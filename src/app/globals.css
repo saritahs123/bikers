@@ -1,0 +1,91 @@
+@import "tailwindcss";
+
+@theme {
+  --color-surface-container-low: #1c1b1b;
+  --color-surface-container-highest: #353534;
+  --color-surface-container-high: #2a2a2a;
+  --color-on-background: #e5e2e1;
+  --color-secondary-fixed-dim: #c8c6c5;
+  --color-error: #ffb4ab;
+  --color-on-primary-fixed-variant: #3d4c05;
+  --color-tertiary-fixed-dim: #c8c6c5;
+  --color-outline: #909282;
+  --color-surface-dim: #131313;
+  --color-inverse-on-surface: #313030;
+  --color-on-error-container: #ffdad6;
+  --color-on-secondary-container: #b7b5b4;
+  --color-secondary-container: #474746;
+  --color-on-primary: #293500;
+  --color-on-secondary: #313030;
+  --color-surface-tint: #bbcf7c;
+  --color-on-tertiary-fixed: #1b1c1c;
+  --color-primary: #bbcf7c;
+  --color-on-surface-variant: #c6c8b6;
+  --color-on-error: #690005;
+  --color-surface: #131313;
+  --color-tertiary-fixed: #e4e2e1;
+  --color-on-secondary-fixed-variant: #474746;
+  --color-surface-container: #201f1f;
+  --color-inverse-primary: #54651e;
+  --color-surface-variant: #353534;
+  --color-tertiary-container: #929090;
+  --color-surface-bright: #3a3939;
+  --color-on-secondary-fixed: #1c1b1b;
+  --color-on-tertiary-fixed-variant: #474746;
+  --color-on-primary-fixed: #161e00;
+  --color-error-container: #93000a;
+  --color-tertiary: #c8c6c5;
+  --color-primary-fixed: #d7ec95;
+  --color-on-tertiary-container: #2a2a2a;
+  --color-on-tertiary: #303030;
+  --color-inverse-surface: #e5e2e1;
+  --color-primary-container: #86984c;
+  --color-secondary-fixed: #e5e2e1;
+  --color-secondary: #c8c6c5;
+  --color-on-surface: #e5e2e1;
+  --color-on-primary-container: #232e00;
+  --color-outline-variant: #46483b;
+  --color-surface-container-lowest: #0e0e0e;
+  --color-background: #131313;
+  --color-primary-fixed-dim: #bbcf7c;
+
+  --spacing-gutter: 24px;
+  --spacing-md: 16px;
+  --spacing-xl: 40px;
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-lg: 24px;
+  --spacing-container-max: 1440px;
+  --spacing-base: 4px;
+
+  --font-label-caps: 'JetBrains Mono', monospace;
+  --font-display-lg: 'Inter', sans-serif;
+  --font-headline-lg: 'Inter', sans-serif;
+  --font-title-md: 'Inter', sans-serif;
+  --font-body-sm: 'Inter', sans-serif;
+  --font-stats-number: 'Inter', sans-serif;
+  --font-body-lg: 'Inter', sans-serif;
+}
+
+body {
+  background-color: #0A0A0A;
+  color: #e5e2e1;
+}
+
+:root {
+  --text-primary: var(--color-on-surface);
+  --text-muted: var(--color-on-surface-variant);
+  --bg-color: #0A0A0A;
+  --bg-elevated: var(--color-surface-container-low);
+  --border-color: var(--color-surface-container-highest);
+}
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+.industrial-border { border: 1px solid #262626; }
+.olive-glow { box-shadow: 0 0 15px rgba(187, 207, 124, 0.15); }
+.custom-scrollbar::-webkit-scrollbar { width: 4px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: #131313; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: #46483b; border-radius: 2px; }

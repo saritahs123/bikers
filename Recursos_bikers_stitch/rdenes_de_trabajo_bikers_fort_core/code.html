@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=JetBrains+Mono:wght@100..900&display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "surface-container-low": "#1c1b1b",
+                      "surface-container-highest": "#353534",
+                      "surface-container-high": "#2a2a2a",
+                      "on-background": "#e5e2e1",
+                      "secondary-fixed-dim": "#c8c6c5",
+                      "error": "#ffb4ab",
+                      "on-primary-fixed-variant": "#3d4c05",
+                      "tertiary-fixed-dim": "#c8c6c5",
+                      "outline": "#909282",
+                      "surface-dim": "#131313",
+                      "inverse-on-surface": "#313030",
+                      "on-error-container": "#ffdad6",
+                      "on-secondary-container": "#b7b5b4",
+                      "secondary-container": "#474746",
+                      "on-primary": "#293500",
+                      "on-secondary": "#313030",
+                      "surface-tint": "#bbcf7c",
+                      "on-tertiary-fixed": "#1b1c1c",
+                      "primary": "#bbcf7c",
+                      "on-surface-variant": "#c6c8b6",
+                      "on-error": "#690005",
+                      "surface": "#131313",
+                      "tertiary-fixed": "#e4e2e1",
+                      "on-secondary-fixed-variant": "#474746",
+                      "surface-container": "#201f1f",
+                      "inverse-primary": "#54651e",
+                      "surface-variant": "#353534",
+                      "tertiary-container": "#929090",
+                      "surface-bright": "#3a3939",
+                      "on-secondary-fixed": "#1c1b1b",
+                      "on-tertiary-fixed-variant": "#474746",
+                      "on-primary-fixed": "#161e00",
+                      "error-container": "#93000a",
+                      "tertiary": "#c8c6c5",
+                      "primary-fixed": "#d7ec95",
+                      "on-tertiary-container": "#2a2a2a",
+                      "on-tertiary": "#303030",
+                      "inverse-surface": "#e5e2e1",
+                      "primary-container": "#86984c",
+                      "secondary-fixed": "#e5e2e1",
+                      "secondary": "#c8c6c5",
+                      "on-surface": "#e5e2e1",
+                      "on-primary-container": "#232e00",
+                      "outline-variant": "#46483b",
+                      "surface-container-lowest": "#0e0e0e",
+                      "background": "#131313",
+                      "primary-fixed-dim": "#bbcf7c"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "gutter": "24px",
+                      "md": "16px",
+                      "xl": "40px",
+                      "xs": "4px",
+                      "sm": "8px",
+                      "lg": "24px",
+                      "container-max": "1440px",
+                      "base": "4px"
+              },
+              "fontFamily": {
+                      "label-caps": ["JetBrains Mono"],
+                      "display-lg": ["Inter"],
+                      "headline-lg-mobile": ["Inter"],
+                      "title-md": ["Inter"],
+                      "headline-lg": ["Inter"],
+                      "body-sm": ["Inter"],
+                      "stats-number": ["Inter"],
+                      "body-lg": ["Inter"]
+              },
+              "fontSize": {
+                      "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "500"}],
+                      "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                      "headline-lg-mobile": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                      "title-md": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                      "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                      "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                      "stats-number": ["36px", {"lineHeight": "44px", "letterSpacing": "-0.03em", "fontWeight": "700"}],
+                      "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}]
+              }
+            },
+          },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #131313;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #2a2a2a;
+            border-radius: 3px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #46483b;
+        }
+        .glow-active {
+            box-shadow: 0 0 15px -3px rgba(187, 207, 124, 0.15);
+        }
+        .inner-stroke {
+            box-shadow: inset 0 0 0 1px #262626;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background selection:bg-primary selection:text-on-primary">
+<!-- Side Navigation Bar -->
+<aside class="fixed left-0 top-0 h-full w-64 bg-surface-container-lowest border-r border-outline-variant flex flex-col p-lg z-50">
+<div class="mb-xl flex items-center gap-md">
+<img alt="Bikers' Fort Logo" class="h-10 w-10 object-contain" src="https://lh3.googleusercontent.com/aida/AP1WRLvxAVXrgngxdCPuzGQz7FNcIJqrPjr-4AyKYGr1AeuRmiW6xpmn_UY30smeQ4VmWGos8DgbEo_PkWV1UXcONduykOpj6pYm5C2onc6j38gUsXLU_YMXCUPhkCYEDHWCE4WhvX_9RXoGcBRQr4qldi93aU20SoU0sUYiFpga7mVdjG0w_mzUKgifrg2mjRj-tk-gSKNlIqBqsR2fuYOx_8XFZI8j69fJNNM-ZpMnsUk_mivdEgDRm2en231l"/>
+<div>
+<h1 class="font-headline-lg text-headline-lg font-bold text-on-surface leading-none">Bikers' Fort</h1>
+<p class="font-label-caps text-label-caps text-outline mt-xs uppercase">Core Management</p>
+</div>
+</div>
+<nav class="flex-1 flex flex-col gap-xs">
+<!-- Active Tab: Work Orders (Ordenes de Trabajo) -->
+<a class="flex items-center gap-md p-sm rounded text-on-surface-variant hover:bg-surface-container-high transition-colors group" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-caps text-label-caps">Dashboard</span>
+</a>
+<a class="flex items-center gap-md p-sm rounded text-on-surface-variant hover:bg-surface-container-high transition-colors group" href="#">
+<span class="material-symbols-outlined">event_seat</span>
+<span class="font-label-caps text-label-caps">Reception</span>
+</a>
+<a class="flex items-center gap-md p-sm rounded bg-surface-container-high text-primary font-bold border-r-2 border-primary transition-colors group" href="#">
+<span class="material-symbols-outlined">build</span>
+<span class="font-label-caps text-label-caps">Work Orders</span>
+</a>
+<a class="flex items-center gap-md p-sm rounded text-on-surface-variant hover:bg-surface-container-high transition-colors group" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+<span class="font-label-caps text-label-caps">Inventory & Parts</span>
+</a>
+<a class="flex items-center gap-md p-sm rounded text-on-surface-variant hover:bg-surface-container-high transition-colors group" href="#">
+<span class="material-symbols-outlined">group</span>
+<span class="font-label-caps text-label-caps">Customers</span>
+</a>
+<a class="flex items-center gap-md p-sm rounded text-on-surface-variant hover:bg-surface-container-high transition-colors group" href="#">
+<span class="material-symbols-outlined">analytics</span>
+<span class="font-label-caps text-label-caps">Reports</span>
+</a>
+</nav>
+<div class="mt-auto pt-lg border-t border-outline-variant flex flex-col gap-xs">
+<a class="flex items-center gap-md p-sm rounded text-on-surface-variant hover:bg-surface-container-high transition-colors" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-label-caps text-label-caps">Settings</span>
+</a>
+<a class="flex items-center gap-md p-sm rounded text-on-surface-variant hover:bg-surface-container-high transition-colors" href="#">
+<span class="material-symbols-outlined">help</span>
+<span class="font-label-caps text-label-caps">Support</span>
+</a>
+</div>
+</aside>
+<!-- Top App Bar -->
+<header class="fixed top-0 right-0 ml-64 w-[calc(100%-16rem)] h-16 bg-surface border-b border-outline-variant flex justify-between items-center px-xl z-40">
+<div class="flex items-center gap-lg flex-1">
+<div class="relative w-96">
+<span class="material-symbols-outlined absolute left-sm top-1/2 -translate-y-1/2 text-outline">search</span>
+<input class="w-full bg-surface-container-lowest border border-outline-variant rounded-lg pl-xl pr-md py-sm text-body-sm focus:border-primary focus:ring-0 transition-all outline-none" placeholder="Buscar orden, cliente o bicicleta..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-lg">
+<button class="relative text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-0 right-0 w-2 h-2 bg-error rounded-full border-2 border-surface"></span>
+</button>
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<div class="h-8 w-8 rounded-full overflow-hidden border border-outline-variant">
+<img class="w-full h-full object-cover" data-alt="Close up professional portrait of a workshop manager in a dark olive shop shirt with Biker's Fort logo. The lighting is moody and cinematic, emphasizing technical expertise and a clean, organized mechanical workspace in the blurred background. Moody industrial atmosphere." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDlASpOmcg6yyj3vUEnqLRm8-YmgMrYQFP3sfvTPCS1vFCV06ESmlK8YJFhJCVgmzxGt4ycd-KGgRWe3tAv5INcNxQGh4dezrLn7qSY0ucK5YovIM30eB8-kZDHDR_JgmCLGf8md0WoQ5N4Q73Ysi49noVpP1I-64Cdq7jBRkcJC0SfpzfuHqX06cKphPTECt4xq0myRIiwJWwh-AO7Njcn8N1LOaBZRpPZX7Cwe_NTwmdQRc17X-cOobliHuo3x-oUb_HTPDuppAhN"/>
+</div>
+</div>
+</header>
+<!-- Main Content -->
+<main class="ml-64 pt-16 min-h-screen">
+<div class="max-w-container-max mx-auto px-xl py-xl">
+<!-- Header Section -->
+<div class="flex justify-between items-end mb-xl">
+<div>
+<h2 class="font-headline-lg text-headline-lg font-bold text-on-surface">Órdenes de Trabajo</h2>
+<p class="text-on-surface-variant font-body-lg">Gestiona el flujo técnico del taller en tiempo real.</p>
+</div>
+<button class="bg-primary text-on-primary font-bold px-lg py-sm rounded-lg flex items-center gap-sm hover:opacity-90 active:scale-95 transition-all glow-active">
+<span class="material-symbols-outlined">add</span>
+<span>Crear Orden</span>
+</button>
+</div>
+<!-- Filters Bar -->
+<div class="bg-surface-container-low inner-stroke rounded-xl p-md mb-xl flex flex-wrap items-center gap-lg">
+<div class="flex items-center gap-sm">
+<span class="font-label-caps text-label-caps text-outline uppercase">Filtrar por:</span>
+</div>
+<div class="flex items-center gap-md">
+<select class="bg-surface-container-lowest border border-outline-variant rounded px-sm py-xs text-body-sm text-on-surface-variant focus:border-primary focus:ring-0">
+<option>Mecánico: Todos</option>
+<option>Carlos Ruiz</option>
+<option>Santi Gomez</option>
+<option>Elena Bosch</option>
+</select>
+<select class="bg-surface-container-lowest border border-outline-variant rounded px-sm py-xs text-body-sm text-on-surface-variant focus:border-primary focus:ring-0">
+<option>Prioridad: Todas</option>
+<option>Crítica</option>
+<option>Alta</option>
+<option>Media</option>
+<option>Baja</option>
+</select>
+<div class="flex items-center bg-surface-container-lowest border border-outline-variant rounded px-sm py-xs gap-sm">
+<span class="material-symbols-outlined text-[18px] text-outline">calendar_today</span>
+<span class="text-body-sm text-on-surface-variant">Últimos 7 días</span>
+<span class="material-symbols-outlined text-[18px] text-outline">expand_more</span>
+</div>
+</div>
+<div class="ml-auto flex items-center gap-xs">
+<button class="p-sm rounded bg-surface-container-high text-primary">
+<span class="material-symbols-outlined">view_kanban</span>
+</button>
+<button class="p-sm rounded text-on-surface-variant hover:bg-surface-container-high">
+<span class="material-symbols-outlined">view_list</span>
+</button>
+</div>
+</div>
+<!-- Kanban Board -->
+<div class="flex gap-lg overflow-x-auto pb-lg custom-scrollbar">
+<!-- Column: Pendientes -->
+<div class="flex-shrink-0 w-80">
+<div class="flex items-center justify-between mb-md px-sm">
+<h3 class="font-label-caps text-label-caps text-on-surface-variant uppercase flex items-center gap-sm">
+<span class="w-2 h-2 rounded-full bg-outline"></span>
+                            Pendientes (3)
+                        </h3>
+</div>
+<div class="flex flex-col gap-md">
+<!-- Card 1 -->
+<div class="bg-surface-container inner-stroke p-md rounded-lg hover:bg-surface-container-high transition-colors cursor-pointer group">
+<div class="flex justify-between items-start mb-sm">
+<span class="font-label-caps text-[10px] text-outline">OT-4502</span>
+<span class="px-xs py-0.5 rounded bg-error/10 text-error font-label-caps text-[10px] uppercase border border-error/20">Crítica</span>
+</div>
+<h4 class="font-title-md text-title-md text-on-surface mb-xs">Ajuste de Transmisión</h4>
+<p class="text-body-sm text-on-surface-variant mb-md">Specialized Turbo Levo • Juan Pérez</p>
+<div class="flex items-center justify-between text-on-surface-variant">
+<div class="flex items-center gap-sm">
+<div class="w-6 h-6 rounded-full bg-surface-container-highest flex items-center justify-center border border-outline-variant">
+<span class="material-symbols-outlined text-[14px]">person</span>
+</div>
+<span class="text-body-sm">Carlos R.</span>
+</div>
+<div class="text-[10px] font-label-caps">Hace 2h</div>
+</div>
+<div class="mt-md w-full bg-surface-container-highest h-1 rounded overflow-hidden">
+<div class="bg-primary h-full w-[10%]"></div>
+</div>
+</div>
+<!-- Card 2 -->
+<div class="bg-surface-container inner-stroke p-md rounded-lg hover:bg-surface-container-high transition-colors cursor-pointer">
+<div class="flex justify-between items-start mb-sm">
+<span class="font-label-caps text-[10px] text-outline">OT-4505</span>
+<span class="px-xs py-0.5 rounded bg-surface-container-highest text-on-surface-variant font-label-caps text-[10px] uppercase border border-outline-variant">Baja</span>
+</div>
+<h4 class="font-title-md text-title-md text-on-surface mb-xs">Lavado Pro + Cera</h4>
+<p class="text-body-sm text-on-surface-variant mb-md">Trek Domane • Marta S.</p>
+<div class="flex items-center justify-between text-on-surface-variant">
+<div class="flex items-center gap-sm text-outline italic">
+<span class="text-body-sm">Sin asignar</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Column: En Proceso -->
+<div class="flex-shrink-0 w-80">
+<div class="flex items-center justify-between mb-md px-sm">
+<h3 class="font-label-caps text-label-caps text-on-surface-variant uppercase flex items-center gap-sm">
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+                            En Proceso (2)
+                        </h3>
+</div>
+<div class="flex flex-col gap-md">
+<!-- Card 3 -->
+<div class="bg-surface-container inner-stroke p-md rounded-lg hover:bg-surface-container-high transition-colors cursor-pointer border-l-2 border-primary">
+<div class="flex justify-between items-start mb-sm">
+<span class="font-label-caps text-[10px] text-outline">OT-4498</span>
+<span class="px-xs py-0.5 rounded bg-primary/10 text-primary font-label-caps text-[10px] uppercase border border-primary/20">Media</span>
+</div>
+<h4 class="font-title-md text-title-md text-on-surface mb-xs">Sangrado de Frenos</h4>
+<p class="text-body-sm text-on-surface-variant mb-md">Giant Reign • Diego L.</p>
+<div class="flex items-center justify-between text-on-surface-variant">
+<div class="flex items-center gap-sm">
+<div class="w-6 h-6 rounded-full bg-surface-container-highest overflow-hidden border border-outline-variant">
+<img class="w-full h-full object-cover" data-alt="Profile photo of a mechanic with messy hair and grease marks on his face, wearing a black apron. Soft industrial lighting in a bike shop workshop background. Sharp detail and high contrast." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC68CqdwewLjeKspitmCo0REH62VnsFx0oCwapr88WYG1S7fX55TUmwPiwGD1tpIVKr6Fn9VWTNFpgUK7k4sY4FtjbiHK7WxrJKCEDTXpqEbsPPtm9WfNLhsbLrWr0I8OoFJ4Q3Dazuih0UefzqpBtePb3lXgnxQrVSgaOPDpm60FiL88dhXk37gL6wau26gH7swmsU5HBKQEAx4H7vsxmM3nnpGph4vxpNsmqFEO8tT6vUAH5bfaDw0Ski_IMKPXkUXGbNzirBo3zD"/>
+</div>
+<span class="text-body-sm">Elena B.</span>
+</div>
+<div class="text-[10px] font-label-caps text-primary">65%</div>
+</div>
+<div class="mt-md w-full bg-surface-container-highest h-1 rounded overflow-hidden">
+<div class="bg-primary h-full w-[65%]"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Column: Esperando Repuestos -->
+<div class="flex-shrink-0 w-80">
+<div class="flex items-center justify-between mb-md px-sm">
+<h3 class="font-label-caps text-label-caps text-on-surface-variant uppercase flex items-center gap-sm">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+                            Esperando Repuestos (1)
+                        </h3>
+</div>
+<div class="flex flex-col gap-md">
+<!-- Card 4 -->
+<div class="bg-surface-container inner-stroke p-md rounded-lg opacity-80 hover:opacity-100 transition-all cursor-pointer">
+<div class="flex justify-between items-start mb-sm">
+<span class="font-label-caps text-[10px] text-outline">OT-4482</span>
+<span class="px-xs py-0.5 rounded bg-secondary/10 text-secondary font-label-caps text-[10px] uppercase border border-secondary/20">Alta</span>
+</div>
+<h4 class="font-title-md text-title-md text-on-surface mb-xs">Cambio de Horquilla</h4>
+<p class="text-body-sm text-on-surface-variant mb-md">Canyon Strive • Roberto V.</p>
+<div class="flex items-center gap-sm p-xs bg-surface-container-low rounded border border-outline-variant mb-md">
+<span class="material-symbols-outlined text-[16px] text-secondary">inventory</span>
+<span class="text-[11px] font-label-caps text-secondary">Fox 38 Performance - ETD 48h</span>
+</div>
+<div class="flex items-center justify-between text-on-surface-variant">
+<div class="flex items-center gap-sm">
+<div class="w-6 h-6 rounded-full bg-surface-container-highest overflow-hidden border border-outline-variant">
+<img class="w-full h-full object-cover" data-alt="Portrait of an experienced mechanic with a beard, wearing protective glasses and a tech-vest. Workshop environment with tools hanging on a pegboard. Professional lighting, industrial aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDADPKLmDNISIHrED7a-bazTlnxfD41xvZ0ptNe8KBSnflvXBFilR0OYvqSkk4Sonto2j0WQeIinxKLtSRfThs-4f6gN4u61aMkYpy2uphLTmXmNXDdeTVyJ8m0BWsJuwDt6uxt-KAhqF5Jh0bXLaTAvWmmWnYDGtzzCyKkcElmhaZTOsfZN8zAVf1HffOOD3tUKzu_zLaX48CFr3ydTcJPpjXnaJBjCLxaCk6pCNtHLaCTLZcwYvSyDDVVo3phqjixdt8lyoBuw7hz"/>
+</div>
+<span class="text-body-sm">Santi G.</span>
+</div>
+<div class="text-[10px] font-label-caps">Bloqueado</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Column: Finalizadas -->
+<div class="flex-shrink-0 w-80">
+<div class="flex items-center justify-between mb-md px-sm">
+<h3 class="font-label-caps text-label-caps text-on-surface-variant uppercase flex items-center gap-sm">
+<span class="w-2 h-2 rounded-full bg-primary-container"></span>
+                            Finalizadas (4)
+                        </h3>
+</div>
+<div class="flex flex-col gap-md">
+<!-- Card 5 -->
+<div class="bg-surface-container inner-stroke p-md rounded-lg hover:bg-surface-container-high transition-colors cursor-pointer">
+<div class="flex justify-between items-start mb-sm">
+<span class="font-label-caps text-[10px] text-outline">OT-4490</span>
+<span class="px-xs py-0.5 rounded bg-primary-container/10 text-primary-container font-label-caps text-[10px] uppercase border border-primary-container/20">Media</span>
+</div>
+<h4 class="font-title-md text-title-md text-on-surface mb-xs line-through opacity-50">Mantenimiento Anual</h4>
+<p class="text-body-sm text-on-surface-variant mb-md">Cannondale Scalpel • Ana L.</p>
+<div class="flex items-center justify-between text-on-surface-variant">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-primary text-[18px]">check_circle</span>
+<span class="text-body-sm">Finalizado por Carlos R.</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Column: Entregadas -->
+<div class="flex-shrink-0 w-80">
+<div class="flex items-center justify-between mb-md px-sm">
+<h3 class="font-label-caps text-label-caps text-on-surface-variant uppercase flex items-center gap-sm">
+<span class="w-2 h-2 rounded-full bg-surface-container-highest"></span>
+                            Entregadas (12)
+                        </h3>
+</div>
+<div class="flex flex-col gap-md opacity-50 grayscale">
+<div class="border border-dashed border-outline-variant p-md rounded-lg text-center">
+<span class="text-body-sm text-outline">Ver historial de entregas</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Micro-interaction Script -->
+<script>
+        document.querySelectorAll('.bg-surface-container').forEach(card => {
+            card.addEventListener('mousedown', () => {
+                card.style.transform = 'scale(0.98)';
+            });
+            card.addEventListener('mouseup', () => {
+                card.style.transform = 'scale(1)';
+            });
+            card.addEventListener('mouseleave', () => {
+                card.style.transform = 'scale(1)';
+            });
+        });
+
+        // Search highlight simulation
+        const searchInput = document.querySelector('input[type="text"]');
+        searchInput.addEventListener('focus', () => {
+            searchInput.parentElement.classList.add('glow-active');
+        });
+        searchInput.addEventListener('blur', () => {
+            searchInput.parentElement.classList.remove('glow-active');
+        });
+    </script>
+</body></html>

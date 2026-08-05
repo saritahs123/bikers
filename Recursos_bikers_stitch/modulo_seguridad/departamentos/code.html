@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Gestión de Departamentos | BIKER'S FORT CORE</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800&amp;family=JetBrains+Mono:wght@600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-tertiary-fixed-variant": "#3d4759",
+                    "surface-tint": "#bfce7f",
+                    "on-tertiary-container": "#202a3a",
+                    "on-secondary-fixed-variant": "#43474f",
+                    "error-container": "#93000a",
+                    "on-secondary-fixed": "#181c23",
+                    "on-primary-container": "#252d00",
+                    "on-surface": "#e4e3d9",
+                    "on-background": "#e4e3d9",
+                    "surface-container": "#1f201a",
+                    "on-error": "#690005",
+                    "surface-container-highest": "#35352f",
+                    "secondary-fixed": "#dfe2ec",
+                    "on-tertiary-fixed": "#121c2c",
+                    "primary": "#bfce7f",
+                    "surface": "#13140f",
+                    "surface-variant": "#35352f",
+                    "primary-container": "#89974f",
+                    "secondary-fixed-dim": "#c3c6d0",
+                    "inverse-on-surface": "#30312b",
+                    "tertiary": "#bdc7dc",
+                    "primary-fixed-dim": "#bfce7f",
+                    "secondary-container": "#43474f",
+                    "secondary": "#c3c6d0",
+                    "on-tertiary": "#273141",
+                    "on-primary": "#2b3400",
+                    "tertiary-container": "#8791a5",
+                    "tertiary-fixed": "#d9e3f9",
+                    "error": "#ffb4ab",
+                    "primary-fixed": "#dbea98",
+                    "outline": "#919282",
+                    "on-primary-fixed-variant": "#404c0a",
+                    "surface-bright": "#393a33",
+                    "on-secondary-container": "#b2b5be",
+                    "background": "#13140f",
+                    "surface-container-lowest": "#0e0f0a",
+                    "surface-container-low": "#1b1c17",
+                    "on-secondary": "#2d3138",
+                    "outline-variant": "#46483b",
+                    "on-surface-variant": "#c7c8b7",
+                    "on-error-container": "#ffdad6",
+                    "inverse-primary": "#576421",
+                    "surface-container-high": "#2a2a24",
+                    "surface-dim": "#13140f",
+                    "on-primary-fixed": "#181e00",
+                    "tertiary-fixed-dim": "#bdc7dc",
+                    "inverse-surface": "#e4e3d9"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "spacing": {
+                    "unit": "4px",
+                    "margin-mobile": "16px",
+                    "margin-desktop": "40px",
+                    "gutter": "24px",
+                    "container-max": "1440px"
+            },
+            "fontFamily": {
+                    "headline-lg": ["Hanken Grotesk"],
+                    "body-lg": ["Hanken Grotesk"],
+                    "headline-sm": ["Hanken Grotesk"],
+                    "body-md": ["Hanken Grotesk"],
+                    "label-caps": ["JetBrains Mono"],
+                    "headline-md": ["Hanken Grotesk"],
+                    "headline-lg-mobile": ["Hanken Grotesk"],
+                    "body-sm": ["Hanken Grotesk"]
+            },
+            "fontSize": {
+                    "headline-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "800"}],
+                    "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                    "headline-sm": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                    "body-md": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                    "label-caps": ["12px", {"lineHeight": "1", "letterSpacing": "0.1em", "fontWeight": "600"}],
+                    "headline-md": ["32px", {"lineHeight": "1.2", "fontWeight": "700"}],
+                    "headline-lg-mobile": ["32px", {"lineHeight": "1.2", "fontWeight": "800"}],
+                    "body-sm": ["14px", {"lineHeight": "1.4", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body { background-color: #0a0c10; color: #e4e3d9; }
+        .industrial-border { border: 1px solid #2d3748; }
+        .industrial-card { background-color: #161a21; border: 1px solid #2d3748; }
+        .industrial-card:hover { border-color: #4a5568; }
+        .bevel-button { 
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 2px 2px 0px rgba(0,0,0,0.5);
+        }
+        .bevel-button:active {
+            box-shadow: 0px 0px 0px rgba(0,0,0,0.5);
+            transform: translate(1px, 1px);
+        }
+        .zebra-striping tr:nth-child(even) { background-color: #1c2129; }
+        .zebra-striping tr:nth-child(odd) { background-color: #161a21; }
+        
+        .technical-grid {
+            background-size: 20px 20px;
+            background-image: radial-gradient(circle, #1f201a 1px, transparent 1px);
+        }
+        
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="font-body-md technical-grid min-h-screen">
+<!-- Sidebar (SideNavBar) -->
+<nav class="fixed left-0 top-0 h-full w-64 border-r border-outline-variant bg-surface-container-lowest flex flex-col z-40 transition-all duration-300">
+<div class="p-6 flex flex-col gap-1 border-b border-outline-variant">
+<span class="font-headline-sm text-on-surface">TALLER • TIENDA</span>
+<span class="font-label-caps text-on-surface-variant text-[10px]">Management System</span>
+</div>
+<div class="flex-1 py-6 space-y-1">
+<a class="text-on-surface-variant hover:text-on-surface px-6 py-3 flex items-center gap-3 transition-all hover:bg-surface-container-high" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-caps">Dashboard</span>
+</a>
+<a class="text-on-surface-variant hover:text-on-surface px-6 py-3 flex items-center gap-3 transition-all hover:bg-surface-container-high" href="#">
+<span class="material-symbols-outlined">event_seat</span>
+<span class="font-label-caps">Reception</span>
+</a>
+<a class="bg-secondary-container text-on-secondary-container border-l-4 border-primary font-bold px-6 py-3 flex items-center gap-3 scale-[1.02]" href="#">
+<span class="material-symbols-outlined">build</span>
+<span class="font-label-caps">Work Orders</span>
+</a>
+<a class="text-on-surface-variant hover:text-on-surface px-6 py-3 flex items-center gap-3 transition-all hover:bg-surface-container-high" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+<span class="font-label-caps">Inventory &amp; Parts</span>
+</a>
+<a class="text-on-surface-variant hover:text-on-surface px-6 py-3 flex items-center gap-3 transition-all hover:bg-surface-container-high" href="#">
+<span class="material-symbols-outlined">group</span>
+<span class="font-label-caps">Clients</span>
+</a>
+<a class="text-on-surface-variant hover:text-on-surface px-6 py-3 flex items-center gap-3 transition-all hover:bg-surface-container-high" href="#">
+<span class="material-symbols-outlined">bar_chart</span>
+<span class="font-label-caps">Reports</span>
+</a>
+</div>
+<div class="p-6 border-t border-outline-variant space-y-4">
+<button class="w-full py-3 bg-primary text-on-primary font-bold bevel-button flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-sm">add</span>
+<span class="font-label-caps text-[11px]">New Work Order</span>
+</button>
+<div class="space-y-1">
+<a class="text-on-surface-variant hover:text-on-surface px-0 py-2 flex items-center gap-3 text-sm" href="#">
+<span class="material-symbols-outlined text-sm">help</span>
+<span class="font-label-caps">Support</span>
+</a>
+<a class="text-on-surface-variant hover:text-on-surface px-0 py-2 flex items-center gap-3 text-sm" href="#">
+<span class="material-symbols-outlined text-sm">logout</span>
+<span class="font-label-caps">Sign Out</span>
+</a>
+</div>
+</div>
+</nav>
+<!-- Top AppBar -->
+<header class="fixed top-0 left-64 right-0 h-16 bg-background border-b border-outline-variant z-30 flex justify-between items-center px-margin-desktop">
+<div class="flex items-center gap-4">
+<span class="font-headline-sm text-on-background uppercase font-extrabold flex items-center gap-2">
+                BIKER'S FORT CORE
+            </span>
+</div>
+<div class="flex items-center gap-6">
+<div class="relative hidden lg:block">
+<span class="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-on-surface-variant">search</span>
+<input class="bg-surface-container-lowest border border-outline-variant px-10 py-2 w-64 focus:outline-none focus:border-primary text-sm" placeholder="Quick search..." type="text"/>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<div class="w-8 h-8 bg-surface-container-highest rounded-full overflow-hidden border border-outline">
+<img class="w-full h-full object-cover" data-alt="A professional workshop manager profile picture, mid-40s, focused expression, wearing a dark technical branded polo shirt with subtle Biker Fort logo. Industrial background with soft bokeh effects and cool blue and charcoal lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCcTZUFyyTA04MYAaQaEEzQJHaxypp7KY3iNoXwidC2TirYOJyumHQi7DvC-D8J8r960Kt4A6Shm-HVcUQLCUQzx89SLtrhjYIGKLOjcFWbiFR7J3Gb3Bg0C2IK7wBY8XiALrB0AiMJO3cyHccJSFruLmVr6PzVNvYB085RRUydDeqUBxftZnNLpoZVm9qTcfdxCFV_1tAFXgk43dTnPu67OyFs7biwgHE3eKR5j_IaDnHolA5sOshy"/>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="ml-64 pt-20 p-margin-desktop min-h-screen">
+<!-- Breadcrumb -->
+<nav class="mb-4 flex items-center gap-2 text-on-surface-variant font-label-caps text-[10px]">
+<a class="hover:text-primary transition-colors" href="#">Inicio</a>
+<span class="material-symbols-outlined text-[12px]">chevron_right</span>
+<a class="hover:text-primary transition-colors" href="#">Catálogos</a>
+<span class="material-symbols-outlined text-[12px]">chevron_right</span>
+<span class="text-primary font-bold">Departamentos</span>
+</nav>
+<!-- Header & Action Row -->
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
+<div>
+<h1 class="font-headline-md text-on-background mb-2">Gestión de Departamentos</h1>
+<p class="text-on-surface-variant font-body-sm max-w-2xl">Administre la estructura jerárquica de la organización, vinculando empresas y áreas operativas bajo un marco de gestión centralizado.</p>
+</div>
+<button class="bg-primary text-on-primary px-6 py-3 font-bold bevel-button flex items-center gap-2" onclick="document.getElementById('newDeptModal').classList.remove('hidden')">
+<span class="material-symbols-outlined">add_business</span>
+<span class="font-label-caps">Nuevo Departamento</span>
+</button>
+</div>
+<!-- Metrics Grid -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-gutter mb-8">
+<div class="industrial-card p-6 flex flex-col gap-2 relative overflow-hidden">
+<div class="absolute top-0 right-0 p-4 opacity-10">
+<span class="material-symbols-outlined text-6xl">corporate_fare</span>
+</div>
+<span class="font-label-caps text-on-surface-variant text-[10px]">Total Departamentos</span>
+<span class="font-headline-md text-primary">12</span>
+<div class="w-full h-1 bg-surface-container-highest mt-2">
+<div class="h-full bg-primary w-2/3"></div>
+</div>
+</div>
+<div class="industrial-card p-6 flex flex-col gap-2 relative overflow-hidden">
+<div class="absolute top-0 right-0 p-4 opacity-10">
+<span class="material-symbols-outlined text-6xl">apartment</span>
+</div>
+<span class="font-label-caps text-on-surface-variant text-[10px]">Empresas Vinculadas</span>
+<span class="font-headline-md text-tertiary">04</span>
+<div class="w-full h-1 bg-surface-container-highest mt-2">
+<div class="h-full bg-tertiary w-1/4"></div>
+</div>
+</div>
+<div class="industrial-card p-6 flex flex-col gap-2 relative overflow-hidden">
+<div class="absolute top-0 right-0 p-4 opacity-10">
+<span class="material-symbols-outlined text-6xl">account_tree</span>
+</div>
+<span class="font-label-caps text-on-surface-variant text-[10px]">Áreas Dependientes</span>
+<span class="font-headline-md text-secondary">48</span>
+<div class="w-full h-1 bg-surface-container-highest mt-2">
+<div class="h-full bg-secondary w-3/4"></div>
+</div>
+</div>
+</div>
+<!-- Table Controls -->
+<div class="industrial-card p-4 mb-4 flex flex-col lg:flex-row gap-4 items-center">
+<div class="relative w-full lg:w-96">
+<span class="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-on-surface-variant">search</span>
+<input class="w-full bg-surface-container-lowest border border-outline-variant pl-10 pr-4 py-2 text-sm focus:border-primary outline-none" placeholder="Filtrar por nombre o descripción..." type="text"/>
+</div>
+<div class="flex items-center gap-4 w-full lg:w-auto">
+<select class="bg-surface-container-lowest border border-outline-variant px-4 py-2 text-sm focus:border-primary outline-none text-on-surface w-full lg:w-48">
+<option>Todas las Empresas</option>
+<option>Biker's Fort HQ</option>
+<option>Manufacturing Central</option>
+<option>Logistics North</option>
+</select>
+<button class="industrial-border bg-surface-container-high px-4 py-2 hover:bg-surface-container-highest transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">download</span>
+<span class="font-label-caps text-[10px]">Exportar CSV</span>
+</button>
+</div>
+</div>
+<!-- Data Table -->
+<div class="industrial-card overflow-x-auto">
+<table class="w-full text-left zebra-striping">
+<thead class="bg-surface-container-low border-b border-outline-variant">
+<tr>
+<th class="px-6 py-4 font-label-caps text-[10px] text-on-surface-variant">Empresa</th>
+<th class="px-6 py-4 font-label-caps text-[10px] text-on-surface-variant">Nombre</th>
+<th class="px-6 py-4 font-label-caps text-[10px] text-on-surface-variant">Descripción</th>
+<th class="px-6 py-4 font-label-caps text-[10px] text-on-surface-variant text-center">Áreas</th>
+<th class="px-6 py-4 font-label-caps text-[10px] text-on-surface-variant">Estado</th>
+<th class="px-6 py-4 font-label-caps text-[10px] text-on-surface-variant text-right">Acciones</th>
+</tr>
+</thead>
+<tbody class="text-sm">
+<tr>
+<td class="px-6 py-4 font-semibold text-tertiary">Biker's Fort HQ</td>
+<td class="px-6 py-4 text-on-surface">Recursos Humanos</td>
+<td class="px-6 py-4 text-on-surface-variant max-w-xs truncate">Gestión de personal, nóminas y bienestar corporativo.</td>
+<td class="px-6 py-4 text-center">
+<span class="bg-surface-container-highest px-3 py-1 border border-outline-variant">08</span>
+</td>
+<td class="px-6 py-4">
+<span class="px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 text-[10px] font-bold">ACTIVO</span>
+</td>
+<td class="px-6 py-4 text-right">
+<div class="flex justify-end gap-2">
+<button class="p-2 hover:bg-surface-container-highest text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-lg">edit</span>
+</button>
+<button class="p-2 hover:bg-surface-container-highest text-on-surface-variant hover:text-error transition-colors">
+<span class="material-symbols-outlined text-lg">delete</span>
+</button>
+</div>
+</td>
+</tr>
+<tr>
+<td class="px-6 py-4 font-semibold text-tertiary">Manufacturing Central</td>
+<td class="px-6 py-4 text-on-surface">Ingeniería</td>
+<td class="px-6 py-4 text-on-surface-variant max-w-xs truncate">Diseño de componentes, prototipado y control de calidad.</td>
+<td class="px-6 py-4 text-center">
+<span class="bg-surface-container-highest px-3 py-1 border border-outline-variant">14</span>
+</td>
+<td class="px-6 py-4">
+<span class="px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 text-[10px] font-bold">ACTIVO</span>
+</td>
+<td class="px-6 py-4 text-right">
+<div class="flex justify-end gap-2">
+<button class="p-2 hover:bg-surface-container-highest text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-lg">edit</span>
+</button>
+<button class="p-2 hover:bg-surface-container-highest text-on-surface-variant hover:text-error transition-colors">
+<span class="material-symbols-outlined text-lg">delete</span>
+</button>
+</div>
+</td>
+</tr>
+<tr>
+<td class="px-6 py-4 font-semibold text-tertiary">Logistics North</td>
+<td class="px-6 py-4 text-on-surface">Almacén</td>
+<td class="px-6 py-4 text-on-surface-variant max-w-xs truncate">Recepción de mercancía, inventario y despacho de pedidos.</td>
+<td class="px-6 py-4 text-center">
+<span class="bg-surface-container-highest px-3 py-1 border border-outline-variant">26</span>
+</td>
+<td class="px-6 py-4">
+<span class="px-2 py-0.5 rounded-full bg-surface-container-highest text-on-surface-variant border border-outline-variant text-[10px] font-bold">EN PAUSA</span>
+</td>
+<td class="px-6 py-4 text-right">
+<div class="flex justify-end gap-2">
+<button class="p-2 hover:bg-surface-container-highest text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-lg">edit</span>
+</button>
+<button class="p-2 hover:bg-surface-container-highest text-on-surface-variant hover:text-error transition-colors">
+<span class="material-symbols-outlined text-lg">delete</span>
+</button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Footer Info -->
+<div class="mt-6 flex justify-between items-center text-on-surface-variant font-label-caps text-[10px]">
+<span>Mostrando 3 de 12 departamentos</span>
+<div class="flex items-center gap-2">
+<button class="p-2 industrial-border hover:bg-surface-container-high disabled:opacity-50" disabled="">
+<span class="material-symbols-outlined text-sm">chevron_left</span>
+</button>
+<button class="p-2 industrial-border bg-primary text-on-primary font-bold">1</button>
+<button class="p-2 industrial-border hover:bg-surface-container-high">2</button>
+<button class="p-2 industrial-border hover:bg-surface-container-high">
+<span class="material-symbols-outlined text-sm">chevron_right</span>
+</button>
+</div>
+</div>
+</main>
+<!-- Creation Modal -->
+<div class="hidden fixed inset-0 z-50 flex items-center justify-center p-margin-mobile" id="newDeptModal">
+<div class="absolute inset-0 bg-background/80 backdrop-blur-sm" onclick="document.getElementById('newDeptModal').classList.add('hidden')"></div>
+<div class="relative industrial-card w-full max-w-lg bg-surface-container overflow-hidden animate-in fade-in zoom-in duration-200">
+<div class="p-6 border-b border-outline-variant flex justify-between items-center bg-surface-container-high">
+<h2 class="font-headline-sm text-on-surface">Configurar Departamento</h2>
+<button class="text-on-surface-variant hover:text-on-surface" onclick="document.getElementById('newDeptModal').classList.add('hidden')">
+<span class="material-symbols-outlined">close</span>
+</button>
+</div>
+<form class="p-6 space-y-6">
+<div class="space-y-4">
+<div class="flex flex-col gap-1.5">
+<label class="font-label-caps text-[10px] text-primary">Empresa Matriz</label>
+<select class="bg-surface-container-lowest border border-outline-variant p-3 focus:border-primary outline-none text-on-surface w-full">
+<option>Seleccione una empresa...</option>
+<option>Biker's Fort HQ</option>
+<option>Manufacturing Central</option>
+<option>Logistics North</option>
+</select>
+</div>
+<div class="flex flex-col gap-1.5">
+<label class="font-label-caps text-[10px] text-primary">Nombre del Departamento</label>
+<input class="bg-surface-container-lowest border border-outline-variant p-3 focus:border-primary outline-none text-on-surface w-full" placeholder="Ej: Ventas, Operaciones..." type="text"/>
+</div>
+<div class="flex flex-col gap-1.5">
+<label class="font-label-caps text-[10px] text-primary">Descripción Técnica</label>
+<textarea class="bg-surface-container-lowest border border-outline-variant p-3 focus:border-primary outline-none text-on-surface w-full resize-none" placeholder="Detalle las responsabilidades clave..." rows="3"></textarea>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div class="flex flex-col gap-1.5">
+<label class="font-label-caps text-[10px] text-primary">Estado Operativo</label>
+<div class="flex items-center gap-4 pt-2">
+<label class="flex items-center gap-2 cursor-pointer group">
+<input checked="" class="text-primary focus:ring-0 bg-surface-container-lowest border-outline-variant" name="status" type="radio"/>
+<span class="text-xs group-hover:text-primary transition-colors">Activo</span>
+</label>
+<label class="flex items-center gap-2 cursor-pointer group">
+<input class="text-primary focus:ring-0 bg-surface-container-lowest border-outline-variant" name="status" type="radio"/>
+<span class="text-xs group-hover:text-primary transition-colors">Inactivo</span>
+</label>
+</div>
+</div>
+<div class="flex flex-col gap-1.5">
+<label class="font-label-caps text-[10px] text-primary">Prioridad Sistema</label>
+<input class="accent-primary mt-2" max="10" min="1" step="1" type="range"/>
+</div>
+</div>
+</div>
+<div class="flex justify-end gap-4 pt-6 border-t border-outline-variant">
+<button class="px-6 py-2 text-on-surface-variant hover:text-on-surface font-label-caps text-xs" onclick="document.getElementById('newDeptModal').classList.add('hidden')" type="button">
+                        Cancelar
+                    </button>
+<button class="bg-primary text-on-primary px-8 py-3 font-bold bevel-button font-label-caps text-xs" type="submit">
+                        Guardar Cambios
+                    </button>
+</div>
+</form>
+<!-- Technical decoration -->
+<div class="absolute bottom-0 right-0 p-1 pointer-events-none opacity-20">
+<span class="font-label-caps text-[8px] text-on-surface-variant">SEC_MOD_DEPT_v2.04</span>
+</div>
+</div>
+</div>
+<script>
+        // Simple visual interaction for modal close on Esc
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                document.getElementById('newDeptModal').classList.add('hidden');
+            }
+        });
+        
+        // Micro-interaction for table rows
+        document.querySelectorAll('tbody tr').forEach(row => {
+            row.addEventListener('mouseenter', () => {
+                row.style.boxShadow = 'inset 4px 0 0 #bfce7f';
+                row.style.transition = 'box-shadow 0.2s ease';
+            });
+            row.addEventListener('mouseleave', () => {
+                row.style.boxShadow = 'none';
+            });
+        });
+    </script>
+</body></html>

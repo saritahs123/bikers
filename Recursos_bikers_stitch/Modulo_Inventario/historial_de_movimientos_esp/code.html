@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Movimientos de Inventario - Biker's Fort Core</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        body {
+            background-color: #0a0c10; /* Technical background */
+            background-image: radial-gradient(#1c2129 1px, transparent 1px);
+            background-size: 24px 24px;
+        }
+        .industrial-border {
+            border: 1px solid #2d3748;
+        }
+        .industrial-shadow {
+            box-shadow: 4px 4px 0px rgba(0,0,0,0.5);
+        }
+        .beveled-button {
+            border-top: 1px solid rgba(255,255,255,0.2);
+        }
+        .zebra-row:nth-child(even) {
+            background-color: #161a21;
+        }
+        .zebra-row:nth-child(odd) {
+            background-color: #1c2129;
+        }
+        .segmented-progress {
+            background: repeating-linear-gradient(
+                90deg,
+                transparent,
+                transparent 4px,
+                #0a0c10 4px,
+                #0a0c10 6px
+            );
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-primary-fixed-variant": "#404c0a",
+                        "on-tertiary-fixed-variant": "#3d4759",
+                        "inverse-surface": "#e4e3d9",
+                        "surface-tint": "#bfce7f",
+                        "tertiary-fixed": "#d9e3f9",
+                        "primary-container": "#89974f",
+                        "outline": "#919282",
+                        "on-secondary-container": "#b2b5be",
+                        "error-container": "#93000a",
+                        "inverse-primary": "#576421",
+                        "tertiary-fixed-dim": "#bdc7dc",
+                        "outline-variant": "#46483b",
+                        "on-primary-fixed": "#181e00",
+                        "surface-container-high": "#2a2a24",
+                        "on-tertiary-container": "#202a3a",
+                        "on-error-container": "#ffdad6",
+                        "on-error": "#690005",
+                        "secondary": "#c3c6d0",
+                        "surface-container-highest": "#35352f",
+                        "secondary-fixed-dim": "#c3c6d0",
+                        "on-surface": "#e4e3d9",
+                        "secondary-fixed": "#dfe2ec",
+                        "on-secondary-fixed-variant": "#43474f",
+                        "background": "#13140f",
+                        "surface-dim": "#13140f",
+                        "tertiary": "#bdc7dc",
+                        "surface-container-low": "#1b1c17",
+                        "surface-container": "#1f201a",
+                        "surface-variant": "#35352f",
+                        "on-secondary": "#2d3138",
+                        "secondary-container": "#43474f",
+                        "primary-fixed": "#dbea98",
+                        "on-surface-variant": "#c7c8b7",
+                        "on-secondary-fixed": "#181c23",
+                        "surface": "#13140f",
+                        "surface-bright": "#393a33",
+                        "on-background": "#e4e3d9",
+                        "primary": "#bfce7f",
+                        "inverse-on-surface": "#30312b",
+                        "error": "#ffb4ab",
+                        "on-primary": "#2b3400",
+                        "on-tertiary-fixed": "#121c2c",
+                        "on-primary-container": "#252d00",
+                        "tertiary-container": "#8791a5",
+                        "primary-fixed-dim": "#bfce7f",
+                        "on-tertiary": "#273141",
+                        "surface-container-lowest": "#0e0f0a"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "container-max": "1440px",
+                        "margin-desktop": "40px",
+                        "unit": "4px",
+                        "margin-mobile": "16px",
+                        "gutter": "24px"
+                    },
+                    "fontFamily": {
+                        "body-lg": ["Hanken Grotesk"],
+                        "label-caps": ["JetBrains Mono"],
+                        "body-md": ["Hanken Grotesk"],
+                        "headline-sm": ["Hanken Grotesk"],
+                        "headline-md": ["Hanken Grotesk"],
+                        "headline-lg": ["Hanken Grotesk"],
+                        "body-sm": ["Hanken Grotesk"]
+                    },
+                    "fontSize": {
+                        "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                        "label-caps": ["12px", {"lineHeight": "1", "letterSpacing": "0.1em", "fontWeight": "600"}],
+                        "body-md": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "headline-sm": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                        "headline-md": ["32px", {"lineHeight": "1.2", "fontWeight": "700"}],
+                        "headline-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "800"}],
+                        "body-sm": ["14px", {"lineHeight": "1.4", "fontWeight": "400"}]
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-surface-dim text-on-surface font-body-md overflow-hidden">
+<div class="flex h-screen w-full">
+<!-- SideNavBar -->
+<aside class="hidden md:flex flex-col h-full py-6 px-4 bg-surface-container-low border-r border-outline-variant w-64">
+<div class="flex items-center gap-3 mb-10">
+<div class="w-10 h-10 bg-primary-container flex items-center justify-center rounded">
+<span class="material-symbols-outlined text-on-primary-container" style="font-variation-settings: 'FILL' 1;">build_circle</span>
+</div>
+<div>
+<h1 class="font-headline-md text-headline-sm font-bold text-primary tracking-tighter leading-tight">Biker's Fort</h1>
+<p class="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-widest">Taller Central</p>
+</div>
+</div>
+<nav class="flex-grow space-y-2">
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant font-body-md hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span>Panel de Control</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-primary font-bold border-r-2 border-primary bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+<span>Inventario</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant font-body-md hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">build</span>
+<span>Órdenes de Trabajo</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant font-body-md hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">calendar_today</span>
+<span>Agenda</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant font-body-md hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">analytics</span>
+<span>Reportes</span>
+</a>
+</nav>
+<div class="mt-auto pt-6 border-t border-outline-variant space-y-2">
+<button class="w-full bg-primary text-on-primary font-bold py-3 px-4 flex items-center justify-center gap-2 industrial-shadow transition-all active:scale-95 active:opacity-80 beveled-button mb-4">
+<span class="material-symbols-outlined">add</span>
+<span>Nueva Orden</span>
+</button>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant font-body-md hover:bg-surface-container-highest transition-colors" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span>Configuración</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant font-body-md hover:bg-surface-container-highest transition-colors" href="#">
+<span class="material-symbols-outlined">help</span>
+<span>Soporte</span>
+</a>
+</div>
+</aside>
+<!-- Main Content Canvas -->
+<main class="flex-grow flex flex-col min-w-0 overflow-hidden relative">
+<!-- TopNavBar -->
+<header class="flex justify-between items-center w-full px-10 h-16 bg-surface-container border-b border-outline-variant">
+<div class="flex items-center gap-6">
+<div class="relative group">
+<span class="absolute inset-y-0 left-3 flex items-center text-on-surface-variant">
+<span class="material-symbols-outlined text-[20px]">search</span>
+</span>
+<input class="bg-surface-container-lowest border border-outline-variant pl-10 pr-4 py-1.5 w-64 focus:ring-1 focus:ring-primary focus:border-primary text-body-sm transition-all outline-none" placeholder="Buscar transacciones..." type="text"/>
+</div>
+<nav class="flex gap-6">
+<a class="text-on-surface-variant font-body-md hover:text-primary transition-colors" href="#">Vista Global</a>
+<a class="text-primary font-bold border-b-2 border-primary pb-1 font-body-md" href="#">Alertas de Stock</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="p-2 text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">history</span>
+</button>
+<div class="h-8 w-8 industrial-border bg-surface-container-highest flex items-center justify-center overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Professional workshop manager portrait" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCPVsvusaKv4Mq-PrsHGBwii4tZgVG6mQsYNtLIM6Qp3Yn9QU-zKiyc3gohKsw8OVul-Ux7BApmV28izYKIL61vB-KNo4yvw_RnfV2RwBEBQeidBKNBbxRwOVzU4FXKic7B3SwgTE8Yt2b_FlTlNuvsMRLWqHxvznexzt83xC9S7fTpWNzatEq2hQwdJK7SnFfIW8XmV0IecJzSuQ6jpxyIJ1fkBgcGs_Z8SiVdY0Gf2wU0UNdy_1Ps"/>
+</div>
+</div>
+</header>
+<!-- Scrollable Content -->
+<div class="flex-grow overflow-y-auto p-10">
+<div class="max-w-[1440px] mx-auto">
+<!-- Header Actions -->
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
+<div>
+<h2 class="font-headline-lg text-headline-md text-on-surface tracking-tight">Movimientos de Inventario</h2>
+<p class="text-on-surface-variant font-body-md mt-1">Trazabilidad completa de stock: Entradas, Salidas y Ajustes.</p>
+</div>
+<div class="flex gap-3">
+<button class="px-4 py-2 industrial-border bg-surface-container-high text-on-surface hover:bg-surface-container-highest transition-all flex items-center gap-2 industrial-shadow">
+<span class="material-symbols-outlined text-[18px]">file_download</span>
+<span class="font-label-caps">EXPORTAR CSV</span>
+</button>
+<button class="px-4 py-2 bg-primary text-on-primary font-bold flex items-center gap-2 industrial-shadow beveled-button">
+<span class="material-symbols-outlined text-[18px]">add_box</span>
+<span class="font-label-caps uppercase">NUEVO AJUSTE</span>
+</button>
+</div>
+</div>
+<!-- Filter Bento Box -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-gutter mb-8">
+<div class="md:col-span-3 bg-surface-container industrial-border p-5 grid grid-cols-1 sm:grid-cols-3 gap-4">
+<div class="space-y-2">
+<label class="font-label-caps text-[10px] text-on-surface-variant">RANGO DE FECHA</label>
+<div class="relative">
+<span class="absolute inset-y-0 left-3 flex items-center text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px]">calendar_month</span>
+</span>
+<input class="w-full bg-surface-container-lowest border-outline-variant pl-10 text-body-sm focus:border-primary focus:ring-0" type="text" value="Últimos 30 días"/>
+</div>
+</div>
+<div class="space-y-2">
+<label class="font-label-caps text-[10px] text-on-surface-variant">TIPO DE MOVIMIENTO</label>
+<select class="w-full bg-surface-container-lowest border-outline-variant text-body-sm focus:border-primary focus:ring-0">
+<option>Todos los tipos</option>
+<option>ENTRADA (COMPRA)</option>
+<option>SALIDA (VENTA)</option>
+<option>SALIDA (OT)</option>
+<option>AJUSTE MANUAL</option>
+</select>
+</div>
+<div class="space-y-2">
+<label class="font-label-caps text-[10px] text-on-surface-variant">FILTRAR SKU / PRODUCTO</label>
+<div class="relative">
+<span class="absolute inset-y-0 left-3 flex items-center text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px]">qr_code</span>
+</span>
+<input class="w-full bg-surface-container-lowest border-outline-variant pl-10 text-body-sm focus:border-primary focus:ring-0" placeholder="Ej. FR-2024-X" type="text"/>
+</div>
+</div>
+</div>
+<div class="bg-primary-container p-5 industrial-border flex flex-col justify-between">
+<span class="font-label-caps text-[10px] text-on-primary-container">ALERTAS DE STOCK</span>
+<div class="flex items-end justify-between">
+<span class="font-headline-md text-on-primary-container leading-none">12</span>
+<span class="text-on-primary-container text-body-sm opacity-80">SKU Críticos</span>
+</div>
+<div class="w-full h-1 bg-on-primary-container/20 mt-2">
+<div class="w-[70%] h-full bg-on-primary-container segmented-progress"></div>
+</div>
+</div>
+</div>
+<!-- Inventory Transactions Table -->
+<div class="industrial-border overflow-hidden bg-surface-container">
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead class="bg-surface-container-highest border-b border-outline-variant">
+<tr>
+<th class="px-6 py-4 font-label-caps text-[10px] text-on-surface-variant">FECHA / HORA</th>
+<th class="px-6 py-4 font-label-caps text-[10px] text-on-surface-variant">ID TRANSACCIÓN</th>
+<th class="px-6 py-4 font-label-caps text-[10px] text-on-surface-variant">SKU / PRODUCTO</th>
+<th class="px-6 py-4 font-label-caps text-[10px] text-on-surface-variant">TIPO</th>
+<th class="px-6 py-4 font-label-caps text-[10px] text-on-surface-variant text-right">CANTIDAD</th>
+<th class="px-6 py-4 font-label-caps text-[10px] text-on-surface-variant text-right">STOCK FINAL</th>
+<th class="px-6 py-4 font-label-caps text-[10px] text-on-surface-variant">RESPONSABLE</th>
+</tr>
+</thead>
+<tbody>
+<!-- Row 1 -->
+<tr class="zebra-row group hover:brightness-125 transition-all">
+<td class="px-6 py-4 text-body-sm">24 OCT 2023, 14:30</td>
+<td class="px-6 py-4 font-label-caps text-on-surface-variant">#INV-98231</td>
+<td class="px-6 py-4">
+<div class="flex flex-col">
+<span class="font-bold text-primary">SH-M8100-XT</span>
+<span class="text-[12px] text-on-surface-variant">Pacha Shimano XT 12 vel.</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="px-2 py-1 bg-primary/20 text-primary text-[10px] font-bold border border-primary/30 uppercase">ENTRADA (COMPRA)</span>
+</td>
+<td class="px-6 py-4 text-right font-bold text-primary">+15</td>
+<td class="px-6 py-4 text-right font-label-caps">42</td>
+<td class="px-6 py-4 text-body-sm text-on-surface-variant">Carlos M. (Admin)</td>
+</tr>
+<!-- Row 2 -->
+<tr class="zebra-row group hover:brightness-125 transition-all">
+<td class="px-6 py-4 text-body-sm">24 OCT 2023, 11:15</td>
+<td class="px-6 py-4 font-label-caps text-on-surface-variant">#WO-44521</td>
+<td class="px-6 py-4">
+<div class="flex flex-col">
+<span class="font-bold text-on-surface">CN-M8100</span>
+<span class="text-[12px] text-on-surface-variant">Cadena Shimano XT 126 Eslabones</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="px-2 py-1 bg-secondary/20 text-secondary text-[10px] font-bold border border-secondary/30 uppercase">SALIDA (OT)</span>
+</td>
+<td class="px-6 py-4 text-right font-bold text-error">-1</td>
+<td class="px-6 py-4 text-right font-label-caps">8</td>
+<td class="px-6 py-4 text-body-sm text-on-surface-variant">Andrés J. (Mecánico)</td>
+</tr>
+<!-- Row 3 -->
+<tr class="zebra-row group hover:brightness-125 transition-all">
+<td class="px-6 py-4 text-body-sm">23 OCT 2023, 17:45</td>
+<td class="px-6 py-4 font-label-caps text-on-surface-variant">#ADJ-0042</td>
+<td class="px-6 py-4">
+<div class="flex flex-col">
+<span class="font-bold text-on-surface">MT-500-29</span>
+<span class="text-[12px] text-on-surface-variant">Llanta Maxxis Minion DHF 29x2.5</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="px-2 py-1 bg-tertiary/20 text-tertiary text-[10px] font-bold border border-tertiary/30 uppercase">AJUSTE MANUAL</span>
+</td>
+<td class="px-6 py-4 text-right font-bold text-on-surface">-2</td>
+<td class="px-6 py-4 text-right font-label-caps">14</td>
+<td class="px-6 py-4 text-body-sm text-on-surface-variant">Sistema (Auditoría)</td>
+</tr>
+<!-- Row 4 -->
+<tr class="zebra-row group hover:brightness-125 transition-all">
+<td class="px-6 py-4 text-body-sm">23 OCT 2023, 09:00</td>
+<td class="px-6 py-4 font-label-caps text-on-surface-variant">#INV-98200</td>
+<td class="px-6 py-4">
+<div class="flex flex-col">
+<span class="font-bold text-primary">BR-M8120</span>
+<span class="text-[12px] text-on-surface-variant">Caliper Shimano XT 4 Pistones</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="px-2 py-1 bg-primary/20 text-primary text-[10px] font-bold border border-primary/30 uppercase">ENTRADA (COMPRA)</span>
+</td>
+<td class="px-6 py-4 text-right font-bold text-primary">+4</td>
+<td class="px-6 py-4 text-right font-label-caps">6</td>
+<td class="px-6 py-4 text-body-sm text-on-surface-variant">Carlos M. (Admin)</td>
+</tr>
+<!-- Row 5 -->
+<tr class="zebra-row group hover:brightness-125 transition-all">
+<td class="px-6 py-4 text-body-sm">22 OCT 2023, 13:20</td>
+<td class="px-6 py-4 font-label-caps text-on-surface-variant">#POS-4491</td>
+<td class="px-6 py-4">
+<div class="flex flex-col">
+<span class="font-bold text-on-surface">OIL-500ML</span>
+<span class="text-[12px] text-on-surface-variant">Aceite Mineral Shimano 500ml</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="px-2 py-1 bg-secondary/20 text-secondary text-[10px] font-bold border border-secondary/30 uppercase">SALIDA (VENTA)</span>
+</td>
+<td class="px-6 py-4 text-right font-bold text-error">-3</td>
+<td class="px-6 py-4 text-right font-label-caps">21</td>
+<td class="px-6 py-4 text-body-sm text-on-surface-variant">Caja Mostrador</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Pagination -->
+<div class="bg-surface-container-highest px-6 py-4 flex items-center justify-between border-t border-outline-variant">
+<span class="text-body-sm text-on-surface-variant">Mostrando 1 - 25 de 1,240 registros</span>
+<div class="flex gap-2">
+<button class="p-1 industrial-border bg-surface-container hover:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined">chevron_left</span>
+</button>
+<button class="px-3 py-1 industrial-border bg-primary text-on-primary font-label-caps">1</button>
+<button class="px-3 py-1 industrial-border bg-surface-container hover:bg-surface-container-high font-label-caps">2</button>
+<button class="px-3 py-1 industrial-border bg-surface-container hover:bg-surface-container-high font-label-caps">3</button>
+<button class="p-1 industrial-border bg-surface-container hover:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Summary Stats Footer -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-gutter mt-8">
+<div class="bg-surface-container industrial-border p-5">
+<div class="flex items-center gap-3 mb-2">
+<span class="material-symbols-outlined text-primary">trending_up</span>
+<span class="font-label-caps text-[10px] text-on-surface-variant uppercase">VALOR TOTAL ENTRADAS (MES)</span>
+</div>
+<p class="text-headline-sm font-bold text-on-surface">$14,502.50 <span class="text-[12px] text-primary font-normal">+12%</span></p>
+</div>
+<div class="bg-surface-container industrial-border p-5">
+<div class="flex items-center gap-3 mb-2">
+<span class="material-symbols-outlined text-error">trending_down</span>
+<span class="font-label-caps text-[10px] text-on-surface-variant uppercase">VALOR TOTAL SALIDAS (MES)</span>
+</div>
+<p class="text-headline-sm font-bold text-on-surface">$8,230.15 <span class="text-[12px] text-error font-normal">-4%</span></p>
+</div>
+<div class="bg-surface-container industrial-border p-5">
+<div class="flex items-center gap-3 mb-2">
+<span class="material-symbols-outlined text-on-surface-variant">inventory</span>
+<span class="font-label-caps text-[10px] text-on-surface-variant uppercase">VALORACIÓN DE STOCK ACTUAL</span>
+</div>
+<p class="text-headline-sm font-bold text-on-surface">$89,410.00</p>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+<!-- Micro-interaction script -->
+<script>
+    document.querySelectorAll('.zebra-row').forEach(row => {
+        row.addEventListener('mouseenter', () => {
+            row.style.transform = 'translateX(4px)';
+            row.style.borderColor = '#84924a';
+        });
+        row.addEventListener('mouseleave', () => {
+            row.style.transform = 'translateX(0)';
+            row.style.borderColor = 'transparent';
+        });
+    });
+</script>
+</body></html>

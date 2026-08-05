@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800;900&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .industrial-grid {
+            background-image: radial-gradient(#2d3748 0.5px, transparent 0.5px);
+            background-size: 24px 24px;
+        }
+        .bevel-olive {
+            box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.2);
+        }
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-container": "#8791a5",
+                        "on-tertiary-container": "#202a3a",
+                        "surface": "#13140f",
+                        "surface-container-low": "#1b1c17",
+                        "inverse-primary": "#576421",
+                        "background": "#13140f",
+                        "surface-container-lowest": "#0e0f0a",
+                        "primary-fixed-dim": "#bfce7f",
+                        "on-secondary": "#2d3138",
+                        "on-primary-container": "#252d00",
+                        "surface-tint": "#bfce7f",
+                        "primary-fixed": "#dbea98",
+                        "surface-container-high": "#2a2a24",
+                        "outline-variant": "#46483b",
+                        "on-tertiary-fixed-variant": "#3d4759",
+                        "surface-variant": "#35352f",
+                        "secondary": "#c3c6d0",
+                        "on-tertiary-fixed": "#121c2c",
+                        "tertiary": "#bdc7dc",
+                        "error-container": "#93000a",
+                        "on-secondary-container": "#b2b5be",
+                        "surface-container": "#1f201a",
+                        "surface-bright": "#393a33",
+                        "on-surface": "#e4e3d9",
+                        "on-secondary-fixed-variant": "#43474f",
+                        "on-primary-fixed-variant": "#404c0a",
+                        "on-error-container": "#ffdad6",
+                        "tertiary-fixed-dim": "#bdc7dc",
+                        "surface-dim": "#13140f",
+                        "on-tertiary": "#273141",
+                        "tertiary-fixed": "#d9e3f9",
+                        "secondary-fixed-dim": "#c3c6d0",
+                        "surface-container-highest": "#35352f",
+                        "secondary-container": "#43474f",
+                        "outline": "#919282",
+                        "primary-container": "#89974f",
+                        "error": "#ffb4ab",
+                        "inverse-on-surface": "#30312b",
+                        "secondary-fixed": "#dfe2ec",
+                        "on-surface-variant": "#c7c8b7",
+                        "on-background": "#e4e3d9",
+                        "primary": "#bfce7f",
+                        "on-secondary-fixed": "#181c23",
+                        "on-primary": "#2b3400",
+                        "on-primary-fixed": "#181e00",
+                        "inverse-surface": "#e4e3d9",
+                        "on-error": "#690005"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "container-max": "1440px",
+                        "gutter": "24px",
+                        "margin-desktop": "40px",
+                        "unit": "4px",
+                        "margin-mobile": "16px"
+                    },
+                    "fontFamily": {
+                        "body-sm": ["Hanken Grotesk"],
+                        "body-md": ["Hanken Grotesk"],
+                        "headline-lg": ["Hanken Grotesk"],
+                        "body-lg": ["Hanken Grotesk"],
+                        "headline-sm": ["Hanken Grotesk"],
+                        "headline-md": ["Hanken Grotesk"],
+                        "label-caps": ["JetBrains Mono"]
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-background text-on-surface industrial-grid min-h-screen font-body-md">
+<!-- Desktop Sidebar Shell -->
+<aside class="hidden md:flex flex-col fixed left-0 top-0 h-full w-64 border-r border-outline-variant bg-surface-container-low z-50">
+<div class="p-6">
+<h1 class="font-headline-sm text-headline-sm font-bold text-primary tracking-tight">Biker's Fort</h1>
+<p class="font-body-sm text-body-sm text-on-surface-variant opacity-70">Core Management</p>
+</div>
+<nav class="flex-1 px-4 space-y-1">
+<a class="flex items-center gap-3 p-3 transition-colors duration-200 text-on-surface-variant font-medium hover:bg-surface-container-high" href="#">
+<span class="material-symbols-outlined">build</span>
+<span>Workshop</span>
+</a>
+<a class="flex items-center gap-3 p-3 transition-colors duration-200 text-on-surface-variant font-medium hover:bg-surface-container-high" href="#">
+<span class="material-symbols-outlined">group</span>
+<span>CRM</span>
+</a>
+<a class="flex items-center gap-3 p-3 transition-colors duration-200 text-primary font-bold border-r-2 border-primary bg-secondary-container/10" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+<span>Inventory</span>
+</a>
+<a class="flex items-center gap-3 p-3 transition-colors duration-200 text-on-surface-variant font-medium hover:bg-surface-container-high" href="#">
+<span class="material-symbols-outlined">history_edu</span>
+<span>Repairs</span>
+</a>
+<a class="flex items-center gap-3 p-3 transition-colors duration-200 text-on-surface-variant font-medium hover:bg-surface-container-high" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span>Settings</span>
+</a>
+</nav>
+<div class="p-4 border-t border-outline-variant">
+<button class="w-full bg-primary-container text-on-primary-container py-3 px-4 rounded-lg font-bold flex items-center justify-center gap-2 bevel-olive hover:brightness-110 active:scale-95 transition-all">
+<span class="material-symbols-outlined">add</span>
+<span>New Repair Order</span>
+</button>
+</div>
+<div class="p-4 space-y-1">
+<a class="flex items-center gap-3 p-2 text-on-surface-variant font-medium hover:bg-surface-container-high" href="#">
+<span class="material-symbols-outlined">help</span>
+<span>Support</span>
+</a>
+<a class="flex items-center gap-3 p-2 text-on-surface-variant font-medium hover:bg-surface-container-high" href="#">
+<span class="material-symbols-outlined">logout</span>
+<span>Log Out</span>
+</a>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="md:ml-64 pb-24 md:pb-0">
+<!-- Top App Bar -->
+<header class="flex justify-between items-center w-full px-6 md:px-margin-desktop h-16 sticky top-0 z-40 border-b border-outline-variant bg-surface-container-lowest">
+<div class="flex items-center gap-8">
+<span class="hidden lg:block font-headline-sm text-headline-sm font-black text-on-surface">Biker's Fort Core</span>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
+<input class="bg-surface-container-lowest border border-outline-variant rounded-lg pl-10 pr-4 py-1.5 text-body-sm focus:border-primary focus:ring-0 outline-none w-64" placeholder="Search components or serials..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<nav class="hidden xl:flex gap-6 items-center">
+<a class="text-on-surface-variant hover:text-primary font-body-sm transition-colors" href="#">Dashboard</a>
+<a class="text-primary border-b-2 border-primary pb-1 font-body-sm" href="#">Inventory</a>
+<a class="text-on-surface-variant hover:text-primary font-body-sm transition-colors" href="#">Schedule</a>
+</nav>
+<div class="h-6 w-px bg-outline-variant hidden sm:block"></div>
+<div class="flex items-center gap-4">
+<button class="material-symbols-outlined p-2 text-on-surface-variant hover:bg-surface-variant/20 rounded-full transition-colors">notifications</button>
+<div class="w-8 h-8 rounded-full overflow-hidden border border-outline">
+<img class="w-full h-full object-cover" data-alt="A professional male mechanic in his early 40s wearing a dark grey branded workshop apron, posing in a high-end bike repair shop with carbon fiber frames in the background. The lighting is dramatic, technical, and features cool blue and warm amber tones, emphasizing a professional and precise industrial environment." src="https://lh3.googleusercontent.com/aida-public/AB6AXuATIYJr1VA_FoivhuV3upXP_QoBEqAdTb8CuoeRcqt2C4HtJd8KbbVzuKDniZbjEn_4ystj_lim5e362hqFxASgBlTN8RQNSjDPPJiba5p_SG-CfOLT555f6DFSscs3OEiMxDtV5WAQJFofOd8GmY4IKXgf2UwTPEKNJzxxqp4JQ9zcZtO1Zng_reaOZ_R_LYT0DLIwoNzOrRrigdwgCE2yFTXi0EGd9B6hoGK9vPqxpDGZqSnvN_Lp"/>
+</div>
+</div>
+</div>
+</header>
+<!-- Page Header -->
+<section class="p-6 md:p-10 max-w-container-max mx-auto">
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
+<div>
+<div class="flex items-center gap-2 text-primary font-label-caps mb-2">
+<span class="material-symbols-outlined text-[16px]">database</span>
+<span>COMPONENT REGISTRY / ASSET TRACKING</span>
+</div>
+<h2 class="font-headline-md text-headline-md text-on-surface">Technical Component Breakdown</h2>
+</div>
+<div class="flex gap-3">
+<button class="px-4 py-2 border border-outline-variant text-on-surface font-semibold rounded hover:bg-surface-container-high transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined">filter_list</span>
+<span>Filter Assets</span>
+</button>
+<button class="px-4 py-2 border border-outline-variant text-on-surface font-semibold rounded hover:bg-surface-container-high transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined">download</span>
+<span>Export Specs</span>
+</button>
+</div>
+</div>
+<!-- Bento Grid - Asset Overview -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+<!-- Active Asset Card -->
+<div class="lg:col-span-8 bg-surface-container-low border border-outline-variant rounded-xl overflow-hidden shadow-[4px_4px_0px_rgba(0,0,0,0.5)]">
+<div class="flex flex-col md:flex-row h-full">
+<div class="md:w-1/2 relative h-64 md:h-auto">
+<img class="w-full h-full object-cover" data-alt="High-resolution technical shot of a custom matte black mountain bike frame with olive green accents, suspended on a repair stand. The background is a clean, industrial workshop with tool walls and soft overhead fluorescent lighting. Sharp focus on the carbon fiber weave and pivot bearings, conveying precision engineering." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBDd__FA5XI0CrQsvz0mg3DzUlKQQ4-UDBqy511xbT-A3TbnblCt0pkZSP37LipVWmvelFk-kHnjs2vv6zOCuGNHJNpsUncNa1ZgK3NGm_u8dQW-_f4sTPUL9PZBqmSU4PI45i_1pEbkvDb5QjRv9u0YzuEucN86zD-5R6JySP2fpjASFeAOufTjl7GX_hMXsfsSQ7ngzFYMTgYs6YUG7YrRRmKBr548_WYQfRF4_xZZpxj-B7nf5me"/>
+<div class="absolute top-4 left-4 bg-primary text-on-primary px-3 py-1 rounded-sm font-label-caps text-[10px]">IN SERVICE</div>
+</div>
+<div class="md:w-1/2 p-6 flex flex-col justify-between">
+<div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface mb-1">Specialized S-Works Turbo Levo</h3>
+<p class="font-label-caps text-on-surface-variant text-[11px] mb-4">VIN: SPZ-4492-SL-2024</p>
+<div class="grid grid-cols-2 gap-4 mb-6">
+<div class="border-l-2 border-primary pl-3">
+<p class="text-[10px] font-label-caps text-on-surface-variant">TOTAL MILEAGE</p>
+<p class="font-headline-sm text-[20px] text-on-surface">1,248 KM</p>
+</div>
+<div class="border-l-2 border-primary pl-3">
+<p class="text-[10px] font-label-caps text-on-surface-variant">LAST SERVICE</p>
+<p class="font-headline-sm text-[20px] text-on-surface">12 OCT 23</p>
+</div>
+</div>
+</div>
+<div class="space-y-4">
+<div class="flex justify-between items-end mb-1">
+<span class="text-body-sm font-semibold">Global Health Index</span>
+<span class="text-primary font-label-caps">84% Optimal</span>
+</div>
+<div class="w-full h-2 bg-surface-container-high rounded-full flex gap-0.5 overflow-hidden">
+<div class="h-full bg-primary w-2/3"></div>
+<div class="h-full bg-primary w-1/12 opacity-80"></div>
+<div class="h-full bg-primary w-1/12 opacity-60"></div>
+<div class="h-full bg-outline-variant flex-1"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Critical Alerts -->
+<div class="lg:col-span-4 flex flex-col gap-6">
+<div class="flex-1 bg-surface-container-low border border-error/30 rounded-xl p-5 border-l-4 border-l-error">
+<div class="flex items-center gap-2 text-error font-label-caps mb-3">
+<span class="material-symbols-outlined text-[20px]">warning</span>
+<span>CRITICAL WEAR DETECTED</span>
+</div>
+<h4 class="text-body-md font-bold mb-2">Rear Brake Pads (Organic)</h4>
+<p class="text-body-sm text-on-surface-variant mb-4">Current thickness: 0.8mm. Minimum safe threshold is 0.5mm. Replacement required within 50km.</p>
+<button class="w-full py-2 bg-error-container text-on-error-container font-bold rounded text-body-sm hover:brightness-110">SCHEDULE REPLACEMENT</button>
+</div>
+<div class="flex-1 bg-surface-container-low border border-outline-variant rounded-xl p-5 flex flex-col justify-center text-center industrial-grid">
+<span class="material-symbols-outlined text-primary text-4xl mb-2">speed</span>
+<p class="text-on-surface-variant text-body-sm">Next Major Overhaul in</p>
+<p class="font-headline-md text-primary">342<span class="text-headline-sm ml-1 text-on-surface">km</span></p>
+</div>
+</div>
+<!-- Technical Breakdown Tabs -->
+<div class="lg:col-span-12">
+<div class="flex border-b border-outline-variant mb-6 overflow-x-auto no-scrollbar">
+<button class="px-6 py-3 border-b-2 border-primary text-primary font-bold flex items-center gap-2 whitespace-nowrap">
+<span class="material-symbols-outlined">settings_input_component</span>
+<span>Drivetrain &amp; Transmission</span>
+</button>
+<button class="px-6 py-3 text-on-surface-variant hover:text-on-surface font-medium flex items-center gap-2 whitespace-nowrap">
+<span class="material-symbols-outlined">album</span>
+<span>Braking System</span>
+</button>
+<button class="px-6 py-3 text-on-surface-variant hover:text-on-surface font-medium flex items-center gap-2 whitespace-nowrap">
+<span class="material-symbols-outlined">height</span>
+<span>Suspension Tech</span>
+</button>
+<button class="px-6 py-3 text-on-surface-variant hover:text-on-surface font-medium flex items-center gap-2 whitespace-nowrap">
+<span class="material-symbols-outlined">electric_bolt</span>
+<span>Electrical &amp; Motor</span>
+</button>
+</div>
+<!-- Component Specification Table -->
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse border border-outline-variant">
+<thead>
+<tr class="bg-surface-container-high text-on-surface-variant font-label-caps text-[11px]">
+<th class="p-4 border border-outline-variant">COMPONENT MODULE</th>
+<th class="p-4 border border-outline-variant">SPECIFICATION &amp; MODEL</th>
+<th class="p-4 border border-outline-variant">INSTALL DATE</th>
+<th class="p-4 border border-outline-variant">USAGE / WEAR</th>
+<th class="p-4 border border-outline-variant">STATUS</th>
+<th class="p-4 border border-outline-variant">ACTIONS</th>
+</tr>
+</thead>
+<tbody class="text-body-sm">
+<tr class="bg-surface-container-low hover:bg-surface-container-high transition-colors border-b border-outline-variant">
+<td class="p-4 font-bold border-x border-outline-variant">Derailleur</td>
+<td class="p-4 font-label-caps border-x border-outline-variant">SRAM XX1 Eagle AXS, 12-speed</td>
+<td class="p-4 border-x border-outline-variant">2023-11-05</td>
+<td class="p-4 border-x border-outline-variant">
+<div class="flex items-center gap-3">
+<div class="flex-1 h-1.5 bg-surface-variant rounded-full overflow-hidden">
+<div class="h-full bg-primary w-[30%]"></div>
+</div>
+<span class="font-label-caps text-[10px]">30%</span>
+</div>
+</td>
+<td class="p-4 border-x border-outline-variant">
+<span class="bg-primary/20 text-primary border border-primary/30 px-2 py-0.5 rounded-full text-[10px] font-bold">OPTIMAL</span>
+</td>
+<td class="p-4 border-x border-outline-variant">
+<button class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors">tune</button>
+</td>
+</tr>
+<tr class="bg-surface-container-lowest hover:bg-surface-container-high transition-colors border-b border-outline-variant">
+<td class="p-4 font-bold border-x border-outline-variant">Cassette</td>
+<td class="p-4 font-label-caps border-x border-outline-variant">SRAM XG-1299 Eagle, 10-52t</td>
+<td class="p-4 border-x border-outline-variant">2023-11-05</td>
+<td class="p-4 border-x border-outline-variant">
+<div class="flex items-center gap-3">
+<div class="flex-1 h-1.5 bg-surface-variant rounded-full overflow-hidden">
+<div class="h-full bg-primary w-[65%]"></div>
+</div>
+<span class="font-label-caps text-[10px]">65%</span>
+</div>
+</td>
+<td class="p-4 border-x border-outline-variant">
+<span class="bg-tertiary-container/20 text-tertiary border border-tertiary-container/30 px-2 py-0.5 rounded-full text-[10px] font-bold">FAIR</span>
+</td>
+<td class="p-4 border-x border-outline-variant">
+<button class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors">tune</button>
+</td>
+</tr>
+<tr class="bg-surface-container-low hover:bg-surface-container-high transition-colors border-b border-outline-variant">
+<td class="p-4 font-bold border-x border-outline-variant">Chain</td>
+<td class="p-4 font-label-caps border-x border-outline-variant">SRAM XX1 Eagle, Rainbow</td>
+<td class="p-4 border-x border-outline-variant">2024-03-12</td>
+<td class="p-4 border-x border-outline-variant">
+<div class="flex items-center gap-3">
+<div class="flex-1 h-1.5 bg-surface-variant rounded-full overflow-hidden">
+<div class="h-full bg-error w-[92%]"></div>
+</div>
+<span class="font-label-caps text-[10px] text-error">92%</span>
+</div>
+</td>
+<td class="p-4 border-x border-outline-variant">
+<span class="bg-error/20 text-error border border-error/30 px-2 py-0.5 rounded-full text-[10px] font-bold">REPLACE</span>
+</td>
+<td class="p-4 border-x border-outline-variant">
+<button class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors">history</button>
+</td>
+</tr>
+<tr class="bg-surface-container-lowest hover:bg-surface-container-high transition-colors border-b border-outline-variant">
+<td class="p-4 font-bold border-x border-outline-variant">Crankset</td>
+<td class="p-4 font-label-caps border-x border-outline-variant">Praxis Carbon M30, Custom</td>
+<td class="p-4 border-x border-outline-variant">2023-11-05</td>
+<td class="p-4 border-x border-outline-variant">
+<div class="flex items-center gap-3">
+<div class="flex-1 h-1.5 bg-surface-variant rounded-full overflow-hidden">
+<div class="h-full bg-primary w-[15%]"></div>
+</div>
+<span class="font-label-caps text-[10px]">15%</span>
+</div>
+</td>
+<td class="p-4 border-x border-outline-variant">
+<span class="bg-primary/20 text-primary border border-primary/30 px-2 py-0.5 rounded-full text-[10px] font-bold">EXCELLENT</span>
+</td>
+<td class="p-4 border-x border-outline-variant">
+<button class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors">tune</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Service History & Notes -->
+<div class="lg:col-span-12 grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+<div class="bg-surface-container-low border border-outline-variant rounded-xl p-6">
+<div class="flex justify-between items-center mb-6">
+<h4 class="font-headline-sm text-[20px] text-on-surface">Service Log</h4>
+<button class="text-primary font-label-caps text-[12px] hover:underline">VIEW ALL</button>
+</div>
+<div class="space-y-4">
+<div class="flex gap-4 p-3 border border-outline-variant/30 rounded-lg bg-surface-container-lowest">
+<div class="bg-surface-container-high text-primary rounded h-10 w-10 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined">calendar_today</span>
+</div>
+<div>
+<p class="font-bold text-body-sm">Drivetrain Degrease &amp; Alignment</p>
+<p class="text-body-sm text-on-surface-variant">Technician: Marc Ros • 14 Mar 2024</p>
+</div>
+</div>
+<div class="flex gap-4 p-3 border border-outline-variant/30 rounded-lg bg-surface-container-lowest">
+<div class="bg-surface-container-high text-primary rounded h-10 w-10 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined">bolt</span>
+</div>
+<div>
+<p class="font-bold text-body-sm">AXS Firmware Update (v2.4.1)</p>
+<p class="text-body-sm text-on-surface-variant">System: Wireless Hub • 02 Feb 2024</p>
+</div>
+</div>
+</div>
+</div>
+<div class="bg-surface-container-low border border-outline-variant rounded-xl p-6">
+<h4 class="font-headline-sm text-[20px] text-on-surface mb-6">Technical Recommendations</h4>
+<div class="space-y-4">
+<div class="flex items-start gap-4">
+<div class="w-2 h-2 rounded-full bg-primary mt-2"></div>
+<p class="text-body-sm text-on-surface-variant leading-relaxed">Consider upgrading to the <span class="text-on-surface font-semibold">T-Type Chain</span> for enhanced shifting under motor load. Current XX1 chain shows early signs of side-plate stretch.</p>
+</div>
+<div class="flex items-start gap-4">
+<div class="w-2 h-2 rounded-full bg-tertiary-container mt-2"></div>
+<p class="text-body-sm text-on-surface-variant leading-relaxed">Suspension air spring volume spacer removal suggested if rider weight remains &lt; 75kg for better mid-stroke support.</p>
+</div>
+<button class="w-full py-2 border-2 border-dashed border-outline-variant text-on-surface-variant hover:text-primary hover:border-primary transition-all font-semibold rounded text-body-sm mt-4">
+                                + ADD WORKSHOP NOTE
+                            </button>
+</div>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Bottom Nav Bar (Mobile Only) -->
+<footer class="md:hidden fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 py-2 bg-surface-container-highest border-t border-outline-variant rounded-t-xl shadow-[4px_4px_0px_rgba(0,0,0,0.5)]">
+<button class="flex flex-col items-center justify-center text-on-surface-variant p-2 active:bg-surface-bright active:scale-90 duration-100">
+<span class="material-symbols-outlined">handyman</span>
+<span class="font-label-caps text-[10px]">Workshop</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant p-2 active:bg-surface-bright active:scale-90 duration-100">
+<span class="material-symbols-outlined">person_search</span>
+<span class="font-label-caps text-[10px]">CRM</span>
+</button>
+<button class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-xl p-2 active:bg-surface-bright active:scale-90 duration-100">
+<span class="material-symbols-outlined">data_check</span>
+<span class="font-label-caps text-[10px]">Inventory</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant p-2 active:bg-surface-bright active:scale-90 duration-100">
+<span class="material-symbols-outlined">person</span>
+<span class="font-label-caps text-[10px]">Account</span>
+</button>
+</footer>
+<script>
+        // Micro-interactions and Lightweight atmospheric effects
+        document.addEventListener('DOMContentLoaded', () => {
+            // Hover effect on technical rows
+            const rows = document.querySelectorAll('tbody tr');
+            rows.forEach(row => {
+                row.addEventListener('mouseenter', () => {
+                    row.style.boxShadow = "inset 4px 0 0 0 #bfce7f";
+                });
+                row.addEventListener('mouseleave', () => {
+                    row.style.boxShadow = "none";
+                });
+            });
+
+            // Smooth progress bar entry
+            const progressBars = document.querySelectorAll('.h-full.bg-primary, .h-full.bg-error');
+            progressBars.forEach(bar => {
+                const width = bar.style.width;
+                bar.style.width = '0%';
+                setTimeout(() => {
+                    bar.style.transition = 'width 1.2s cubic-bezier(0.65, 0, 0.35, 1)';
+                    bar.style.width = width;
+                }, 100);
+            });
+        });
+    </script>
+</body></html>

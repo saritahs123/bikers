@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Biker's Fort Core - Detalle de Factura</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .industrial-grid {
+            background-image: radial-gradient(circle at 1px 1px, #2d3748 1px, transparent 0);
+            background-size: 24px 24px;
+            opacity: 0.05;
+        }
+        .beveled-edge {
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .zebra-row:nth-child(even) {
+            background-color: #1c2129;
+        }
+        .zebra-row:nth-child(odd) {
+            background-color: #161a21;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-fixed": "#d9e3f9",
+                        "primary-fixed": "#dbea98",
+                        "tertiary-fixed-dim": "#bdc7dc",
+                        "primary-container": "#89974f",
+                        "surface-variant": "#35352f",
+                        "primary-fixed-dim": "#bfce7f",
+                        "secondary-container": "#43474f",
+                        "on-background": "#e4e3d9",
+                        "on-secondary": "#2d3138",
+                        "inverse-on-surface": "#30312b",
+                        "error": "#ffb4ab",
+                        "on-primary-fixed": "#181e00",
+                        "outline-variant": "#46483b",
+                        "surface-container": "#1f201a",
+                        "on-tertiary-container": "#202a3a",
+                        "on-secondary-fixed-variant": "#43474f",
+                        "error-container": "#93000a",
+                        "on-tertiary": "#273141",
+                        "on-surface": "#e4e3d9",
+                        "surface-dim": "#13140f",
+                        "inverse-surface": "#e4e3d9",
+                        "background": "#13140f",
+                        "on-tertiary-fixed-variant": "#3d4759",
+                        "on-secondary-container": "#b2b5be",
+                        "tertiary-container": "#8791a5",
+                        "surface-bright": "#393a33",
+                        "on-primary": "#2b3400",
+                        "on-secondary-fixed": "#181c23",
+                        "inverse-primary": "#576421",
+                        "on-primary-container": "#252d00",
+                        "surface": "#13140f",
+                        "on-error-container": "#ffdad6",
+                        "on-surface-variant": "#c7c8b7",
+                        "tertiary": "#bdc7dc",
+                        "surface-container-highest": "#35352f",
+                        "secondary-fixed-dim": "#c3c6d0",
+                        "on-error": "#690005",
+                        "surface-tint": "#bfce7f",
+                        "on-tertiary-fixed": "#121c2c",
+                        "on-primary-fixed-variant": "#404c0a",
+                        "secondary": "#c3c6d0",
+                        "outline": "#919282",
+                        "secondary-fixed": "#dfe2ec",
+                        "surface-container-lowest": "#0e0f0a",
+                        "surface-container-low": "#1b1c17",
+                        "surface-container-high": "#2a2a24",
+                        "primary": "#bfce7f"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "margin-mobile": "16px",
+                        "gutter": "24px",
+                        "unit": "4px",
+                        "container-max": "1440px",
+                        "margin-desktop": "40px"
+                    },
+                    "fontFamily": {
+                        "body-md": ["Hanken Grotesk"],
+                        "body-lg": ["Hanken Grotesk"],
+                        "headline-lg": ["Hanken Grotesk"],
+                        "label-caps": ["JetBrains Mono"],
+                        "headline-sm": ["Hanken Grotesk"],
+                        "headline-md": ["Hanken Grotesk"]
+                    },
+                    "fontSize": {
+                        "body-md": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                        "headline-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "800"}],
+                        "label-caps": ["12px", {"lineHeight": "1", "letterSpacing": "0.1em", "fontWeight": "600"}],
+                        "headline-sm": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                        "headline-md": ["32px", {"lineHeight": "1.2", "fontWeight": "700"}]
+                    }
+                },
+            },
+        }
+    </script>
+</head>
+<body class="bg-background text-on-background font-body-md min-h-screen overflow-x-hidden">
+<!-- TopNavBar -->
+<header class="bg-surface-container text-on-surface border-b border-outline-variant w-full h-16 flex justify-between items-center px-margin-desktop ml-0 sticky top-0 z-50">
+<div class="flex items-center gap-4">
+<span class="font-headline-sm text-headline-sm font-bold text-primary tracking-tight">Biker's Fort Core</span>
+</div>
+<div class="flex items-center gap-6">
+<div class="hidden md:flex items-center bg-surface-container-lowest border border-outline px-4 py-2 rounded-lg">
+<span class="material-symbols-outlined text-on-surface-variant mr-2">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-sm w-64" placeholder="Buscar factura..." type="text"/>
+</div>
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined cursor-pointer hover:bg-surface-variant p-2 rounded-full transition-colors" data-icon="notifications">notifications</span>
+<span class="material-symbols-outlined cursor-pointer hover:bg-surface-variant p-2 rounded-full transition-colors" data-icon="settings">settings</span>
+<div class="w-8 h-8 rounded-full overflow-hidden border border-primary">
+<img class="w-full h-full object-cover" data-alt="A professional portrait of a workshop manager wearing a dark branded tactical shirt, set against a blurred background of a high-end mountain bike service center with industrial lighting and tool walls. The aesthetic is clean, professional, and masculine." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBEgxjRU_eG8BvLrnFzqXuFk8Q5mjVp_NDam8tGj_rcaJjz_Grts2mJthkiAqJvDubnZGFbgD2f2DdIaAzv6EDKHmCyWa6YAq3oSfe7wI3heiht16gkR91OexcERRJmFiYe_qYzDhN6arIBUu40-w1E3r32IEt6HSmm-Z2P3onAmvKBLWdkRFa6qDFeqwhGOexb7A45FjoeA-3Hi8In6lIFMlQeJ0Tplntg1Iwe9oLW8ZUGs1VxB7F2"/>
+</div>
+</div>
+</div>
+</header>
+<div class="flex min-h-[calc(100vh-64px)]">
+<!-- SideNavBar -->
+<aside class="hidden md:flex flex-col h-[calc(100vh-64px)] w-64 bg-surface-container-low border-r border-outline-variant py-unit sticky top-16">
+<nav class="flex-1 px-2 space-y-1">
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:text-on-surface hover:bg-surface-variant transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="font-label-caps text-label-caps">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:text-on-surface hover:bg-surface-variant transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="login">login</span>
+<span class="font-label-caps text-label-caps">Reception</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:text-on-surface hover:bg-surface-variant transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="handyman">handyman</span>
+<span class="font-label-caps text-label-caps">Work Orders</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:text-on-surface hover:bg-surface-variant transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="inventory_2">inventory_2</span>
+<span class="font-label-caps text-label-caps">Inventory</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:text-on-surface hover:bg-surface-variant transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="group">group</span>
+<span class="font-label-caps text-label-caps">Clients</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 bg-primary-container text-on-primary-container border-l-4 border-primary transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="payments">payments</span>
+<span class="font-label-caps text-label-caps">Billing</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:text-on-surface hover:bg-surface-variant transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+<span class="font-label-caps text-label-caps">Reports</span>
+</a>
+</nav>
+<div class="p-4 mt-auto space-y-1">
+<button class="w-full bg-primary-container text-on-primary-container py-3 beveled-edge font-bold flex items-center justify-center gap-2 mb-4 hover:opacity-90 transition-opacity">
+<span class="material-symbols-outlined text-sm" data-icon="add">add</span>
+                    New Work Order
+                </button>
+<a class="flex items-center gap-3 px-4 py-2 text-on-surface-variant hover:text-on-surface transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+<span class="font-label-caps text-label-caps uppercase">Support</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 text-on-surface-variant hover:text-on-surface transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="logout">logout</span>
+<span class="font-label-caps text-label-caps uppercase">Sign Out</span>
+</a>
+</div>
+</aside>
+<!-- Main Content -->
+<main class="flex-1 relative overflow-y-auto">
+<div class="industrial-grid absolute inset-0 pointer-events-none"></div>
+<div class="max-w-container-max mx-auto p-6 md:p-margin-desktop relative z-10">
+<!-- Action Bar -->
+<div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+<div class="flex items-center gap-4">
+<button class="p-2 hover:bg-surface-variant border border-outline-variant rounded transition-colors group">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-on-surface" data-icon="arrow_back">arrow_back</span>
+</button>
+<div>
+<h1 class="font-headline-md text-headline-md text-primary">Factura #INV-2024-089</h1>
+<p class="text-on-surface-variant font-label-caps">Emitida: 24 May 2024</p>
+</div>
+</div>
+<div class="flex flex-wrap gap-2">
+<button class="flex items-center gap-2 px-4 py-2 bg-surface-container border border-outline-variant hover:border-primary transition-colors">
+<span class="material-symbols-outlined text-body-md" data-icon="print">print</span>
+<span class="font-label-caps text-xs">Imprimir PDF</span>
+</button>
+<button class="flex items-center gap-2 px-4 py-2 bg-surface-container border border-outline-variant hover:border-primary transition-colors">
+<span class="material-symbols-outlined text-body-md" data-icon="mail">mail</span>
+<span class="font-label-caps text-xs">Enviar por Correo</span>
+</button>
+<button class="flex items-center gap-2 px-6 py-2 bg-primary text-on-primary font-bold beveled-edge hover:opacity-90 transition-opacity">
+<span class="material-symbols-outlined text-body-md" data-icon="add_card">add_card</span>
+<span class="font-label-caps text-xs">Registrar Pago</span>
+</button>
+</div>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-gutter">
+<!-- Invoice Details (8 columns) -->
+<div class="lg:col-span-8 space-y-gutter">
+<!-- Header Info Card -->
+<div class="bg-[#161a21] border border-[#2d3748] p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
+<div class="space-y-4">
+<h3 class="font-label-caps text-primary border-b border-outline-variant pb-2 mb-4">CLIENTE</h3>
+<div class="flex items-start gap-4">
+<div class="w-12 h-12 bg-surface-container-high border border-outline-variant flex items-center justify-center">
+<span class="material-symbols-outlined text-primary" data-icon="person">person</span>
+</div>
+<div>
+<p class="font-bold text-on-surface">Alejandro "The Shredder" Mendoza</p>
+<p class="text-sm text-on-surface-variant">mendoza.pro@email.com</p>
+<p class="text-sm text-on-surface-variant">+52 55 1234 5678</p>
+</div>
+</div>
+</div>
+<div class="space-y-4">
+<h3 class="font-label-caps text-primary border-b border-outline-variant pb-2 mb-4">DETALLES DE ENVÍO / TALLER</h3>
+<div>
+<p class="text-sm text-on-surface-variant uppercase">Estatus</p>
+<div class="inline-flex items-center px-2 py-1 bg-primary-container/20 text-primary border border-primary/30 rounded-sm text-xs font-bold mt-1">
+                                        PAGO PENDIENTE
+                                    </div>
+</div>
+<div class="mt-4">
+<p class="text-sm text-on-surface-variant uppercase">Referencia de Orden</p>
+<p class="font-label-caps text-on-surface">WO-9981-DHS</p>
+</div>
+</div>
+</div>
+<!-- Items Table -->
+<div class="bg-[#161a21] border border-[#2d3748] overflow-hidden">
+<table class="w-full text-left border-collapse">
+<thead class="bg-surface-container-high border-b border-[#2d3748]">
+<tr>
+<th class="px-6 py-4 font-label-caps text-on-surface-variant text-xs">Descripción del Servicio / Producto</th>
+<th class="px-6 py-4 font-label-caps text-on-surface-variant text-xs text-center">Cant.</th>
+<th class="px-6 py-4 font-label-caps text-on-surface-variant text-xs text-right">Precio Unitario</th>
+<th class="px-6 py-4 font-label-caps text-on-surface-variant text-xs text-right">Total</th>
+</tr>
+</thead>
+<tbody>
+<tr class="zebra-row border-b border-[#2d3748]/50">
+<td class="px-6 py-5">
+<div class="flex flex-col">
+<span class="font-bold text-on-surface">Servicio Integral de Horquilla Fox 38</span>
+<span class="text-xs text-on-surface-variant">Desmontaje completo, cambio de retenes y aceite 20wt.</span>
+</div>
+</td>
+<td class="px-6 py-5 text-center font-label-caps">1</td>
+<td class="px-6 py-5 text-right font-label-caps">$185.00</td>
+<td class="px-6 py-5 text-right font-bold text-on-surface">$185.00</td>
+</tr>
+<tr class="zebra-row border-b border-[#2d3748]/50">
+<td class="px-6 py-5">
+<div class="flex flex-col">
+<span class="font-bold text-on-surface">Pastillas de Freno Shimano H03C Metal</span>
+<span class="text-xs text-on-surface-variant">Pastillas con aletas de refrigeración (Par).</span>
+</div>
+</td>
+<td class="px-6 py-5 text-center font-label-caps">2</td>
+<td class="px-6 py-5 text-right font-label-caps">$42.50</td>
+<td class="px-6 py-5 text-right font-bold text-on-surface">$85.00</td>
+</tr>
+<tr class="zebra-row border-b border-[#2d3748]/50">
+<td class="px-6 py-5">
+<div class="flex flex-col">
+<span class="font-bold text-on-surface">Ajuste de Transmisión SRAM Eagle</span>
+<span class="text-xs text-on-surface-variant">Calibración de desviador y tensión de cable.</span>
+</div>
+</td>
+<td class="px-6 py-5 text-center font-label-caps">1</td>
+<td class="px-6 py-5 text-right font-label-caps">$25.00</td>
+<td class="px-6 py-5 text-right font-bold text-on-surface">$25.00</td>
+</tr>
+<tr class="zebra-row border-b border-[#2d3748]/50">
+<td class="px-6 py-5">
+<div class="flex flex-col">
+<span class="font-bold text-on-surface">Cubierta Maxxis Assegai 29x2.50 WT</span>
+<span class="text-xs text-on-surface-variant">3C MaxxGrip / DoubleDown / TR.</span>
+</div>
+</td>
+<td class="px-6 py-5 text-center font-label-caps">1</td>
+<td class="px-6 py-5 text-right font-label-caps">$94.00</td>
+<td class="px-6 py-5 text-right font-bold text-on-surface">$94.00</td>
+</tr>
+</tbody>
+</table>
+<!-- Totals Section -->
+<div class="p-6 bg-surface-container-low flex justify-end">
+<div class="w-full max-w-xs space-y-3">
+<div class="flex justify-between items-center text-on-surface-variant">
+<span class="font-label-caps text-xs">Subtotal</span>
+<span class="font-label-caps">$389.00</span>
+</div>
+<div class="flex justify-between items-center text-on-surface-variant">
+<span class="font-label-caps text-xs">IVA (16%)</span>
+<span class="font-label-caps">$62.24</span>
+</div>
+<div class="h-px bg-outline-variant w-full my-2"></div>
+<div class="flex justify-between items-center">
+<span class="font-label-caps text-primary text-sm">TOTAL FINAL</span>
+<span class="text-headline-sm font-black text-primary">$451.24</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Internal Notes -->
+<div class="bg-[#161a21] border border-[#2d3748] p-6">
+<h3 class="font-label-caps text-xs text-on-surface-variant mb-4 flex items-center gap-2">
+<span class="material-symbols-outlined text-sm" data-icon="notes">notes</span>
+                                NOTAS ADICIONALES
+                            </h3>
+<p class="text-sm text-on-surface-variant leading-relaxed">
+                                El cliente solicitó revisión especial de los rodamientos del basculante. Se detectó desgaste prematuro pero funcional por 3 meses más. Se recomienda cambio en el siguiente servicio integral. Garantía de 30 días en mano de obra.
+                            </p>
+</div>
+</div>
+<!-- Side Panel (4 columns) -->
+<div class="lg:col-span-4 space-y-gutter">
+<!-- Payment History Card -->
+<div class="bg-[#1c2129] border border-[#2d3748] p-6 shadow-[4px_4px_0px_rgba(0,0,0,0.5)]">
+<h3 class="font-label-caps text-on-surface mb-6 flex items-center justify-between">
+                                Historial de Pagos
+                                <span class="material-symbols-outlined text-primary" data-icon="history">history</span>
+</h3>
+<div class="space-y-6">
+<!-- Transaction 1 -->
+<div class="relative pl-6 border-l-2 border-primary/30 py-1">
+<div class="absolute -left-[9px] top-2 w-4 h-4 bg-primary rounded-full border-4 border-[#1c2129]"></div>
+<div class="flex flex-col">
+<span class="font-label-caps text-xs text-primary">24 MAY 2024</span>
+<span class="font-bold text-on-surface">Depósito de Garantía</span>
+<div class="flex justify-between items-center mt-2 text-sm text-on-surface-variant">
+<span>Transferencia SPEI</span>
+<span class="font-label-caps">$100.00</span>
+</div>
+<div class="mt-1 text-[10px] text-on-tertiary-container bg-tertiary-container/20 px-2 py-0.5 rounded-sm inline-block self-start">
+                                            REF: #88271
+                                        </div>
+</div>
+</div>
+<!-- Transaction 2 -->
+<div class="relative pl-6 border-l-2 border-outline-variant py-1">
+<div class="absolute -left-[9px] top-2 w-4 h-4 bg-outline-variant rounded-full border-4 border-[#1c2129]"></div>
+<div class="flex flex-col">
+<span class="font-label-caps text-xs text-on-surface-variant">PENDIENTE</span>
+<span class="font-bold text-on-surface-variant">Liquidación Final</span>
+<div class="flex justify-between items-center mt-2 text-sm text-on-surface-variant/50">
+<span>Esperando pago</span>
+<span class="font-label-caps">$351.24</span>
+</div>
+</div>
+</div>
+</div>
+<button class="w-full mt-8 py-3 border border-dashed border-outline hover:border-primary transition-colors text-xs font-label-caps text-on-surface-variant hover:text-primary flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-sm" data-icon="add_circle">add_circle</span>
+                                AGREGAR TRANSACCIÓN
+                            </button>
+</div>
+<!-- Technical Details Card -->
+<div class="bg-[#1c2129] border border-[#2d3748] p-6">
+<h3 class="font-label-caps text-on-surface mb-4">Información Técnica</h3>
+<div class="space-y-4">
+<div class="bg-[#13140f] p-3 border border-outline-variant/30">
+<p class="text-[10px] text-on-surface-variant uppercase mb-1">Mecánico Asignado</p>
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center text-[10px] font-bold">RM</div>
+<span class="text-sm font-bold">Roberto Méndez</span>
+</div>
+</div>
+<div class="bg-[#13140f] p-3 border border-outline-variant/30">
+<p class="text-[10px] text-on-surface-variant uppercase mb-1">Bicicleta</p>
+<p class="text-sm font-bold">Santa Cruz V10 Carbon CC</p>
+<p class="text-[10px] text-on-surface-variant">SN: SC-V10-22-X001</p>
+</div>
+</div>
+</div>
+<!-- Quick Visual Status -->
+<div class="h-48 relative overflow-hidden bg-[#0a0c10] border border-[#2d3748]">
+<div class="absolute inset-0 opacity-40">
+<img class="w-full h-full object-cover grayscale brightness-50 contrast-125" data-alt="A macro close-up photograph of high-precision mountain bike rear derailleur gears and a clean bike chain. Dramatic cinematic lighting highlighting the mechanical textures, metallic surfaces, and lubrication. Industrial dark aesthetic with olive and charcoal tones." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBRkiCCAF9l-9lIIRtbjeDPOLZ-eEu_IyuRpg4sV5eehszf65Q4ZbrXlWIQaoqHA_J_8gztrjJRCPnQPTxMQxdvGNkNxdKQAznid_JwzBEY5RTk_KN0EGLOvUkWF9SA7wcQMpzOqZHSBKQo2AWLwbgMkygupotF9wg9O11YwoXnqTyFksVjK-oQaB1IiIGIyVQYka2rakVnO4gOsJxC5hBykUP0aaD1FNZkRfabYhFTYDqmxfMeVkSn"/>
+</div>
+<div class="absolute inset-0 bg-gradient-to-t from-[#13140f] to-transparent"></div>
+<div class="absolute bottom-4 left-4">
+<p class="font-label-caps text-primary text-xs mb-1">PROGRESO DEL SERVICIO</p>
+<div class="flex gap-1">
+<div class="w-8 h-2 bg-primary"></div>
+<div class="w-8 h-2 bg-primary"></div>
+<div class="w-8 h-2 bg-primary"></div>
+<div class="w-8 h-2 bg-primary"></div>
+<div class="w-8 h-2 bg-surface-variant"></div>
+</div>
+<p class="text-[10px] text-on-surface-variant mt-2 font-bold uppercase">Ajuste Final / Limpieza</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+<!-- Micro-interaction Scripts -->
+<script>
+        document.querySelectorAll('button').forEach(button => {
+            button.addEventListener('mousedown', function() {
+                this.style.transform = 'scale(0.98)';
+            });
+            button.addEventListener('mouseup', function() {
+                this.style.transform = 'scale(1)';
+            });
+            button.addEventListener('mouseleave', function() {
+                this.style.transform = 'scale(1)';
+            });
+        });
+
+        // Simple mock for "Registrar Pago"
+        const registerPayBtn = document.querySelector('[data-icon="add_card"]').closest('button');
+        registerPayBtn.addEventListener('click', () => {
+            const confirmed = confirm('¿Desea registrar el pago total de $451.24?');
+            if (confirmed) {
+                alert('Pago registrado correctamente. Generando recibo...');
+            }
+        });
+    </script>
+</body></html>

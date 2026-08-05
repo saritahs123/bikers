@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Velo-Industrial | Registro Fotográfico</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        body {
+            background-color: #13140f;
+            color: #e4e3d9;
+            font-family: 'Hanken Grotesk', sans-serif;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .industrial-grid {
+            background-image: radial-gradient(#2d3748 0.5px, transparent 0.5px);
+            background-size: 24px 24px;
+            opacity: 0.05;
+        }
+        .bento-card {
+            border: 1px solid #46483b;
+            transition: all 0.2s ease;
+        }
+        .bento-card:hover {
+            border-color: #919282;
+            background-color: #1f201a;
+        }
+        .bevel-button {
+            box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.1);
+        }
+        .segmented-progress {
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            gap: 2px;
+        }
+        .segmented-block {
+            height: 4px;
+            background-color: #35352f;
+        }
+        .segmented-block.active {
+            background-color: #bfce7f;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-container-high": "#2a2a24",
+                        "secondary": "#c3c6d0",
+                        "background": "#13140f",
+                        "on-background": "#e4e3d9",
+                        "surface-variant": "#35352f",
+                        "on-tertiary-container": "#202a3a",
+                        "on-secondary-container": "#b2b5be",
+                        "tertiary-fixed": "#d9e3f9",
+                        "surface-container-lowest": "#0e0f0a",
+                        "on-error-container": "#ffdad6",
+                        "inverse-on-surface": "#30312b",
+                        "on-primary-fixed-variant": "#404c0a",
+                        "tertiary": "#bdc7dc",
+                        "on-error": "#690005",
+                        "surface-container-highest": "#35352f",
+                        "primary-fixed-dim": "#bfce7f",
+                        "primary": "#bfce7f",
+                        "surface-container": "#1f201a",
+                        "on-surface-variant": "#c7c8b7",
+                        "surface": "#13140f",
+                        "secondary-fixed": "#dfe2ec",
+                        "outline": "#919282",
+                        "inverse-primary": "#576421",
+                        "on-secondary-fixed-variant": "#43474f",
+                        "surface-tint": "#bfce7f",
+                        "on-primary": "#2b3400",
+                        "inverse-surface": "#e4e3d9",
+                        "tertiary-container": "#8791a5",
+                        "on-primary-container": "#252d00",
+                        "tertiary-fixed-dim": "#bdc7dc",
+                        "on-secondary-fixed": "#181c23",
+                        "error-container": "#93000a",
+                        "secondary-fixed-dim": "#c3c6d0",
+                        "surface-bright": "#393a33",
+                        "secondary-container": "#43474f",
+                        "on-primary-fixed": "#181e00",
+                        "primary-fixed": "#dbea98",
+                        "on-tertiary-fixed-variant": "#3d4759",
+                        "outline-variant": "#46483b",
+                        "on-tertiary": "#273141",
+                        "on-surface": "#e4e3d9",
+                        "surface-container-low": "#1b1c17",
+                        "primary-container": "#89974f",
+                        "on-tertiary-fixed": "#121c2c",
+                        "error": "#ffb4ab",
+                        "surface-dim": "#13140f",
+                        "on-secondary": "#2d3138"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "container-max": "1440px",
+                        "unit": "4px",
+                        "margin-mobile": "16px",
+                        "gutter": "24px",
+                        "margin-desktop": "40px"
+                    },
+                    "fontFamily": {
+                        "label-caps": ["JetBrains Mono"],
+                        "headline-md": ["Hanken Grotesk"],
+                        "headline-lg-mobile": ["Hanken Grotesk"],
+                        "body-sm": ["Hanken Grotesk"],
+                        "headline-sm": ["Hanken Grotesk"],
+                        "headline-lg": ["Hanken Grotesk"],
+                        "body-lg": ["Hanken Grotesk"],
+                        "body-md": ["Hanken Grotesk"]
+                    },
+                    "fontSize": {
+                        "label-caps": ["12px", {"lineHeight": "1", "letterSpacing": "0.1em", "fontWeight": "600"}],
+                        "headline-md": ["32px", {"lineHeight": "1.2", "fontWeight": "700"}],
+                        "headline-lg-mobile": ["32px", {"lineHeight": "1.2", "fontWeight": "800"}],
+                        "body-sm": ["14px", {"lineHeight": "1.4", "fontWeight": "400"}],
+                        "headline-sm": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                        "headline-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "800"}],
+                        "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                        "body-md": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}]
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-background text-on-background min-h-screen overflow-x-hidden">
+<!-- Background Industrial Pattern -->
+<div class="fixed inset-0 industrial-grid pointer-events-none"></div>
+<!-- TopNavBar -->
+<nav class="fixed top-0 w-full z-50 flex justify-between items-center px-margin-desktop bg-background border-b border-outline-variant h-16">
+<div class="flex items-center gap-8">
+<span class="font-headline-md text-headline-md font-bold text-primary">VELO-INDUSTRIAL</span>
+<div class="hidden md:flex items-center gap-6">
+<a class="text-on-surface-variant hover:bg-surface-container-high transition-colors px-2 py-1 font-label-caps text-label-caps" href="#">Dashboard</a>
+<a class="text-primary font-bold border-b-2 border-primary px-2 py-1 font-label-caps text-label-caps" href="#">Workshop</a>
+<a class="text-on-surface-variant hover:bg-surface-container-high transition-colors px-2 py-1 font-label-caps text-label-caps" href="#">Inventory</a>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="hidden md:flex items-center bg-surface-container border border-outline-variant px-3 py-1.5 rounded-lg w-64">
+<span class="material-symbols-outlined text-outline text-sm mr-2">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-body-sm text-on-surface w-full" placeholder="Search order ID..." type="text"/>
+</div>
+<button class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors">notifications</button>
+<div class="w-8 h-8 bg-surface-variant border border-outline-variant flex items-center justify-center overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Close-up portrait of a professional mountain bike mechanic in a dark workshop, wearing a charcoal grey apron, dramatic side lighting emphasizing texture and expertise. Dark industrial aesthetic with olive green and metallic accents." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAt5u6UEqkl5kQQJaTW4pvCink7XokeYYwTEV2fxjM7qYLdqUziIQ44xzfmEwpsSOvH322UpocCG-cUJDHGjb_aQ03mv_OwaLFqOjROWFOrT9r28mlIZmYZkCkARWca1p5W8dneL-cgQmoyxYJZYglmILWTqL1V-jGv8THUWMjwV43iKCiUKgsZj7makUb5PPwdjJpCd7cbhbNKubRSNcecG_vl-Lkct8Gm1IQv9jnGYYlWctMYCI_o"/>
+</div>
+</div>
+</nav>
+<!-- SideNavBar -->
+<aside class="fixed left-0 top-16 h-[calc(100vh-4rem)] w-64 bg-surface-container-low border-r border-outline-variant hidden md:flex flex-col py-6">
+<div class="px-6 mb-8">
+<h2 class="font-headline-sm text-headline-sm text-on-surface mb-1">Service Bay 01</h2>
+<p class="font-label-caps text-label-caps text-outline text-[10px]">PRECISION MANAGEMENT</p>
+</div>
+<nav class="flex-1 px-4 space-y-2">
+<a class="flex items-center gap-3 bg-secondary-container text-on-secondary-container rounded-lg px-4 py-3 active:translate-x-1 duration-200" href="#">
+<span class="material-symbols-outlined">build</span>
+<span class="font-label-caps text-label-caps">Workshop</span>
+</a>
+<a class="flex items-center gap-3 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest px-4 py-3 transition-all" href="#">
+<span class="material-symbols-outlined">precision_manufacturing</span>
+<span class="font-label-caps text-label-caps">Inventory</span>
+</a>
+<a class="flex items-center gap-3 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest px-4 py-3 transition-all" href="#">
+<span class="material-symbols-outlined">groups</span>
+<span class="font-label-caps text-label-caps">CRM</span>
+</a>
+<a class="flex items-center gap-3 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest px-4 py-3 transition-all" href="#">
+<span class="material-symbols-outlined">receipt_long</span>
+<span class="font-label-caps text-label-caps">Billing</span>
+</a>
+</nav>
+<div class="px-4 mt-auto space-y-2">
+<button class="w-full bg-primary-container text-on-primary-container py-3 rounded-lg font-label-caps text-label-caps bevel-button hover:brightness-110 active:scale-95 transition-all">
+                New Work Order
+            </button>
+<div class="pt-6 border-t border-outline-variant space-y-1">
+<a class="flex items-center gap-3 text-on-surface-variant hover:text-on-surface px-4 py-2 transition-all" href="#">
+<span class="material-symbols-outlined">help</span>
+<span class="font-label-caps text-label-caps">Support</span>
+</a>
+<a class="flex items-center gap-3 text-on-surface-variant hover:text-on-surface px-4 py-2 transition-all" href="#">
+<span class="material-symbols-outlined">history</span>
+<span class="font-label-caps text-label-caps">Logs</span>
+</a>
+</div>
+</div>
+</aside>
+<!-- Main Content -->
+<main class="md:ml-64 mt-16 p-margin-desktop min-h-screen">
+<header class="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
+<div>
+<div class="flex items-center gap-2 mb-2">
+<span class="bg-primary text-on-primary px-2 py-0.5 font-label-caps text-[10px]">WO-8842-X</span>
+<span class="text-outline font-label-caps text-[10px]">SANTA CRUZ MEGATOWER V2</span>
+</div>
+<h1 class="font-headline-lg text-headline-lg">Registro Fotográfico</h1>
+<p class="text-on-surface-variant text-body-md mt-2 max-w-2xl">Evidencia técnica de desgaste, trazabilidad de componentes críticos y comparativa visual de restauración de alto rendimiento.</p>
+</div>
+<div class="flex gap-3">
+<button class="flex items-center gap-2 border border-outline px-4 py-2 hover:bg-surface-container-high transition-colors font-label-caps text-label-caps">
+<span class="material-symbols-outlined text-sm">share</span> Exportar Reporte
+                </button>
+<button class="flex items-center gap-2 bg-primary text-on-primary px-4 py-2 font-label-caps text-label-caps bevel-button hover:brightness-110">
+<span class="material-symbols-outlined text-sm">add_a_photo</span> Capturar Nueva
+                </button>
+</div>
+</header>
+<!-- Stats Row -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
+<div class="bento-card bg-surface-container-low p-6 flex flex-col justify-between">
+<span class="font-label-caps text-label-caps text-outline">Total Capturas</span>
+<span class="font-headline-md text-headline-md mt-2">24</span>
+<div class="segmented-progress mt-4">
+<div class="segmented-block active"></div><div class="segmented-block active"></div><div class="segmented-block active"></div><div class="segmented-block active"></div><div class="segmented-block active"></div><div class="segmented-block active"></div><div class="segmented-block active"></div><div class="segmented-block active"></div><div class="segmented-block"></div><div class="segmented-block"></div>
+</div>
+</div>
+<div class="bento-card bg-surface-container-low p-6">
+<span class="font-label-caps text-label-caps text-outline">Estado Crítico</span>
+<div class="flex items-center gap-2 mt-2">
+<span class="material-symbols-outlined text-error" style="font-variation-settings: 'FILL' 1;">warning</span>
+<span class="font-headline-md text-headline-md text-error">03</span>
+</div>
+<p class="text-[11px] font-label-caps mt-2 text-on-error-container">Desgaste fuera de tolerancia</p>
+</div>
+<div class="bento-card bg-surface-container-low p-6">
+<span class="font-label-caps text-label-caps text-outline">Microscopía Digital</span>
+<div class="flex items-center gap-2 mt-2">
+<span class="material-symbols-outlined text-primary">biotech</span>
+<span class="font-headline-md text-headline-md">08</span>
+</div>
+<p class="text-[11px] font-label-caps mt-2 text-outline">Análisis de fatiga (Fisuras)</p>
+</div>
+<div class="bento-card bg-surface-container-low p-6">
+<span class="font-label-caps text-label-caps text-outline">Última Carga</span>
+<span class="font-headline-md text-headline-md mt-2">14:20</span>
+<p class="text-[11px] font-label-caps mt-2 text-outline">Operador: Bay 01/Mech_04</p>
+</div>
+</div>
+<!-- Evidence Gallery (Bento Grid) -->
+<div class="grid grid-cols-1 md:grid-cols-12 gap-6 mb-12">
+<!-- Large "Before & After" Compare Card -->
+<div class="md:col-span-8 bento-card bg-surface-container-low overflow-hidden group">
+<div class="p-4 border-b border-outline-variant flex justify-between items-center bg-surface-container">
+<span class="font-label-caps text-label-caps text-on-surface">Comparativa: Rodamiento Pivot Principal</span>
+<div class="flex gap-2">
+<span class="px-2 py-0.5 border border-outline-variant rounded font-label-caps text-[10px]">ID: 4492-B</span>
+<span class="px-2 py-0.5 bg-primary text-on-primary rounded font-label-caps text-[10px]">FINALIZADO</span>
+</div>
+</div>
+<div class="relative h-[400px] flex">
+<div class="w-1/2 h-full relative overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Macro photography of a heavily corroded mountain bike pivot bearing, showing rust, pitted metal surfaces, and contaminated grease. The lighting is harsh and technical, revealing every detail of mechanical failure. Industrial dark color palette with orange rust accents." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDn292XLhm-JI7h3jGtDQgjOr6uYpcE6T5Z0Wnj5y24qmqD95EaGFyf0MYCVSoYGtRtxLyA0YcHV6T4uccViI8UzJTeTcj1RtKX1dsKRzS7zL3Cf6gNywJrL9H5g2SQ4Hn8541kFzNWZnGMiKqPNeK40UH-dc31yjnJkptrz98pf9Z7tQYsgEj7h6M67A-HGXq1G7GU0Glcx2dpp8Icj49MNdKWc5lZhM5CTDaZvq7jCIweFyT8v029"/>
+<div class="absolute bottom-4 left-4 bg-black/70 px-3 py-1 font-label-caps text-label-caps border border-white/20">Antes (Estado Inicial)</div>
+</div>
+<div class="w-1/2 h-full relative overflow-hidden border-l border-outline">
+<img class="w-full h-full object-cover" data-alt="Professional studio photography of a brand new precision ceramic mountain bike bearing, installed perfectly with neon-green high-performance grease. The surface is polished, pristine, and reflecting soft industrial workshop lighting. Clean, matte industrial aesthetic with military olive accents." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBsrvX8-ANUQhyAiEnl6WmVt_tke28jfSgxPeiLLznf6pAsKWT5VhvCqdjs9RobetncMDGZfnz1nC7pN6Vat11k8uY1uIMny0PpGkYcvOpyPxrSYBuSF4-9PQC-lIM5hPw1SKXg3GrBjXPPxNxb14p9MzzeU3kd6RVgg9Irt3feR-034IgyhfNI3jaO25T447IGox3cKz2V-aa5o9pjqvPrnSsrdLdTjUiIW6bJ4_Ej1aDlekSfEUiv"/>
+<div class="absolute bottom-4 right-4 bg-primary px-3 py-1 font-label-caps text-label-caps text-on-primary shadow-lg">Después (Instalación)</div>
+</div>
+<!-- Interaction Slider Overlay (Simulated) -->
+<div class="absolute inset-0 pointer-events-none flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+<div class="bg-primary p-2 rounded-full text-on-primary">
+<span class="material-symbols-outlined">compare_arrows</span>
+</div>
+</div>
+</div>
+<div class="p-4 grid grid-cols-2 gap-4 bg-surface-container-lowest">
+<div class="text-[12px] text-on-surface-variant font-body-sm">
+<span class="font-bold block text-error mb-1">Diagnóstico:</span> 
+                        Contaminación por sedimentos y falla de sello laberíntico. Fricción estática elevada: &gt;0.8Nm.
+                    </div>
+<div class="text-[12px] text-on-surface-variant font-body-sm border-l border-outline-variant pl-4">
+<span class="font-bold block text-primary mb-1">Resolución:</span> 
+                        Reemplazo por rodamientos Enduro MAX Dual-Lip. Torque aplicado: 15Nm (Loctite 243).
+                    </div>
+</div>
+</div>
+<!-- Micro-analysis Sidebar -->
+<div class="md:col-span-4 flex flex-col gap-6">
+<div class="bento-card bg-surface-container-low flex-1 overflow-hidden">
+<div class="p-4 border-b border-outline-variant bg-surface-container">
+<span class="font-label-caps text-label-caps">Microscopía: Fatiga de Material</span>
+</div>
+<div class="h-48">
+<img class="w-full h-full object-cover grayscale hover:grayscale-0 transition-all duration-500" data-alt="Microscopic digital scan of a carbon fiber frame area around a mounting point, showing tiny hairline fractures under UV light. The image is technical, high contrast, with blue and green highlights indicating stress points. Dark background, scientific industrial style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAd3yOh-N9i4E5SRDbF0ufgJ_d59z-FxorNIhEQrA7e8E9SmuJHO3KXZG20EdUTUvVtNCI5l1xL6Dk6VQfWlQhITJv9AtAU-rqGbdB7r9AQ0_Ssec_UyQcH_6noXLd5-Kd_kL2368VrXTUYJS4pLQtqljMqVMX5vlfOd-Hro7b9oACRy1IO6bYbyNb53w7winE7-cswbZUErztHVhZbQ7JAAi29_GcB8sV1X3pLbAR-f8Pk5VyMVHYE"/>
+</div>
+<div class="p-4">
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-error text-sm">microwave</span>
+<span class="font-label-caps text-[11px] text-error">ALERTA: FISURA TIPO B</span>
+</div>
+<p class="text-body-sm text-on-surface-variant">Microfisura detectada en vaina inferior derecha. Profundidad estimada: 0.4mm. No compromete integridad estructural inmediata, pero requiere monitoreo en 200km.</p>
+</div>
+</div>
+<div class="bento-card bg-surface-container-low p-4">
+<div class="flex justify-between items-center mb-4">
+<span class="font-label-caps text-label-caps">Etiquetas Técnicas</span>
+<span class="material-symbols-outlined text-sm text-outline">sell</span>
+</div>
+<div class="flex flex-wrap gap-2">
+<span class="bg-surface-variant text-on-surface-variant px-2 py-1 text-[10px] font-label-caps border border-outline-variant">#CARBON_STRESS</span>
+<span class="bg-surface-variant text-on-surface-variant px-2 py-1 text-[10px] font-label-caps border border-outline-variant">#CRITICAL_FLAW</span>
+<span class="bg-surface-variant text-on-surface-variant px-2 py-1 text-[10px] font-label-caps border border-outline-variant">#REPAIR_DONE</span>
+<span class="bg-surface-variant text-on-surface-variant px-2 py-1 text-[10px] font-label-caps border border-outline-variant">#TOLERANCE_CHECK</span>
+</div>
+</div>
+</div>
+<!-- Component Detail Feed -->
+<div class="md:col-span-3 bento-card bg-surface-container-low overflow-hidden">
+<div class="aspect-square">
+<img class="w-full h-full object-cover" data-alt="Close-up detailed photo of a worn mountain bike chain measuring tool showing 0.75 wear. The background is a clean, dark industrial workspace. Sharp focus on the measurement scale. Professional mechanic documentation style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuANxw57UFBWFP8Y_6wwt-cQceIdwy1anMvldVuy71CNbrQF8WTynUCJIV2IUIXDLLRC_FpCM_iKQO6zln9GRBAg6MdHNQWGK40Ozd6ItM-m33G_-J188c3A50hy4omLffIlxYXZPGWwYP2AeiD8j0QvyFNfdFoXh_1gGdBZoUxjjSZY2W3xLZV8XZonHVcpart6W0eNu5GZcEMBDWf7d1gQXV7_tyV8FWk7muzVnHLJ1y6X6ggsZ7Sq"/>
+</div>
+<div class="p-4">
+<span class="font-label-caps text-[10px] text-outline">Transmisión</span>
+<h3 class="font-headline-sm text-[16px] mt-1 mb-2">Desgaste de Cadena</h3>
+<div class="flex items-center gap-2">
+<div class="flex-1 h-1 bg-surface-variant">
+<div class="h-full bg-error w-[75%]"></div>
+</div>
+<span class="text-[10px] font-label-caps">0.75%</span>
+</div>
+</div>
+</div>
+<div class="md:col-span-3 bento-card bg-surface-container-low overflow-hidden">
+<div class="aspect-square">
+<img class="w-full h-full object-cover" data-alt="Detail shot of a mountain bike hydraulic brake piston extended, showing blackened oil and dirt buildup. High contrast, sharp focus on the seals and the texture of the grime. Industrial lighting, dark charcoal background." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDpT8cle7yu_WzpbOoHHUBRIntljKGnaRqTEYpo9SMVteb2l47n3Anns1mwTTNhLDHjuEyX6hTplJFKYVhheLK2gRs2G9D0Ktn6UqxGQajIqpKox5oGyniHZqrzJcBWQPWJOlComZw5LMlvCbnUopqeH9ooA3INErikt2IPTZvTfKwV49L9aRQihp2roX1yJgYWL_-1pl70cQQ-DWeVqq_r4bfevxvgIKPUB2DKVWeswpMTxyaaosPa"/>
+</div>
+<div class="p-4">
+<span class="font-label-caps text-[10px] text-outline">Frenado</span>
+<h3 class="font-headline-sm text-[16px] mt-1 mb-2">Estado Pistones</h3>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-sm text-error" style="font-variation-settings: 'FILL' 1;">error</span>
+<span class="text-[10px] font-label-caps text-error">REEMPLAZO RECOMENDADO</span>
+</div>
+</div>
+</div>
+<div class="md:col-span-3 bento-card bg-surface-container-low overflow-hidden">
+<div class="aspect-square">
+<img class="w-full h-full object-cover" data-alt="Technical photo of a suspension fork air spring assembly disassembled on a clean lint-free mat. Parts are organized and shining with fresh suspension oil. Clinical workshop aesthetic, military olive and metallic grey colors." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA_P5VOESoP0VVh8kiTpD9foHB6m-2PogqcQ3G81eE3-H34kwRrbCs7uWfotYiPdl__rgH-Pkz62mdAirH6N3EMNXg70TLkfXJRD0LpKk_6HAebs2Bh7etvWRQt35LWWuMw5PrP9JhzVr-VCIVGYfLqgYSMOs9SvDeYq8eCOmwGXTg3nqjeSD9ufMfY-_xB3ruxIrw5-fEBRRfufwaZ5f7dRUTpFXquagDiTRrTDdnNyob-TioPh8Qy"/>
+</div>
+<div class="p-4">
+<span class="font-label-caps text-[10px] text-outline">Suspensión</span>
+<h3 class="font-headline-sm text-[16px] mt-1 mb-2">Full Service Fork</h3>
+<div class="flex items-center gap-2 text-primary">
+<span class="material-symbols-outlined text-sm">check_circle</span>
+<span class="text-[10px] font-label-caps">OPTIMIZADO</span>
+</div>
+</div>
+</div>
+<div class="md:col-span-3 bento-card bg-surface-container-low overflow-hidden border-dashed border-2 border-outline-variant flex flex-col items-center justify-center p-8 text-center group cursor-pointer hover:bg-surface-container">
+<div class="w-12 h-12 rounded-full border border-outline-variant flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-primary">add_a_photo</span>
+</div>
+<span class="font-label-caps text-label-caps">Agregar Nueva Evidencia</span>
+<p class="text-[10px] text-outline mt-2">Formatos: RAW, JPG, PNG (Max 50MB)</p>
+</div>
+</div>
+<!-- Technical Log List -->
+<section class="mb-10">
+<h2 class="font-headline-sm text-headline-sm mb-6 border-l-4 border-primary pl-4">Historial de Capturas</h2>
+<div class="bento-card overflow-hidden">
+<table class="w-full border-collapse">
+<thead class="bg-surface-container-high">
+<tr class="text-left font-label-caps text-[10px] text-outline">
+<th class="p-4 border-b border-outline-variant">ID FOTO</th>
+<th class="p-4 border-b border-outline-variant">COMPONENTE</th>
+<th class="p-4 border-b border-outline-variant">CATEGORÍA</th>
+<th class="p-4 border-b border-outline-variant">ANALISTA</th>
+<th class="p-4 border-b border-outline-variant">ACCIÓN</th>
+</tr>
+</thead>
+<tbody class="text-body-sm">
+<tr class="border-b border-outline-variant hover:bg-surface-container transition-colors">
+<td class="p-4 font-label-caps">#IMG-9921</td>
+<td class="p-4">Rotor Galfer 203mm</td>
+<td class="p-4">
+<span class="bg-surface-variant px-2 py-0.5 rounded text-[10px] font-label-caps">DESGASTE</span>
+</td>
+<td class="p-4 text-on-surface-variant">Mech_04</td>
+<td class="p-4 flex gap-2">
+<button class="material-symbols-outlined text-sm hover:text-primary">visibility</button>
+<button class="material-symbols-outlined text-sm hover:text-primary">download</button>
+</td>
+</tr>
+<tr class="bg-surface-container-low/50 border-b border-outline-variant hover:bg-surface-container transition-colors">
+<td class="p-4 font-label-caps">#IMG-9918</td>
+<td class="p-4">Cassette SRAM XX1</td>
+<td class="p-4">
+<span class="bg-surface-variant px-2 py-0.5 rounded text-[10px] font-label-caps">REPARACIÓN</span>
+</td>
+<td class="p-4 text-on-surface-variant">Mech_02</td>
+<td class="p-4 flex gap-2">
+<button class="material-symbols-outlined text-sm hover:text-primary">visibility</button>
+<button class="material-symbols-outlined text-sm hover:text-primary">download</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+</main>
+<!-- FAB Action (Contextual: Add Photo) -->
+<button class="fixed bottom-8 right-8 w-14 h-14 bg-primary text-on-primary rounded-full shadow-[4px_4px_0px_rgba(0,0,0,0.5)] flex items-center justify-center hover:translate-y-[-2px] active:translate-y-[2px] transition-transform z-50">
+<span class="material-symbols-outlined" style="font-variation-settings: 'wght' 700;">camera</span>
+</button>
+<script>
+        // Simple interactivity for demonstration
+        document.addEventListener('DOMContentLoaded', () => {
+            // Hover effect on the compare card could be enhanced here with JS
+            console.log("Velo-Industrial Photo Log Initialized");
+        });
+    </script>
+</body></html>

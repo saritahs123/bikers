@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Detalle de Orden de Compra | Biker's Fort Core</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .bg-grid-pattern {
+            background-image: radial-gradient(circle, #2d3748 1px, transparent 1px);
+            background-size: 24px 24px;
+        }
+        .bevel-primary {
+            box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.2);
+        }
+        .industrial-shadow {
+            box-shadow: 4px 4px 0px rgba(0,0,0,0.5);
+        }
+        /* Zebra striping for industrial lists */
+        .zebra-row:nth-child(even) {
+            background-color: #1c2129;
+        }
+        .zebra-row:nth-child(odd) {
+            background-color: #161a21;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface": "#13140f",
+                        "inverse-on-surface": "#30312b",
+                        "on-tertiary-container": "#202a3a",
+                        "tertiary-fixed": "#d9e3f9",
+                        "on-secondary-fixed": "#181c23",
+                        "background": "#13140f",
+                        "on-secondary-container": "#b2b5be",
+                        "on-secondary": "#2d3138",
+                        "inverse-surface": "#e4e3d9",
+                        "on-surface-variant": "#c7c8b7",
+                        "tertiary-container": "#8791a5",
+                        "tertiary-fixed-dim": "#bdc7dc",
+                        "surface-tint": "#bfce7f",
+                        "on-primary-fixed": "#181e00",
+                        "on-secondary-fixed-variant": "#43474f",
+                        "primary-fixed-dim": "#bfce7f",
+                        "error": "#ffb4ab",
+                        "tertiary": "#bdc7dc",
+                        "secondary-fixed": "#dfe2ec",
+                        "secondary-container": "#43474f",
+                        "on-primary-container": "#252d00",
+                        "surface-variant": "#35352f",
+                        "error-container": "#93000a",
+                        "on-error-container": "#ffdad6",
+                        "surface-container": "#1f201a",
+                        "primary": "#bfce7f",
+                        "surface-container-highest": "#35352f",
+                        "surface-container-lowest": "#0e0f0a",
+                        "primary-fixed": "#dbea98",
+                        "surface-bright": "#393a33",
+                        "primary-container": "#89974f",
+                        "on-tertiary-fixed-variant": "#3d4759",
+                        "surface-container-high": "#2a2a24",
+                        "inverse-primary": "#576421",
+                        "on-error": "#690005",
+                        "secondary": "#c3c6d0",
+                        "outline-variant": "#46483b",
+                        "on-primary": "#2b3400",
+                        "on-primary-fixed-variant": "#404c0a",
+                        "on-tertiary-fixed": "#121c2c",
+                        "on-background": "#e4e3d9",
+                        "secondary-fixed-dim": "#c3c6d0",
+                        "surface-container-low": "#1b1c17",
+                        "on-surface": "#e4e3d9",
+                        "surface-dim": "#13140f",
+                        "outline": "#919282",
+                        "on-tertiary": "#273141"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "fontFamily": {
+                        "label-caps": ["JetBrains Mono"],
+                        "headline-md": ["Hanken Grotesk"],
+                        "body-md": ["Hanken Grotesk"],
+                        "headline-lg": ["Hanken Grotesk"],
+                        "headline-sm": ["Hanken Grotesk"],
+                        "body-sm": ["Hanken Grotesk"],
+                        "body-lg": ["Hanken Grotesk"]
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-surface text-on-surface font-body-md overflow-x-hidden">
+<!-- Global Layout Container -->
+<div class="flex min-h-screen">
+<!-- SideNavBar (Execution from JSON) -->
+<aside class="fixed left-0 top-0 h-full flex flex-col py-6 px-4 bg-surface-container-lowest border-r border-outline-variant w-64 z-50">
+<div class="mb-10 px-2">
+<h1 class="font-headline-sm text-headline-sm font-bold text-primary tracking-tight">Biker's Fort Core</h1>
+<p class="text-[10px] uppercase tracking-widest text-on-surface-variant font-label-caps opacity-70">Workshop Management</p>
+</div>
+<nav class="flex-1 space-y-1">
+<!-- Active Item: Inventory (closest match for Purchase Orders) -->
+<a class="flex items-center gap-3 px-3 py-3 text-on-surface-variant font-medium hover:bg-surface-container-high hover:text-on-surface transition-colors duration-200 group" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="font-label-caps text-[13px]">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-3 text-primary font-bold border-r-2 border-primary bg-surface-container-high group" href="#">
+<span class="material-symbols-outlined" data-icon="inventory_2">inventory_2</span>
+<span class="font-label-caps text-[13px]">Inventory</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-3 text-on-surface-variant font-medium hover:bg-surface-container-high hover:text-on-surface transition-colors duration-200 group" href="#">
+<span class="material-symbols-outlined" data-icon="handyman">handyman</span>
+<span class="font-label-caps text-[13px]">Builds</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-3 text-on-surface-variant font-medium hover:bg-surface-container-high hover:text-on-surface transition-colors duration-200 group" href="#">
+<span class="material-symbols-outlined" data-icon="calendar_month">calendar_month</span>
+<span class="font-label-caps text-[13px]">Calendar</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-3 text-on-surface-variant font-medium hover:bg-surface-container-high hover:text-on-surface transition-colors duration-200 group" href="#">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+<span class="font-label-caps text-[13px]">Analytics</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-3 text-on-surface-variant font-medium hover:bg-surface-container-high hover:text-on-surface transition-colors duration-200 group" href="#">
+<span class="material-symbols-outlined" data-icon="payments">payments</span>
+<span class="font-label-caps text-[13px]">Payments</span>
+</a>
+</nav>
+<button class="mt-4 mb-8 w-full py-3 bg-primary-container text-on-primary-container font-label-caps text-[12px] flex items-center justify-center gap-2 industrial-shadow bevel-primary active:scale-[0.98] transition-transform">
+<span class="material-symbols-outlined text-[18px]">add_circle</span>
+                New Repair Order
+            </button>
+<div class="pt-6 border-t border-outline-variant space-y-1">
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant font-medium hover:bg-surface-container-high hover:text-on-surface" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="font-label-caps text-[12px]">Settings</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant font-medium hover:bg-surface-container-high hover:text-on-surface" href="#">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+<span class="font-label-caps text-[12px]">Support</span>
+</a>
+</div>
+</aside>
+<!-- Main Canvas -->
+<main class="ml-64 flex-1 min-h-screen bg-surface relative">
+<!-- Blueprint texture overlay -->
+<div class="absolute inset-0 bg-grid-pattern opacity-5 pointer-events-none"></div>
+<!-- TopAppBar -->
+<header class="flex justify-between items-center px-10 h-16 sticky top-0 z-40 bg-surface border-b border-outline-variant">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-outline" data-icon="search">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-body-md w-96 placeholder:text-outline-variant" placeholder="Buscar productos, órdenes, componentes..." type="text"/>
+</div>
+<div class="flex items-center gap-6">
+<button class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors" data-icon="notifications">notifications</button>
+<button class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors" data-icon="history">history</button>
+<div class="h-8 w-8 rounded-full overflow-hidden border border-outline">
+<img class="object-cover h-full w-full" data-alt="Close up portrait of a professional bicycle mechanic wearing a dark workshop apron, looking focused and skilled. The background shows a blurry high-end bike repair shop with matte charcoal walls and industrial lighting. The overall mood is serious and professional, emphasizing expertise and reliability in a premium technical environment." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDiZjfho_sc1EtM7bWI92jcBNdR4asj3OCs8tmq1NLwBs7pi5jV0HZhz-1Mwwv_ormqIl2B8c_3QQen_J8CqsaOusrvc7qL_F6Se_3RPi6zSi2VnMaDCqyoQNLPU1ZOfh_znfg8qnPprNvZva6Rh_zwiooOvSfJnkZ7rtgFSOXw9Z8kWJzzbDLVTGlKZdMuKZFaW_AnFFklQNGCNlaSdq2CdO1imqnr8dqTtX1EuPkYn5sboWssAKNX"/>
+</div>
+</div>
+</header>
+<!-- Content Area -->
+<div class="p-10 max-w-[1440px] mx-auto relative z-10">
+<!-- Breadcrumbs & Status -->
+<div class="flex justify-between items-end mb-8">
+<div>
+<nav class="flex items-center gap-2 text-on-surface-variant font-label-caps text-[10px] mb-2">
+<a class="hover:text-primary" href="#">INVENTARIO</a>
+<span class="material-symbols-outlined text-[12px]">chevron_right</span>
+<a class="hover:text-primary" href="#">ORDENES DE COMPRA</a>
+<span class="material-symbols-outlined text-[12px]">chevron_right</span>
+<span class="text-on-surface">OC-2023-452</span>
+</nav>
+<h2 class="font-headline-md text-headline-md text-on-surface">Detalle de Orden #OC-2023-452</h2>
+<p class="text-on-surface-variant font-body-md">Proveedor: <span class="text-primary font-bold">Shimano Latin America</span></p>
+</div>
+<div class="flex flex-col items-end gap-3">
+<span class="px-4 py-1.5 bg-[#1a202c] border border-primary text-primary font-label-caps text-[12px] tracking-widest industrial-shadow">ESTADO: PENDIENTE</span>
+<div class="flex gap-3">
+<button class="px-4 py-2 bg-surface-container-high border border-outline-variant text-on-surface font-label-caps text-[11px] hover:border-outline transition-all flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]">print</span>
+                                IMPRIMIR OC
+                            </button>
+<button class="px-4 py-2 bg-surface-container-high border border-outline-variant text-on-surface font-label-caps text-[11px] hover:border-outline transition-all flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]">mail</span>
+                                NOTIFICAR PROVEEDOR
+                            </button>
+<button class="px-6 py-2 bg-primary text-on-primary font-label-caps text-[11px] industrial-shadow bevel-primary hover:opacity-90 transition-all flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]">input</span>
+                                INICIAR RECEPCIÓN
+                            </button>
+</div>
+</div>
+</div>
+<!-- Info Grid (Asymmetric) -->
+<div class="grid grid-cols-12 gap-gutter mb-10">
+<!-- Supplier Card -->
+<div class="col-span-8 bg-[#161a21] border border-[#2d3748] p-6 relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-2 opacity-5">
+<span class="material-symbols-outlined text-[120px]" data-icon="factory">factory</span>
+</div>
+<h3 class="font-label-caps text-label-caps text-primary mb-6 border-b border-outline-variant pb-2">INFORMACIÓN DEL PROVEEDOR</h3>
+<div class="grid grid-cols-2 gap-8">
+<div class="space-y-4">
+<div>
+<label class="block text-[10px] text-on-surface-variant font-label-caps opacity-60">RAZÓN SOCIAL</label>
+<p class="font-bold text-body-lg">Shimano Latin America S.A.</p>
+</div>
+<div>
+<label class="block text-[10px] text-on-surface-variant font-label-caps opacity-60">CONTACTO</label>
+<p class="font-body-md text-on-surface">Ricardo Mendoza — Gerente de Cuentas</p>
+<p class="text-body-sm text-on-surface-variant">r.mendoza@shimano-latam.com</p>
+</div>
+</div>
+<div class="space-y-4">
+<div>
+<label class="block text-[10px] text-on-surface-variant font-label-caps opacity-60">DIRECCIÓN DE DESPACHO</label>
+<p class="text-body-sm text-on-surface-variant italic">Industrial Park Alpha, Building 4, Panama City</p>
+</div>
+<div class="flex gap-8">
+<div>
+<label class="block text-[10px] text-on-surface-variant font-label-caps opacity-60">LEAD TIME</label>
+<p class="font-bold text-primary font-label-caps">15-20 DÍAS</p>
+</div>
+<div>
+<label class="block text-[10px] text-on-surface-variant font-label-caps opacity-60">CRÉDITO</label>
+<p class="font-bold text-on-surface font-label-caps">NET 30</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Meta Details -->
+<div class="col-span-4 bg-[#1c2129] border border-[#2d3748] p-6">
+<h3 class="font-label-caps text-label-caps text-primary mb-6 border-b border-outline-variant pb-2">DETALLES LOGÍSTICOS</h3>
+<div class="space-y-6">
+<div class="flex justify-between items-center">
+<span class="text-body-sm text-on-surface-variant font-label-caps">FECHA EMISIÓN</span>
+<span class="text-body-md font-bold">24 OCT 2023</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-body-sm text-on-surface-variant font-label-caps">FECHA ESTIMADA</span>
+<span class="text-body-md font-bold text-primary">12 NOV 2023</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-body-sm text-on-surface-variant font-label-caps">ALMACÉN DESTINO</span>
+<span class="text-body-md font-bold">WH-MAIN-CENTRAL</span>
+</div>
+<div class="pt-4 border-t border-outline-variant">
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-[16px] text-primary" data-icon="local_shipping">local_shipping</span>
+<span class="text-[10px] font-label-caps">MÉTODO DE ENVÍO</span>
+</div>
+<p class="text-body-sm">Air Freight - Express Priority (DHL)</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Line Items Table -->
+<div class="bg-[#13140f] border border-[#2d3748] overflow-hidden mb-10">
+<table class="w-full text-left border-collapse">
+<thead class="bg-[#1c2129] border-b border-[#2d3748]">
+<tr>
+<th class="px-6 py-4 font-label-caps text-[11px] text-primary tracking-widest">PRODUCTO</th>
+<th class="px-6 py-4 font-label-caps text-[11px] text-primary tracking-widest text-center">SKU</th>
+<th class="px-6 py-4 font-label-caps text-[11px] text-primary tracking-widest text-right">CANT. SOLICITADA</th>
+<th class="px-6 py-4 font-label-caps text-[11px] text-primary tracking-widest text-right">PRECIO UNITARIO</th>
+<th class="px-6 py-4 font-label-caps text-[11px] text-primary tracking-widest text-right">SUBTOTAL</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/30">
+<!-- Row 1 -->
+<tr class="zebra-row group">
+<td class="px-6 py-5">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 bg-surface-container border border-outline-variant flex items-center justify-center">
+<span class="material-symbols-outlined text-outline" data-icon="settings_input_component">settings_input_component</span>
+</div>
+<div>
+<p class="font-bold text-on-surface">Shimano XTR M9100 Cassette</p>
+<p class="text-[11px] text-on-surface-variant">12-Speed / 10-51T Hyperglide+</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-5 text-center font-label-caps text-sm text-on-surface-variant">CS-M9100-12</td>
+<td class="px-6 py-5 text-right font-bold">25</td>
+<td class="px-6 py-5 text-right font-label-caps text-sm">$ 284.00</td>
+<td class="px-6 py-5 text-right font-bold text-primary">$ 7,100.00</td>
+</tr>
+<!-- Row 2 -->
+<tr class="zebra-row group">
+<td class="px-6 py-5">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 bg-surface-container border border-outline-variant flex items-center justify-center">
+<span class="material-symbols-outlined text-outline" data-icon="link">link</span>
+</div>
+<div>
+<p class="font-bold text-on-surface">Shimano XTR CN-M9100 Chain</p>
+<p class="text-[11px] text-on-surface-variant">126 Links with Quick-Link</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-5 text-center font-label-caps text-sm text-on-surface-variant">CN-M9100-Q</td>
+<td class="px-6 py-5 text-right font-bold">50</td>
+<td class="px-6 py-5 text-right font-label-caps text-sm">$ 48.50</td>
+<td class="px-6 py-5 text-right font-bold text-primary">$ 2,425.00</td>
+</tr>
+<!-- Row 3 -->
+<tr class="zebra-row group">
+<td class="px-6 py-5">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 bg-surface-container border border-outline-variant flex items-center justify-center">
+<span class="material-symbols-outlined text-outline" data-icon="hardware">hardware</span>
+</div>
+<div>
+<p class="font-bold text-on-surface">Shimano Saint BR-M820 Brake Set</p>
+<p class="text-[11px] text-on-surface-variant">4-Piston Caliper, Metal Pads</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-5 text-center font-label-caps text-sm text-on-surface-variant">BR-M820-SET</td>
+<td class="px-6 py-5 text-right font-bold">10</td>
+<td class="px-6 py-5 text-right font-label-caps text-sm">$ 195.00</td>
+<td class="px-6 py-5 text-right font-bold text-primary">$ 1,950.00</td>
+</tr>
+<!-- Row 4 -->
+<tr class="zebra-row group">
+<td class="px-6 py-5">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 bg-surface-container border border-outline-variant flex items-center justify-center">
+<span class="material-symbols-outlined text-outline" data-icon="radio_button_checked">radio_button_checked</span>
+</div>
+<div>
+<p class="font-bold text-on-surface">Shimano RT-MT900 Rotor</p>
+<p class="text-[11px] text-on-surface-variant">203mm Center Lock Ice-Tech</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-5 text-center font-label-caps text-sm text-on-surface-variant">RT-MT900-L</td>
+<td class="px-6 py-5 text-right font-bold">20</td>
+<td class="px-6 py-5 text-right font-label-caps text-sm">$ 72.00</td>
+<td class="px-6 py-5 text-right font-bold text-primary">$ 1,440.00</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Footer Summary Grid -->
+<div class="grid grid-cols-12 gap-gutter items-start">
+<!-- Internal Notes -->
+<div class="col-span-7 bg-[#1c2129] border border-[#2d3748] p-6">
+<div class="flex items-center gap-2 mb-4">
+<span class="material-symbols-outlined text-primary text-[20px]" data-icon="description">description</span>
+<h4 class="font-label-caps text-label-caps text-on-surface">NOTAS INTERNAS Y COMENTARIOS</h4>
+</div>
+<p class="text-body-sm text-on-surface-variant leading-relaxed">
+                            Esta orden corresponde al reabastecimiento de componentes de gama alta para el trimestre Q4. Se priorizó el envío aéreo para evitar quiebres de stock en el taller central durante la temporada de mantenimiento de invierno. Verificar sellos de seguridad Shimano al momento de la recepción física.
+                        </p>
+</div>
+<!-- Financial Summary -->
+<div class="col-span-5 bg-[#161a21] border border-primary p-8 industrial-shadow relative">
+<!-- Decorative industrial corner -->
+<div class="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-primary"></div>
+<div class="space-y-4">
+<div class="flex justify-between items-center text-on-surface-variant">
+<span class="font-label-caps text-[12px]">SUBTOTAL (USD)</span>
+<span class="font-label-caps text-body-md">$ 12,915.00</span>
+</div>
+<div class="flex justify-between items-center text-on-surface-variant">
+<span class="font-label-caps text-[12px]">IMPUESTOS (7.0%)</span>
+<span class="font-label-caps text-body-md">$ 904.05</span>
+</div>
+<div class="flex justify-between items-center text-on-surface-variant">
+<span class="font-label-caps text-[12px]">MANEJO Y ENVÍO</span>
+<span class="font-label-caps text-body-md">$ 150.00</span>
+</div>
+<div class="pt-4 border-t border-primary/30 flex justify-between items-end">
+<div>
+<span class="block font-label-caps text-primary text-[10px] tracking-widest mb-1">MONTO TOTAL A PAGAR</span>
+<span class="text-headline-sm font-bold text-on-surface">$ 13,969.05</span>
+</div>
+<div class="text-right">
+<span class="block text-[10px] text-on-surface-variant font-label-caps opacity-50">TIPO DE CAMBIO</span>
+<span class="text-[12px] font-label-caps">1.00 USD / LOCAL</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Technical Footer Information -->
+<div class="mt-12 pt-6 border-t border-outline-variant flex justify-between items-center opacity-40">
+<div class="flex gap-10">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]" data-icon="history">history</span>
+<span class="text-[10px] font-label-caps">AUDITADO: 24/10/23 15:42</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]" data-icon="verified_user">verified_user</span>
+<span class="text-[10px] font-label-caps">SYSTEM HASH: BF-7729-001X</span>
+</div>
+</div>
+<p class="text-[10px] font-label-caps">BIKER'S FORT CORE v2.4.0 — PROPIEDAD INDUSTRIAL</p>
+</div>
+</div>
+</main>
+</div>
+<!-- Floating Micro-interactions Script -->
+<script>
+        // Simple hover effect for table rows to simulate a 'scanner' light
+        document.querySelectorAll('.zebra-row').forEach(row => {
+            row.addEventListener('mouseenter', () => {
+                row.style.borderLeft = '2px solid #bfce7f';
+                row.style.transition = 'all 0.2s ease';
+            });
+            row.addEventListener('mouseleave', () => {
+                row.style.borderLeft = '2px solid transparent';
+            });
+        });
+
+        // Toggle focus on search
+        const searchInput = document.querySelector('header input');
+        const searchIcon = document.querySelector('header .material-symbols-outlined[data-icon="search"]');
+        
+        searchInput.addEventListener('focus', () => {
+            searchIcon.classList.add('text-primary');
+        });
+        searchInput.addEventListener('blur', () => {
+            searchIcon.classList.remove('text-primary');
+        });
+    </script>
+</body></html>

@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Biker's Fort Core | Security Control Hub</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800;900&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "inverse-on-surface": "#30312b",
+                    "error": "#ffb4ab",
+                    "on-secondary": "#2d3138",
+                    "secondary-container": "#43474f",
+                    "on-background": "#e4e3d9",
+                    "primary-fixed-dim": "#bfce7f",
+                    "surface-variant": "#35352f",
+                    "primary-container": "#89974f",
+                    "tertiary-fixed-dim": "#bdc7dc",
+                    "tertiary-fixed": "#d9e3f9",
+                    "primary-fixed": "#dbea98",
+                    "error-container": "#93000a",
+                    "surface-container": "#1f201a",
+                    "on-tertiary-container": "#202a3a",
+                    "on-secondary-fixed-variant": "#43474f",
+                    "outline-variant": "#46483b",
+                    "on-primary-fixed": "#181e00",
+                    "tertiary": "#bdc7dc",
+                    "surface-container-highest": "#35352f",
+                    "on-surface-variant": "#c7c8b7",
+                    "on-error-container": "#ffdad6",
+                    "surface": "#13140f",
+                    "on-primary-container": "#252d00",
+                    "on-secondary-fixed": "#181c23",
+                    "inverse-primary": "#576421",
+                    "tertiary-container": "#8791a5",
+                    "surface-bright": "#393a33",
+                    "on-primary": "#2b3400",
+                    "on-secondary-container": "#b2b5be",
+                    "on-tertiary-fixed-variant": "#3d4759",
+                    "background": "#13140f",
+                    "surface-dim": "#13140f",
+                    "inverse-surface": "#e4e3d9",
+                    "on-tertiary": "#273141",
+                    "on-surface": "#e4e3d9",
+                    "primary": "#bfce7f",
+                    "surface-container-low": "#1b1c17",
+                    "surface-container-high": "#2a2a24",
+                    "surface-container-lowest": "#0e0f0a",
+                    "secondary-fixed": "#dfe2ec",
+                    "secondary": "#c3c6d0",
+                    "outline": "#919282",
+                    "surface-tint": "#bfce7f",
+                    "on-tertiary-fixed": "#121c2c",
+                    "on-primary-fixed-variant": "#404c0a",
+                    "secondary-fixed-dim": "#c3c6d0",
+                    "on-error": "#690005"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "spacing": {
+                    "margin-mobile": "16px",
+                    "gutter": "24px",
+                    "unit": "4px",
+                    "container-max": "1440px",
+                    "margin-desktop": "40px"
+            },
+            "fontFamily": {
+                    "body-sm": ["Hanken Grotesk"],
+                    "headline-sm": ["Hanken Grotesk"],
+                    "headline-md": ["Hanken Grotesk"],
+                    "label-caps": ["JetBrains Mono"],
+                    "headline-lg-mobile": ["Hanken Grotesk"],
+                    "body-md": ["Hanken Grotesk"],
+                    "body-lg": ["Hanken Grotesk"],
+                    "headline-lg": ["Hanken Grotesk"]
+            },
+            "fontSize": {
+                    "body-sm": ["14px", {"lineHeight": "1.4", "fontWeight": "400"}],
+                    "headline-sm": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                    "headline-md": ["32px", {"lineHeight": "1.2", "fontWeight": "700"}],
+                    "label-caps": ["12px", {"lineHeight": "1", "letterSpacing": "0.1em", "fontWeight": "600"}],
+                    "headline-lg-mobile": ["32px", {"lineHeight": "1.2", "fontWeight": "800"}],
+                    "body-md": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                    "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                    "headline-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "800"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            background-color: #13140f;
+            background-image: radial-gradient(circle at 2px 2px, #1f201a 1px, transparent 0);
+            background-size: 32px 32px;
+            color: #e4e3d9;
+        }
+        .industrial-border {
+            border: 1px solid #46483b;
+        }
+        .industrial-shadow {
+            box-shadow: 4px 4px 0px rgba(0,0,0,0.5);
+        }
+        .segmented-progress {
+            background-image: linear-gradient(90deg, transparent 75%, #13140f 75%);
+            background-size: 8px 100%;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .active-nav-glow {
+            box-shadow: 0 0 15px rgba(191, 206, 127, 0.2);
+        }
+    </style>
+</head>
+<body class="font-body-md text-body-md overflow-x-hidden selection:bg-primary-container selection:text-on-primary-container">
+<!-- TopNavBar Implementation -->
+<header class="bg-surface dark:bg-surface border-b border-outline-variant dark:border-outline-variant w-full h-16 fixed top-0 z-50">
+<div class="flex justify-between items-center px-margin-desktop w-full max-w-container-max mx-auto h-full">
+<div class="flex items-center gap-6">
+<span class="font-headline-sm text-headline-sm font-black text-primary dark:text-primary tracking-tighter">Biker's Fort Core</span>
+<nav class="hidden md:flex items-center gap-8 h-full">
+<a class="font-body-md text-body-md text-primary dark:text-primary font-bold border-b-2 border-primary h-16 flex items-center" href="#">Seguridad</a>
+<a class="font-body-md text-body-md text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container-high dark:hover:bg-surface-container-high px-3 h-16 flex items-center transition-colors duration-200" href="#">Inventario</a>
+<a class="font-body-md text-body-md text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container-high dark:hover:bg-surface-container-high px-3 h-16 flex items-center transition-colors duration-200" href="#">Taller</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative hidden lg:block">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
+<input class="bg-surface-container-lowest border border-outline-variant rounded-lg py-2 pl-10 pr-4 text-body-sm focus:outline-none focus:border-primary w-64 transition-all" placeholder="Buscar usuarios..." type="text"/>
+</div>
+<button class="p-2 text-on-surface-variant hover:bg-surface-container-high rounded-full transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="p-2 text-on-surface-variant hover:bg-surface-container-high rounded-full transition-colors">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<div class="w-8 h-8 rounded-full overflow-hidden border border-outline-variant">
+<img class="w-full h-full object-cover" data-alt="Professional headshot of a system administrator in a dark industrial office setting, dramatic low-key lighting highlighting sharp facial features, dressed in technical military-inspired apparel, background showing blurry server racks and mechanical components, premium cinematic quality." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDwqtPEfi1dVhawz9cNhe8gJK9lMqYdEu56uBCPKEaqR_F-BWIrDFCwoYzW2KSFtOVGFxRxpHxv5tpRXzmMK54OCQwDMbpkaIjde5OhhxcYkOkkhW6q3dBltnmRk4rkaaN60JLMACsriacjm3wI_tqd6LUtWgM5zc2Zlzu5YUdClBMnh8QaoPK3mvvJ8FgY0iUECL9M_Z5XKOGYTlUXX31nBOQPOn5LwXPhEf1Nar8ZoOOp-wnOlvA6"/>
+</div>
+</div>
+</div>
+</header>
+<!-- SideNavBar Implementation -->
+<aside class="h-screen w-64 fixed left-0 top-0 bg-surface-container dark:bg-surface-container border-r border-outline-variant dark:border-outline-variant hidden md:flex flex-col z-40 pt-16">
+<div class="flex flex-col h-full py-6 px-4">
+<div class="mb-8 px-2">
+<div class="flex items-center gap-3 mb-1">
+<span class="material-symbols-outlined text-primary text-3xl">security</span>
+<span class="font-headline-md text-headline-md text-on-surface dark:text-on-surface leading-tight">Security Control</span>
+</div>
+<p class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-widest">Access Management</p>
+</div>
+<nav class="space-y-1 flex-grow">
+<a class="bg-primary-container dark:bg-primary-container text-on-primary-container dark:text-on-primary-container rounded-lg flex items-center gap-3 px-4 py-3 active-nav-glow scale-95 transition-transform" href="#">
+<span class="material-symbols-outlined">fingerprint</span>
+<span class="font-label-caps text-label-caps">IDENTITY HUB</span>
+</a>
+<a class="text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container-highest dark:hover:bg-surface-container-highest rounded-lg flex items-center gap-3 px-4 py-3 scale-95 active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined">assignment_ind</span>
+<span class="font-label-caps text-label-caps">ROLES FUNCIONALES</span>
+</a>
+<a class="text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container-highest dark:hover:bg-surface-container-highest rounded-lg flex items-center gap-3 px-4 py-3 scale-95 active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined">admin_panel_settings</span>
+<span class="font-label-caps text-label-caps">MATRIZ DE ACCESO</span>
+</a>
+<a class="text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container-highest dark:hover:bg-surface-container-highest rounded-lg flex items-center gap-3 px-4 py-3 scale-95 active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined">history_edu</span>
+<span class="font-label-caps text-label-caps">AUDIT LOGS</span>
+</a>
+<a class="text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container-highest dark:hover:bg-surface-container-highest rounded-lg flex items-center gap-3 px-4 py-3 scale-95 active:scale-90 transition-transform" href="#">
+<span class="material-symbols-outlined">account_tree</span>
+<span class="font-label-caps text-label-caps">ORG STRUCTURE</span>
+</a>
+</nav>
+<div class="mt-auto space-y-4">
+<button class="w-full bg-primary text-on-primary font-label-caps text-label-caps py-4 rounded-lg industrial-shadow border-t border-white/20 active:translate-y-1 active:shadow-none transition-all">
+                    NUEVA IDENTIDAD
+                </button>
+<div class="pt-6 border-t border-outline-variant space-y-1">
+<a class="text-on-surface-variant hover:bg-surface-container-highest flex items-center gap-3 px-4 py-2 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined text-sm">help</span>
+<span class="font-label-caps text-label-caps">HELP CENTER</span>
+</a>
+<a class="text-on-surface-variant hover:bg-surface-container-highest flex items-center gap-3 px-4 py-2 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined text-sm">check_circle</span>
+<span class="font-label-caps text-label-caps">SYSTEM STATUS</span>
+</a>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Content Canvas -->
+<main class="md:ml-64 pt-24 px-margin-mobile md:px-margin-desktop pb-12 max-w-container-max mx-auto">
+<!-- Dashboard Header & Metrics -->
+<section class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
+<!-- Metric 1: Usuarios Activos -->
+<div class="industrial-border bg-surface-container-low p-6 industrial-shadow relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-4 opacity-10">
+<span class="material-symbols-outlined text-6xl">person_check</span>
+</div>
+<div class="relative z-10">
+<p class="font-label-caps text-label-caps text-on-surface-variant mb-2">USUARIOS ACTIVOS</p>
+<div class="flex items-baseline gap-3">
+<h2 class="font-headline-lg text-headline-lg text-primary">1,284</h2>
+<span class="text-primary font-body-sm">+12%</span>
+</div>
+<div class="w-full h-1 bg-surface-container-highest mt-4 relative">
+<div class="absolute inset-0 bg-primary segmented-progress w-[85%]"></div>
+</div>
+</div>
+</div>
+<!-- Metric 2: Intentos de Acceso Fallidos -->
+<div class="industrial-border bg-surface-container-low p-6 industrial-shadow relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-4 opacity-10">
+<span class="material-symbols-outlined text-6xl">lock_open</span>
+</div>
+<div class="relative z-10">
+<p class="font-label-caps text-label-caps text-on-surface-variant mb-2">INTENTOS FALLIDOS (24H)</p>
+<div class="flex items-baseline gap-3">
+<h2 class="font-headline-lg text-headline-lg text-error">42</h2>
+<span class="text-error font-body-sm">-5%</span>
+</div>
+<div class="w-full h-1 bg-surface-container-highest mt-4 relative">
+<div class="absolute inset-0 bg-error segmented-progress w-[15%]"></div>
+</div>
+</div>
+</div>
+<!-- Metric 3: Sesiones Concurrentes -->
+<div class="industrial-border bg-surface-container-low p-6 industrial-shadow relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-4 opacity-10">
+<span class="material-symbols-outlined text-6xl">sync_alt</span>
+</div>
+<div class="relative z-10">
+<p class="font-label-caps text-label-caps text-on-surface-variant mb-2">SESIONES CONCURRENTES</p>
+<div class="flex items-baseline gap-3">
+<h2 class="font-headline-lg text-headline-lg text-tertiary">318</h2>
+<span class="text-tertiary font-body-sm">ESTABLE</span>
+</div>
+<div class="w-full h-1 bg-surface-container-highest mt-4 relative">
+<div class="absolute inset-0 bg-tertiary segmented-progress w-[60%]"></div>
+</div>
+</div>
+</div>
+</section>
+<!-- User Management Table Header -->
+<div class="flex flex-col md:flex-row justify-between items-end md:items-center gap-4 mb-6">
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface">Hub de Identidad</h3>
+<p class="text-on-surface-variant font-body-md">Gestión centralizada de personal y privilegios.</p>
+</div>
+<div class="flex gap-3">
+<button class="bg-surface-container-high border border-outline-variant px-4 py-2 rounded flex items-center gap-2 hover:bg-surface-container-highest transition-colors">
+<span class="material-symbols-outlined text-sm">filter_alt</span>
+<span class="font-label-caps text-label-caps">FILTRAR</span>
+</button>
+<button class="bg-surface-container-high border border-outline-variant px-4 py-2 rounded flex items-center gap-2 hover:bg-surface-container-highest transition-colors">
+<span class="material-symbols-outlined text-sm">download</span>
+<span class="font-label-caps text-label-caps">EXPORTAR</span>
+</button>
+</div>
+</div>
+<!-- Identity Management Grid (Table View) -->
+<div class="industrial-border bg-surface-container-low overflow-hidden">
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead class="bg-surface-container-lowest border-b border-outline-variant">
+<tr>
+<th class="p-4 font-label-caps text-label-caps text-on-surface-variant">USUARIO</th>
+<th class="p-4 font-label-caps text-label-caps text-on-surface-variant">DEPARTAMENTO</th>
+<th class="p-4 font-label-caps text-label-caps text-on-surface-variant">CARGO</th>
+<th class="p-4 font-label-caps text-label-caps text-on-surface-variant">ESTADO</th>
+<th class="p-4 font-label-caps text-label-caps text-on-surface-variant text-right">ACCIONES RÁPIDAS</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/30">
+<!-- User Row 1 -->
+<tr class="hover:bg-surface-container-high transition-colors group">
+<td class="p-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg industrial-border overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Portrait of a female mechanical engineer, olive green work shirt, sharp focused gaze, technical background with mountain bike frames hanging on a wall, industrial dark aesthetic, warm key lighting, high resolution photography." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB0vXVuu5FrXo_B1MIh0QakkR3X61QeYBesXA8yHnl-biJ05qFTjg-cBxy_S4DWkDWFofN0jJ38pf80GfyHd-HkuNYE7w24BNFG6UyJ8W5HcdWb5xNVXIQ9YKaSWq1bzUpgrxehlJ4AEfKOdGjIPkMSZrcz_Z77ZQxeEZHfjVFa0C_nuDYfQAI8rWf6SbNSJFTeXX0RYGul2J86l9fvrCxXL1JIt0JTR81gE7flP38uMChUx9wOY8D_"/>
+</div>
+<div>
+<div class="font-body-md font-bold text-on-surface">Elena Varela</div>
+<div class="text-xs text-on-surface-variant font-mono">ID: 4892-XT</div>
+</div>
+</div>
+</td>
+<td class="p-4">
+<span class="font-label-caps text-[10px] px-2 py-1 bg-surface-container-highest border border-outline-variant rounded">INGENIERÍA</span>
+</td>
+<td class="p-4 text-on-surface-variant">Lead Technician</td>
+<td class="p-4">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
+<span class="text-xs text-primary font-bold">ACTIVO</span>
+</div>
+</td>
+<td class="p-4">
+<div class="flex justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+<button class="p-2 hover:text-primary transition-colors" title="Identidad">
+<span class="material-symbols-outlined">badge</span>
+</button>
+<button class="p-2 hover:text-primary transition-colors" title="Acceso">
+<span class="material-symbols-outlined">key</span>
+</button>
+<button class="p-2 hover:text-primary transition-colors" title="Logs">
+<span class="material-symbols-outlined">list_alt</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- User Row 2 -->
+<tr class="hover:bg-surface-container-high transition-colors group">
+<td class="p-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg industrial-border overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Close up portrait of a senior warehouse manager, rugged features, wearing a black technical jacket with charcoal patches, background showing organized bike components, dark industrial workshop vibe, cinematic rim lighting, moody atmosphere." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAafRyFzdkdkqC3TVulZB6iRLJf3EJ8cV8UK6cHFiVTL8--O7iKuA9EMw7jrIzL6poJzluZEVr3C0rBerX3dMyWDtUgvEn7MbLkHs5AjFOWrS-n0uhpv6TzFaZw0K0VE_0zWScxwOqKufjEgA3ESdd8vSufsdnFshc5ntbOPv6RPcn_bon1LYth2W2l8OZPdnajaN4vgnyom4MGnkJ1iZEAgIBhv8JqQdZxSQgSPbijWn3jWEz87cj_"/>
+</div>
+<div>
+<div class="font-body-md font-bold text-on-surface">Marcos Thorne</div>
+<div class="text-xs text-on-surface-variant font-mono">ID: 2210-ZP</div>
+</div>
+</div>
+</td>
+<td class="p-4">
+<span class="font-label-caps text-[10px] px-2 py-1 bg-surface-container-highest border border-outline-variant rounded">LOGÍSTICA</span>
+</td>
+<td class="p-4 text-on-surface-variant">Inventory Chief</td>
+<td class="p-4">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
+<span class="text-xs text-primary font-bold">ACTIVO</span>
+</div>
+</td>
+<td class="p-4">
+<div class="flex justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+<button class="p-2 hover:text-primary transition-colors" title="Identidad">
+<span class="material-symbols-outlined">badge</span>
+</button>
+<button class="p-2 hover:text-primary transition-colors" title="Acceso">
+<span class="material-symbols-outlined">key</span>
+</button>
+<button class="p-2 hover:text-primary transition-colors" title="Logs">
+<span class="material-symbols-outlined">list_alt</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- User Row 3 -->
+<tr class="hover:bg-surface-container-high transition-colors group">
+<td class="p-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg industrial-border overflow-hidden grayscale">
+<img class="w-full h-full object-cover" data-alt="Portrait of a young male apprentice mechanic, thoughtful expression, wearing military olive coveralls, holding a technical manual, dark garage setting with metal structures, professional studio lighting with sharp shadows, high detail texture." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDXcovbX_iNv7g56qXpajXAsXVo20v6NZct9Qo4rxvUGChbu8_6yqKtB5GC_wavN5_RdCnN04gOgEzVdK1u7QMHtEgfPpjLa_LRW1LpA7mCwhVPbSAkY7SLhVOU-NLrn6jV6aRtFuBUDszHUp2HQ2ZuyXLYSJxUwc11Fivrs_PHv48w5qCzv3Jlj37S4UDO-w5aNDOlv8Wf4b74-bZJoJMm5IZhnn7DDjxIWMbGc54k5o9yr3N3OYHW"/>
+</div>
+<div>
+<div class="font-body-md font-bold text-on-surface opacity-50">Julián Roda</div>
+<div class="text-xs text-on-surface-variant font-mono opacity-50">ID: 1104-MN</div>
+</div>
+</div>
+</td>
+<td class="p-4">
+<span class="font-label-caps text-[10px] px-2 py-1 bg-surface-container-highest border border-outline-variant rounded opacity-50">TALLER</span>
+</td>
+<td class="p-4 text-on-surface-variant opacity-50">Junior Mechanic</td>
+<td class="p-4">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-on-surface-variant"></div>
+<span class="text-xs text-on-surface-variant font-bold">INACTIVO</span>
+</div>
+</td>
+<td class="p-4">
+<div class="flex justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+<button class="p-2 hover:text-primary transition-colors" title="Identidad">
+<span class="material-symbols-outlined">badge</span>
+</button>
+<button class="p-2 hover:text-primary transition-colors" title="Acceso">
+<span class="material-symbols-outlined">key</span>
+</button>
+<button class="p-2 hover:text-primary transition-colors" title="Logs">
+<span class="material-symbols-outlined">list_alt</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- User Row 4 -->
+<tr class="hover:bg-surface-container-high transition-colors group">
+<td class="p-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg industrial-border overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Portrait of a senior cybersecurity female analyst, futuristic glasses, dark modern office with holographic displays, wearing technical apparel in charcoal and deep grey, precision lighting on facial features, professional photography, industrial core aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDSRaKoL0YxLELbo_sblMNjer4_GA1QippD-Z2IQCcCC8aLsjuv3Yx1RJyufEZ8Mqe0Pg7aH4xQR8lKxG35gC-O2o-FrAcGTMLZnloq6degcbFtzqVOkQu4bUUrEYCah3vs8QUNptkxYiy1aU2iKgtruou0LhP58al4dk5UjYEqiYT9135RGkoOQKfaDiP8RSQRqQ6y1jidectz1BqviWxL_ogxW8mxah5SlVQZVH1PqsgWV4KdzsMX"/>
+</div>
+<div>
+<div class="font-body-md font-bold text-on-surface">Sara Jensen</div>
+<div class="text-xs text-on-surface-variant font-mono">ID: 8872-KL</div>
+</div>
+</div>
+</td>
+<td class="p-4">
+<span class="font-label-caps text-[10px] px-2 py-1 bg-primary/10 border border-primary/30 text-primary rounded">SEGURIDAD</span>
+</td>
+<td class="p-4 text-on-surface-variant">Security Audit</td>
+<td class="p-4">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
+<span class="text-xs text-primary font-bold">ACTIVO</span>
+</div>
+</td>
+<td class="p-4">
+<div class="flex justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+<button class="p-2 hover:text-primary transition-colors" title="Identidad">
+<span class="material-symbols-outlined">badge</span>
+</button>
+<button class="p-2 hover:text-primary transition-colors" title="Acceso">
+<span class="material-symbols-outlined">key</span>
+</button>
+<button class="p-2 hover:text-primary transition-colors" title="Logs">
+<span class="material-symbols-outlined">list_alt</span>
+</button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Pagination Footer -->
+<div class="p-4 border-t border-outline-variant bg-surface-container-lowest flex items-center justify-between">
+<span class="text-xs text-on-surface-variant font-mono">MOSTRANDO 1-15 DE 1,284 USUARIOS</span>
+<div class="flex gap-2">
+<button class="p-1 hover:bg-surface-container-high transition-colors border border-outline-variant rounded">
+<span class="material-symbols-outlined">chevron_left</span>
+</button>
+<div class="flex gap-1">
+<button class="px-3 py-1 bg-primary text-on-primary font-bold rounded">1</button>
+<button class="px-3 py-1 hover:bg-surface-container-high transition-colors text-on-surface-variant rounded">2</button>
+<button class="px-3 py-1 hover:bg-surface-container-high transition-colors text-on-surface-variant rounded">3</button>
+</div>
+<button class="p-1 hover:bg-surface-container-high transition-colors border border-outline-variant rounded">
+<span class="material-symbols-outlined">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+<!-- System Alerts / Logs Preview -->
+<section class="mt-10 grid grid-cols-1 md:grid-cols-2 gap-6">
+<div class="industrial-border bg-surface-container p-6">
+<h4 class="font-label-caps text-label-caps text-primary mb-4 border-b border-outline-variant pb-2 flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">history</span> RECIENTES LOGS DE AUDITORÍA
+                </h4>
+<div class="space-y-3">
+<div class="flex justify-between items-start gap-4 border-l-2 border-primary pl-3 py-1">
+<div>
+<p class="text-xs font-mono text-on-surface">E. Varela: Elevación de privilegios [MATRIZ_A]</p>
+<p class="text-[10px] text-on-surface-variant">Hace 4 minutos • Terminal 04</p>
+</div>
+<span class="material-symbols-outlined text-sm opacity-30">verified_user</span>
+</div>
+<div class="flex justify-between items-start gap-4 border-l-2 border-error pl-3 py-1">
+<div>
+<p class="text-xs font-mono text-on-surface">Anónimo: Intento fallido SSH [IP: 192.168.1.15]</p>
+<p class="text-[10px] text-on-surface-variant">Hace 12 minutos • Gateway Principal</p>
+</div>
+<span class="material-symbols-outlined text-sm text-error">warning</span>
+</div>
+<div class="flex justify-between items-start gap-4 border-l-2 border-tertiary pl-3 py-1">
+<div>
+<p class="text-xs font-mono text-on-surface">M. Thorne: Acceso concedido [BÓVEDA_REPUESTOS]</p>
+<p class="text-[10px] text-on-surface-variant">Hace 28 minutos • Lector RFID</p>
+</div>
+<span class="material-symbols-outlined text-sm opacity-30">key</span>
+</div>
+</div>
+</div>
+<div class="industrial-border bg-surface-container p-6">
+<h4 class="font-label-caps text-label-caps text-primary mb-4 border-b border-outline-variant pb-2 flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">assignment_turned_in</span> PENDIENTE DE REVISIÓN
+                </h4>
+<div class="space-y-4">
+<div class="bg-surface-container-lowest p-3 rounded flex items-center justify-between border border-outline-variant/30">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary">person_add</span>
+<span class="text-xs font-bold uppercase">3 Nuevos registros de identidad</span>
+</div>
+<button class="text-[10px] font-label-caps bg-primary/20 text-primary px-2 py-1 rounded">REVISAR</button>
+</div>
+<div class="bg-surface-container-lowest p-3 rounded flex items-center justify-between border border-outline-variant/30">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-error">notification_important</span>
+<span class="text-xs font-bold uppercase">Credenciales expiradas (Técnicos)</span>
+</div>
+<button class="text-[10px] font-label-caps bg-error/20 text-error px-2 py-1 rounded">NOTIFICAR</button>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- FAB Action (Contextual: New User) -->
+<button class="fixed bottom-8 right-8 w-14 h-14 bg-primary text-on-primary rounded-full industrial-shadow flex items-center justify-center hover:scale-110 active:scale-95 transition-transform z-50">
+<span class="material-symbols-outlined text-2xl">person_add</span>
+</button>
+<script>
+        // Micro-interactions for the dashboard
+        document.querySelectorAll('tr').forEach(row => {
+            row.addEventListener('click', (e) => {
+                // Prevent click if clicking action buttons
+                if (!e.target.closest('button')) {
+                    console.log('Navegando al perfil del usuario...');
+                    // In a real app, this would redirect or open a side panel
+                }
+            });
+        });
+
+        // Simulating metric updates
+        setInterval(() => {
+            const activeUserCount = document.querySelector('h2.text-primary');
+            if (activeUserCount) {
+                const current = parseInt(activeUserCount.textContent.replace(',', ''));
+                const newVal = current + (Math.random() > 0.5 ? 1 : -1);
+                activeUserCount.textContent = newVal.toLocaleString();
+            }
+        }, 5000);
+    </script>
+</body></html>

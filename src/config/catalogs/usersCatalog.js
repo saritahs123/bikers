@@ -1,0 +1,12 @@
+export const INITIAL_USERS_DATA = [];
+export const USER_ROLES = [];
+export const DATA_SCOPES = [];
+export const USER_TYPES = [];
+export const INITIAL_SESSIONS_DATA = [];
+export const INITIAL_ACTIVITY_DATA = [];
+export const INITIAL_AUDIT_DATA = [];
+export const PREDEFINED_JOB_TITLES = [];
+export const PREDEFINED_DEPARTMENTS = [];
+export const PREDEFINED_AGENCIES = [];
+export const INITIAL_DEPARTMENTS_DATA = [];
+export const INITIAL_AREAS_DATA = [];

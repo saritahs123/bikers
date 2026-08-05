@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Categorías y Marcas | Biker's Fort Core</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800&amp;family=JetBrains+Mono:wght@600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Style Guidance Implementation -->
+<style>
+        body {
+            background-color: #0a0c10; /* Technical background */
+            background-image: radial-gradient(#1c2129 0.5px, transparent 0.5px);
+            background-size: 24px 24px;
+            color: #e4e3d9;
+        }
+        
+        .industrial-border {
+            border: 1px solid #2d3748;
+        }
+
+        .industrial-shadow {
+            box-shadow: 4px 4px 0px rgba(0,0,0,0.5);
+        }
+
+        .beveled-button {
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .segmented-progress {
+            background: repeating-linear-gradient(
+                90deg,
+                #2d3748,
+                #2d3748 4px,
+                transparent 4px,
+                transparent 6px
+            );
+        }
+
+        .segmented-progress-fill {
+            background: repeating-linear-gradient(
+                90deg,
+                #84924a,
+                #84924a 4px,
+                transparent 4px,
+                transparent 6px
+            );
+        }
+
+        /* Material Symbols weight logic */
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+
+        /* Custom Scrollbar for Industrial Feel */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0a0c10;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #2d3748;
+            border-radius: 0px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #4a5568;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-primary-fixed-variant": "#404c0a",
+                      "on-tertiary-fixed-variant": "#3d4759",
+                      "inverse-surface": "#e4e3d9",
+                      "surface-tint": "#bfce7f",
+                      "tertiary-fixed": "#d9e3f9",
+                      "primary-container": "#89974f",
+                      "outline": "#919282",
+                      "on-secondary-container": "#b2b5be",
+                      "error-container": "#93000a",
+                      "inverse-primary": "#576421",
+                      "tertiary-fixed-dim": "#bdc7dc",
+                      "outline-variant": "#46483b",
+                      "on-primary-fixed": "#181e00",
+                      "surface-container-high": "#2a2a24",
+                      "on-tertiary-container": "#202a3a",
+                      "on-error-container": "#ffdad6",
+                      "on-error": "#690005",
+                      "secondary": "#c3c6d0",
+                      "surface-container-highest": "#35352f",
+                      "secondary-fixed-dim": "#c3c6d0",
+                      "on-surface": "#e4e3d9",
+                      "secondary-fixed": "#dfe2ec",
+                      "on-secondary-fixed-variant": "#43474f",
+                      "background": "#13140f",
+                      "surface-dim": "#13140f",
+                      "tertiary": "#bdc7dc",
+                      "surface-container-low": "#1b1c17",
+                      "surface-container": "#1f201a",
+                      "surface-variant": "#35352f",
+                      "on-secondary": "#2d3138",
+                      "secondary-container": "#43474f",
+                      "primary-fixed": "#dbea98",
+                      "on-surface-variant": "#c7c8b7",
+                      "on-secondary-fixed": "#181c23",
+                      "surface": "#13140f",
+                      "surface-bright": "#393a33",
+                      "on-background": "#e4e3d9",
+                      "primary": "#bfce7f",
+                      "inverse-on-surface": "#30312b",
+                      "error": "#ffb4ab",
+                      "on-primary": "#2b3400",
+                      "on-tertiary-fixed": "#121c2c",
+                      "on-primary-container": "#252d00",
+                      "tertiary-container": "#8791a5",
+                      "primary-fixed-dim": "#bfce7f",
+                      "on-tertiary": "#273141",
+                      "surface-container-lowest": "#0e0f0a"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "container-max": "1440px",
+                      "margin-desktop": "40px",
+                      "unit": "4px",
+                      "margin-mobile": "16px",
+                      "gutter": "24px"
+              },
+              "fontFamily": {
+                      "body-lg": ["Hanken Grotesk"],
+                      "label-caps": ["JetBrains Mono"],
+                      "body-md": ["Hanken Grotesk"],
+                      "headline-sm": ["Hanken Grotesk"],
+                      "headline-md": ["Hanken Grotesk"],
+                      "headline-lg-mobile": ["Hanken Grotesk"],
+                      "headline-lg": ["Hanken Grotesk"],
+                      "body-sm": ["Hanken Grotesk"]
+              },
+              "fontSize": {
+                      "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                      "label-caps": ["12px", {"lineHeight": "1", "letterSpacing": "0.1em", "fontWeight": "600"}],
+                      "body-md": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                      "headline-sm": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                      "headline-md": ["32px", {"lineHeight": "1.2", "fontWeight": "700"}],
+                      "headline-lg-mobile": ["32px", {"lineHeight": "1.2", "fontWeight": "800"}],
+                      "headline-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "800"}],
+                      "body-sm": ["14px", {"lineHeight": "1.4", "fontWeight": "400"}]
+              }
+            }
+          }
+        }
+    </script>
+</head>
+<body class="bg-background text-on-background font-body-md min-h-screen flex overflow-hidden">
+<!-- Shared SideNav Component (Predicted) -->
+<aside class="hidden md:flex flex-col h-screen w-64 border-r border-outline-variant bg-surface-container-low py-unit-6 px-unit-4">
+<div class="mb-8">
+<h1 class="font-headline-md text-headline-md font-bold text-primary tracking-tighter">Biker's Fort</h1>
+<p class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-widest mt-1">Core Workshop</p>
+</div>
+<nav class="flex-1 space-y-2">
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant font-body-md hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span>Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-primary font-bold border-r-2 border-primary bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+<span>Inventory</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant font-body-md hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">build</span>
+<span>Work Orders</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant font-body-md hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">calendar_today</span>
+<span>Schedule</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant font-body-md hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">analytics</span>
+<span>Reports</span>
+</a>
+</nav>
+<div class="mt-auto pt-6 border-t border-outline-variant">
+<button class="w-full bg-primary-container text-on-primary-container font-bold py-3 beveled-button mb-4 transition-all active:scale-95 active:opacity-80">
+                New Repair Ticket
+            </button>
+<div class="space-y-2">
+<a class="flex items-center gap-3 px-4 py-2 text-on-surface-variant font-body-md hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span>Settings</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 text-on-surface-variant font-body-md hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">help</span>
+<span>Support</span>
+</a>
+</div>
+</div>
+</aside>
+<main class="flex-1 flex flex-col h-screen overflow-y-auto">
+<!-- Shared TopNavBar Component (Predicted) -->
+<header class="flex justify-between items-center w-full px-margin-desktop h-16 border-b border-outline-variant bg-surface-container sticky top-0 z-50">
+<div class="flex items-center gap-gutter">
+<div class="relative focus-within:ring-1 focus-within:ring-primary flex items-center bg-surface-container-lowest border border-outline-variant px-3 py-1">
+<span class="material-symbols-outlined text-on-surface-variant mr-2">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-body-sm w-64 placeholder-on-surface-variant" placeholder="Buscar categoría..." type="text"/>
+</div>
+<nav class="hidden lg:flex items-center gap-6">
+<a class="text-on-surface-variant font-body-md hover:text-primary transition-colors duration-200" href="#">Global View</a>
+<a class="text-primary font-bold border-b-2 border-primary pb-1" href="#">Stock Alerts</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">history</span>
+</button>
+<div class="w-8 h-8 bg-outline-variant overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A rugged workshop manager wearing a professional dark green mechanic apron, working in a dimly lit industrial garage with high-end bicycle tools in the background. The portrait has a moody cinematic lighting style with deep blacks and sharp highlights, consistent with an industrial aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC_poaU79zEfI8VqvYZoXvvughsMAjg2pz8PiZzj1pHuIQzqzoPeRSlNJo6Fni5h8OWrGxvfUG6aXSriIQwccykCvEVpG99xf25fAjL6ELzowNlwAtB_9c7PAUHUjEP0zhNoz_K71WqNhxJpG7ysx2UqzbqxHzhpBIsIQL74P5rZmBk7Nz50hvrm8wNUx2ypaXje5eoKWNj0lol0g3d1PVi507L6TAncWRXU2Yag6E4tJjCVIxNmERf"/>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<div class="p-margin-desktop max-w-[1440px] mx-auto w-full">
+<div class="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
+<div>
+<span class="font-label-caps text-label-caps text-primary mb-2 block">INVENTORY ARCHITECTURE</span>
+<h2 class="font-headline-lg text-headline-lg leading-none">Categorías y Marcas</h2>
+</div>
+<div class="flex gap-3">
+<button class="industrial-border px-6 py-2 flex items-center gap-2 hover:bg-surface-container-highest transition-colors active:scale-95">
+<span class="material-symbols-outlined">add</span>
+<span class="font-label-caps text-label-caps">Nueva Marca</span>
+</button>
+<button class="bg-primary text-on-primary font-bold px-6 py-2 flex items-center gap-2 beveled-button industrial-shadow hover:brightness-110 active:scale-95">
+<span class="material-symbols-outlined">category</span>
+<span class="font-label-caps text-label-caps">Nueva Categoría</span>
+</button>
+</div>
+</div>
+<!-- Bento Grid Layout -->
+<div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+<!-- Stats Overview -->
+<div class="md:col-span-12 industrial-border bg-[#161a21] p-6 grid grid-cols-1 sm:grid-cols-4 gap-6">
+<div>
+<p class="font-label-caps text-label-caps text-on-surface-variant mb-1">CATEGORÍAS TOTALES</p>
+<p class="font-headline-md text-headline-md text-primary">12</p>
+</div>
+<div>
+<p class="font-label-caps text-label-caps text-on-surface-variant mb-1">MARCAS ACTIVAS</p>
+<p class="font-headline-md text-headline-md text-on-surface">34</p>
+</div>
+<div>
+<p class="font-label-caps text-label-caps text-on-surface-variant mb-1">SKUS ASOCIADOS</p>
+<p class="font-headline-md text-headline-md text-on-surface">1,248</p>
+</div>
+<div>
+<p class="font-label-caps text-label-caps text-on-surface-variant mb-1">STOCK TOTAL VALORADO</p>
+<p class="font-headline-md text-headline-md text-on-primary-fixed-variant">$42.5k</p>
+</div>
+</div>
+<!-- Main Categories Grid -->
+<div class="md:col-span-8 grid grid-cols-1 sm:grid-cols-2 gap-6">
+<!-- Category Card: Transmisión -->
+<div class="industrial-border bg-[#161a21] overflow-hidden group hover:border-primary transition-colors cursor-pointer">
+<div class="h-32 bg-surface-container relative">
+<div class="w-full h-full bg-cover bg-center opacity-40 group-hover:scale-105 transition-transform duration-700" data-alt="Close-up macro shot of a high-end bicycle derailleur and chain, oily and metallic with mechanical precision. Deep charcoal shadows and military olive highlights, moody industrial workshop vibe." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDbkcLWpAKrmvLVZZW0OlPCqmbwcFgD3-b1VYbLgF46AnEEQJvAH8mHx2r9R_fCG8lzyNWbsiLWX4aWgQ5dcUaNdbxsMrpPyuwiyjVBQUheFkxKAZVNYjsQyFnSNsjtB0MYQjJAePXX9cAlNkaLS4Ll6irM0FyN6ctXD6LcJPzHria607JPTNwYD1iSfvhiqX6JVCWsC4TkNK5F7pce9WUDjB9SIdj5ITZEPNYI3OQhG5MKokDzl1FD')"></div>
+<div class="absolute inset-0 bg-gradient-to-t from-[#161a21] to-transparent"></div>
+<div class="absolute bottom-4 left-4">
+<h3 class="font-headline-sm text-headline-sm">Transmisión</h3>
+</div>
+<div class="absolute top-4 right-4 bg-primary text-on-primary text-xs font-bold px-2 py-1 rounded">
+                                482 SKU
+                            </div>
+</div>
+<div class="p-4 space-y-4">
+<div class="flex flex-wrap gap-2">
+<span class="bg-[#1c2129] industrial-border px-2 py-1 font-label-caps text-[10px] text-on-surface-variant">SHIMANO (240)</span>
+<span class="bg-[#1c2129] industrial-border px-2 py-1 font-label-caps text-[10px] text-on-surface-variant">SRAM (210)</span>
+<span class="bg-[#1c2129] industrial-border px-2 py-1 font-label-caps text-[10px] text-on-surface-variant">CAMPAGNOLO (32)</span>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between text-[11px] font-label-caps text-on-surface-variant">
+<span>CAPACIDAD DE STOCK</span>
+<span>85%</span>
+</div>
+<div class="h-2 segmented-progress w-full">
+<div class="h-full segmented-progress-fill w-[85%]"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Category Card: Suspensión -->
+<div class="industrial-border bg-[#161a21] overflow-hidden group hover:border-primary transition-colors cursor-pointer">
+<div class="h-32 bg-surface-container relative">
+<div class="w-full h-full bg-cover bg-center opacity-40 group-hover:scale-105 transition-transform duration-700" data-alt="Technical view of mountain bike suspension forks, matte black and gold details. Industrial lighting with a blueprint feel, dramatic shadows, dark aesthetics with metallic textures." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuAcUbA4KDou4fX06msJcGDaYasX7lM0ZI-wV8Zawvt9Md-MXNsvcUxo50nV2iacg5Vln99X58Dt7G2GE3CzAs_X_OuW2yLXfLYizW4i8C4h9Moc6S4g72u7-V6bXYoQ3zRkXamDs3Vd7ehLlQ9jnoiQ8Q_q_9ePMRNBsuoIxNNb_400LRbtKsC0zgBCll7ukhmQAuotfiR__kuc2_HFnOtEaw2y2WVmZr6Zx2LMUjY6gBsI0GzFuwcD')"></div>
+<div class="absolute inset-0 bg-gradient-to-t from-[#161a21] to-transparent"></div>
+<div class="absolute bottom-4 left-4">
+<h3 class="font-headline-sm text-headline-sm">Suspensión</h3>
+</div>
+<div class="absolute top-4 right-4 bg-primary text-on-primary text-xs font-bold px-2 py-1 rounded">
+                                156 SKU
+                            </div>
+</div>
+<div class="p-4 space-y-4">
+<div class="flex flex-wrap gap-2">
+<span class="bg-[#1c2129] industrial-border px-2 py-1 font-label-caps text-[10px] text-on-surface-variant">FOX (88)</span>
+<span class="bg-[#1c2129] industrial-border px-2 py-1 font-label-caps text-[10px] text-on-surface-variant">ROCKSHOX (62)</span>
+<span class="bg-[#1c2129] industrial-border px-2 py-1 font-label-caps text-[10px] text-on-surface-variant">OHLINS (6)</span>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between text-[11px] font-label-caps text-on-surface-variant">
+<span>CAPACIDAD DE STOCK</span>
+<span>42%</span>
+</div>
+<div class="h-2 segmented-progress w-full">
+<div class="h-full segmented-progress-fill w-[42%]"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Category Card: Llantas -->
+<div class="industrial-border bg-[#161a21] overflow-hidden group hover:border-primary transition-colors cursor-pointer">
+<div class="h-32 bg-surface-container relative">
+<div class="w-full h-full bg-cover bg-center opacity-40 group-hover:scale-105 transition-transform duration-700" data-alt="Macro texture of rugged mountain bike tire treads. Muddy yet professional industrial lighting, deep charcoal palette with tactical mechanical vibe." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuC5QzaQ64VBgphDNYSMZzZzyjRjHxvb-2Jg7prAJB_mIe5ScPK0HZ9XrEx708SngQE1A6k7hqkgzztHwaLCts_Xeqnl-XBBTLIHj5yg4qAC7izqyXbxOTNpQx8NbZI_QuTVblBhyQci_wVYu50ZpGRJ2Jri4WRjqb-zePSo1l4Y7V0v4KRsuXdUfWpxwUJiJ-6vC7bC_SR4ROcBxjTo-bzI1hchkE-8O7h5eGkK2uzVhhe4kaCFAcD7')"></div>
+<div class="absolute inset-0 bg-gradient-to-t from-[#161a21] to-transparent"></div>
+<div class="absolute bottom-4 left-4">
+<h3 class="font-headline-sm text-headline-sm">Llantas</h3>
+</div>
+<div class="absolute top-4 right-4 bg-primary text-on-primary text-xs font-bold px-2 py-1 rounded">
+                                310 SKU
+                            </div>
+</div>
+<div class="p-4 space-y-4">
+<div class="flex flex-wrap gap-2">
+<span class="bg-[#1c2129] industrial-border px-2 py-1 font-label-caps text-[10px] text-on-surface-variant">MAXXIS (145)</span>
+<span class="bg-[#1c2129] industrial-border px-2 py-1 font-label-caps text-[10px] text-on-surface-variant">SCHWALBE (120)</span>
+<span class="bg-[#1c2129] industrial-border px-2 py-1 font-label-caps text-[10px] text-on-surface-variant">CONTINENTAL (45)</span>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between text-[11px] font-label-caps text-on-surface-variant">
+<span>CAPACIDAD DE STOCK</span>
+<span>92%</span>
+</div>
+<div class="h-2 segmented-progress w-full">
+<div class="h-full segmented-progress-fill w-[92%]"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Category Card: Frenos -->
+<div class="industrial-border bg-[#161a21] overflow-hidden group hover:border-primary transition-colors cursor-pointer">
+<div class="h-32 bg-surface-container relative">
+<div class="w-full h-full bg-cover bg-center opacity-40 group-hover:scale-105 transition-transform duration-700" data-alt="Mechanical bicycle brake disc and caliper. Technical shot in a workshop with steel and carbon fiber textures, military olive accents, high-end photography." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuAsnJLe2_AlM7LEYAhimURxVOCf1mX8WjmVbjUDM7ogNJcmi5ylJjJtwsIAVPettjc5-HVsqAPWZ8SaWOY9fZjCanMxgZEPgml7LKIdKOoVeBu1mOGWFAJ4lhVExVOb2GP21fthr7NKe4XBOKTQf_zLs8jGGAELfFpRuah5goI1qps24zp9BeCVSuua2RFF7DNvZRdLhjzyRd79ee7KRWAYGoaIpWgpyu0hifzcZNfJ_Dhg-PvTTgx-')"></div>
+<div class="absolute inset-0 bg-gradient-to-t from-[#161a21] to-transparent"></div>
+<div class="absolute bottom-4 left-4">
+<h3 class="font-headline-sm text-headline-sm">Frenos</h3>
+</div>
+<div class="absolute top-4 right-4 bg-primary text-on-primary text-xs font-bold px-2 py-1 rounded">
+                                205 SKU
+                            </div>
+</div>
+<div class="p-4 space-y-4">
+<div class="flex flex-wrap gap-2">
+<span class="bg-[#1c2129] industrial-border px-2 py-1 font-label-caps text-[10px] text-on-surface-variant">MAGURA (75)</span>
+<span class="bg-[#1c2129] industrial-border px-2 py-1 font-label-caps text-[10px] text-on-surface-variant">SHIMANO (85)</span>
+<span class="bg-[#1c2129] industrial-border px-2 py-1 font-label-caps text-[10px] text-on-surface-variant">TRP (45)</span>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between text-[11px] font-label-caps text-on-surface-variant">
+<span>CAPACIDAD DE STOCK</span>
+<span>68%</span>
+</div>
+<div class="h-2 segmented-progress w-full">
+<div class="h-full segmented-progress-fill w-[68%]"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Sidebar Brands Management -->
+<div class="md:col-span-4 space-y-6">
+<div class="industrial-border bg-[#161a21] p-6 h-full flex flex-col">
+<div class="flex items-center justify-between mb-6">
+<h3 class="font-headline-sm text-headline-sm">Marcas</h3>
+<span class="font-label-caps text-[10px] bg-primary-container px-2 py-1 text-on-primary-container">34 TOTAL</span>
+</div>
+<div class="space-y-4 flex-1 overflow-y-auto pr-2 max-h-[600px]">
+<!-- Brand Row -->
+<div class="flex items-center justify-between p-3 border-b border-outline-variant hover:bg-surface-container-highest transition-colors group">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 industrial-border bg-background flex items-center justify-center font-bold text-lg italic">S</div>
+<div>
+<p class="font-bold">Shimano</p>
+<p class="text-[10px] font-label-caps text-on-surface-variant">Japan · 325 SKU</p>
+</div>
+</div>
+<button class="opacity-0 group-hover:opacity-100 transition-opacity text-on-surface-variant hover:text-primary">
+<span class="material-symbols-outlined text-sm">settings</span>
+</button>
+</div>
+<div class="flex items-center justify-between p-3 border-b border-outline-variant hover:bg-surface-container-highest transition-colors group">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 industrial-border bg-background flex items-center justify-center font-bold text-lg italic">SR</div>
+<div>
+<p class="font-bold">SRAM</p>
+<p class="text-[10px] font-label-caps text-on-surface-variant">USA · 272 SKU</p>
+</div>
+</div>
+<button class="opacity-0 group-hover:opacity-100 transition-opacity text-on-surface-variant hover:text-primary">
+<span class="material-symbols-outlined text-sm">settings</span>
+</button>
+</div>
+<div class="flex items-center justify-between p-3 border-b border-outline-variant hover:bg-surface-container-highest transition-colors group">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 industrial-border bg-background flex items-center justify-center font-bold text-lg italic text-primary">F</div>
+<div>
+<p class="font-bold">Fox Racing</p>
+<p class="text-[10px] font-label-caps text-on-surface-variant">USA · 189 SKU</p>
+</div>
+</div>
+<button class="opacity-0 group-hover:opacity-100 transition-opacity text-on-surface-variant hover:text-primary">
+<span class="material-symbols-outlined text-sm">settings</span>
+</button>
+</div>
+<div class="flex items-center justify-between p-3 border-b border-outline-variant hover:bg-surface-container-highest transition-colors group">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 industrial-border bg-background flex items-center justify-center font-bold text-lg italic">RS</div>
+<div>
+<p class="font-bold">RockShox</p>
+<p class="text-[10px] font-label-caps text-on-surface-variant">USA · 145 SKU</p>
+</div>
+</div>
+<button class="opacity-0 group-hover:opacity-100 transition-opacity text-on-surface-variant hover:text-primary">
+<span class="material-symbols-outlined text-sm">settings</span>
+</button>
+</div>
+<div class="flex items-center justify-between p-3 border-b border-outline-variant hover:bg-surface-container-highest transition-colors group">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 industrial-border bg-background flex items-center justify-center font-bold text-lg italic">M</div>
+<div>
+<p class="font-bold">Magura</p>
+<p class="text-[10px] font-label-caps text-on-surface-variant">Germany · 82 SKU</p>
+</div>
+</div>
+<button class="opacity-0 group-hover:opacity-100 transition-opacity text-on-surface-variant hover:text-primary">
+<span class="material-symbols-outlined text-sm">settings</span>
+</button>
+</div>
+<div class="flex items-center justify-between p-3 border-b border-outline-variant hover:bg-surface-container-highest transition-colors group">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 industrial-border bg-background flex items-center justify-center font-bold text-lg italic">MX</div>
+<div>
+<p class="font-bold">Maxxis</p>
+<p class="text-[10px] font-label-caps text-on-surface-variant">Taiwan · 210 SKU</p>
+</div>
+</div>
+<button class="opacity-0 group-hover:opacity-100 transition-opacity text-on-surface-variant hover:text-primary">
+<span class="material-symbols-outlined text-sm">settings</span>
+</button>
+</div>
+</div>
+<div class="mt-6">
+<button class="w-full py-3 industrial-border border-dashed font-label-caps text-label-caps text-on-surface-variant hover:text-primary hover:border-primary transition-all">
+                                + ASOCIAR MARCA EXISTENTE
+                            </button>
+</div>
+</div>
+</div>
+</div>
+<!-- Technical List: Subcategorías -->
+<div class="mt-8 industrial-border bg-[#161a21]">
+<div class="p-6 border-b border-outline-variant flex items-center justify-between">
+<h3 class="font-headline-sm text-headline-sm">Detalle de Subcategorías</h3>
+<div class="flex gap-2">
+<button class="p-2 industrial-border hover:bg-surface-container-highest">
+<span class="material-symbols-outlined">filter_list</span>
+</button>
+<button class="p-2 industrial-border hover:bg-surface-container-highest">
+<span class="material-symbols-outlined">download</span>
+</button>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left">
+<thead>
+<tr class="bg-surface-container-low font-label-caps text-[11px] text-on-surface-variant border-b border-outline-variant">
+<th class="px-6 py-4 uppercase">Subcategoría</th>
+<th class="px-6 py-4 uppercase">Categoría Padre</th>
+<th class="px-6 py-4 uppercase">SKUs</th>
+<th class="px-6 py-4 uppercase">Marca Principal</th>
+<th class="px-6 py-4 uppercase text-right">Acciones</th>
+</tr>
+</thead>
+<tbody class="font-body-sm">
+<tr class="border-b border-outline-variant hover:bg-[#1c2129] transition-colors">
+<td class="px-6 py-4 font-bold">Casetes 12V</td>
+<td class="px-6 py-4 text-on-surface-variant">Transmisión</td>
+<td class="px-6 py-4">84</td>
+<td class="px-6 py-4"><span class="px-2 py-0.5 industrial-border bg-background">SRAM</span></td>
+<td class="px-6 py-4 text-right">
+<button class="text-on-surface-variant hover:text-primary"><span class="material-symbols-outlined text-base">edit</span></button>
+</td>
+</tr>
+<tr class="border-b border-outline-variant hover:bg-[#1c2129] transition-colors">
+<td class="px-6 py-4 font-bold">Pastillas de Freno</td>
+<td class="px-6 py-4 text-on-surface-variant">Frenos</td>
+<td class="px-6 py-4">112</td>
+<td class="px-6 py-4"><span class="px-2 py-0.5 industrial-border bg-background">Shimano</span></td>
+<td class="px-6 py-4 text-right">
+<button class="text-on-surface-variant hover:text-primary"><span class="material-symbols-outlined text-base">edit</span></button>
+</td>
+</tr>
+<tr class="border-b border-outline-variant hover:bg-[#1c2129] transition-colors">
+<td class="px-6 py-4 font-bold">Retenes Horquilla</td>
+<td class="px-6 py-4 text-on-surface-variant">Suspensión</td>
+<td class="px-6 py-4">42</td>
+<td class="px-6 py-4"><span class="px-2 py-0.5 industrial-border bg-background">Fox</span></td>
+<td class="px-6 py-4 text-right">
+<button class="text-on-surface-variant hover:text-primary"><span class="material-symbols-outlined text-base">edit</span></button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<footer class="mt-auto py-6 px-margin-desktop border-t border-outline-variant bg-surface-container-low flex justify-between items-center text-xs text-on-surface-variant font-label-caps">
+<p>© 2024 BIKER'S FORT CORE - SYSTEM v2.4.1</p>
+<div class="flex gap-4">
+<a class="hover:text-primary transition-colors" href="#">POLÍTICA DE INVENTARIO</a>
+<a class="hover:text-primary transition-colors" href="#">AUDITORÍA DE MARCAS</a>
+</div>
+</footer>
+</main>
+<!-- Micro-interaction Scripts -->
+<script>
+        // Simple hover effect reinforcement for cards
+        document.querySelectorAll('.industrial-border').forEach(card => {
+            card.addEventListener('mouseenter', () => {
+                card.style.borderColor = '#4a5568';
+            });
+            card.addEventListener('mouseleave', () => {
+                if (!card.classList.contains('group-hover:border-primary')) {
+                    card.style.borderColor = '#2d3748';
+                }
+            });
+        });
+
+        // Search highlight mock
+        const searchInput = document.querySelector('input[type="text"]');
+        searchInput.addEventListener('focus', () => {
+            searchInput.parentElement.classList.add('border-primary');
+        });
+        searchInput.addEventListener('blur', () => {
+            searchInput.parentElement.classList.remove('border-primary');
+        });
+    </script>
+</body></html>

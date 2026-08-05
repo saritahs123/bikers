@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Biker's Fort Core - Gestión de Proveedores</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind Configuration -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-primary-fixed-variant": "#404c0a",
+                    "on-tertiary-fixed-variant": "#3d4759",
+                    "inverse-surface": "#e4e3d9",
+                    "surface-tint": "#bfce7f",
+                    "tertiary-fixed": "#d9e3f9",
+                    "primary-container": "#89974f",
+                    "outline": "#919282",
+                    "on-secondary-container": "#b2b5be",
+                    "error-container": "#93000a",
+                    "inverse-primary": "#576421",
+                    "tertiary-fixed-dim": "#bdc7dc",
+                    "outline-variant": "#46483b",
+                    "on-primary-fixed": "#181e00",
+                    "surface-container-high": "#2a2a24",
+                    "on-tertiary-container": "#202a3a",
+                    "on-error-container": "#ffdad6",
+                    "on-error": "#690005",
+                    "secondary": "#c3c6d0",
+                    "surface-container-highest": "#35352f",
+                    "secondary-fixed-dim": "#c3c6d0",
+                    "on-surface": "#e4e3d9",
+                    "secondary-fixed": "#dfe2ec",
+                    "on-secondary-fixed-variant": "#43474f",
+                    "background": "#13140f",
+                    "surface-dim": "#13140f",
+                    "tertiary": "#bdc7dc",
+                    "surface-container-low": "#1b1c17",
+                    "surface-container": "#1f201a",
+                    "surface-variant": "#35352f",
+                    "on-secondary": "#2d3138",
+                    "secondary-container": "#43474f",
+                    "primary-fixed": "#dbea98",
+                    "on-surface-variant": "#c7c8b7",
+                    "on-secondary-fixed": "#181c23",
+                    "surface": "#13140f",
+                    "surface-bright": "#393a33",
+                    "on-background": "#e4e3d9",
+                    "primary": "#bfce7f",
+                    "inverse-on-surface": "#30312b",
+                    "error": "#ffb4ab",
+                    "on-primary": "#2b3400",
+                    "on-tertiary-fixed": "#121c2c",
+                    "on-primary-container": "#252d00",
+                    "tertiary-container": "#8791a5",
+                    "primary-fixed-dim": "#bfce7f",
+                    "on-tertiary": "#273141",
+                    "surface-container-lowest": "#0e0f0a"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "spacing": {
+                    "container-max": "1440px",
+                    "margin-desktop": "40px",
+                    "unit": "4px",
+                    "margin-mobile": "16px",
+                    "gutter": "24px"
+            },
+            "fontFamily": {
+                    "body-lg": ["Hanken Grotesk"],
+                    "label-caps": ["JetBrains Mono"],
+                    "body-md": ["Hanken Grotesk"],
+                    "headline-sm": ["Hanken Grotesk"],
+                    "headline-md": ["Hanken Grotesk"],
+                    "headline-lg-mobile": ["Hanken Grotesk"],
+                    "headline-lg": ["Hanken Grotesk"],
+                    "body-sm": ["Hanken Grotesk"]
+            },
+            "fontSize": {
+                    "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                    "label-caps": ["12px", {"lineHeight": "1", "letterSpacing": "0.1em", "fontWeight": "600"}],
+                    "body-md": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                    "headline-sm": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                    "headline-md": ["32px", {"lineHeight": "1.2", "fontWeight": "700"}],
+                    "headline-lg-mobile": ["32px", {"lineHeight": "1.2", "fontWeight": "800"}],
+                    "headline-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "800"}],
+                    "body-sm": ["14px", {"lineHeight": "1.4", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            background-color: #0a0c10;
+            background-image: radial-gradient(#1c2129 0.5px, transparent 0.5px);
+            background-size: 24px 24px;
+        }
+        .industrial-border {
+            border: 1px solid #2d3748;
+        }
+        .bevel-button {
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        }
+        .zebra-stripes tr:nth-child(even) {
+            background-color: #161a21;
+        }
+        .zebra-stripes tr:nth-child(odd) {
+            background-color: #1c2129;
+        }
+        .segmented-progress {
+            display: flex;
+            gap: 2px;
+        }
+        .progress-segment {
+            height: 6px;
+            flex: 1;
+            background-color: #2d3748;
+        }
+        .progress-segment.active {
+            background-color: #84924a;
+        }
+    </style>
+</head>
+<body class="text-on-surface font-body-md selection:bg-primary selection:text-on-primary">
+<div class="flex h-screen overflow-hidden">
+<!-- SideNavBar -->
+<aside class="hidden md:flex flex-col h-full py-unit-6 px-unit-4 bg-surface-container-low border-r border-outline-variant w-64 shrink-0">
+<div class="mb-10 px-2">
+<h1 class="font-headline-md text-headline-md font-bold text-primary tracking-tighter">Biker's Fort Core</h1>
+<p class="font-label-caps text-label-caps text-on-surface-variant uppercase mt-1">Gestión de Taller</p>
+</div>
+<nav class="flex-1 space-y-1">
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant font-body-md hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span>Panel de Control</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-primary font-bold border-r-2 border-primary bg-surface-container-highest transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="inventory_2" style="font-variation-settings: 'FILL' 1;">inventory_2</span>
+<span>Inventario</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant font-body-md hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="build">build</span>
+<span>Órdenes de Trabajo</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant font-body-md hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="calendar_today">calendar_today</span>
+<span>Agenda</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant font-body-md hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+<span>Reportes</span>
+</a>
+</nav>
+<div class="mt-auto space-y-1 pt-6 border-t border-outline-variant">
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant font-body-md hover:bg-surface-container-highest" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span>Configuración</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant font-body-md hover:bg-surface-container-highest" href="#">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+<span>Soporte</span>
+</a>
+<div class="flex items-center gap-3 px-4 py-4 mt-4 bg-surface-container rounded-lg industrial-border">
+<div class="w-8 h-8 rounded bg-primary-container flex items-center justify-center text-on-primary-container">
+<span class="material-symbols-outlined text-sm">person</span>
+</div>
+<div class="overflow-hidden">
+<p class="text-xs font-bold truncate">Gerente de Taller</p>
+<p class="text-[10px] text-on-surface-variant uppercase">Administrador Core</p>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 flex flex-col min-w-0 bg-background overflow-y-auto">
+<!-- TopNavBar -->
+<header class="flex justify-between items-center w-full px-margin-desktop h-16 bg-surface-container border-b border-outline-variant sticky top-0 z-10">
+<div class="flex items-center gap-8">
+<div class="relative group">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-lg">search</span>
+<input class="bg-surface-container-lowest border border-outline-variant rounded-sm pl-10 pr-4 py-1.5 text-sm w-64 focus:ring-1 focus:ring-primary focus:border-primary transition-all outline-none" placeholder="Buscar proveedores..." type="text"/>
+</div>
+<nav class="hidden lg:flex items-center gap-6">
+<a class="text-on-surface-variant font-body-md hover:text-primary transition-colors duration-200" href="#">Vista Global</a>
+<a class="text-primary font-bold border-b-2 border-primary pb-1" href="#">Proveedores</a>
+<a class="text-on-surface-variant font-body-md hover:text-primary transition-colors duration-200" href="#">Alertas de Stock</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 text-on-surface-variant hover:text-primary transition-all">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="p-2 text-on-surface-variant hover:text-primary transition-all">
+<span class="material-symbols-outlined" data-icon="history">history</span>
+</button>
+<div class="h-8 w-px bg-outline-variant mx-2"></div>
+<button class="bg-primary hover:bg-primary-container text-on-primary font-bold px-4 py-2 text-sm flex items-center gap-2 transition-all bevel-button">
+<span class="material-symbols-outlined text-sm">add_shopping_cart</span>
+                    Nueva Orden de Compra
+                </button>
+</div>
+</header>
+<div class="p-margin-desktop space-y-gutter max-w-container-max mx-auto w-full">
+<!-- Page Header & Stats -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-gutter">
+<div class="md:col-span-2">
+<h2 class="font-headline-md text-headline-md text-on-surface">Gestión de Proveedores</h2>
+<p class="text-on-surface-variant mt-2 max-w-xl">Centraliza la comunicación, pedidos y estados financieros con tus socios estratégicos de suministro.</p>
+</div>
+<div class="bg-surface-container-low industrial-border p-4 flex flex-col justify-between">
+<span class="font-label-caps text-label-caps text-on-surface-variant uppercase">Deuda Total</span>
+<div class="mt-2">
+<span class="text-2xl font-bold text-error">$42,850.00</span>
+<p class="text-[10px] text-on-surface-variant mt-1">3 facturas vencidas esta semana</p>
+</div>
+</div>
+<div class="bg-surface-container-low industrial-border p-4 flex flex-col justify-between">
+<span class="font-label-caps text-label-caps text-on-surface-variant uppercase">Tiempo de Entrega Promedio</span>
+<div class="mt-2">
+<span class="text-2xl font-bold text-primary">4.2 Días</span>
+<div class="segmented-progress mt-2 w-24">
+<div class="progress-segment active"></div>
+<div class="progress-segment active"></div>
+<div class="progress-segment active"></div>
+<div class="progress-segment active"></div>
+<div class="progress-segment"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Featured Supplier (Bento Style) -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-gutter">
+<div class="lg:col-span-2 relative h-64 overflow-hidden industrial-border bg-surface-container-lowest group">
+<div class="absolute inset-0 opacity-40 mix-blend-overlay grayscale group-hover:grayscale-0 transition-all duration-700 bg-cover bg-center" data-alt="A sophisticated macro photograph of high-end mountain bike derailleurs and carbon fiber components neatly arranged on a dark metallic workbench. The lighting is dramatic and technical, using cold blue and warm amber tones to highlight precision engineering. The overall aesthetic is industrial, premium, and focused on mechanical excellence." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuB5Tf4megbiYpuJ8bd7qdyfGcTIA8Hv3Uwe0xoGa-yx2UPIzVPIiM3t-3BmuV_sdPtFb53UteKCGmT7fkAlYtfTSr1E-2v4IEjqqWS3qX_SanjT_uqxQw42vxH9-Oc-Og-elvwwildqPjMiA1JfKE6Hz93SibQRZ3Hz5llWabGDlcrWPtdAKUh_AMrQfz-JuMmuaARagepuHU4ptYvQ4vTzadJ2Y7oR7qfQQ7Fv9-ehZAXliHkCvrd4')"></div>
+<div class="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent"></div>
+<div class="relative h-full flex flex-col justify-end p-6">
+<div class="flex justify-between items-end">
+<div>
+<span class="bg-primary/20 text-primary px-2 py-0.5 text-[10px] font-bold tracking-widest uppercase border border-primary/30">Socio Platinum</span>
+<h3 class="text-3xl font-extrabold mt-2 tracking-tight">Specialized Global</h3>
+<p class="text-on-surface-variant text-sm mt-1">Cuadros, Ropa, Componentes de alto rendimiento</p>
+</div>
+<div class="text-right">
+<p class="font-label-caps text-label-caps text-on-surface-variant uppercase">Última Compra</p>
+<p class="text-sm font-bold">12 Oct 2023</p>
+</div>
+</div>
+</div>
+</div>
+<div class="bg-surface-container-high industrial-border p-6 flex flex-col">
+<div class="flex items-center justify-between mb-4">
+<h4 class="font-bold">Contactos Rápidos</h4>
+<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-primary">more_vert</span>
+</div>
+<div class="space-y-4 flex-1">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full industrial-border overflow-hidden bg-surface-container">
+<img class="w-full h-full object-cover" data-alt="A professional headshot of a female supply chain manager with a neutral expression, wearing a technical outdoor vest, set against a blurred industrial office background. Soft, clean lighting with a corporate yet modern look." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAgwyo_jbwTXuCz38VsFTxqiryQzG4PjUjANEJrECX2kfwJCCgSVgCmTg3tqVKf2mwruAIU-bZb3d2949-0G5RW3oJudnTo1pCblUEcnMV2T2CEdgI4IRjLbhNXL1wXwYY9eYszZhG1tJ3SVZPqKiUomw6ir5QyOH-AnDv4BQIFQo11Bvj81Xs1IktbgjuneHv1BxyMqIDw9D5I_HF_4r9SkY-IM9Qtx2a6LO9KxoH4Ml8vjqX_mmzJ"/>
+</div>
+<div>
+<p class="text-sm font-bold">Elena Rodriguez</p>
+<p class="text-[10px] text-on-surface-variant uppercase">Key Account Manager - Specialized</p>
+</div>
+<button class="ml-auto w-8 h-8 rounded border border-outline-variant flex items-center justify-center hover:bg-primary/10 hover:border-primary transition-colors">
+<span class="material-symbols-outlined text-sm">mail</span>
+</button>
+</div>
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full industrial-border overflow-hidden bg-surface-container">
+<img class="w-full h-full object-cover" data-alt="A professional headshot of a male technical support engineer with short hair, wearing a grey polo shirt with a subtle bike brand logo. Clean industrial workshop background, bright and professional lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAQHPePPR_HK2eA8Uqb7tdwlB4ayLzFO5ISUY3bo4YzRe7qpCJ3ygrMeoLe4fMkhrNPZz4-dljFYQpSUkTd203z2LE1YeMB8qWfAGGaZvLBT9DBsatn1DyzzSuRSvdfGBiVZk_Ey8t1hbtgQBstCSM9Ztz6aYy2VOPJF1ZnKvo5wcbJt7XYslY9_UyXH2IIKMV3aUB1lHXBUUjKXXAbTgIXPXVGwfjIfOn4MXm-7_EQW1hwjtBvH2uR"/>
+</div>
+<div>
+<p class="text-sm font-bold">Marcus Thorne</p>
+<p class="text-[10px] text-on-surface-variant uppercase">Soporte Técnico - Shimano</p>
+</div>
+<button class="ml-auto w-8 h-8 rounded border border-outline-variant flex items-center justify-center hover:bg-primary/10 hover:border-primary transition-colors">
+<span class="material-symbols-outlined text-sm">call</span>
+</button>
+</div>
+</div>
+<button class="mt-4 w-full py-2 text-xs font-bold border border-outline-variant hover:bg-surface-container-highest transition-colors uppercase">Ver Directorio Completo</button>
+</div>
+</div>
+<!-- Suppliers List Table -->
+<section class="industrial-border bg-surface-container-low overflow-hidden">
+<div class="px-6 py-4 border-b border-outline-variant flex justify-between items-center bg-surface-container">
+<h3 class="font-bold flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">groups</span>
+                        Listado Detallado de Proveedores
+                    </h3>
+<div class="flex gap-2">
+<button class="px-3 py-1 text-xs font-label-caps border border-outline-variant flex items-center gap-2 hover:bg-surface-container-highest uppercase">
+<span class="material-symbols-outlined text-sm">filter_list</span> Filtrar
+                        </button>
+<button class="px-3 py-1 text-xs font-label-caps border border-outline-variant flex items-center gap-2 hover:bg-surface-container-highest uppercase">
+<span class="material-symbols-outlined text-sm">download</span> Exportar
+                        </button>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left zebra-stripes border-collapse">
+<thead>
+<tr class="bg-surface-container-highest border-b border-outline-variant">
+<th class="px-6 py-3 font-label-caps text-[11px] uppercase tracking-wider text-on-surface-variant">Proveedor</th>
+<th class="px-6 py-3 font-label-caps text-[11px] uppercase tracking-wider text-on-surface-variant">Productos Clave</th>
+<th class="px-6 py-3 font-label-caps text-[11px] uppercase tracking-wider text-on-surface-variant">Tiempo Entrega</th>
+<th class="px-6 py-3 font-label-caps text-[11px] uppercase tracking-wider text-on-surface-variant">Estado de Cuenta</th>
+<th class="px-6 py-3 font-label-caps text-[11px] uppercase tracking-wider text-on-surface-variant">Último Contacto</th>
+<th class="px-6 py-3 font-label-caps text-[11px] uppercase tracking-wider text-on-surface-variant text-right">Acciones</th>
+</tr>
+</thead>
+<tbody class="text-sm">
+<tr>
+<td class="px-6 py-4">
+<div class="font-bold">Shimano Latin America</div>
+<div class="text-[10px] text-on-surface-variant">PANAMÁ | DISTRIBUCIÓN DIRECTA</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex gap-1 flex-wrap">
+<span class="bg-surface-container px-2 py-0.5 rounded text-[10px] border border-outline-variant">Grupos XT</span>
+<span class="bg-surface-container px-2 py-0.5 rounded text-[10px] border border-outline-variant">Frenos SLX</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<span class="font-mono text-primary">3-5d</span>
+<div class="w-16 bg-outline-variant/30 h-1 rounded overflow-hidden">
+<div class="bg-primary h-full w-[80%]"></div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="text-primary font-bold">AL DÍA</span>
+<p class="text-[10px] text-on-surface-variant">$0.00 Pendiente</p>
+</td>
+<td class="px-6 py-4 text-on-surface-variant">Ayer, 14:20</td>
+<td class="px-6 py-4 text-right">
+<button class="text-primary hover:underline font-bold text-xs">DETALLES</button>
+</td>
+</tr>
+<tr>
+<td class="px-6 py-4">
+<div class="font-bold">SRAM Worldwide</div>
+<div class="text-[10px] text-on-surface-variant">USA | CHICAGO OFFICE</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex gap-1 flex-wrap">
+<span class="bg-surface-container px-2 py-0.5 rounded text-[10px] border border-outline-variant">Eagle Transmission</span>
+<span class="bg-surface-container px-2 py-0.5 rounded text-[10px] border border-outline-variant">RockShox</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<span class="font-mono text-on-surface-variant">7-10d</span>
+<div class="w-16 bg-outline-variant/30 h-1 rounded overflow-hidden">
+<div class="bg-secondary h-full w-[50%]"></div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="text-error font-bold">PENDIENTE</span>
+<p class="text-[10px] text-on-surface-variant">$12,400.30</p>
+</td>
+<td class="px-6 py-4 text-on-surface-variant">05 Oct 2023</td>
+<td class="px-6 py-4 text-right">
+<button class="text-primary hover:underline font-bold text-xs">DETALLES</button>
+</td>
+</tr>
+<tr>
+<td class="px-6 py-4">
+<div class="font-bold">Continental Tires Europe</div>
+<div class="text-[10px] text-on-surface-variant">ALEMANIA | HANNOVER</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex gap-1 flex-wrap">
+<span class="bg-surface-container px-2 py-0.5 rounded text-[10px] border border-outline-variant">Grand Prix 5000</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<span class="font-mono text-primary">2-3d</span>
+<div class="w-16 bg-outline-variant/30 h-1 rounded overflow-hidden">
+<div class="bg-primary h-full w-[95%]"></div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="text-primary font-bold">AL DÍA</span>
+<p class="text-[10px] text-on-surface-variant">$0.00 Pendiente</p>
+</td>
+<td class="px-6 py-4 text-on-surface-variant">Semana pasada</td>
+<td class="px-6 py-4 text-right">
+<button class="text-primary hover:underline font-bold text-xs">DETALLES</button>
+</td>
+</tr>
+<tr>
+<td class="px-6 py-4">
+<div class="font-bold">Park Tool Co.</div>
+<div class="text-[10px] text-on-surface-variant">USA | MINNESOTA</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex gap-1 flex-wrap">
+<span class="bg-surface-container px-2 py-0.5 rounded text-[10px] border border-outline-variant">Herramientas Pro</span>
+<span class="bg-surface-container px-2 py-0.5 rounded text-[10px] border border-outline-variant">Limpieza</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<span class="font-mono text-on-surface-variant">12-15d</span>
+<div class="w-16 bg-outline-variant/30 h-1 rounded overflow-hidden">
+<div class="bg-error h-full w-[30%]"></div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="text-primary font-bold">AL DÍA</span>
+<p class="text-[10px] text-on-surface-variant">$0.00 Pendiente</p>
+</td>
+<td class="px-6 py-4 text-on-surface-variant">1 mes atrás</td>
+<td class="px-6 py-4 text-right">
+<button class="text-primary hover:underline font-bold text-xs">DETALLES</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="px-6 py-3 border-t border-outline-variant bg-surface-container flex justify-between items-center text-[10px] font-label-caps text-on-surface-variant">
+<span class="uppercase">Mostrando 1-4 de 28 proveedores</span>
+<div class="flex gap-4">
+<button class="hover:text-primary transition-colors uppercase">Anterior</button>
+<button class="hover:text-primary transition-colors uppercase">Siguiente</button>
+</div>
+</div>
+</section>
+<!-- Activity Log & Quick Analysis -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-gutter pb-margin-desktop">
+<div class="industrial-border p-6 bg-surface-container-low">
+<h4 class="font-bold mb-4 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-sm">history</span>
+                        Actividad Reciente de Suministro
+                    </h4>
+<div class="space-y-4">
+<div class="flex gap-4 pl-2 border-l-2 border-primary/30">
+<div class="text-[10px] font-mono text-on-surface-variant w-12 pt-1">10:30</div>
+<div>
+<p class="text-sm font-bold">Confirmación de Pedido - Shimano</p>
+<p class="text-xs text-on-surface-variant">La orden #ORD-8829 ha sido procesada y está en camino.</p>
+</div>
+</div>
+<div class="flex gap-4 pl-2 border-l-2 border-error/30">
+<div class="text-[10px] font-mono text-on-surface-variant w-12 pt-1">AYER</div>
+<div>
+<p class="text-sm font-bold text-error">Alerta de Stock Crítico - Specialized</p>
+<p class="text-xs text-on-surface-variant">Neumáticos Fast Trak Control agotados en almacén principal.</p>
+</div>
+</div>
+</div>
+</div>
+<div class="industrial-border p-6 bg-surface-container-low flex flex-col justify-between">
+<div>
+<h4 class="font-bold mb-2">Desempeño de Proveedores</h4>
+<p class="text-xs text-on-surface-variant mb-6">Métrica de cumplimiento basada en tiempos de entrega y calidad del producto (últimos 30 días).</p>
+</div>
+<div class="space-y-4">
+<div>
+<div class="flex justify-between text-[10px] font-label-caps mb-1">
+<span>CONFIABILIDAD</span>
+<span>98%</span>
+</div>
+<div class="h-1 bg-outline-variant/30 rounded-full">
+<div class="h-full bg-primary rounded-full" style="width: 98%"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between text-[10px] font-label-caps mb-1">
+<span>PRECISIÓN DE PEDIDO</span>
+<span>92%</span>
+</div>
+<div class="h-1 bg-outline-variant/30 rounded-full">
+<div class="h-full bg-primary rounded-full" style="width: 92%"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+<!-- Micro-interaction Script -->
+<script>
+    // Simple hover effect for table rows
+    const rows = document.querySelectorAll('tbody tr');
+    rows.forEach(row => {
+        row.addEventListener('mouseenter', () => {
+            row.style.boxShadow = 'inset 4px 0px 0px #bfce7f';
+            row.style.transition = 'all 0.2s ease';
+        });
+        row.addEventListener('mouseleave', () => {
+            row.style.boxShadow = 'none';
+        });
+    });
+
+    // Search bar focus effect
+    const searchInput = document.querySelector('input[type="text"]');
+    if (searchInput) {
+        searchInput.addEventListener('focus', () => {
+            searchInput.parentElement.classList.add('scale-105');
+            searchInput.parentElement.style.transition = 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
+        });
+        searchInput.addEventListener('blur', () => {
+            searchInput.parentElement.classList.remove('scale-105');
+        });
+    }
+</script>
+</body></html>

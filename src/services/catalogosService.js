@@ -1,0 +1,18 @@
+export const catalogosService = {
+  getEmpresas: async () => [],
+  getDepartamentos: async () => [],
+  getAreas: async () => [],
+  getCargos: async () => [],
+  getRolesFuncionales: async () => [],
+  getTiposUsuario: async () => [],
+  getModulos: async () => [],
+  getMatrizAccesoRol: async () => [],
+  getAgrupaciones: async () => [],
+  getAgencias: async () => [],
+  getPaises: async () => [],
+  getRegiones: async () => [],
+  getProvincias: async () => [],
+  getMunicipios: async () => [],
+  getDistritosMunicipales: async () => [],
+  getSectores: async () => [],
+};

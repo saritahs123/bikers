@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Biker's Fort Core - Iniciar Sesión</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800;900&family=JetBrains+Mono:wght@600&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@100..900&family=JetBrains+Mono:wght@100..900&display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "secondary-fixed": "#dfe2ec",
+                        "error": "#ffb4ab",
+                        "surface-container-high": "#2a2a24",
+                        "on-surface-variant": "#c7c8b7",
+                        "surface-bright": "#393a33",
+                        "outline": "#919282",
+                        "secondary": "#c3c6d0",
+                        "on-secondary-fixed-variant": "#43474f",
+                        "on-tertiary-container": "#202a3a",
+                        "on-background": "#e4e3d9",
+                        "on-secondary-fixed": "#181c23",
+                        "tertiary-container": "#8791a5",
+                        "surface-container-lowest": "#0e0f0a",
+                        "surface-dim": "#13140f",
+                        "primary-fixed-dim": "#bfce7f",
+                        "surface-container-highest": "#35352f",
+                        "inverse-primary": "#576421",
+                        "on-tertiary": "#273141",
+                        "surface": "#13140f",
+                        "on-secondary": "#2d3138",
+                        "on-primary-container": "#252d00",
+                        "on-primary-fixed-variant": "#404c0a",
+                        "on-error-container": "#ffdad6",
+                        "primary-container": "#89974f",
+                        "surface-container": "#1f201a",
+                        "surface-variant": "#35352f",
+                        "primary-fixed": "#dbea98",
+                        "on-surface": "#e4e3d9",
+                        "tertiary-fixed": "#d9e3f9",
+                        "on-secondary-container": "#b2b5be",
+                        "on-error": "#690005",
+                        "inverse-surface": "#e4e3d9",
+                        "on-primary": "#2b3400",
+                        "primary": "#bfce7f",
+                        "error-container": "#93000a",
+                        "on-tertiary-fixed-variant": "#3d4759",
+                        "inverse-on-surface": "#30312b",
+                        "surface-container-low": "#1b1c17",
+                        "secondary-fixed-dim": "#c3c6d0",
+                        "tertiary": "#bdc7dc",
+                        "secondary-container": "#43474f",
+                        "background": "#13140f",
+                        "surface-tint": "#bfce7f",
+                        "outline-variant": "#46483b",
+                        "on-primary-fixed": "#181e00",
+                        "tertiary-fixed-dim": "#bdc7dc",
+                        "on-tertiary-fixed": "#121c2c"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "unit": "4px",
+                        "margin-mobile": "16px",
+                        "gutter": "24px",
+                        "margin-desktop": "40px",
+                        "container-max": "1440px"
+                    },
+                    "fontFamily": {
+                        "headline-md": ["Hanken Grotesk"],
+                        "label-caps": ["JetBrains Mono"],
+                        "body-sm": ["Hanken Grotesk"],
+                        "headline-sm": ["Hanken Grotesk"],
+                        "headline-lg-mobile": ["Hanken Grotesk"],
+                        "body-md": ["Hanken Grotesk"],
+                        "headline-lg": ["Hanken Grotesk"],
+                        "body-lg": ["Hanken Grotesk"]
+                    },
+                    "fontSize": {
+                        "headline-md": ["32px", {"lineHeight": "1.2", "fontWeight": "700"}],
+                        "label-caps": ["12px", {"lineHeight": "1", "letterSpacing": "0.1em", "fontWeight": "600"}],
+                        "body-sm": ["14px", {"lineHeight": "1.4", "fontWeight": "400"}],
+                        "headline-sm": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                        "headline-lg-mobile": ["32px", {"lineHeight": "1.2", "fontWeight": "800"}],
+                        "body-md": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "headline-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "800"}],
+                        "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .grid-pattern {
+            background-image: radial-gradient(circle, #2d3748 1px, transparent 1px);
+            background-size: 24px 24px;
+            opacity: 0.05;
+        }
+        .industrial-border {
+            border: 1px solid #2d3748;
+            box-shadow: 4px 4px 0px rgba(0,0,0,0.5);
+        }
+        .btn-bevel {
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        }
+        .input-dark {
+            background-color: #0a0c10;
+            border-color: #2d3748;
+            transition: border-color 0.2s ease;
+        }
+        .input-dark:focus {
+            border-color: #bfce7f;
+            outline: none;
+            box-shadow: 0 0 0 1px #bfce7f;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background min-h-screen flex flex-col font-body-md overflow-x-hidden">
+<!-- Atmospheric Background Layers -->
+<div class="fixed inset-0 grid-pattern pointer-events-none"></div>
+<div class="fixed inset-0 bg-gradient-to-tr from-surface-container-lowest via-transparent to-surface-container-low pointer-events-none opacity-50"></div>
+<main class="flex-grow flex items-center justify-center px-margin-mobile md:px-margin-desktop py-12 relative z-10">
+<!-- Split Screen Layout Container -->
+<div class="w-full max-w-container-max flex flex-col md:flex-row items-stretch min-h-[600px] industrial-border bg-surface">
+<!-- Left Side: Visual Narrative -->
+<div class="hidden md:flex md:w-1/2 relative overflow-hidden group">
+<div class="absolute inset-0 bg-surface-container-lowest/40 z-10"></div>
+<img class="absolute inset-0 w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105" data-alt="A cinematic, high-contrast photograph of a professional mountain bike workshop at night. Tools are organized with surgical precision on a matte black pegboard, illuminated by focused industrial pendant lights. The atmosphere is technical and rugged, with subtle metallic reflections and a desaturated military olive and charcoal color palette. The shallow depth of field focuses on a high-precision gear assembly on a workbench." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDNIiO5saDtrBa-3jVTzTsab6kX5EuUffvfkSAXlGjmmzPM32Eowk6cVBkeeK0SFsK_39ds9SNkm8dJfU7eQ_LhPRlOm9TUHAZxJqNlo1zSx-DSyXc7G3cYNq2uydhERkHJQFJWwW_PrNeQzvNELcMGLs09C6gzqt3KLsrPUFm3aIzICbzfNqDp1kc2GuUzrzboUwFWk049NTgXialgm5Cn3Ap1ktElQjwVwZoCX_Vy3eeIltZ0ek2w"/>
+<div class="absolute bottom-margin-desktop left-margin-desktop right-margin-desktop z-20">
+<div class="p-8 backdrop-blur-md bg-surface-container-lowest/60 border border-outline-variant">
+<h2 class="font-headline-sm text-headline-sm text-primary mb-2">Ingeniería en Cada Detalle</h2>
+<p class="text-body-md text-on-surface-variant max-w-md">Sistema central de gestión para talleres de alto rendimiento y control de inventario técnico.</p>
+</div>
+</div>
+</div>
+<!-- Right Side: Login Form -->
+<div class="w-full md:w-1/2 flex flex-col items-center justify-center p-8 md:p-16 bg-surface-container">
+<div class="w-full max-w-md flex flex-col items-center">
+<!-- Logo Header -->
+<div class="mb-10 w-full flex justify-center">
+<img alt="Biker's Fort Core Logo" class="h-32 w-auto object-contain" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDQsHXizSsIBMDwL7CfWGuh1piUa7nML2qajgrM7gURI1WTI23Yiqdyx4mb2NmBQQFg9HuPpoAeKbkqw42UqACCcF9d10BLrZ8jL5tntjp1Xft5wGazfeqHkVGJga6K99Fs_qAGUVq52QUz55MLEgC8Jt8rVZknQjwy8cGdpLKrcH9V7qLKmsUfsNZb2KvT8Y0Ob7ooWBCQVup0AZRys0LGLsIdd4dN1aIpJP18pMDQbfg-2SRWVgSbcyGKMbiHh1830A"/>
+</div>
+<div class="w-full text-center mb-8">
+<h1 class="font-headline-sm text-headline-sm text-on-surface tracking-tight">CONTROL DE ACCESO</h1>
+<p class="font-label-caps text-label-caps text-on-surface-variant mt-2 uppercase">Workshop Management v4.2</p>
+</div>
+<!-- Login Form -->
+<form class="w-full space-y-6" onsubmit="event.preventDefault();">
+<!-- User Field -->
+<div class="space-y-2">
+<label class="font-label-caps text-label-caps text-on-surface-variant block" for="username">NOMBRE DE USUARIO / EMAIL</label>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline-variant pointer-events-none">person</span>
+<input class="w-full h-14 pl-12 pr-4 rounded-none input-dark text-on-surface font-body-md" id="username" placeholder="admin@bikersfort.com" type="text"/>
+</div>
+</div>
+<!-- Password Field -->
+<div class="space-y-2">
+<label class="font-label-caps text-label-caps text-on-surface-variant block" for="password">CONTRASEÑA</label>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline-variant pointer-events-none">lock</span>
+<input class="w-full h-14 pl-12 pr-12 rounded-none input-dark text-on-surface font-body-md" id="password" placeholder="••••••••" type="password"/>
+<button class="absolute right-4 top-1/2 -translate-y-1/2 text-outline hover:text-primary transition-colors" onclick="togglePassword()" type="button">
+<span class="material-symbols-outlined text-body-lg" id="eye-icon">visibility</span>
+</button>
+</div>
+</div>
+<!-- Options Row -->
+<div class="flex items-center justify-between">
+<label class="flex items-center group cursor-pointer">
+<input class="w-5 h-5 rounded-none border-outline-variant bg-surface-container-lowest text-primary focus:ring-primary focus:ring-offset-surface-container" type="checkbox"/>
+<span class="ml-3 font-body-sm text-body-sm text-on-surface-variant group-hover:text-on-surface transition-colors">Recordarme</span>
+</label>
+<a class="font-body-sm text-body-sm text-primary hover:text-primary-fixed transition-colors" href="#">¿Olvidaste tu contraseña?</a>
+</div>
+<!-- Submit Button -->
+<button class="w-full h-14 bg-primary text-on-primary font-headline-sm text-[18px] uppercase tracking-wider btn-bevel hover:bg-primary-fixed transition-all active:scale-[0.98] mt-4" type="submit">
+                            Iniciar Sesión
+                        </button>
+</form>
+<!-- Security Badges -->
+<div class="mt-12 flex flex-wrap justify-center gap-6 opacity-60">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[18px]">verified_user</span>
+<span class="font-label-caps text-label-caps text-[10px]">Protocolo AES-256</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[18px]">encrypted</span>
+<span class="font-label-caps text-label-caps text-[10px]">Acceso Encriptado</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Footer -->
+<footer class="py-8 px-margin-desktop border-t border-outline-variant/30 z-10">
+<div class="max-w-container-max mx-auto flex flex-col md:flex-row justify-between items-center gap-4 text-on-surface-variant font-label-caps text-[10px]">
+<div class="flex items-center gap-4">
+<span>© 2024 BIKER'S FORT CORE. TODOS LOS DERECHOS RESERVADOS.</span>
+<span class="hidden md:block">|</span>
+<span>SYSTEM STATUS: <span class="text-primary">ONLINE</span></span>
+</div>
+<div class="flex gap-6">
+<a class="hover:text-primary transition-colors" href="#">SOPORTE TÉCNICO</a>
+<a class="hover:text-primary transition-colors" href="#">POLÍTICA DE PRIVACIDAD</a>
+<span class="text-on-surface">BUILD ID: 03.11.2024.BFC</span>
+</div>
+</div>
+</footer>
+<script>
+        function togglePassword() {
+            const passwordInput = document.getElementById('password');
+            const eyeIcon = document.getElementById('eye-icon');
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+                eyeIcon.textContent = 'visibility_off';
+            } else {
+                passwordInput.type = 'password';
+                eyeIcon.textContent = 'visibility';
+            }
+        }
+
+        // Atmospheric micro-interaction for button
+        const loginBtn = document.querySelector('button[type="submit"]');
+        loginBtn.addEventListener('mousemove', (e) => {
+            const rect = loginBtn.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            loginBtn.style.setProperty('--x', `${x}px`);
+            loginBtn.style.setProperty('--y', `${y}px`);
+        });
+    </script>
+</body></html>

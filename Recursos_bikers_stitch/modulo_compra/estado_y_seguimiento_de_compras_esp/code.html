@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Biker's Fort Core - Estado de Suministros</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind Config Verbatim -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface": "#13140f",
+                    "inverse-on-surface": "#30312b",
+                    "on-tertiary-container": "#202a3a",
+                    "tertiary-fixed": "#d9e3f9",
+                    "on-secondary-fixed": "#181c23",
+                    "background": "#13140f",
+                    "on-secondary-container": "#b2b5be",
+                    "on-secondary": "#2d3138",
+                    "inverse-surface": "#e4e3d9",
+                    "on-surface-variant": "#c7c8b7",
+                    "tertiary-container": "#8791a5",
+                    "tertiary-fixed-dim": "#bdc7dc",
+                    "surface-tint": "#bfce7f",
+                    "on-primary-fixed": "#181e00",
+                    "on-secondary-fixed-variant": "#43474f",
+                    "primary-fixed-dim": "#bfce7f",
+                    "error": "#ffb4ab",
+                    "tertiary": "#bdc7dc",
+                    "secondary-fixed": "#dfe2ec",
+                    "secondary-container": "#43474f",
+                    "on-primary-container": "#252d00",
+                    "surface-variant": "#35352f",
+                    "error-container": "#93000a",
+                    "on-error-container": "#ffdad6",
+                    "surface-container": "#1f201a",
+                    "primary": "#bfce7f",
+                    "surface-container-highest": "#35352f",
+                    "surface-container-lowest": "#0e0f0a",
+                    "primary-fixed": "#dbea98",
+                    "surface-bright": "#393a33",
+                    "primary-container": "#89974f",
+                    "on-tertiary-fixed-variant": "#3d4759",
+                    "surface-container-high": "#2a2a24",
+                    "inverse-primary": "#576421",
+                    "on-error": "#690005",
+                    "secondary": "#c3c6d0",
+                    "outline-variant": "#46483b",
+                    "on-primary": "#2b3400",
+                    "on-primary-fixed-variant": "#404c0a",
+                    "on-tertiary-fixed": "#121c2c",
+                    "on-background": "#e4e3d9",
+                    "secondary-fixed-dim": "#c3c6d0",
+                    "surface-container-low": "#1b1c17",
+                    "on-surface": "#e4e3d9",
+                    "surface-dim": "#13140f",
+                    "outline": "#919282",
+                    "on-tertiary": "#273141"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "spacing": {
+                    "unit": "4px",
+                    "gutter": "24px",
+                    "margin-mobile": "16px",
+                    "margin-desktop": "40px",
+                    "container-max": "1440px"
+            },
+            "fontFamily": {
+                    "label-caps": ["JetBrains Mono"],
+                    "headline-md": ["Hanken Grotesk"],
+                    "body-md": ["Hanken Grotesk"],
+                    "headline-lg": ["Hanken Grotesk"],
+                    "headline-sm": ["Hanken Grotesk"],
+                    "headline-lg-mobile": ["Hanken Grotesk"],
+                    "body-sm": ["Hanken Grotesk"],
+                    "body-lg": ["Hanken Grotesk"]
+            },
+            "fontSize": {
+                    "label-caps": ["12px", {"lineHeight": "1", "letterSpacing": "0.1em", "fontWeight": "600"}],
+                    "headline-md": ["32px", {"lineHeight": "1.2", "fontWeight": "700"}],
+                    "body-md": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                    "headline-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "800"}],
+                    "headline-sm": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                    "headline-lg-mobile": ["32px", {"lineHeight": "1.2", "fontWeight": "800"}],
+                    "body-sm": ["14px", {"lineHeight": "1.4", "fontWeight": "400"}],
+                    "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            background-color: #0a0c10;
+            color: #e4e3d9;
+            font-family: 'Hanken Grotesk', sans-serif;
+        }
+        .grid-pattern {
+            background-image: radial-gradient(#2d3748 0.5px, transparent 0.5px);
+            background-size: 24px 24px;
+            opacity: 0.05;
+        }
+        .industrial-border {
+            border: 1px solid #2d3748;
+        }
+        .beveled-button {
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 4px 4px 0px rgba(0, 0, 0, 0.5);
+        }
+        .beveled-button:active {
+            box-shadow: 0px 0px 0px rgba(0, 0, 0, 0.5);
+            transform: translate(2px, 2px);
+        }
+        .zebra-stripe:nth-child(even) {
+            background-color: #1c2129;
+        }
+        .chain-segment {
+            height: 8px;
+            background: #2d3748;
+            position: relative;
+            overflow: hidden;
+            border-radius: 2px;
+        }
+        .chain-fill {
+            height: 100%;
+            background: #84924a;
+            width: 0%;
+            transition: width 1s ease-in-out;
+        }
+        .chain-divider {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #0a0c10;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background min-h-screen overflow-x-hidden">
+<div class="fixed inset-0 grid-pattern pointer-events-none"></div>
+<!-- SideNavBar Shell -->
+<aside class="fixed left-0 top-0 h-full flex flex-col py-6 px-4 bg-surface-container-lowest border-r border-outline-variant w-64 z-50">
+<div class="mb-10">
+<h1 class="font-headline-sm text-headline-sm font-bold text-primary tracking-tight">Biker's Fort Core</h1>
+<p class="text-on-surface-variant text-xs font-label-caps uppercase tracking-widest mt-1">Workshop Management</p>
+</div>
+<nav class="flex flex-col gap-1 flex-grow">
+<!-- Dashboard -->
+<a class="flex items-center gap-3 px-4 py-3 rounded-sm text-on-surface-variant font-medium hover:bg-surface-container-high hover:text-on-surface transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-caps text-label-caps">Dashboard</span>
+</a>
+<!-- Inventory (Active Mapping for Suministros/Inventory context) -->
+<a class="flex items-center gap-3 px-4 py-3 rounded-sm text-primary font-bold border-r-2 border-primary bg-surface-container-high" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+<span class="font-label-caps text-label-caps">Inventory</span>
+</a>
+<!-- Builds -->
+<a class="flex items-center gap-3 px-4 py-3 rounded-sm text-on-surface-variant font-medium hover:bg-surface-container-high hover:text-on-surface transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">handyman</span>
+<span class="font-label-caps text-label-caps">Builds</span>
+</a>
+<!-- Calendar -->
+<a class="flex items-center gap-3 px-4 py-3 rounded-sm text-on-surface-variant font-medium hover:bg-surface-container-high hover:text-on-surface transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">calendar_month</span>
+<span class="font-label-caps text-label-caps">Calendar</span>
+</a>
+<!-- Analytics -->
+<a class="flex items-center gap-3 px-4 py-3 rounded-sm text-on-surface-variant font-medium hover:bg-surface-container-high hover:text-on-surface transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">analytics</span>
+<span class="font-label-caps text-label-caps">Analytics</span>
+</a>
+<!-- Payments -->
+<a class="flex items-center gap-3 px-4 py-3 rounded-sm text-on-surface-variant font-medium hover:bg-surface-container-high hover:text-on-surface transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">payments</span>
+<span class="font-label-caps text-label-caps">Payments</span>
+</a>
+</nav>
+<button class="beveled-button bg-primary text-on-primary font-label-caps py-3 mb-8 flex items-center justify-center gap-2 rounded-sm active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-sm">add_shopping_cart</span>
+            New Repair Order
+        </button>
+<div class="mt-auto flex flex-col gap-1 border-t border-outline-variant pt-4">
+<a class="flex items-center gap-3 px-4 py-2 text-on-surface-variant font-label-caps hover:text-on-surface transition-colors" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span>Settings</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 text-on-surface-variant font-label-caps hover:text-on-surface transition-colors" href="#">
+<span class="material-symbols-outlined">help</span>
+<span>Support</span>
+</a>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="ml-64 min-h-screen flex flex-col">
+<!-- TopNavBar Shell -->
+<header class="flex justify-between items-center px-10 w-full h-16 sticky top-0 z-40 bg-surface border-b border-outline-variant">
+<div class="flex items-center gap-4">
+<div class="relative focus-within:ring-1 focus-within:ring-primary rounded-lg transition-all bg-surface-container-lowest px-4 py-1.5 flex items-center gap-2 industrial-border w-96">
+<span class="material-symbols-outlined text-on-surface-variant text-sm">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-sm text-on-surface w-full font-body-md" placeholder="Buscar pedidos, SKUs o proveedores..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-4">
+<button class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-all">notifications</button>
+<button class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-all">history</button>
+<button class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-all">account_circle</button>
+</div>
+</div>
+</header>
+<!-- Dashboard Content -->
+<div class="p-10 max-w-[1440px] mx-auto w-full">
+<!-- Header Section -->
+<div class="flex justify-between items-end mb-8">
+<div>
+<h2 class="font-headline-md text-headline-md text-on-surface">Estado de Suministros</h2>
+<p class="text-on-surface-variant font-body-md mt-1">Monitorización en tiempo real de la cadena de suministro y logística.</p>
+</div>
+<div class="flex gap-4">
+<div class="flex flex-col items-end">
+<span class="text-xs font-label-caps text-outline uppercase tracking-widest">Última actualización</span>
+<span class="text-primary font-label-caps">HACE 4 MINUTOS</span>
+</div>
+</div>
+</div>
+<!-- Key Metrics Grid -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+<div class="industrial-border bg-[#161a21] p-6 flex flex-col gap-4">
+<div class="flex justify-between items-center">
+<span class="font-label-caps text-on-surface-variant text-xs uppercase">Cumplimiento de Plazos</span>
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">timer</span>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="text-4xl font-headline-lg text-primary">94.2%</span>
+<span class="text-primary-container text-xs font-label-caps">+2.1% v.p.</span>
+</div>
+<div class="chain-segment">
+<div class="chain-fill" style="width: 94%;"></div>
+<div class="chain-divider" style="left: 20%;"></div>
+<div class="chain-divider" style="left: 40%;"></div>
+<div class="chain-divider" style="left: 60%;"></div>
+<div class="chain-divider" style="left: 80%;"></div>
+</div>
+</div>
+<div class="industrial-border bg-[#161a21] p-6 flex flex-col gap-4">
+<div class="flex justify-between items-center">
+<span class="font-label-caps text-on-surface-variant text-xs uppercase">Calidad de Recepción</span>
+<span class="material-symbols-outlined text-secondary" style="font-variation-settings: 'FILL' 1;">verified</span>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="text-4xl font-headline-lg text-on-surface">98.8%</span>
+<span class="text-on-surface-variant text-xs font-label-caps">META 99%</span>
+</div>
+<div class="chain-segment">
+<div class="chain-fill" style="width: 98.8%;"></div>
+<div class="chain-divider" style="left: 20%;"></div>
+<div class="chain-divider" style="left: 40%;"></div>
+<div class="chain-divider" style="left: 60%;"></div>
+<div class="chain-divider" style="left: 80%;"></div>
+</div>
+</div>
+<div class="industrial-border bg-[#161a21] p-6 flex flex-col gap-4">
+<div class="flex justify-between items-center">
+<span class="font-label-caps text-on-surface-variant text-xs uppercase">Stock en Tránsito</span>
+<span class="material-symbols-outlined text-tertiary" style="font-variation-settings: 'FILL' 1;">local_shipping</span>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="text-4xl font-headline-lg text-tertiary">42</span>
+<span class="text-on-surface-variant text-xs font-label-caps">ENVÍOS ACTIVOS</span>
+</div>
+<div class="flex gap-1">
+<div class="h-1 flex-grow bg-primary"></div>
+<div class="h-1 flex-grow bg-primary"></div>
+<div class="h-1 flex-grow bg-outline-variant"></div>
+<div class="h-1 flex-grow bg-outline-variant"></div>
+<div class="h-1 flex-grow bg-outline-variant"></div>
+</div>
+</div>
+</div>
+<!-- Supply Chain Map/Timeline & Alerts Section -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+<!-- Supply Chain Timeline -->
+<div class="lg:col-span-8 space-y-6">
+<div class="industrial-border bg-[#161a21] p-8">
+<div class="flex justify-between items-center mb-8">
+<h3 class="font-headline-sm text-headline-sm text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">route</span>
+                                Flujo Logístico Activo
+                            </h3>
+<div class="flex gap-2">
+<button class="px-3 py-1 bg-surface-container text-xs font-label-caps text-on-surface rounded-sm border border-outline-variant hover:border-primary transition-colors">VISTA MAPA</button>
+<button class="px-3 py-1 bg-primary-container text-xs font-label-caps text-on-primary rounded-sm border border-primary hover:opacity-90 transition-opacity">VISTA LISTA</button>
+</div>
+</div>
+<div class="relative py-12 px-6 overflow-hidden">
+<!-- SVG Path for Timeline Connection -->
+<svg class="absolute inset-0 w-full h-full pointer-events-none" style="filter: drop-shadow(0 0 4px rgba(132, 146, 74, 0.2))">
+<path d="M 50 150 L 250 150 L 450 150 L 650 150" fill="none" stroke="#2d3748" stroke-dasharray="8 4" stroke-width="2"></path>
+<path d="M 50 150 L 250 150 L 400 150" fill="none" id="progress-path" stroke="#84924a" stroke-width="3"></path>
+</svg>
+<div class="relative flex justify-between">
+<!-- Step 1 -->
+<div class="flex flex-col items-center gap-4 relative z-10 w-40">
+<div class="w-12 h-12 bg-primary rounded-full flex items-center justify-center border-4 border-[#161a21] outline outline-1 outline-primary">
+<span class="material-symbols-outlined text-on-primary">factory</span>
+</div>
+<div class="text-center">
+<p class="font-label-caps text-xs text-primary mb-1">PRODUCCIÓN</p>
+<p class="text-sm font-bold text-on-surface">Fábrica CarbonTech</p>
+<p class="text-[10px] text-on-surface-variant font-label-caps mt-1">CERRADO: 14 MAY</p>
+</div>
+</div>
+<!-- Step 2 -->
+<div class="flex flex-col items-center gap-4 relative z-10 w-40">
+<div class="w-12 h-12 bg-primary rounded-full flex items-center justify-center border-4 border-[#161a21] outline outline-1 outline-primary">
+<span class="material-symbols-outlined text-on-primary">warehouse</span>
+</div>
+<div class="text-center">
+<p class="font-label-caps text-xs text-primary mb-1">LOGÍSTICA INTERMEDIA</p>
+<p class="text-sm font-bold text-on-surface">Hub Central EuroPort</p>
+<p class="text-[10px] text-on-surface-variant font-label-caps mt-1">EN TRÁNSITO: 18 MAY</p>
+</div>
+</div>
+<!-- Step 3 -->
+<div class="flex flex-col items-center gap-4 relative z-10 w-40">
+<div class="w-12 h-12 bg-surface-container rounded-full flex items-center justify-center border-4 border-[#161a21] outline outline-1 outline-outline-variant animate-pulse">
+<span class="material-symbols-outlined text-on-surface-variant">local_shipping</span>
+</div>
+<div class="text-center">
+<p class="font-label-caps text-xs text-outline mb-1 uppercase">Transporte Local</p>
+<p class="text-sm font-bold text-on-surface">DHL Global Forwarding</p>
+<p class="text-[10px] text-primary font-label-caps mt-1">LLEGADA: 22 MAY</p>
+</div>
+</div>
+<!-- Step 4 -->
+<div class="flex flex-col items-center gap-4 relative z-10 w-40">
+<div class="w-12 h-12 bg-surface-container rounded-full flex items-center justify-center border-4 border-[#161a21] outline outline-1 outline-outline-variant opacity-40">
+<span class="material-symbols-outlined text-on-surface-variant">build_circle</span>
+</div>
+<div class="text-center opacity-40">
+<p class="font-label-caps text-xs text-outline mb-1 uppercase">Taller Core</p>
+<p class="text-sm font-bold text-on-surface">Workshop HQ</p>
+<p class="text-[10px] text-on-surface-variant font-label-caps mt-1">PENDIENTE</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Mini Map View Placeholder -->
+<div class="mt-8 industrial-border h-48 w-full relative overflow-hidden group">
+<div class="absolute inset-0 grayscale opacity-40 group-hover:grayscale-0 group-hover:opacity-60 transition-all duration-700 bg-cover bg-center" data-alt="A top-down satellite view of a complex industrial port and logistics hub. The imagery is desaturated with deep greys and blacks, but high-tech overlay lines in vibrant olive green trace shipping routes across the ocean. Strategic dots mark warehouses and factories. The lighting is nocturnal, emphasizing glowing city lights and industrial activity under a dark, moody sky." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDzRV9H7w4qIQDHlg1Xv_ccHfGz1xSBSnZzn3HiHlphB67aBgEzepSo58eW59B7qssA_RoopRk5MSdOIh77T25RQ7XTTq_Gj3onwCc1LfCDZubDTmGWhJ390KSpLhCRcFgEWJOPM59BqF69TKgoNYLfa_ugA5PlCQtteWOIHMZrjuv7tegEnIH_aWacG5Rc90VvL9sCSN6F574SH4cZXQblKbX2Ci1x84x5wnQHs4iTvzFJPuTgyoip')"></div>
+<div class="absolute inset-0 flex items-center justify-center">
+<div class="bg-surface-container-high/90 backdrop-blur-md p-4 industrial-border">
+<p class="font-label-caps text-xs text-primary flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">location_on</span>
+                                        UBICACIÓN ACTUAL: ATLÁNTICO NORTE (34.05, -118.24)
+                                    </p>
+</div>
+</div>
+</div>
+</div>
+<!-- Supply Orders Table -->
+<div class="industrial-border bg-[#161a21] overflow-hidden">
+<div class="p-6 border-b border-outline-variant flex justify-between items-center">
+<h4 class="font-label-caps text-sm text-on-surface">ÚLTIMOS PEDIDOS DE SUMINISTROS</h4>
+<span class="text-xs text-outline font-label-caps uppercase">12 PEDIDOS ESTE MES</span>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left">
+<thead class="bg-surface-container-low border-b border-outline-variant">
+<tr>
+<th class="px-6 py-3 font-label-caps text-[10px] text-outline uppercase tracking-wider">Orden ID</th>
+<th class="px-6 py-3 font-label-caps text-[10px] text-outline uppercase tracking-wider">Proveedor</th>
+<th class="px-6 py-3 font-label-caps text-[10px] text-outline uppercase tracking-wider">Estado</th>
+<th class="px-6 py-3 font-label-caps text-[10px] text-outline uppercase tracking-wider">Artículos</th>
+<th class="px-6 py-3 font-label-caps text-[10px] text-outline uppercase tracking-wider">ETA</th>
+</tr>
+</thead>
+<tbody>
+<tr class="zebra-stripe hover:bg-surface-container-high transition-colors">
+<td class="px-6 py-4 font-label-caps text-xs text-primary">#ORD-90210</td>
+<td class="px-6 py-4 font-body-sm text-on-surface">Shimano Pro Series</td>
+<td class="px-6 py-4">
+<span class="px-2 py-0.5 bg-primary-container/20 text-primary text-[10px] font-label-caps border border-primary/30">EN TRÁNSITO</span>
+</td>
+<td class="px-6 py-4 font-body-sm text-on-surface-variant">24x Cassettes XT, 12x Desviadores</td>
+<td class="px-6 py-4 font-label-caps text-xs">22/05/24</td>
+</tr>
+<tr class="zebra-stripe hover:bg-surface-container-high transition-colors">
+<td class="px-6 py-4 font-label-caps text-xs text-primary">#ORD-89942</td>
+<td class="px-6 py-4 font-body-sm text-on-surface">SRAM Distribution</td>
+<td class="px-6 py-4">
+<span class="px-2 py-0.5 bg-surface-container-highest text-on-surface-variant text-[10px] font-label-caps border border-outline-variant">PROCESANDO</span>
+</td>
+<td class="px-6 py-4 font-body-sm text-on-surface-variant">50x Cadenas Eagle, 20x Frenos Code</td>
+<td class="px-6 py-4 font-label-caps text-xs">28/05/24</td>
+</tr>
+<tr class="zebra-stripe hover:bg-surface-container-high transition-colors">
+<td class="px-6 py-4 font-label-caps text-xs text-primary">#ORD-88712</td>
+<td class="px-6 py-4 font-body-sm text-on-surface">Fox Racing Shox</td>
+<td class="px-6 py-4">
+<span class="px-2 py-0.5 bg-error-container/20 text-error text-[10px] font-label-caps border border-error/30">RETRASADO</span>
+</td>
+<td class="px-6 py-4 font-body-sm text-on-surface-variant">10x Horquillas 38, 5x Amortiguadores</td>
+<td class="px-6 py-4 font-label-caps text-xs text-error">15/05/24</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<!-- Alerts & Urgent Orders Section -->
+<div class="lg:col-span-4 space-y-6">
+<!-- Critical Alerts -->
+<div class="industrial-border bg-[#161a21] overflow-hidden">
+<div class="p-6 bg-error-container/10 border-b border-error/30">
+<h3 class="font-headline-sm text-headline-sm text-error flex items-center gap-2">
+<span class="material-symbols-outlined">warning</span>
+                                Alertas Críticas
+                            </h3>
+</div>
+<div class="p-6 space-y-4">
+<div class="p-4 bg-surface-container-high border-l-4 border-error flex gap-4">
+<span class="material-symbols-outlined text-error mt-0.5">inventory</span>
+<div>
+<p class="font-bold text-sm text-on-surface">Stockout: Pastillas de Freno E-Bike</p>
+<p class="text-xs text-on-surface-variant mt-1">Inventario agotado para el servicio del modelo 'Turbo Levo'.</p>
+<button class="mt-3 text-[10px] font-label-caps text-error underline hover:text-on-error-container transition-colors uppercase">Realizar Pedido Urgente</button>
+</div>
+</div>
+<div class="p-4 bg-surface-container-high border-l-4 border-[#d97706] flex gap-4">
+<span class="material-symbols-outlined text-[#d97706] mt-0.5">event_busy</span>
+<div>
+<p class="font-bold text-sm text-on-surface">Retraso Crítico: Fox Racing</p>
+<p class="text-xs text-on-surface-variant mt-1">Envío retenido en aduanas. Afecta 5 montajes programados.</p>
+<button class="mt-3 text-[10px] font-label-caps text-[#d97706] underline hover:text-on-surface transition-colors uppercase">Contactar Transitario</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Supply Analysis Mini Chart -->
+<div class="industrial-border bg-[#161a21] p-6">
+<h4 class="font-label-caps text-xs text-on-surface-variant uppercase mb-6">Proyección de Stock (30 días)</h4>
+<div class="h-40 flex items-end justify-between gap-1">
+<!-- Simulated Chart Bars -->
+<div class="w-full bg-outline-variant h-[40%] rounded-t-sm relative group">
+<div class="absolute -top-6 left-1/2 -translate-x-1/2 bg-surface p-1 text-[8px] font-label-caps border border-outline opacity-0 group-hover:opacity-100 transition-opacity">40%</div>
+</div>
+<div class="w-full bg-outline-variant h-[55%] rounded-t-sm"></div>
+<div class="w-full bg-outline-variant h-[35%] rounded-t-sm"></div>
+<div class="w-full bg-primary h-[85%] rounded-t-sm"></div>
+<div class="w-full bg-primary h-[70%] rounded-t-sm"></div>
+<div class="w-full bg-primary-container h-[95%] rounded-t-sm"></div>
+<div class="w-full bg-primary-container h-[80%] rounded-t-sm"></div>
+<div class="w-full bg-error h-[15%] rounded-t-sm animate-pulse"></div>
+<div class="w-full bg-outline-variant h-[30%] rounded-t-sm"></div>
+<div class="w-full bg-outline-variant h-[45%] rounded-t-sm"></div>
+</div>
+<div class="flex justify-between mt-2 font-label-caps text-[8px] text-outline uppercase tracking-tighter">
+<span>May 01</span>
+<span>May 15</span>
+<span>Jun 01</span>
+</div>
+<p class="mt-4 text-[11px] text-on-surface-variant leading-relaxed">
+<span class="text-error font-bold">Riesgo:</span> La proyección indica una ruptura de stock en el grupo "Transmisión" para la semana 22 si no se adelanta el pedido de SRAM.
+                        </p>
+</div>
+<!-- Quick Actions -->
+<div class="flex flex-col gap-3">
+<button class="beveled-button bg-surface-container-high text-on-surface font-label-caps py-4 rounded-sm border border-outline-variant hover:bg-surface-container-highest transition-all flex items-center justify-between px-6">
+<span>Sincronizar Catálogos</span>
+<span class="material-symbols-outlined text-sm">sync</span>
+</button>
+<button class="beveled-button bg-surface-container-high text-on-surface font-label-caps py-4 rounded-sm border border-outline-variant hover:bg-surface-container-highest transition-all flex items-center justify-between px-6">
+<span>Reporte de Desempeño Proveedor</span>
+<span class="material-symbols-outlined text-sm">assessment</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Interactive Layer for data visualization animation -->
+<script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Animate progress bars on load
+            const fills = document.querySelectorAll('.chain-fill');
+            fills.forEach(fill => {
+                const width = fill.style.width;
+                fill.style.width = '0%';
+                setTimeout(() => {
+                    fill.style.width = width;
+                }, 200);
+            });
+
+            // Pulse effect for critical alerts in stock list
+            const tableRows = document.querySelectorAll('tr');
+            tableRows.forEach(row => {
+                if (row.innerText.includes('RETRASADO')) {
+                    row.classList.add('border-l-2', 'border-error');
+                }
+            });
+        });
+    </script>
+</body></html>

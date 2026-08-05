@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Biker's Fort Core - Órdenes de Trabajo</title>
+<!-- Tailwind CSS & Plugins -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Google Fonts: Hanken Grotesk & JetBrains Mono -->
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800&amp;family=JetBrains+Mono:wght@600&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "surface-bright": "#393a33",
+            "on-surface-variant": "#c7c8b7",
+            "on-secondary-fixed": "#181c23",
+            "on-tertiary-fixed-variant": "#3d4759",
+            "tertiary-fixed-dim": "#bdc7dc",
+            "tertiary-container": "#8791a5",
+            "on-secondary": "#2d3138",
+            "on-error": "#690005",
+            "error": "#ffb4ab",
+            "background": "#13140f",
+            "on-secondary-container": "#b2b5be",
+            "on-tertiary-fixed": "#121c2c",
+            "surface-container-low": "#1b1c17",
+            "surface-container-lowest": "#0e0f0a",
+            "surface-dim": "#13140f",
+            "inverse-on-surface": "#30312b",
+            "primary-fixed": "#dbea98",
+            "tertiary": "#bdc7dc",
+            "primary-container": "#89974f",
+            "on-tertiary-container": "#202a3a",
+            "on-error-container": "#ffdad6",
+            "on-background": "#e4e3d9",
+            "secondary-fixed-dim": "#c3c6d0",
+            "on-primary-container": "#252d00",
+            "tertiary-fixed": "#d9e3f9",
+            "surface-variant": "#35352f",
+            "inverse-primary": "#576421",
+            "secondary-fixed": "#dfe2ec",
+            "primary-fixed-dim": "#bfce7f",
+            "surface-container-high": "#2a2a24",
+            "on-primary-fixed-variant": "#404c0a",
+            "error-container": "#93000a",
+            "on-secondary-fixed-variant": "#43474f",
+            "on-tertiary": "#273141",
+            "surface-container": "#1f201a",
+            "on-primary": "#2b3400",
+            "outline-variant": "#46483b",
+            "primary": "#bfce7f",
+            "surface-container-highest": "#35352f",
+            "secondary": "#c3c6d0",
+            "surface-tint": "#bfce7f",
+            "secondary-container": "#43474f",
+            "outline": "#919282",
+            "inverse-surface": "#e4e3d9",
+            "surface": "#13140f",
+            "on-surface": "#e4e3d9",
+            "on-primary-fixed": "#181e00"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          "spacing": {
+            "margin-mobile": "16px",
+            "margin-desktop": "40px",
+            "container-max": "1440px",
+            "unit": "4px",
+            "gutter": "24px"
+          },
+          "fontFamily": {
+            "body-lg": ["Hanken Grotesk"],
+            "label-caps": ["JetBrains Mono"],
+            "body-md": ["Hanken Grotesk"],
+            "headline-md": ["Hanken Grotesk"],
+            "headline-sm": ["Hanken Grotesk"],
+            "body-sm": ["Hanken Grotesk"],
+            "headline-lg-mobile": ["Hanken Grotesk"],
+            "headline-lg": ["Hanken Grotesk"]
+          },
+          "fontSize": {
+            "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+            "label-caps": ["12px", {"lineHeight": "1", "letterSpacing": "0.1em", "fontWeight": "600"}],
+            "body-md": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
+            "headline-md": ["32px", {"lineHeight": "1.2", "fontWeight": "700"}],
+            "headline-sm": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}],
+            "body-sm": ["14px", {"lineHeight": "1.4", "fontWeight": "400"}],
+            "headline-lg-mobile": ["32px", {"lineHeight": "1.2", "fontWeight": "800"}],
+            "headline-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "800"}]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    body {
+      background-color: #13140f;
+      color: #e4e3d9;
+      background-image: radial-gradient(rgba(145, 146, 130, 0.05) 1px, transparent 1px);
+      background-size: 24px 24px;
+    }
+
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+
+    .kanban-column {
+      min-width: 320px;
+      flex: 1;
+    }
+
+    .industrial-card {
+      background-color: #161a21;
+      border: 1px solid #2d3748;
+      transition: border-color 0.2s ease, transform 0.2s ease;
+    }
+
+    .industrial-card:hover {
+      border-color: #4a5568;
+      transform: translateY(-2px);
+      box-shadow: 4px 4px 0px rgba(0,0,0,0.5);
+    }
+
+    .geometric-header {
+      clip-path: polygon(0 0, 100% 0, 95% 100%, 5% 100%);
+    }
+
+    .beveled-button {
+      border-top: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #0e0f0a;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #46483b;
+      border-radius: 10px;
+    }
+  </style>
+</head>
+<body class="font-body-md overflow-hidden">
+<!-- TopAppBar -->
+<header class="fixed top-0 left-0 right-0 z-50 h-16 bg-background flex justify-between items-center px-margin-desktop w-full border-b border-outline-variant">
+<div class="font-headline-sm text-on-background uppercase font-extrabold flex items-center gap-2">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">settings_input_component</span>
+      BIKER'S FORT CORE
+    </div>
+<div class="flex-1 max-w-xl mx-8 hidden md:block">
+<div class="relative flex items-center">
+<span class="material-symbols-outlined absolute left-3 text-on-surface-variant">search</span>
+<input class="w-full bg-surface-container-lowest border border-outline-variant py-2 pl-10 pr-4 rounded text-body-sm focus:outline-none focus:border-primary" placeholder="Buscar órdenes, clientes o mecánicos..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="material-symbols-outlined text-on-surface-variant hover:bg-surface-container-high p-2 rounded transition-colors">notifications</button>
+<button class="material-symbols-outlined text-on-surface-variant hover:bg-surface-container-high p-2 rounded transition-colors">settings</button>
+<div class="h-8 w-8 rounded-full overflow-hidden border border-outline-variant ml-2">
+<img alt="Avatar del administrador" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDwVpbQGvkjI7uLHVvAfo3A-0uJCsVbkHeO0jB6JEui5mubGRarsEzaTmUXuHy7EJLrJJR7cV9cp6qgplnXhBqO3JndlrY7dQoGgtZjWBx_0TtIx1sRvk4TDvnaZ2vSeleNJsahN2Nyk-DBikZ49VQxVof-U2mFJSx2wLkbilzGFw0DVBV1W7nxlH9Fk6Q800hf29jySfbI-lF0ZTpNg6bNolAIALXidPucm_qqSh8Ofw9ZU9feIoe_"/>
+</div>
+</div>
+</header>
+<!-- SideNavBar -->
+<aside class="fixed left-0 top-0 h-full border-r border-outline-variant flex flex-col pt-20 bg-surface-container-lowest w-64 z-40 hidden md:flex">
+<div class="px-6 mb-8">
+<div class="font-headline-sm text-on-surface font-extrabold tracking-tighter">TALLER • TIENDA</div>
+<div class="font-label-caps text-[10px] text-on-surface-variant tracking-widest mt-1">SISTEMA DE GESTIÓN</div>
+</div>
+<nav class="flex-1 px-2 space-y-1">
+<a class="text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface px-4 py-3 flex items-center gap-3 transition-all rounded" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-caps">Panel</span>
+</a>
+<a class="text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface px-4 py-3 flex items-center gap-3 transition-all rounded" href="#">
+<span class="material-symbols-outlined">event_seat</span>
+<span class="font-label-caps">Recepción</span>
+</a>
+<!-- Active State -->
+<a class="bg-secondary-container text-on-secondary-container border-l-4 border-primary font-bold px-4 py-3 flex items-center gap-3 scale-[1.02] rounded-r" href="#">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">build</span>
+<span class="font-label-caps">Órdenes de Trabajo</span>
+</a>
+<a class="text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface px-4 py-3 flex items-center gap-3 transition-all rounded" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+<span class="font-label-caps">Inventario y Partes</span>
+</a>
+<a class="text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface px-4 py-3 flex items-center gap-3 transition-all rounded" href="#">
+<span class="material-symbols-outlined">group</span>
+<span class="font-label-caps">Clientes</span>
+</a>
+<a class="text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface px-4 py-3 flex items-center gap-3 transition-all rounded" href="#">
+<span class="material-symbols-outlined">bar_chart</span>
+<span class="font-label-caps">Reportes</span>
+</a>
+</nav>
+<div class="p-4">
+<button class="w-full bg-primary-container text-on-primary-container font-label-caps py-4 rounded beveled-button flex items-center justify-center gap-2 hover:brightness-110 transition-all">
+<span class="material-symbols-outlined">add_circle</span>
+        Nueva Orden
+      </button>
+</div>
+<div class="mt-auto border-t border-outline-variant p-2 space-y-1">
+<a class="text-on-surface-variant hover:text-on-surface px-4 py-2 flex items-center gap-3 transition-all rounded" href="#">
+<span class="material-symbols-outlined text-sm">help</span>
+<span class="font-label-caps text-[10px]">Soporte</span>
+</a>
+<a class="text-on-surface-variant hover:text-on-surface px-4 py-2 flex items-center gap-3 transition-all rounded" href="#">
+<span class="material-symbols-outlined text-sm">logout</span>
+<span class="font-label-caps text-[10px]">Cerrar Sesión</span>
+</a>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="md:pl-64 pt-16 h-screen flex flex-col bg-surface-dim">
+<!-- Kanban Content -->
+<div class="flex-1 overflow-x-auto overflow-y-hidden custom-scrollbar">
+<div class="flex h-full p-6 gap-6 min-w-max">
+<!-- RECIBIDA -->
+<section class="kanban-column flex flex-col gap-4">
+<div class="geometric-header bg-primary-container text-on-primary-container py-3 px-6 text-center font-label-caps tracking-widest text-sm font-bold shadow-md">
+            RECIBIDA
+          </div>
+<div class="flex-1 overflow-y-auto space-y-4 pr-1 custom-scrollbar">
+<!-- Card 1 -->
+<div class="industrial-card p-4 flex flex-col gap-3 rounded">
+<div class="flex justify-between items-start">
+<div class="flex items-center gap-2 text-primary">
+<span class="material-symbols-outlined">pedal_bike</span>
+<span class="font-label-caps text-[10px]">WO-8821</span>
+</div>
+<span class="bg-error-container text-on-error-container px-2 py-0.5 font-label-caps text-[10px] rounded">URGENTE</span>
+</div>
+<div>
+<h3 class="font-headline-sm text-sm text-on-surface uppercase">Transition Spur Carbon</h3>
+<p class="text-on-surface-variant text-xs">Cliente: Marco Van Ginkel</p>
+</div>
+<div class="bg-surface-container-highest p-2 rounded flex items-center gap-2">
+<span class="material-symbols-outlined text-sm text-on-surface-variant">architecture</span>
+<span class="text-xs">Servicio de Suspensión Completo</span>
+</div>
+<div class="flex justify-between items-center mt-2 pt-2 border-t border-outline-variant">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-secondary-container flex items-center justify-center text-[10px] text-on-secondary-container font-bold">JD</div>
+<span class="text-[10px] text-on-surface-variant">John Doe</span>
+</div>
+<div class="text-[10px] text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">calendar_today</span>
+                  24 Oct
+                </div>
+</div>
+</div>
+<!-- Card 2 -->
+<div class="industrial-card p-4 flex flex-col gap-3 rounded">
+<div class="flex justify-between items-start">
+<div class="flex items-center gap-2 text-primary">
+<span class="material-symbols-outlined">pedal_bike</span>
+<span class="font-label-caps text-[10px]">WO-8824</span>
+</div>
+<span class="bg-secondary-container text-on-secondary-container px-2 py-0.5 font-label-caps text-[10px] rounded">NORMAL</span>
+</div>
+<div>
+<h3 class="font-headline-sm text-sm text-on-surface uppercase">Santa Cruz Megatower</h3>
+<p class="text-on-surface-variant text-xs">Cliente: Sarah Miller</p>
+</div>
+<div class="bg-surface-container-highest p-2 rounded flex items-center gap-2">
+<span class="material-symbols-outlined text-sm text-on-surface-variant">bolt</span>
+<span class="text-xs">Ajuste de Transmisión</span>
+</div>
+<div class="flex justify-between items-center mt-2 pt-2 border-t border-outline-variant">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-tertiary-container flex items-center justify-center text-[10px] text-on-tertiary-container font-bold">ML</div>
+<span class="text-[10px] text-on-surface-variant">Mike Lewis</span>
+</div>
+<div class="text-[10px] text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">calendar_today</span>
+                  26 Oct
+                </div>
+</div>
+</div>
+</div>
+</section>
+<!-- EN DIAGNÓSTICO -->
+<section class="kanban-column flex flex-col gap-4">
+<div class="geometric-header bg-primary-container text-on-primary-container py-3 px-6 text-center font-label-caps tracking-widest text-sm font-bold shadow-md opacity-90">
+            EN DIAGNÓSTICO
+          </div>
+<div class="flex-1 overflow-y-auto space-y-4 pr-1 custom-scrollbar">
+<!-- Card 3 -->
+<div class="industrial-card p-4 flex flex-col gap-3 rounded">
+<div class="flex justify-between items-start">
+<div class="flex items-center gap-2 text-primary">
+<span class="material-symbols-outlined">pedal_bike</span>
+<span class="font-label-caps text-[10px]">WO-8819</span>
+</div>
+<span class="bg-secondary-container text-on-secondary-container px-2 py-0.5 font-label-caps text-[10px] rounded">NORMAL</span>
+</div>
+<div>
+<h3 class="font-headline-sm text-sm text-on-surface uppercase">Yeti SB160</h3>
+<p class="text-on-surface-variant text-xs">Cliente: Alex Rivera</p>
+</div>
+<div class="bg-surface-container-highest p-2 rounded flex items-center gap-2">
+<span class="material-symbols-outlined text-sm text-on-surface-variant">hearing</span>
+<span class="text-xs">Ruido en Eje de Centro</span>
+</div>
+<div class="flex justify-between items-center mt-2 pt-2 border-t border-outline-variant">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-surface-bright flex items-center justify-center text-[10px] text-on-surface font-bold">TC</div>
+<span class="text-[10px] text-on-surface-variant">Tim Cook</span>
+</div>
+<div class="text-[10px] text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">calendar_today</span>
+                  25 Oct
+                </div>
+</div>
+</div>
+</div>
+</section>
+<!-- EN REPARACIÓN -->
+<section class="kanban-column flex flex-col gap-4">
+<div class="geometric-header bg-primary-container text-on-primary-container py-3 px-6 text-center font-label-caps tracking-widest text-sm font-bold shadow-md opacity-80">
+            EN REPARACIÓN
+          </div>
+<div class="flex-1 overflow-y-auto space-y-4 pr-1 custom-scrollbar">
+<!-- Card 4 -->
+<div class="industrial-card p-4 flex flex-col gap-3 rounded border-l-2 border-l-primary">
+<div class="flex justify-between items-start">
+<div class="flex items-center gap-2 text-primary">
+<span class="material-symbols-outlined">pedal_bike</span>
+<span class="font-label-caps text-[10px]">WO-8812</span>
+</div>
+<span class="bg-secondary-container text-on-secondary-container px-2 py-0.5 font-label-caps text-[10px] rounded">NORMAL</span>
+</div>
+<div>
+<h3 class="font-headline-sm text-sm text-on-surface uppercase">Specialized Stumpjumper</h3>
+<p class="text-on-surface-variant text-xs">Cliente: David Webb</p>
+</div>
+<!-- Segmented Progress Bar -->
+<div class="flex gap-1 h-1 w-full my-2">
+<div class="flex-1 bg-primary"></div>
+<div class="flex-1 bg-primary"></div>
+<div class="flex-1 bg-primary"></div>
+<div class="flex-1 bg-surface-container-high"></div>
+<div class="flex-1 bg-surface-container-high"></div>
+</div>
+<div class="bg-surface-container-highest p-2 rounded flex items-center gap-2">
+<span class="material-symbols-outlined text-sm text-on-surface-variant">build_circle</span>
+<span class="text-xs">Sangrado de Frenos + Cambio de Pastillas</span>
+</div>
+<div class="flex justify-between items-center mt-2 pt-2 border-t border-outline-variant">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-secondary-container flex items-center justify-center text-[10px] text-on-secondary-container font-bold">JD</div>
+<span class="text-[10px] text-on-surface-variant">John Doe</span>
+</div>
+<div class="text-[10px] text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">calendar_today</span>
+                  24 Oct
+                </div>
+</div>
+</div>
+</div>
+</section>
+<!-- REPUESTOS PENDIENTES -->
+<section class="kanban-column flex flex-col gap-4">
+<div class="geometric-header bg-primary-container text-on-primary-container py-3 px-6 text-center font-label-caps tracking-widest text-sm font-bold shadow-md opacity-70">
+            REPUESTOS PENDIENTES
+          </div>
+<div class="flex-1 overflow-y-auto space-y-4 pr-1 custom-scrollbar">
+<!-- Card 5 -->
+<div class="industrial-card p-4 flex flex-col gap-3 rounded opacity-75 grayscale-[0.3]">
+<div class="flex justify-between items-start">
+<div class="flex items-center gap-2 text-primary">
+<span class="material-symbols-outlined">pedal_bike</span>
+<span class="font-label-caps text-[10px]">WO-8805</span>
+</div>
+<span class="bg-secondary-container text-on-secondary-container px-2 py-0.5 font-label-caps text-[10px] rounded">NORMAL</span>
+</div>
+<div>
+<h3 class="font-headline-sm text-sm text-on-surface uppercase">Ibis Ripmo V2</h3>
+<p class="text-on-surface-variant text-xs">Cliente: Emma Watson</p>
+</div>
+<div class="bg-error-container/20 p-2 rounded flex items-center gap-2 text-error">
+<span class="material-symbols-outlined text-sm" style="font-variation-settings: 'FILL' 1;">inventory_2</span>
+<span class="text-xs font-bold">Esperando: Fox Float X2 Seal Kit</span>
+</div>
+<div class="flex justify-between items-center mt-2 pt-2 border-t border-outline-variant">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-tertiary-container flex items-center justify-center text-[10px] text-on-tertiary-container font-bold">ML</div>
+<span class="text-[10px] text-on-surface-variant">Mike Lewis</span>
+</div>
+<div class="text-[10px] text-error flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">history</span>
+                  Retrasado
+                </div>
+</div>
+</div>
+</div>
+</section>
+<!-- LISTA PARA ENTREGA -->
+<section class="kanban-column flex flex-col gap-4">
+<div class="geometric-header bg-primary-container text-on-primary-container py-3 px-6 text-center font-label-caps tracking-widest text-sm font-bold shadow-md opacity-60">
+            LISTA PARA ENTREGA
+          </div>
+<div class="flex-1 overflow-y-auto space-y-4 pr-1 custom-scrollbar">
+<!-- Card 6 -->
+<div class="industrial-card p-4 flex flex-col gap-3 rounded border-primary bg-surface-container-high/30">
+<div class="flex justify-between items-start">
+<div class="flex items-center gap-2 text-primary">
+<span class="material-symbols-outlined">pedal_bike</span>
+<span class="font-label-caps text-[10px]">WO-8799</span>
+</div>
+<span class="bg-primary/20 text-primary px-2 py-0.5 font-label-caps text-[10px] rounded border border-primary/30">COMPLETADA</span>
+</div>
+<div>
+<h3 class="font-headline-sm text-sm text-on-surface uppercase">Cannondale Habit</h3>
+<p class="text-on-surface-variant text-xs">Cliente: Roberto Carlos</p>
+</div>
+<div class="bg-primary/10 p-2 rounded flex items-center gap-2 text-primary">
+<span class="material-symbols-outlined text-sm">verified</span>
+<span class="text-xs">Mantenimiento General y Pulido</span>
+</div>
+<div class="flex justify-between items-center mt-2 pt-2 border-t border-outline-variant">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-surface-bright flex items-center justify-center text-[10px] text-on-surface font-bold">TC</div>
+<span class="text-[10px] text-on-surface-variant">Tim Cook</span>
+</div>
+<div class="text-[10px] text-primary flex items-center gap-1 font-bold">
+<span class="material-symbols-outlined text-[14px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                  Lista
+                </div>
+</div>
+</div>
+</div>
+</section>
+</div>
+</div>
+<!-- Status Bar / Footer -->
+<footer class="h-10 bg-surface-container-lowest border-t border-outline-variant flex items-center justify-between px-6 z-40">
+<div class="flex gap-4 items-center">
+<span class="flex items-center gap-1 text-[10px] font-label-caps text-on-surface-variant">
+<span class="w-2 h-2 rounded-full bg-primary"></span> 12 Órdenes Activas
+        </span>
+<span class="flex items-center gap-1 text-[10px] font-label-caps text-on-surface-variant">
+<span class="w-2 h-2 rounded-full bg-error"></span> 2 Urgentes
+        </span>
+</div>
+<div class="text-[10px] font-label-caps text-on-surface-variant flex items-center gap-4">
+<span>Conexión al Servidor: Segura</span>
+<span class="text-primary">Sistema en Línea</span>
+</div>
+</footer>
+</main>
+<script>
+    // Lightweight atmospheric interaction: Hover ripple effect on industrial cards
+    document.querySelectorAll('.industrial-card').forEach(card => {
+      card.addEventListener('mouseenter', () => {
+        card.style.borderColor = '#bfce7f';
+      });
+      card.addEventListener('mouseleave', () => {
+        card.style.borderColor = '#2d3748';
+      });
+    });
+
+    // Horizontal scroll with mouse wheel for the Kanban board
+    const kanbanScroll = document.querySelector('.overflow-x-auto');
+    if (kanbanScroll) {
+      kanbanScroll.addEventListener('wheel', (evt) => {
+        evt.preventDefault();
+        kanbanScroll.scrollLeft += evt.deltaY;
+      });
+    }
+  </script>
+</body></html>

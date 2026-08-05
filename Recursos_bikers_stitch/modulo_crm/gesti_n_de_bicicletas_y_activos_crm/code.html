@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Biker's Fort | Gestión de Activos</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800;900&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "tertiary-container": "#8791a5",
+                    "on-tertiary-container": "#202a3a",
+                    "surface": "#13140f",
+                    "surface-container-low": "#1b1c17",
+                    "inverse-primary": "#576421",
+                    "background": "#13140f",
+                    "surface-container-lowest": "#0e0f0a",
+                    "primary-fixed-dim": "#bfce7f",
+                    "on-secondary": "#2d3138",
+                    "on-primary-container": "#252d00",
+                    "surface-tint": "#bfce7f",
+                    "primary-fixed": "#dbea98",
+                    "surface-container-high": "#2a2a24",
+                    "outline-variant": "#46483b",
+                    "on-tertiary-fixed-variant": "#3d4759",
+                    "surface-variant": "#35352f",
+                    "secondary": "#c3c6d0",
+                    "on-tertiary-fixed": "#121c2c",
+                    "tertiary": "#bdc7dc",
+                    "error-container": "#93000a",
+                    "on-secondary-container": "#b2b5be",
+                    "surface-container": "#1f201a",
+                    "surface-bright": "#393a33",
+                    "on-surface": "#e4e3d9",
+                    "on-secondary-fixed-variant": "#43474f",
+                    "on-primary-fixed-variant": "#404c0a",
+                    "on-error-container": "#ffdad6",
+                    "tertiary-fixed-dim": "#bdc7dc",
+                    "surface-dim": "#13140f",
+                    "on-tertiary": "#273141",
+                    "tertiary-fixed": "#d9e3f9",
+                    "secondary-fixed-dim": "#c3c6d0",
+                    "surface-container-highest": "#35352f",
+                    "secondary-container": "#43474f",
+                    "outline": "#919282",
+                    "primary-container": "#89974f",
+                    "error": "#ffb4ab",
+                    "inverse-on-surface": "#30312b",
+                    "secondary-fixed": "#dfe2ec",
+                    "on-surface-variant": "#c7c8b7",
+                    "on-background": "#e4e3d9",
+                    "primary": "#bfce7f",
+                    "on-secondary-fixed": "#181c23",
+                    "on-primary": "#2b3400",
+                    "on-primary-fixed": "#181e00",
+                    "inverse-surface": "#e4e3d9",
+                    "on-error": "#690005"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "spacing": {
+                    "container-max": "1440px",
+                    "gutter": "24px",
+                    "margin-desktop": "40px",
+                    "unit": "4px",
+                    "margin-mobile": "16px"
+            },
+            "fontFamily": {
+                    "body-sm": ["Hanken Grotesk"],
+                    "body-md": ["Hanken Grotesk"],
+                    "headline-lg": ["Hanken Grotesk"],
+                    "body-lg": ["Hanken Grotesk"],
+                    "headline-sm": ["Hanken Grotesk"],
+                    "headline-md": ["Hanken Grotesk"],
+                    "headline-lg-mobile": ["Hanken Grotesk"],
+                    "label-caps": ["JetBrains Mono"]
+            },
+            "fontSize": {
+                    "body-sm": ["14px", {"lineHeight": "1.4", "fontWeight": "400"}],
+                    "body-md": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                    "headline-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "800"}],
+                    "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                    "headline-sm": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                    "headline-md": ["32px", {"lineHeight": "1.2", "fontWeight": "700"}],
+                    "headline-lg-mobile": ["32px", {"lineHeight": "1.2", "fontWeight": "800"}],
+                    "label-caps": ["12px", {"lineHeight": "1", "letterSpacing": "0.1em", "fontWeight": "600"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            background-color: #0a0c10;
+            background-image: radial-gradient(#1c2129 0.5px, transparent 0.5px);
+            background-size: 24px 24px;
+            color: #e4e3d9;
+        }
+        .industrial-border {
+            border: 1px solid #2d3448;
+        }
+        .industrial-shadow {
+            box-shadow: 4px 4px 0px rgba(0,0,0,0.5);
+        }
+        .segmented-progress {
+            display: flex;
+            gap: 2px;
+        }
+        .segmented-progress span {
+            height: 4px;
+            flex: 1;
+            background: #1c2129;
+        }
+        .segmented-progress span.active {
+            background: #84924a;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #0a0c10;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #46483b;
+        }
+    </style>
+</head>
+<body class="font-body-md text-body-md selection:bg-primary-container selection:text-on-primary-container">
+<!-- Desktop Side Navigation -->
+<nav class="hidden md:flex flex-col fixed left-0 top-0 h-full w-64 border-r border-outline-variant bg-surface-container-low z-50">
+<div class="p-6">
+<h1 class="font-headline-sm text-headline-sm font-bold text-primary tracking-tight">Biker's Fort</h1>
+<p class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold mt-1">Core Management</p>
+</div>
+<div class="flex-1 px-4 space-y-2 mt-4">
+<a class="flex items-center gap-3 px-4 py-3 rounded transition-colors duration-200 text-on-surface-variant font-medium hover:bg-surface-container-high" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">build</span>
+                Workshop
+            </a>
+<a class="flex items-center gap-3 px-4 py-3 rounded transition-colors duration-200 text-on-surface-variant font-medium hover:bg-surface-container-high" href="#">
+<span class="material-symbols-outlined">group</span>
+                CRM
+            </a>
+<a class="flex items-center gap-3 px-4 py-3 rounded transition-colors duration-200 text-primary font-bold border-r-2 border-primary bg-secondary-container/10" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">inventory_2</span>
+                Inventory
+            </a>
+<a class="flex items-center gap-3 px-4 py-3 rounded transition-colors duration-200 text-on-surface-variant font-medium hover:bg-surface-container-high" href="#">
+<span class="material-symbols-outlined">history_edu</span>
+                Repairs
+            </a>
+<a class="flex items-center gap-3 px-4 py-3 rounded transition-colors duration-200 text-on-surface-variant font-medium hover:bg-surface-container-high" href="#">
+<span class="material-symbols-outlined">settings</span>
+                Settings
+            </a>
+</div>
+<div class="p-4 border-t border-outline-variant space-y-2">
+<button class="w-full bg-primary-container text-on-primary-container font-bold py-3 px-4 rounded industrial-border industrial-shadow active:scale-95 transition-transform flex items-center justify-center gap-2">
+<span class="material-symbols-outlined">add</span>
+                New Repair Order
+            </button>
+<div class="flex flex-col pt-4 space-y-2">
+<a class="flex items-center gap-3 px-4 py-2 text-on-surface-variant hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">help</span>
+                    Support
+                </a>
+<a class="flex items-center gap-3 px-4 py-2 text-on-surface-variant hover:text-error transition-colors" href="#">
+<span class="material-symbols-outlined">logout</span>
+                    Log Out
+                </a>
+</div>
+</div>
+</nav>
+<!-- Main Content Shell -->
+<main class="md:ml-64 min-h-screen pb-20 md:pb-0">
+<!-- Top App Bar -->
+<header class="flex justify-between items-center w-full px-margin-mobile md:px-margin-desktop h-16 sticky top-0 z-40 border-b border-outline-variant bg-surface-container-lowest">
+<div class="flex items-center gap-6 flex-1">
+<span class="md:hidden font-headline-sm text-headline-sm font-black text-on-surface">BF</span>
+<div class="relative max-w-md w-full hidden md:block">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm">search</span>
+<input class="w-full bg-surface-container-lowest border border-outline-variant rounded px-10 py-1.5 font-body-sm text-body-sm focus:ring-1 focus:ring-primary outline-none" placeholder="Search assets, owners, serial numbers..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="hidden lg:flex gap-6 mr-6">
+<a class="text-on-surface-variant font-body-sm text-body-sm hover:text-primary transition-colors" href="#">Dashboard</a>
+<a class="text-primary border-b-2 border-primary pb-1 font-body-sm text-body-sm" href="#">Inventory</a>
+<a class="text-on-surface-variant font-body-sm text-body-sm hover:text-primary transition-colors" href="#">Schedule</a>
+</div>
+<div class="flex items-center gap-3">
+<button class="relative p-2 text-on-surface-variant hover:bg-surface-variant/20 rounded-full transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 bg-error rounded-full"></span>
+</button>
+<div class="w-8 h-8 rounded-full overflow-hidden border border-outline-variant">
+<img class="w-full h-full object-cover" data-alt="A professional portrait of a workshop manager wearing a tactical olive green apron in a high-tech bicycle workshop setting. Soft rim lighting highlights the industrial background of carbon fiber frames and precision tools. The overall mood is professional, focused, and reliable, using a deep charcoal and muted green color palette." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD69ppqcCU3c2KLxvFlFphE23VJqQAn_varzQFu7JWIQg6-ZhFbyHknqneLua4NGGqg_uxTZx1cCsaqH_vuQzHRj8juuIybTj3LafXW6N_osSn35uQpc8PmPf6fmfKyvw9bK8kLZ06N-XzfZ1NduAR_p0HmBZqbDmc_nMPdW-hPvQTR8UGh6Zi7FjDOstPTlu1fkvSzOGLfrDTjTj5LQVEMN8VkuKuX1IjaqGj5lDtqCP3HgTSnsw8o"/>
+</div>
+</div>
+</div>
+</header>
+<!-- Content Canvas -->
+<div class="p-margin-mobile md:p-margin-desktop max-w-container-max mx-auto">
+<!-- Header Section -->
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
+<div>
+<h2 class="font-headline-md text-headline-md text-on-surface">Gestión de Activos</h2>
+<p class="text-on-surface-variant mt-1">Directorio maestro de flota y bicicletas de clientes.</p>
+</div>
+<div class="flex gap-3">
+<button class="flex items-center gap-2 px-4 py-2 border border-outline-variant bg-surface-container hover:bg-surface-container-high transition-colors rounded font-label-caps text-label-caps">
+<span class="material-symbols-outlined text-[18px]">filter_list</span>
+                        Filtros
+                    </button>
+<button class="flex items-center gap-2 px-4 py-2 border border-outline-variant bg-surface-container hover:bg-surface-container-high transition-colors rounded font-label-caps text-label-caps">
+<span class="material-symbols-outlined text-[18px]">download</span>
+                        Exportar CSV
+                    </button>
+</div>
+</div>
+<!-- Filters Bar (Technical) -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8 bg-[#161a21] p-4 border border-[#2d3748] industrial-shadow">
+<div class="space-y-1.5">
+<label class="font-label-caps text-label-caps text-on-surface-variant">Marca</label>
+<select class="w-full bg-[#0a0c10] border-[#2d3748] text-on-surface rounded p-2 font-body-sm focus:border-primary outline-none">
+<option>Todas las marcas</option>
+<option>Shimano</option>
+<option>Specialized</option>
+<option>Santa Cruz</option>
+<option>Trek</option>
+</select>
+</div>
+<div class="space-y-1.5">
+<label class="font-label-caps text-label-caps text-on-surface-variant">Tipo</label>
+<select class="w-full bg-[#0a0c10] border-[#2d3748] text-on-surface rounded p-2 font-body-sm focus:border-primary outline-none">
+<option>Todos los tipos</option>
+<option>MTB</option>
+<option>Road</option>
+<option>E-Bike</option>
+<option>Gravel</option>
+</select>
+</div>
+<div class="space-y-1.5">
+<label class="font-label-caps text-label-caps text-on-surface-variant">Estado Mantenimiento</label>
+<select class="w-full bg-[#0a0c10] border-[#2d3748] text-on-surface rounded p-2 font-body-sm focus:border-primary outline-none">
+<option>Cualquier estado</option>
+<option>Óptimo</option>
+<option>Requiere Servicio</option>
+<option>En Reparación</option>
+<option>Crítico</option>
+</select>
+</div>
+<div class="flex items-end">
+<button class="w-full h-[42px] bg-[#84924a] text-white font-bold rounded border-t border-white/20 hover:brightness-110 transition-all flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-[18px]">search</span>
+                        Aplicar Filtros
+                    </button>
+</div>
+</div>
+<!-- Assets Grid (Asymmetric / Bento Style) -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+<!-- Bike Card 1 -->
+<div class="bg-[#161a21] border border-[#2d3748] hover:border-[#4a5568] transition-all group overflow-hidden">
+<div class="relative h-48 overflow-hidden">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="A side view of a matte black Specialized Stumpjumper MTB parked in a professional bike workshop. The lighting is cinematic, casting sharp shadows and highlighting the high-end suspension components and carbon frame. Technical details like the cassette and hydraulic lines are visible, emphasizing mechanical precision in a dark industrial atmosphere." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDXRh3o_IEtsUGL2tSZeUeTpqLehYrEiSQ4w33jVgdqOZ-DqEhKtuA5lAg_h4TzM96mPZrtmD5T204G_YWROMM-fk2l-z2Q7__ZRoEw1phDGyStNENSJH95KoeYF0qRLL40VOmJGxvURR_fbYHJuVXeno3G0E1wAV3qFaX66aIh_jjRg3QdG6RsyTqgzrTHt4PkfFIdpq7IIGcCYoUycx0ImUAY7lE07SJuNsHSeI7wJCYkF0E4o_5L"/>
+<div class="absolute top-3 left-3 bg-[#13140f]/80 backdrop-blur-md px-2 py-1 border border-[#2d3748] rounded">
+<span class="font-label-caps text-[10px] text-primary">MTB</span>
+</div>
+</div>
+<div class="p-5 space-y-4">
+<div class="flex justify-between items-start">
+<div>
+<h3 class="font-bold text-on-surface group-hover:text-primary transition-colors">Specialized Stumpjumper</h3>
+<p class="text-on-surface-variant font-label-caps text-[11px] mt-0.5">SN: 4882-BFRT-001</p>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-on-surface">more_vert</span>
+</div>
+<div class="space-y-3">
+<div class="flex items-center gap-3">
+<div class="w-6 h-6 rounded-full overflow-hidden border border-outline-variant">
+<img class="w-full h-full object-cover" data-alt="A small circular avatar of a cyclist in outdoor gear, wearing high-performance sunglasses. The background shows a blurry mountain landscape. The lighting is bright and natural, contrasting with the workshop's industrial theme while maintaining a consistent professional aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA8teo_qnYSLFMa8ZQhbH3oAXdb14pFqgHfPowYcdBW1fUZDTixf5TV4rzuHoR2qmUafuHsUsKOiuw2G8rdy7OuGYFHpDC-2GydgiZFT8LUZIppSXOHEdexaF0ECqlAoFot7DDzE9gmrGB6kGPjRyvtNEHnajUVzZJky2C8_5QxK2dOYnGnnpJqYOAoJAH4Df2Tg4TQcqgPJZoihNWywQGRZls8gBPC_25teX7AionF3nYxI5c_yNao"/>
+</div>
+<span class="text-body-sm text-on-surface">Carlos Mendoza</span>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between text-[11px] font-label-caps">
+<span class="text-on-surface-variant uppercase">Vida de Cadena</span>
+<span class="text-primary">85%</span>
+</div>
+<div class="segmented-progress">
+<span class="active"></span><span class="active"></span><span class="active"></span><span class="active"></span><span class="active"></span><span class="active"></span><span class="active"></span><span class="active"></span><span class=""></span><span class=""></span>
+</div>
+</div>
+</div>
+<div class="pt-2 flex items-center justify-between border-t border-outline-variant">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-[#84924a]"></span>
+<span class="font-label-caps text-[10px] uppercase text-on-surface">Óptimo</span>
+</div>
+<button class="text-on-surface-variant hover:text-primary transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-[18px]">history</span>
+<span class="text-[10px] font-bold uppercase tracking-tighter">Historial</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Bike Card 2 -->
+<div class="bg-[#161a21] border border-[#2d3748] hover:border-[#4a5568] transition-all group overflow-hidden">
+<div class="relative h-48 overflow-hidden">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="Close-up photograph of a Santa Cruz V10 downhill bike in a military olive green finish. The frame shows slight signs of trail dirt, giving it a rugged, authentic workshop feel. Focus is on the heavy-duty rear suspension and the brand logo on the carbon frame. Deep charcoal workshop environment with industrial grid patterns on the floor." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBxuh-cl6P4Kxz1SAHXOD9ucAo4kJAYvqN4u2GpZAY1tq7FgdLN_25Um571fy0YFW4JYCkR71-0AUpwSlWsUEiPhLEDp5EUsULQ0Itbpxfkwam8XmI8dMsLBLzLnmj3shW1BixMAWuePT49T6dLGYN0YBZMkcu8z7eVW0jplpRlxtIY8v-yEGT5onoOVuGwuVXCugUJlsIDbr5a938wHdT6Fotn6JFmqsVlvExPdy1PZUxKcVHUY0r9"/>
+<div class="absolute top-3 left-3 bg-[#13140f]/80 backdrop-blur-md px-2 py-1 border border-[#2d3748] rounded">
+<span class="font-label-caps text-[10px] text-primary">MTB</span>
+</div>
+</div>
+<div class="p-5 space-y-4">
+<div class="flex justify-between items-start">
+<div>
+<h3 class="font-bold text-on-surface group-hover:text-primary transition-colors">Santa Cruz V10</h3>
+<p class="text-on-surface-variant font-label-caps text-[11px] mt-0.5">SN: 9021-SNCZ-DWH</p>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-on-surface">more_vert</span>
+</div>
+<div class="space-y-3">
+<div class="flex items-center gap-3">
+<div class="w-6 h-6 rounded-full overflow-hidden border border-outline-variant">
+<img class="w-full h-full object-cover" data-alt="Avatar of a mountain bike enthusiast with a beard, wearing a tactical cap. Warm, low-key lighting typical of a high-end garage workshop. The image is crisp and professional, fitting the Biker's Fort branding." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCLL-oqUMpfJEtRnlSY9QtFez7ZL3osljJKF30M2M0KF5Vtk7hzXtjtVtdlGB9lEwakksVU1yUQqfdit6eOR0q6DtPv4c31qPX_m9xYGURzSvitsZW2WOeQJmpOSp6bWCDUDtGoqiaNnKdEcVyJ2xJr2CWdboNxHTPijIqnYJEGW_KU4AvWB8ZExuZHRJ5yJuIjEGiJ_6dD_8NpQ8FMyit7OyOmzz-9V0wHhFcxE1u4zyNj8dUzHZCa"/>
+</div>
+<span class="text-body-sm text-on-surface">Elena Rodriguez</span>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between text-[11px] font-label-caps">
+<span class="text-on-surface-variant uppercase">Servicio Horquilla</span>
+<span class="text-error">12%</span>
+</div>
+<div class="segmented-progress">
+<span class="active bg-error"></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span><span class=""></span>
+</div>
+</div>
+</div>
+<div class="pt-2 flex items-center justify-between border-t border-outline-variant">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-error animate-pulse"></span>
+<span class="font-label-caps text-[10px] uppercase text-error font-bold">Mantenimiento Crítico</span>
+</div>
+<button class="text-on-surface-variant hover:text-primary transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-[18px]">build</span>
+<span class="text-[10px] font-bold uppercase tracking-tighter">Agendar</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Bike Card 3 -->
+<div class="bg-[#161a21] border border-[#2d3748] hover:border-[#4a5568] transition-all group overflow-hidden">
+<div class="relative h-48 overflow-hidden">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="A sleek Trek Domane road bike with an iridescent blue and dark grey finish. The bicycle is mounted on a carbon fiber display stand in a minimalist, tech-oriented workshop. Lighting is high-key and surgical, reflecting off the polished frame and aerodynamic wheels. The aesthetic is clean, technical, and high-performance." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC8MChQGwZGEL2nCWtBTsGt7Mnkcevu9CFl2RJAGhc1ujv9AYhlmdphE2jFI4OFM_McklIup0CCy11MrJZRRfSkosNenx89m95cSZ5Eq7_FMwWMar6_e0mZZfKIVUXojTPCa1gjfLDoTJyhsNSuUzXLEJxt_lz7mpVPUGqxNAwv6aTqCu9CTisbq-PX6xfqXX2uyst839rcxGLPJTN8MTo_KnfpstAbaMKVphv_Ala4IkUwqOLywmth"/>
+<div class="absolute top-3 left-3 bg-[#13140f]/80 backdrop-blur-md px-2 py-1 border border-[#2d3748] rounded">
+<span class="font-label-caps text-[10px] text-primary">Road</span>
+</div>
+</div>
+<div class="p-5 space-y-4">
+<div class="flex justify-between items-start">
+<div>
+<h3 class="font-bold text-on-surface group-hover:text-primary transition-colors">Trek Domane SLR</h3>
+<p class="text-on-surface-variant font-label-caps text-[11px] mt-0.5">SN: 7721-TRKD-7.0</p>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-on-surface">more_vert</span>
+</div>
+<div class="space-y-3">
+<div class="flex items-center gap-3">
+<div class="w-6 h-6 rounded-full overflow-hidden border border-outline-variant">
+<img class="w-full h-full object-cover" data-alt="Avatar of a female cyclist in professional racing gear, captured in a profile shot. The lighting is studio-quality, emphasizing a professional athlete persona. Muted dark background to maintain focus on the subject." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBU5gMho3v1lwrO6cAjuYl7VhT7qDbUAQ3GAveI43bfQyatxL6Coh9JTkANCr5sjzeIjsF_pN4hRKK7po8tANje2VViLkBFrAHXrg33dBS0cDbs5rZSBOR_PY8J17FOj9gy-lxdYnBWirDCHGfDhtSOBzSKKP5YRKdh7sPfy9-u-6mYxQbf1pEtZqHixtrQjMUOjgCgBp1vJPRmK8X1xiQ-YX1xFhgEdjEylyPRv03c7O9JkmzMmkG-"/>
+</div>
+<span class="text-body-sm text-on-surface">Javier Soto</span>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between text-[11px] font-label-caps">
+<span class="text-on-surface-variant uppercase">Vida Batería Di2</span>
+<span class="text-[#84924a]">100%</span>
+</div>
+<div class="segmented-progress">
+<span class="active"></span><span class="active"></span><span class="active"></span><span class="active"></span><span class="active"></span><span class="active"></span><span class="active"></span><span class="active"></span><span class="active"></span><span class="active"></span>
+</div>
+</div>
+</div>
+<div class="pt-2 flex items-center justify-between border-t border-outline-variant">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-[#84924a]"></span>
+<span class="font-label-caps text-[10px] uppercase text-on-surface">Listo para Ruta</span>
+</div>
+<button class="text-on-surface-variant hover:text-primary transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-[18px]">history</span>
+<span class="text-[10px] font-bold uppercase tracking-tighter">Historial</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Bike Card 4 -->
+<div class="bg-[#161a21] border border-[#2d3748] hover:border-[#4a5568] transition-all group overflow-hidden">
+<div class="relative h-48 overflow-hidden">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="A sophisticated E-Bike, specifically a Specialized Turbo Levo, showcasing its integrated motor and battery compartment. The frame is a deep charcoal matte finish with tactical tan accents. It sits in a high-density equipment room with blueprints and technical charts visible in the softly blurred background. Technical workshop aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBnN1dHcsCKRH72M0k5jMiyjEPBXvr3aGGijG0itM2YjfewFzJdUN5cxRfiI_TqgMPP5aMENCErX-bl9QNO16yAVIrXiqyi7StV-Kn0CQL8ESRzFaXC4dvH4_3ECsCHRNzvlpObipZBt-FR2JaB64OcYn32UXBC4f_4jK2Uaeb2_rxUvo2mo0K1vZqmJRYLNrwB1b7Z-nTFvOWD1WTWr4wsnzM3VyohqW4kqGrJniolvTFnlPRxEPxA"/>
+<div class="absolute top-3 left-3 bg-[#13140f]/80 backdrop-blur-md px-2 py-1 border border-[#2d3748] rounded">
+<span class="font-label-caps text-[10px] text-primary">E-Bike</span>
+</div>
+</div>
+<div class="p-5 space-y-4">
+<div class="flex justify-between items-start">
+<div>
+<h3 class="font-bold text-on-surface group-hover:text-primary transition-colors">Specialized Turbo Levo</h3>
+<p class="text-on-surface-variant font-label-caps text-[11px] mt-0.5">SN: 1104-EBLV-909</p>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-on-surface">more_vert</span>
+</div>
+<div class="space-y-3">
+<div class="flex items-center gap-3">
+<div class="w-6 h-6 rounded-full overflow-hidden border border-outline-variant">
+<img class="w-full h-full object-cover" data-alt="Avatar of a tech-savvy bike user, showing a friendly face in a modern office environment with industrial design touches. Bright, clean lighting, professional look." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAdibshp8_AymaAr1FiRxXmE5cDEK_EknNKttL1P2mR0xiq4dxJkFlu1iF6deGbxmzT6K0UWQNmIsghnGddFnOlhn9mzszY08CliPbflwc-ujUA3Ksco2XNN-7LsjiILfKtTDBbqEEmwOYZmUFboRxcgtpIdy1z7lNU5MxBZ2lP2w596CVliaFzQJWTsnOGbE2gEqVSC7piDxJrg3CbIq4Zhsq0HSoE9LWbv0wWMcwqbXfhvrBbgohm"/>
+</div>
+<span class="text-body-sm text-on-surface">Marcela Paz</span>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between text-[11px] font-label-caps">
+<span class="text-on-surface-variant uppercase">Salud Motor</span>
+<span class="text-on-surface">92%</span>
+</div>
+<div class="segmented-progress">
+<span class="active"></span><span class="active"></span><span class="active"></span><span class="active"></span><span class="active"></span><span class="active"></span><span class="active"></span><span class="active"></span><span class="active"></span><span class=""></span>
+</div>
+</div>
+</div>
+<div class="pt-2 flex items-center justify-between border-t border-outline-variant">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+<span class="font-label-caps text-[10px] uppercase text-on-surface">Actualizando Firmware</span>
+</div>
+<button class="text-on-surface-variant hover:text-primary transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-[18px]">sync</span>
+<span class="text-[10px] font-bold uppercase tracking-tighter">Status</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Detailed List (Technical Table View) -->
+<div class="mt-12 overflow-x-auto custom-scrollbar industrial-border bg-[#161a21]">
+<table class="w-full border-collapse">
+<thead class="bg-[#0a0c10] border-b border-[#2d3748]">
+<tr>
+<th class="px-6 py-4 text-left font-label-caps text-label-caps text-on-surface-variant uppercase">Bicicleta / Modelo</th>
+<th class="px-6 py-4 text-left font-label-caps text-label-caps text-on-surface-variant uppercase">Número de Serie</th>
+<th class="px-6 py-4 text-left font-label-caps text-label-caps text-on-surface-variant uppercase">Propietario</th>
+<th class="px-6 py-4 text-left font-label-caps text-label-caps text-on-surface-variant uppercase">Último Servicio</th>
+<th class="px-6 py-4 text-left font-label-caps text-label-caps text-on-surface-variant uppercase">Estado</th>
+<th class="px-6 py-4 text-right font-label-caps text-label-caps text-on-surface-variant uppercase">Acciones</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-[#2d3748]">
+<tr class="hover:bg-[#1c2129] transition-colors group">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 bg-[#0a0c10] border border-[#2d3748] flex items-center justify-center">
+<span class="material-symbols-outlined text-primary">directions_bike</span>
+</div>
+<div>
+<p class="font-bold text-on-surface group-hover:text-primary transition-colors">Shimano Pro X2</p>
+<p class="text-[11px] text-on-surface-variant font-label-caps">MTB Custom</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 font-label-caps text-[12px] text-on-surface-variant">SHM-2024-990-X</td>
+<td class="px-6 py-4 text-body-sm">Miguel Angel Blanco</td>
+<td class="px-6 py-4 text-body-sm text-on-surface-variant italic">12 Ene, 2024</td>
+<td class="px-6 py-4">
+<span class="px-2 py-1 bg-secondary-container/20 text-secondary font-label-caps text-[10px] border border-secondary/30 uppercase">En Espera</span>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors">open_in_new</button>
+</td>
+</tr>
+<tr class="bg-[#1c2129]/30 hover:bg-[#1c2129] transition-colors group">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 bg-[#0a0c10] border border-[#2d3748] flex items-center justify-center">
+<span class="material-symbols-outlined text-primary">bolt</span>
+</div>
+<div>
+<p class="font-bold text-on-surface group-hover:text-primary transition-colors">Specialized Kenevo</p>
+<p class="text-[11px] text-on-surface-variant font-label-caps">E-MTB</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 font-label-caps text-[12px] text-on-surface-variant">SPC-KEN-2023-F</td>
+<td class="px-6 py-4 text-body-sm">Daniela Fuentes</td>
+<td class="px-6 py-4 text-body-sm text-on-surface-variant italic">05 Mar, 2024</td>
+<td class="px-6 py-4">
+<span class="px-2 py-1 bg-primary-container/20 text-primary font-label-caps text-[10px] border border-primary/30 uppercase">En Taller</span>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors">open_in_new</button>
+</td>
+</tr>
+<!-- Zebra row example -->
+<tr class="hover:bg-[#1c2129] transition-colors group">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 bg-[#0a0c10] border border-[#2d3748] flex items-center justify-center">
+<span class="material-symbols-outlined text-primary">pedal_bike</span>
+</div>
+<div>
+<p class="font-bold text-on-surface group-hover:text-primary transition-colors">Santa Cruz Megatower</p>
+<p class="text-[11px] text-on-surface-variant font-label-caps">Enduro</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 font-label-caps text-[12px] text-on-surface-variant">SCZ-MEGA-V2-88</td>
+<td class="px-6 py-4 text-body-sm">Roberto Gomez</td>
+<td class="px-6 py-4 text-body-sm text-on-surface-variant italic">Hoy, 09:30 AM</td>
+<td class="px-6 py-4">
+<span class="px-2 py-1 bg-error-container/20 text-error font-label-caps text-[10px] border border-error/30 uppercase">Urgente</span>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors">open_in_new</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</main>
+<!-- Mobile Bottom Navigation -->
+<nav class="md:hidden fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 py-2 bg-surface-container-highest border-t border-outline-variant industrial-shadow rounded-t-xl">
+<a class="flex flex-col items-center justify-center text-on-surface-variant p-2 active:bg-surface-bright active:scale-90 duration-100" href="#">
+<span class="material-symbols-outlined">handyman</span>
+<span class="font-label-caps text-[10px] mt-1">Workshop</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant p-2 active:bg-surface-bright active:scale-90 duration-100" href="#">
+<span class="material-symbols-outlined">person_search</span>
+<span class="font-label-caps text-[10px] mt-1">CRM</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-xl p-2 active:scale-90 duration-100" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">data_check</span>
+<span class="font-label-caps text-[10px] mt-1">Inventory</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant p-2 active:bg-surface-bright active:scale-90 duration-100" href="#">
+<span class="material-symbols-outlined">person</span>
+<span class="font-label-caps text-[10px] mt-1">Account</span>
+</a>
+</nav>
+<!-- Simple Hover Micro-interaction Script -->
+<script>
+        document.querySelectorAll('tr, .bg-[#161a21]').forEach(el => {
+            el.addEventListener('mouseenter', () => {
+                // Subtle interaction could go here
+            });
+        });
+    </script>
+</body></html>

@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Nueva Entrada de Vehículo | Bikers' Fort Core</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "outline-variant": "#46483b",
+                        "on-primary-fixed-variant": "#3d4c05",
+                        "primary": "#bbcf7c",
+                        "on-primary": "#293500",
+                        "surface-container-low": "#1c1b1b",
+                        "surface-container-highest": "#353534",
+                        "tertiary-container": "#929090",
+                        "surface-tint": "#bbcf7c",
+                        "inverse-surface": "#e5e2e1",
+                        "surface-container-high": "#2a2a2a",
+                        "surface": "#131313",
+                        "on-secondary-container": "#b7b5b4",
+                        "tertiary-fixed": "#e4e2e1",
+                        "inverse-primary": "#54651e",
+                        "tertiary": "#c8c6c5",
+                        "on-primary-container": "#232e00",
+                        "surface-container": "#201f1f",
+                        "surface-container-lowest": "#0e0e0e",
+                        "on-tertiary-fixed-variant": "#474746",
+                        "inverse-on-surface": "#313030",
+                        "secondary-container": "#474746",
+                        "surface-bright": "#3a3939",
+                        "on-tertiary-fixed": "#1b1c1c",
+                        "on-primary-fixed": "#161e00",
+                        "surface-dim": "#131313",
+                        "primary-fixed": "#d7ec95",
+                        "primary-container": "#86984c",
+                        "on-secondary": "#313030",
+                        "surface-variant": "#353534",
+                        "on-tertiary-container": "#2a2a2a",
+                        "tertiary-fixed-dim": "#c8c6c5",
+                        "secondary-fixed": "#e5e2e1",
+                        "on-background": "#e5e2e1",
+                        "secondary": "#c8c6c5",
+                        "on-surface-variant": "#c6c8b6",
+                        "on-secondary-fixed-variant": "#474746",
+                        "error": "#ffb4ab",
+                        "error-container": "#93000a",
+                        "secondary-fixed-dim": "#c8c6c5",
+                        "primary-fixed-dim": "#bbcf7c",
+                        "on-error-container": "#ffdad6",
+                        "on-error": "#690005",
+                        "on-tertiary": "#303030",
+                        "background": "#131313",
+                        "on-surface": "#e5e2e1",
+                        "outline": "#909282",
+                        "on-secondary-fixed": "#1c1b1b"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "xs": "4px",
+                        "md": "16px",
+                        "base": "4px",
+                        "sm": "8px",
+                        "lg": "24px",
+                        "gutter": "24px",
+                        "container-max": "1440px",
+                        "xl": "40px"
+                    },
+                    "fontFamily": {
+                        "title-md": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "label-caps": ["JetBrains Mono"],
+                        "body-sm": ["Inter"],
+                        "body-lg": ["Inter"]
+                    },
+                    "fontSize": {
+                        "title-md": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                        "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "500"}],
+                        "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body {
+            background-color: #0A0A0A;
+            color: #e5e2e1;
+            font-family: 'Inter', sans-serif;
+        }
+        .inner-stroke {
+            box-shadow: inset 0 0 0 1px #262626;
+        }
+        .glow-active:focus-within {
+            box-shadow: 0 0 12px rgba(187, 207, 124, 0.15);
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #131313;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #46483b;
+            border-radius: 2px;
+        }
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: #bbcf7c !important;
+        }
+    </style>
+</head>
+<body class="flex overflow-hidden h-screen">
+<!-- SideNavBar -->
+<aside class="fixed left-0 top-0 h-screen w-64 flex flex-col py-lg bg-surface-container-lowest border-r border-outline-variant z-50">
+<div class="px-lg mb-xl">
+<h1 class="font-headline-lg text-headline-lg font-bold text-on-surface">Bikers' Fort</h1>
+<p class="font-label-caps text-label-caps text-on-surface-variant opacity-70">Core Management</p>
+</div>
+<div class="px-md mb-lg">
+<button class="w-full bg-primary text-on-primary py-sm px-md rounded font-bold flex items-center justify-center gap-sm transition-all active:scale-95 shadow-[0_0_12px_rgba(187,207,124,0.15)]">
+<span class="material-symbols-outlined text-[20px]">add</span>
+                New Work Order
+            </button>
+</div>
+<nav class="flex-1 px-sm space-y-xs overflow-y-auto custom-scrollbar">
+<!-- Navigation Items mapping from JSON -->
+<a class="flex items-center gap-md px-md py-sm rounded transition-all duration-200 text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-caps text-label-caps">Dashboard</span>
+</a>
+<a class="flex items-center gap-md px-md py-sm rounded transition-all duration-200 text-primary border-r-2 border-primary bg-primary-container/10" href="#">
+<span class="material-symbols-outlined">login</span>
+<span class="font-label-caps text-label-caps">Reception</span>
+</a>
+<a class="flex items-center gap-md px-md py-sm rounded transition-all duration-200 text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface" href="#">
+<span class="material-symbols-outlined">build</span>
+<span class="font-label-caps text-label-caps">Work Orders</span>
+</a>
+<a class="flex items-center gap-md px-md py-sm rounded transition-all duration-200 text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+<span class="font-label-caps text-label-caps">Inventory</span>
+</a>
+<a class="flex items-center gap-md px-md py-sm rounded transition-all duration-200 text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface" href="#">
+<span class="material-symbols-outlined">group</span>
+<span class="font-label-caps text-label-caps">Customers</span>
+</a>
+<a class="flex items-center gap-md px-md py-sm rounded transition-all duration-200 text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface" href="#">
+<span class="material-symbols-outlined">analytics</span>
+<span class="font-label-caps text-label-caps">Reports</span>
+</a>
+</nav>
+<div class="px-sm pt-lg border-t border-outline-variant/30 space-y-xs">
+<a class="flex items-center gap-md px-md py-sm rounded text-on-surface-variant hover:bg-surface-container-low" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-label-caps text-label-caps">Settings</span>
+</a>
+<a class="flex items-center gap-md px-md py-sm rounded text-on-surface-variant hover:bg-surface-container-low" href="#">
+<span class="material-symbols-outlined">help</span>
+<span class="font-label-caps text-label-caps">Support</span>
+</a>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="ml-64 flex-1 flex flex-col min-h-screen bg-surface">
+<!-- TopNavBar -->
+<header class="w-full h-16 flex justify-between items-center px-gutter bg-surface border-b border-outline-variant z-40 sticky top-0">
+<div class="flex items-center gap-md">
+<span class="font-title-md text-title-md font-bold text-primary">Bikers' Fort Core</span>
+<span class="text-outline-variant">/</span>
+<span class="font-body-lg text-body-lg text-on-surface">Nueva Entrada</span>
+</div>
+<div class="flex items-center gap-lg">
+<div class="relative group">
+<span class="absolute inset-y-0 left-3 flex items-center text-outline">
+<span class="material-symbols-outlined text-[20px]">search</span>
+</span>
+<input class="bg-surface-container-lowest border border-outline-variant rounded-full pl-10 pr-4 py-1.5 text-body-sm w-64 focus:w-80 transition-all" placeholder="Buscar..." type="text"/>
+</div>
+<div class="flex items-center gap-md">
+<button class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors cursor-pointer">notifications</button>
+<button class="material-symbols-outlined text-on-surface-variant hover:text-primary transition-colors cursor-pointer">settings</button>
+<div class="w-8 h-8 rounded-full overflow-hidden border border-outline-variant cursor-pointer active:opacity-80">
+<img class="w-full h-full object-cover" data-alt="A professional technician profile avatar in a high-contrast industrial workshop setting, wearing a branded black apron. The lighting is Moody with subtle olive green atmospheric highlights on a dark background." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCqNlW7HmOUbZtz_WKCuxNczxIXEF7vMvWvC-in_vmDKN8QZViS74ZXnb7hlcii03kOrJ-WhFV-GCkfkgYOiD-aj_N_LB4Ssl8__3Z7_ciIcM3KyaueRoLS_YygRtlmp_rsXbrQpr4lcwBJ56Lbc3IRkkO-k6KWNEnl2X5MXlxvEwczwZhgzz2C8_3jTyXF8hc_zAYS5LQ_jrhAgW2GkmIH1o5JXwNrhiu599hoZTQntusha11GpwWNqcaE8bvod7BlV-fMol8Xx1z1"/>
+</div>
+</div>
+</div>
+</header>
+<!-- Form Content -->
+<div class="flex-1 overflow-y-auto custom-scrollbar p-gutter">
+<div class="max-w-5xl mx-auto">
+<header class="mb-lg">
+<h2 class="font-headline-lg text-headline-lg text-on-surface">Recepción de Vehículo</h2>
+<p class="text-on-surface-variant font-body-lg">Complete los detalles para iniciar el proceso de servicio.</p>
+</header>
+<form class="space-y-lg pb-xl">
+<!-- Bento Grid for Sections -->
+<div class="grid grid-cols-1 md:grid-cols-12 gap-lg">
+<!-- Client Info (Col 1-6) -->
+<section class="md:col-span-6 bg-surface-container p-lg rounded-lg inner-stroke glow-active">
+<div class="flex items-center gap-sm mb-md text-primary">
+<span class="material-symbols-outlined">person</span>
+<h3 class="font-title-md text-title-md">Datos del Cliente</h3>
+</div>
+<div class="space-y-md">
+<div>
+<label class="block font-label-caps text-label-caps text-on-surface-variant mb-xs">Nombre Completo</label>
+<input class="w-full bg-surface-container-lowest border border-outline-variant rounded p-sm text-body-lg" placeholder="Ej. Juan Pérez" type="text"/>
+</div>
+<div class="grid grid-cols-2 gap-md">
+<div>
+<label class="block font-label-caps text-label-caps text-on-surface-variant mb-xs">Teléfono</label>
+<input class="w-full bg-surface-container-lowest border border-outline-variant rounded p-sm text-body-lg" placeholder="+34 000 000 000" type="tel"/>
+</div>
+<div>
+<label class="block font-label-caps text-label-caps text-on-surface-variant mb-xs">Correo Electrónico</label>
+<input class="w-full bg-surface-container-lowest border border-outline-variant rounded p-sm text-body-lg" placeholder="juan@ejemplo.com" type="email"/>
+</div>
+</div>
+</div>
+</section>
+<!-- Vehicle Info (Col 7-12) -->
+<section class="md:col-span-6 bg-surface-container p-lg rounded-lg inner-stroke glow-active">
+<div class="flex items-center gap-sm mb-md text-primary">
+<span class="material-symbols-outlined">directions_bike</span>
+<h3 class="font-title-md text-title-md">Datos del Vehículo</h3>
+</div>
+<div class="space-y-md">
+<div class="grid grid-cols-2 gap-md">
+<div>
+<label class="block font-label-caps text-label-caps text-on-surface-variant mb-xs">Marca</label>
+<input class="w-full bg-surface-container-lowest border border-outline-variant rounded p-sm text-body-lg" placeholder="Ej. Specialized" type="text"/>
+</div>
+<div>
+<label class="block font-label-caps text-label-caps text-on-surface-variant mb-xs">Modelo</label>
+<input class="w-full bg-surface-container-lowest border border-outline-variant rounded p-sm text-body-lg" placeholder="Ej. S-Works Tarmac" type="text"/>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-md">
+<div>
+<label class="block font-label-caps text-label-caps text-on-surface-variant mb-xs">Color</label>
+<input class="w-full bg-surface-container-lowest border border-outline-variant rounded p-sm text-body-lg" placeholder="Ej. Mate Carbon" type="text"/>
+</div>
+<div>
+<label class="block font-label-caps text-label-caps text-on-surface-variant mb-xs">Nº de Serie / VIN</label>
+<input class="w-full bg-surface-container-lowest border border-outline-variant rounded p-sm text-body-lg font-mono" placeholder="SN123456789" type="text"/>
+</div>
+</div>
+</div>
+</section>
+<!-- Reason & Services (Col 1-8) -->
+<section class="md:col-span-8 bg-surface-container p-lg rounded-lg inner-stroke glow-active">
+<div class="flex items-center gap-sm mb-md text-primary">
+<span class="material-symbols-outlined">description</span>
+<h3 class="font-title-md text-title-md">Motivo de Entrada</h3>
+</div>
+<div class="space-y-md">
+<div>
+<label class="block font-label-caps text-label-caps text-on-surface-variant mb-xs">Descripción del Problema</label>
+<textarea class="w-full bg-surface-container-lowest border border-outline-variant rounded p-sm text-body-lg resize-none" placeholder="Describa el ruido, fallo o comportamiento anómalo..." rows="4"></textarea>
+</div>
+<div>
+<label class="block font-label-caps text-label-caps text-on-surface-variant mb-xs">Servicios Solicitados</label>
+<div class="flex flex-wrap gap-sm">
+<label class="flex items-center gap-sm px-md py-sm bg-surface-container-lowest border border-outline-variant rounded cursor-pointer hover:bg-surface-container-high transition-colors">
+<input class="rounded border-outline-variant text-primary focus:ring-primary bg-surface" type="checkbox"/>
+<span class="text-body-sm">Mantenimiento Completo</span>
+</label>
+<label class="flex items-center gap-sm px-md py-sm bg-surface-container-lowest border border-outline-variant rounded cursor-pointer hover:bg-surface-container-high transition-colors">
+<input class="rounded border-outline-variant text-primary focus:ring-primary bg-surface" type="checkbox"/>
+<span class="text-body-sm">Ajuste de Transmisión</span>
+</label>
+<label class="flex items-center gap-sm px-md py-sm bg-surface-container-lowest border border-outline-variant rounded cursor-pointer hover:bg-surface-container-high transition-colors">
+<input class="rounded border-outline-variant text-primary focus:ring-primary bg-surface" type="checkbox"/>
+<span class="text-body-sm">Revisión de Frenos</span>
+</label>
+<label class="flex items-center gap-sm px-md py-sm bg-surface-container-lowest border border-outline-variant rounded cursor-pointer hover:bg-surface-container-high transition-colors">
+<input class="rounded border-outline-variant text-primary focus:ring-primary bg-surface" type="checkbox"/>
+<span class="text-body-sm">Lavado Premium</span>
+</label>
+</div>
+</div>
+</div>
+</section>
+<!-- Checklist (Col 9-12) -->
+<section class="md:col-span-4 bg-surface-container p-lg rounded-lg inner-stroke glow-active">
+<div class="flex items-center gap-sm mb-md text-primary">
+<span class="material-symbols-outlined">fact_check</span>
+<h3 class="font-title-md text-title-md">Estado Visual</h3>
+</div>
+<div class="space-y-lg">
+<div class="space-y-sm">
+<p class="font-label-caps text-label-caps text-on-surface-variant">Check-list</p>
+<div class="space-y-xs">
+<label class="flex justify-between items-center group">
+<span class="text-body-sm text-on-surface-variant">Sin arañazos visibles</span>
+<input class="rounded border-outline-variant text-primary focus:ring-primary bg-surface" type="checkbox"/>
+</label>
+<label class="flex justify-between items-center group">
+<span class="text-body-sm text-on-surface-variant">Luces/Accesorios</span>
+<input class="rounded border-outline-variant text-primary focus:ring-primary bg-surface" type="checkbox"/>
+</label>
+<label class="flex justify-between items-center group">
+<span class="text-body-sm text-on-surface-variant">Ciclocomputador</span>
+<input class="rounded border-outline-variant text-primary focus:ring-primary bg-surface" type="checkbox"/>
+</label>
+</div>
+</div>
+<div class="space-y-sm">
+<p class="font-label-caps text-label-caps text-on-surface-variant">Estado de Limpieza</p>
+<div class="grid grid-cols-3 gap-xs">
+<button class="py-sm border border-outline-variant rounded text-label-caps hover:bg-surface-container-high transition-colors active:bg-primary/20" type="button">LIMPIA</button>
+<button class="py-sm border border-outline-variant rounded text-label-caps hover:bg-surface-container-high transition-colors" type="button">POLVO</button>
+<button class="py-sm border border-outline-variant rounded text-label-caps hover:bg-surface-container-high transition-colors" type="button">BARRO</button>
+</div>
+</div>
+<div class="pt-md">
+<div class="aspect-square bg-surface-container-lowest rounded border border-dashed border-outline-variant flex flex-col items-center justify-center gap-sm text-outline-variant hover:text-primary transition-colors cursor-pointer group">
+<span class="material-symbols-outlined text-[32px]">add_a_photo</span>
+<span class="text-label-caps">Subir Fotos</span>
+</div>
+</div>
+</div>
+</section>
+</div>
+<!-- Actions -->
+<div class="flex items-center justify-end gap-md pt-lg">
+<button class="px-xl py-md rounded font-bold text-on-surface-variant border border-outline-variant hover:bg-surface-container-high transition-all active:scale-95" type="button">
+                            Cancelar
+                        </button>
+<button class="px-xl py-md rounded font-bold bg-primary text-on-primary hover:brightness-110 shadow-[0_0_15px_rgba(187,207,124,0.2)] transition-all active:scale-95" type="submit">
+                            Crear Entrada
+                        </button>
+</div>
+</form>
+</div>
+</div>
+</main>
+<script>
+        // Micro-interactions for buttons
+        document.querySelectorAll('button').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                if (btn.type === 'submit') {
+                    // Prevent default for demo
+                    e.preventDefault();
+                    console.log('Form submission logic here');
+                    alert('Entrada creada correctamente');
+                }
+            });
+        });
+
+        // Visual Checklist buttons toggle
+        const cleanButtons = document.querySelectorAll('.grid-cols-3 button');
+        cleanButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                cleanButtons.forEach(b => {
+                    b.classList.remove('bg-primary', 'text-on-primary', 'border-primary');
+                    b.classList.add('border-outline-variant');
+                });
+                btn.classList.add('bg-primary', 'text-on-primary', 'border-primary');
+                btn.classList.remove('border-outline-variant');
+            });
+        });
+    </script>
+</body></html>

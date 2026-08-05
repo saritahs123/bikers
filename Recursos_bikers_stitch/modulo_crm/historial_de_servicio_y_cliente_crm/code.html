@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800;900&amp;family=JetBrains+Mono:wght@600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        body {
+            background-color: #0a0c10;
+            background-image: radial-gradient(#1f201a 1px, transparent 1px);
+            background-size: 24px 24px;
+        }
+        .segmented-progress {
+            display: flex;
+            gap: 2px;
+        }
+        .segment {
+            height: 8px;
+            flex: 1;
+            background-color: #2d3748;
+        }
+        .segment.active {
+            background-color: #84924a;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #13140f;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #46483b;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-container": "#8791a5",
+                        "on-tertiary-container": "#202a3a",
+                        "surface": "#13140f",
+                        "surface-container-low": "#1b1c17",
+                        "inverse-primary": "#576421",
+                        "background": "#13140f",
+                        "surface-container-lowest": "#0e0f0a",
+                        "primary-fixed-dim": "#bfce7f",
+                        "on-secondary": "#2d3138",
+                        "on-primary-container": "#252d00",
+                        "surface-tint": "#bfce7f",
+                        "primary-fixed": "#dbea98",
+                        "surface-container-high": "#2a2a24",
+                        "outline-variant": "#46483b",
+                        "on-tertiary-fixed-variant": "#3d4759",
+                        "surface-variant": "#35352f",
+                        "secondary": "#c3c6d0",
+                        "on-tertiary-fixed": "#121c2c",
+                        "tertiary": "#bdc7dc",
+                        "error-container": "#93000a",
+                        "on-secondary-container": "#b2b5be",
+                        "surface-container": "#1f201a",
+                        "surface-bright": "#393a33",
+                        "on-surface": "#e4e3d9",
+                        "on-secondary-fixed-variant": "#43474f",
+                        "on-primary-fixed-variant": "#404c0a",
+                        "on-error-container": "#ffdad6",
+                        "tertiary-fixed-dim": "#bdc7dc",
+                        "surface-dim": "#13140f",
+                        "on-tertiary": "#273141",
+                        "tertiary-fixed": "#d9e3f9",
+                        "secondary-fixed-dim": "#c3c6d0",
+                        "surface-container-highest": "#35352f",
+                        "secondary-container": "#43474f",
+                        "outline": "#919282",
+                        "primary-container": "#89974f",
+                        "error": "#ffb4ab",
+                        "inverse-on-surface": "#30312b",
+                        "secondary-fixed": "#dfe2ec",
+                        "on-surface-variant": "#c7c8b7",
+                        "on-background": "#e4e3d9",
+                        "primary": "#bfce7f",
+                        "on-secondary-fixed": "#181c23",
+                        "on-primary": "#2b3400",
+                        "on-primary-fixed": "#181e00",
+                        "inverse-surface": "#e4e3d9",
+                        "on-error": "#690005"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "container-max": "1440px",
+                        "gutter": "24px",
+                        "margin-desktop": "40px",
+                        "unit": "4px",
+                        "margin-mobile": "16px"
+                    },
+                    "fontFamily": {
+                        "body-sm": ["Hanken Grotesk"],
+                        "body-md": ["Hanken Grotesk"],
+                        "headline-lg": ["Hanken Grotesk"],
+                        "body-lg": ["Hanken Grotesk"],
+                        "headline-sm": ["Hanken Grotesk"],
+                        "headline-md": ["Hanken Grotesk"],
+                        "label-caps": ["JetBrains Mono"]
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="text-on-surface bg-background min-h-screen">
+<!-- Desktop Sidebar -->
+<aside class="hidden md:flex flex-col fixed left-0 top-0 h-full w-64 border-r border-outline-variant bg-surface-container-low z-50">
+<div class="p-6">
+<h1 class="font-headline-sm text-headline-sm font-bold text-primary tracking-tight">Biker's Fort</h1>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Core Management</p>
+</div>
+<nav class="flex-1 px-4 space-y-2 mt-4">
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant font-medium hover:bg-surface-container-high transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">build</span>
+<span class="font-body-md text-body-md">Workshop</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-primary font-bold border-r-2 border-primary bg-secondary-container/10 transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">group</span>
+<span class="font-body-md text-body-md">CRM</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant font-medium hover:bg-surface-container-high transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+<span class="font-body-md text-body-md">Inventory</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant font-medium hover:bg-surface-container-high transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">history_edu</span>
+<span class="font-body-md text-body-md">Repairs</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant font-medium hover:bg-surface-container-high transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-body-md text-body-md">Settings</span>
+</a>
+</nav>
+<div class="p-4 mt-auto">
+<button class="w-full bg-primary-container text-on-primary-container py-3 font-bold rounded-lg hover:brightness-110 active:scale-95 transition-all">
+                New Repair Order
+            </button>
+</div>
+<div class="p-4 border-t border-outline-variant">
+<a class="flex items-center gap-3 px-4 py-2 text-on-surface-variant font-medium hover:bg-surface-container-high transition-colors" href="#">
+<span class="material-symbols-outlined">help</span>
+<span class="font-body-md text-body-md">Support</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 text-on-surface-variant font-medium hover:bg-surface-container-high transition-colors" href="#">
+<span class="material-symbols-outlined">logout</span>
+<span class="font-body-md text-body-md">Log Out</span>
+</a>
+</div>
+</aside>
+<!-- Top AppBar -->
+<header class="flex justify-between items-center w-full px-margin-mobile md:px-margin-desktop md:pl-[296px] h-16 sticky top-0 z-40 bg-surface-container-lowest border-b border-outline-variant">
+<div class="flex items-center gap-4 flex-1">
+<span class="material-symbols-outlined md:hidden">menu</span>
+<div class="relative w-full max-w-md hidden md:block">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
+<input class="w-full bg-surface-container text-body-sm font-body-sm border border-outline-variant rounded-full pl-10 pr-4 py-2 focus:ring-1 focus:ring-primary outline-none" placeholder="Search customer or bike VIN..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="hidden lg:flex items-center gap-6 mr-6">
+<a class="text-on-surface-variant font-body-sm hover:text-primary transition-colors" href="#">Dashboard</a>
+<a class="text-on-surface-variant font-body-sm hover:text-primary transition-colors" href="#">Analytics</a>
+<a class="text-primary border-b-2 border-primary pb-1 font-body-sm" href="#">Schedule</a>
+</div>
+<button class="material-symbols-outlined text-on-surface-variant p-2 hover:bg-surface-variant/20 rounded-full">notifications</button>
+<div class="flex items-center gap-2">
+<img class="w-8 h-8 rounded-full border border-primary" data-alt="A professional headshot of a workshop manager in their 40s, wearing technical work gear, set against a blurred background of a high-end mountain bike service center with warm industrial lighting. The aesthetic is clean, professional, and technical." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBu27cJTcw4t37_wyu8Gews7lYg8fY1U8nQ0di98zcLYqEu7lVWyq7PuxvgrRRr3G4uuciobnRJuhUqYjgvyblBnqtKfIr-U_lIrlfD8kYfT32zhppbav80RrX_BkcKaTYaWIUlw8_VPZqQIsERIU_qMg1EVb22JNv2cdzdvSuuf_k7DD0jVFPvL5X-T9wiz-WW4Rz5Gz7QQpB0fATSeMiBzF5luKMAmSXfmUo2oT2v9l8Z76bdxP62"/>
+</div>
+</div>
+</header>
+<!-- Main Content -->
+<main class="md:pl-64 min-h-screen pb-24 md:pb-8">
+<div class="max-w-container-max mx-auto p-margin-mobile md:p-margin-desktop space-y-8">
+<!-- Customer/Asset Profile Header -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+<!-- Profile Card -->
+<div class="lg:col-span-2 bg-[#161a21] border border-[#2d3748] p-6 flex flex-col md:flex-row gap-8 relative overflow-hidden">
+<div class="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+<span class="material-symbols-outlined text-[120px]">directions_bike</span>
+</div>
+<div class="relative z-10 w-full md:w-48 h-48 bg-surface-container rounded-lg border border-[#2d3748] overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A detailed side profile of a Santa Cruz Nomad mountain bike in military olive green, resting in a professional work stand. The background shows an organized tool wall in a high-end workshop, with deep charcoal tones and sharp mechanical focus." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCZPbqizkyrIs9D-AkhK523F9X6NfPP4LRE3Ae4YV4zyNsw76itRAyfjB2cRKa1Do2CNdJAl1VBPSdsLpcr3-516AcnAnjnJpHAZy0hL95cWSXBbNNDNdAxsoMD5XWDFNt46d7lxl76zthjXbfdaFpIOLdfKnWxV6-zR6J-ezEn7XbQm1CqL2ZnvPNGDfCJ4MNyUqxfA7R6agRfRA-X-q1Tjs7KSs6WZFNWvHAk-w3lf6nJCr9WifXr"/>
+</div>
+<div class="flex-1 space-y-4">
+<div class="flex flex-wrap items-center justify-between gap-4">
+<div>
+<h2 class="font-headline-md text-headline-md font-bold text-on-surface">Santa Cruz Nomad CC</h2>
+<p class="font-label-caps text-label-caps text-primary">VIN: SC2024-NOM-9981</p>
+</div>
+<span class="bg-[#84924a] text-white px-3 py-1 font-label-caps text-label-caps uppercase">Active Service Plan</span>
+</div>
+<div class="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2">
+<div>
+<p class="font-label-caps text-label-caps text-on-surface-variant mb-1">PROPIETARIO</p>
+<p class="font-body-md text-body-md font-bold">Mateo Rivera</p>
+</div>
+<div>
+<p class="font-label-caps text-label-caps text-on-surface-variant mb-1">KM ESTIMADO</p>
+<p class="font-body-md text-body-md font-bold">1,240 km</p>
+</div>
+<div>
+<p class="font-label-caps text-label-caps text-on-surface-variant mb-1">ÚLTIMA VISITA</p>
+<p class="font-body-md text-body-md font-bold">12 Oct 2023</p>
+</div>
+<div>
+<p class="font-label-caps text-label-caps text-on-surface-variant mb-1">ESTADO</p>
+<p class="font-body-md text-body-md font-bold text-[#84924a]">Óptimo</p>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between items-center">
+<span class="font-label-caps text-label-caps">Maintenance Health Score</span>
+<span class="font-label-caps text-label-caps text-primary">94%</span>
+</div>
+<div class="segmented-progress">
+<div class="segment active"></div><div class="segment active"></div><div class="segment active"></div><div class="segment active"></div><div class="segment active"></div><div class="segment active"></div><div class="segment active"></div><div class="segment active"></div><div class="segment active"></div><div class="segment"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Recurrence Chart -->
+<div class="bg-[#161a21] border border-[#2d3748] p-6 flex flex-col justify-between">
+<div>
+<h3 class="font-headline-sm text-headline-sm font-bold mb-4">Visitas Trimestrales</h3>
+<div class="h-40 flex items-end justify-between gap-2 px-2">
+<div class="w-full bg-primary-container/20 border-t-2 border-primary-container h-1/4 relative group">
+<div class="hidden group-hover:block absolute -top-8 left-1/2 -translate-x-1/2 bg-surface-container p-1 rounded font-label-caps text-[10px]">Q1: 1</div>
+</div>
+<div class="w-full bg-primary-container/40 border-t-2 border-primary-container h-2/4 relative group">
+<div class="hidden group-hover:block absolute -top-8 left-1/2 -translate-x-1/2 bg-surface-container p-1 rounded font-label-caps text-[10px]">Q2: 2</div>
+</div>
+<div class="w-full bg-primary-container/80 border-t-2 border-primary-container h-3/4 relative group">
+<div class="hidden group-hover:block absolute -top-8 left-1/2 -translate-x-1/2 bg-surface-container p-1 rounded font-label-caps text-[10px]">Q3: 3</div>
+</div>
+<div class="w-full bg-primary-container h-full relative group">
+<div class="hidden group-hover:block absolute -top-8 left-1/2 -translate-x-1/2 bg-surface-container p-1 rounded font-label-caps text-[10px]">Q4: 4</div>
+</div>
+</div>
+<div class="flex justify-between mt-2 px-2 font-label-caps text-[10px] text-on-surface-variant">
+<span>ENE-MAR</span>
+<span>ABR-JUN</span>
+<span>JUL-SEP</span>
+<span>OCT-DIC</span>
+</div>
+</div>
+<div class="pt-4 border-t border-[#2d3748] mt-4">
+<div class="flex justify-between items-center">
+<span class="text-on-surface-variant font-body-sm">Ticket Promedio</span>
+<span class="font-bold text-primary">$185.00</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Service Timeline -->
+<div class="space-y-4">
+<div class="flex items-center justify-between">
+<h3 class="font-headline-sm text-headline-sm font-bold">Historial de Intervenciones</h3>
+<div class="flex gap-2">
+<button class="bg-surface-container border border-outline-variant px-4 py-2 font-label-caps text-label-caps flex items-center gap-2 hover:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined text-sm">filter_list</span> Filtrar
+                        </button>
+<button class="bg-surface-container border border-outline-variant px-4 py-2 font-label-caps text-label-caps flex items-center gap-2 hover:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined text-sm">download</span> Exportar PDF
+                        </button>
+</div>
+</div>
+<div class="relative space-y-8 before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-primary before:via-[#2d3748] before:to-transparent">
+<!-- Timeline Item 1 -->
+<div class="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
+<div class="flex items-center justify-center w-10 h-10 rounded-full border border-primary bg-background text-primary shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10">
+<span class="material-symbols-outlined text-base">verified</span>
+</div>
+<div class="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] bg-[#161a21] border border-[#2d3748] p-6 hover:border-primary/50 transition-colors shadow-[4px_4px_0px_rgba(0,0,0,0.5)]">
+<div class="flex items-center justify-between mb-2">
+<time class="font-label-caps text-label-caps text-primary">12 OCT 2023 — 1,240 KM</time>
+<span class="bg-primary/10 text-primary px-2 py-0.5 font-label-caps text-[10px] uppercase border border-primary/20">Preventivo</span>
+</div>
+<div class="mb-4">
+<h4 class="font-body-lg text-body-lg font-bold">Mantenimiento de Temporada Elite</h4>
+<p class="text-on-surface-variant font-body-sm mt-1">Servicio completo de suspensión (Fork &amp; Shock), purgado de frenos y ajuste de transmisión.</p>
+</div>
+<div class="bg-surface-container-lowest border border-[#2d3748] p-4 space-y-3">
+<div class="flex gap-4">
+<span class="material-symbols-outlined text-primary text-lg">engineering</span>
+<div class="flex-1">
+<p class="font-label-caps text-[11px] text-on-surface-variant">NOTAS DEL MECÁNICO (C. RAMÍREZ)</p>
+<p class="font-body-sm text-body-sm italic">"Retenes de horquilla reemplazados por precaución. Se detectó ligero desgaste en el plato delantero, se sugiere cambio en el próximo servicio."</p>
+</div>
+</div>
+</div>
+<div class="mt-4 flex flex-wrap gap-2">
+<span class="bg-secondary-container/20 text-on-secondary-container px-2 py-1 rounded font-label-caps text-[10px]">KIT-RETENES-FOX</span>
+<span class="bg-secondary-container/20 text-on-secondary-container px-2 py-1 rounded font-label-caps text-[10px]">SHIMANO-OIL-MINERAL</span>
+<span class="bg-secondary-container/20 text-on-secondary-container px-2 py-1 rounded font-label-caps text-[10px]">CABLE-OPTISLICK</span>
+</div>
+</div>
+</div>
+<!-- Timeline Item 2 -->
+<div class="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group">
+<div class="flex items-center justify-center w-10 h-10 rounded-full border border-outline bg-background text-on-surface-variant shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10">
+<span class="material-symbols-outlined text-base">construction</span>
+</div>
+<div class="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] bg-[#161a21] border border-[#2d3748] p-6 hover:border-[#4a5568] transition-colors">
+<div class="flex items-center justify-between mb-2">
+<time class="font-label-caps text-label-caps text-on-surface-variant">15 AGO 2023 — 980 KM</time>
+<span class="bg-error-container/20 text-error px-2 py-0.5 font-label-caps text-[10px] uppercase border border-error/20">Reparación</span>
+</div>
+<div class="mb-4">
+<h4 class="font-body-lg text-body-lg font-bold">Cambio de Pata de Cambio y Centrado</h4>
+<p class="text-on-surface-variant font-body-sm mt-1">Impacto en rodada nocturna. Reemplazo de hanger y centrado de rueda trasera.</p>
+</div>
+<div class="bg-surface-container-lowest border border-[#2d3748] p-4">
+<div class="flex gap-4">
+<span class="material-symbols-outlined text-on-surface-variant text-lg">note</span>
+<div class="flex-1">
+<p class="font-label-caps text-[11px] text-on-surface-variant">NOTAS DEL MECÁNICO (L. SOSA)</p>
+<p class="font-body-sm text-body-sm italic">"Rueda trasera presentaba descentrado de 3mm. Se corrigió tensión de radios."</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Timeline Item 3 -->
+<div class="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group">
+<div class="flex items-center justify-center w-10 h-10 rounded-full border border-outline bg-background text-on-surface-variant shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10">
+<span class="material-symbols-outlined text-base">history</span>
+</div>
+<div class="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] bg-[#161a21] border border-[#2d3748] p-6 hover:border-[#4a5568] transition-colors">
+<div class="flex items-center justify-between mb-2">
+<time class="font-label-caps text-label-caps text-on-surface-variant">04 MAY 2023 — 450 KM</time>
+<span class="bg-secondary-container/20 text-on-secondary-container px-2 py-0.5 font-label-caps text-[10px] uppercase border border-outline-variant">Garantía</span>
+</div>
+<div class="mb-4">
+<h4 class="font-body-lg text-body-lg font-bold">Servicio de Rodaje Inicial</h4>
+<p class="text-on-surface-variant font-body-sm mt-1">Reapriete general de tornillería, ajuste de cables por estiramiento inicial.</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Bottom Navigation (Mobile) -->
+<nav class="md:hidden fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 py-2 bg-surface-container-highest border-t border-outline-variant rounded-t-xl shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
+<a class="flex flex-col items-center justify-center text-on-surface-variant p-2 active:bg-surface-bright active:scale-90 duration-100" href="#">
+<span class="material-symbols-outlined">handyman</span>
+<span class="font-label-caps text-label-caps">Workshop</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-xl p-2 active:bg-surface-bright active:scale-90 duration-100" href="#">
+<span class="material-symbols-outlined">person_search</span>
+<span class="font-label-caps text-label-caps">CRM</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant p-2 active:bg-surface-bright active:scale-90 duration-100" href="#">
+<span class="material-symbols-outlined">data_check</span>
+<span class="font-label-caps text-label-caps">Inventory</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant p-2 active:bg-surface-bright active:scale-90 duration-100" href="#">
+<span class="material-symbols-outlined">person</span>
+<span class="font-label-caps text-label-caps">Account</span>
+</a>
+</nav>
+<script>
+        // Micro-interaction: Hover effects for timeline items
+        document.querySelectorAll('.is-active').forEach(item => {
+            item.addEventListener('mouseenter', () => {
+                item.querySelector('.material-symbols-outlined').style.transform = 'scale(1.2)';
+            });
+            item.addEventListener('mouseleave', () => {
+                item.querySelector('.material-symbols-outlined').style.transform = 'scale(1)';
+            });
+        });
+
+        // Simple mock for "New Repair Order" button interaction
+        const fab = document.querySelector('button.bg-primary-container');
+        if (fab) {
+            fab.addEventListener('click', () => {
+                console.log('Opening new repair order modal...');
+                // Logic to trigger modal would go here
+            });
+        }
+    </script>
+</body></html>

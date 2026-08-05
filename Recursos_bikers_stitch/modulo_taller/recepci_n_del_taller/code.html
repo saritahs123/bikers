@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>VELO-INDUSTRIAL | Recepción de Taller</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        body {
+            background-color: #0a0c10; /* Deep charcoal from style guidance */
+            background-image: radial-gradient(#1c2129 0.5px, transparent 0.5px);
+            background-size: 24px 24px; /* Industrial grid pattern */
+        }
+        .industrial-border {
+            border: 1px solid #2d3748;
+        }
+        .bevel-button {
+            box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.2);
+        }
+        .segmented-progress {
+            display: flex;
+            gap: 2px;
+        }
+        .segmented-block {
+            height: 8px;
+            flex: 1;
+            background-color: #1f201a;
+        }
+        .segmented-block.active {
+            background-color: #84924a;
+        }
+        canvas#signature-pad {
+            cursor: crosshair;
+            touch-action: none;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #13140f;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #46483b;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "surface-container-high": "#2a2a24",
+                      "secondary": "#c3c6d0",
+                      "background": "#13140f",
+                      "on-background": "#e4e3d9",
+                      "surface-variant": "#35352f",
+                      "on-tertiary-container": "#202a3a",
+                      "on-secondary-container": "#b2b5be",
+                      "tertiary-fixed": "#d9e3f9",
+                      "surface-container-lowest": "#0e0f0a",
+                      "on-error-container": "#ffdad6",
+                      "inverse-on-surface": "#30312b",
+                      "on-primary-fixed-variant": "#404c0a",
+                      "tertiary": "#bdc7dc",
+                      "on-error": "#690005",
+                      "surface-container-highest": "#35352f",
+                      "primary-fixed-dim": "#bfce7f",
+                      "primary": "#bfce7f",
+                      "surface-container": "#1f201a",
+                      "on-surface-variant": "#c7c8b7",
+                      "surface": "#13140f",
+                      "secondary-fixed": "#dfe2ec",
+                      "outline": "#919282",
+                      "inverse-primary": "#576421",
+                      "on-secondary-fixed-variant": "#43474f",
+                      "surface-tint": "#bfce7f",
+                      "on-primary": "#2b3400",
+                      "inverse-surface": "#e4e3d9",
+                      "tertiary-container": "#8791a5",
+                      "on-primary-container": "#252d00",
+                      "tertiary-fixed-dim": "#bdc7dc",
+                      "on-secondary-fixed": "#181c23",
+                      "error-container": "#93000a",
+                      "secondary-fixed-dim": "#c3c6d0",
+                      "surface-bright": "#393a33",
+                      "secondary-container": "#43474f",
+                      "on-primary-fixed": "#181e00",
+                      "primary-fixed": "#dbea98",
+                      "on-tertiary-fixed-variant": "#3d4759",
+                      "outline-variant": "#46483b",
+                      "on-tertiary": "#273141",
+                      "on-surface": "#e4e3d9",
+                      "surface-container-low": "#1b1c17",
+                      "primary-container": "#89974f",
+                      "on-tertiary-fixed": "#121c2c",
+                      "error": "#ffb4ab",
+                      "surface-dim": "#13140f",
+                      "on-secondary": "#2d3138"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "container-max": "1440px",
+                      "unit": "4px",
+                      "margin-mobile": "16px",
+                      "gutter": "24px",
+                      "margin-desktop": "40px"
+              },
+              "fontFamily": {
+                      "label-caps": ["JetBrains Mono"],
+                      "headline-md": ["Hanken Grotesk"],
+                      "headline-lg-mobile": ["Hanken Grotesk"],
+                      "body-sm": ["Hanken Grotesk"],
+                      "headline-sm": ["Hanken Grotesk"],
+                      "headline-lg": ["Hanken Grotesk"],
+                      "body-lg": ["Hanken Grotesk"],
+                      "body-md": ["Hanken Grotesk"]
+              },
+              "fontSize": {
+                      "label-caps": ["12px", {"lineHeight": "1", "letterSpacing": "0.1em", "fontWeight": "600"}],
+                      "headline-md": ["32px", {"lineHeight": "1.2", "fontWeight": "700"}],
+                      "headline-lg-mobile": ["32px", {"lineHeight": "1.2", "fontWeight": "800"}],
+                      "body-sm": ["14px", {"lineHeight": "1.4", "fontWeight": "400"}],
+                      "headline-sm": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                      "headline-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "800"}],
+                      "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                      "body-md": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}]
+              }
+            },
+          },
+        }
+      </script>
+</head>
+<body class="font-body-md text-on-surface custom-scrollbar">
+<!-- Top Navigation Bar -->
+<header class="fixed top-0 w-full z-50 flex justify-between items-center px-margin-desktop h-16 bg-background border-b border-outline-variant">
+<div class="flex items-center gap-4">
+<span class="font-headline-md text-headline-md font-bold text-primary">VELO-INDUSTRIAL</span>
+<div class="h-6 w-px bg-outline-variant mx-2"></div>
+<span class="font-label-caps text-label-caps text-on-surface-variant">WORKSHOP RECEPTION</span>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2 px-3 py-1 bg-surface-container rounded-lg border border-outline-variant">
+<span class="material-symbols-outlined text-primary" style="font-size: 20px;">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-body-sm w-48 text-on-surface placeholder:text-on-surface-variant" placeholder="Buscar cliente o serial..." type="text"/>
+</div>
+<div class="flex gap-4">
+<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-primary transition-colors">notifications</span>
+<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-primary transition-colors">settings</span>
+</div>
+<div class="flex items-center gap-3">
+<div class="text-right hidden sm:block">
+<p class="font-label-caps text-label-caps text-on-surface">M. VAZQUEZ</p>
+<p class="text-[10px] text-primary uppercase">Chief Mechanic</p>
+</div>
+<img class="w-10 h-10 rounded-full border border-primary object-cover" data-alt="A professional close-up portrait of a head mechanic in a high-end mountain bike workshop. He is wearing a heavy-duty black apron with the shop logo, and the background shows a blurred industrial setting with carbon fiber bike frames and precision tools. The lighting is dramatic and moody, emphasizing a premium, technical atmosphere with a deep charcoal and military olive color palette." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBxZ2XnhGy_hTYQry-CBNKHMBs5h72CMLxRqCc0PH8BeAMtKSsaV18ajVWp61U0RbIsxFIgJvJp8WruAP_54z84h7LBQb_GIgQdo0DcN0NoEToroZCyXZtkEptMAOL8pA4g-Twa4MJ--Y5CBUs8zkvx1tbEN3cb-g3pJrgJsOqgk3lsIkZfi1piCFMOIg6C3JY_8SEYWfoEjriEeCtXQURUJ9jy3uXdYUcb10kylg3X4xU4so2STJcs"/>
+</div>
+</div>
+</header>
+<!-- Side Navigation Bar -->
+<nav class="fixed left-0 top-0 h-full flex flex-col py-margin-desktop border-r border-outline-variant bg-surface-container-low w-64 pt-20">
+<div class="px-6 mb-8">
+<div class="flex items-center gap-3 p-3 bg-surface-container rounded-lg industrial-border mb-6">
+<span class="material-symbols-outlined text-primary">precision_manufacturing</span>
+<div>
+<p class="font-label-caps text-label-caps text-on-surface">Service Bay 01</p>
+<p class="text-[10px] text-on-surface-variant uppercase">Active Session</p>
+</div>
+</div>
+<button class="w-full py-3 bg-primary text-on-primary font-label-caps text-label-caps rounded-lg bevel-button flex items-center justify-center gap-2 active:scale-95 transition-all">
+<span class="material-symbols-outlined">add</span>
+                NUEVA ORDEN
+            </button>
+</div>
+<div class="flex-1 px-4 space-y-1">
+<a class="flex items-center gap-4 bg-secondary-container text-on-secondary-container rounded-lg px-4 py-3 active:translate-x-1 duration-200" href="#">
+<span class="material-symbols-outlined">build</span>
+<span class="font-label-caps text-label-caps">Workshop</span>
+</a>
+<a class="flex items-center gap-4 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest px-4 py-3 rounded-lg transition-all" href="#">
+<span class="material-symbols-outlined">precision_manufacturing</span>
+<span class="font-label-caps text-label-caps">Inventory</span>
+</a>
+<a class="flex items-center gap-4 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest px-4 py-3 rounded-lg transition-all" href="#">
+<span class="material-symbols-outlined">groups</span>
+<span class="font-label-caps text-label-caps">CRM</span>
+</a>
+<a class="flex items-center gap-4 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest px-4 py-3 rounded-lg transition-all" href="#">
+<span class="material-symbols-outlined">receipt_long</span>
+<span class="font-label-caps text-label-caps">Billing</span>
+</a>
+</div>
+<div class="px-4 pb-8 space-y-1">
+<a class="flex items-center gap-4 text-on-surface-variant hover:text-on-surface px-4 py-2 transition-all" href="#">
+<span class="material-symbols-outlined">help</span>
+<span class="font-label-caps text-label-caps">Support</span>
+</a>
+<a class="flex items-center gap-4 text-on-surface-variant hover:text-on-surface px-4 py-2 transition-all" href="#">
+<span class="material-symbols-outlined">history</span>
+<span class="font-label-caps text-label-caps">Logs</span>
+</a>
+</div>
+</nav>
+<!-- Main Content Canvas -->
+<main class="ml-64 pt-24 px-margin-desktop pb-12 min-h-screen max-w-[1440px]">
+<!-- Header & Progress -->
+<div class="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
+<div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface mb-2">Ingreso de Activo</h1>
+<p class="font-body-lg text-on-surface-variant">Orden de Servicio: <span class="text-primary font-label-caps">#WO-8842-2024</span></p>
+</div>
+<div class="w-full md:w-64">
+<div class="flex justify-between mb-2">
+<span class="font-label-caps text-[10px] text-on-surface-variant">COMPLETADO: 65%</span>
+<span class="font-label-caps text-[10px] text-primary">FASE: INSPECCIÓN</span>
+</div>
+<div class="segmented-progress">
+<div class="segmented-block active"></div>
+<div class="segmented-block active"></div>
+<div class="segmented-block active"></div>
+<div class="segmented-block"></div>
+<div class="segmented-block"></div>
+</div>
+</div>
+</div>
+<!-- Bento Grid Layout -->
+<div class="grid grid-cols-12 gap-gutter">
+<!-- CRM / Client Data (Left Column) -->
+<div class="col-span-12 lg:col-span-4 space-y-gutter">
+<section class="bg-surface-container industrial-border p-6 rounded-lg">
+<div class="flex items-center gap-2 mb-6">
+<span class="material-symbols-outlined text-primary">person</span>
+<h2 class="font-label-caps text-label-caps text-on-surface">DATOS DEL CLIENTE</h2>
+</div>
+<div class="space-y-4">
+<div>
+<label class="block font-label-caps text-[10px] text-on-surface-variant mb-1">PROPIETARIO</label>
+<div class="flex items-center gap-3 p-3 bg-background border border-outline-variant rounded">
+<img class="w-10 h-10 rounded-full object-cover grayscale brightness-75" data-alt="A portrait of a male cyclist in high-end mountain biking gear, looking professional and ready for a ride. He is standing against a dark studio background with subtle industrial light streaks. The aesthetic is clean and modern, matching the professional workshop theme with high-contrast lighting and deep tonal range." src="https://lh3.googleusercontent.com/aida-public/AB6AXuALq-NJs4Ma7d7jNYfDTfPC_Ul7ttOtTNs54Vqcf_tY5wUnVC9Bexw2aOFe_WNgHdUfZ-13EU4TuEoLHRgPSxd7idp-j5hJO2_jI-aKaN74Wd8FOdZu5uAmiDaEhLUEg_KSKvMiXggGre4ztVhD_Oc3pTQ9Ecv3wkCFyZq85AtDF5z-izr0ttOEa_8kR1rZO5xJW0LnCeaP1uq41RG8a1Wb7lqDV45hVF9KwpjExms5EYWho4U4XzYF"/>
+<div>
+<p class="font-body-md text-on-surface">Julian Arango</p>
+<p class="text-[12px] text-on-surface-variant">Tier 1: Elite Member</p>
+</div>
+<span class="material-symbols-outlined ml-auto text-primary cursor-pointer">edit</span>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div>
+<label class="block font-label-caps text-[10px] text-on-surface-variant mb-1">TELÉFONO</label>
+<input class="w-full bg-background border border-outline-variant rounded p-2 text-body-sm text-on-surface" readonly="" type="text" value="+34 612 345 678"/>
+</div>
+<div>
+<label class="block font-label-caps text-[10px] text-on-surface-variant mb-1">ID CLIENTE</label>
+<input class="w-full bg-background border border-outline-variant rounded p-2 text-body-sm text-on-surface" readonly="" type="text" value="CRM-9921"/>
+</div>
+</div>
+</div>
+</section>
+<section class="bg-surface-container industrial-border p-6 rounded-lg">
+<div class="flex items-center gap-2 mb-6">
+<span class="material-symbols-outlined text-primary">directions_bike</span>
+<h2 class="font-label-caps text-label-caps text-on-surface">ACTIVO / BICICLETA</h2>
+</div>
+<div class="space-y-4">
+<div class="aspect-video bg-background border border-outline-variant rounded-lg overflow-hidden mb-4 relative group">
+<div class="w-full h-full bg-cover bg-center opacity-60 transition-transform duration-700 group-hover:scale-110" data-alt="A high-end carbon fiber mountain bike, military olive green and matte black, parked against a clean workshop wall. The photo is technical and professional, highlighting the frame geometry and high-performance components like the suspension and drivetrain. Industrial studio lighting with sharp shadows and subtle lens flares." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuA14yBJSrYfOdoqMvFoP6KUoLKQJLylqJyEez5vS7b3YuuN8ww2iNeuokef9vs2MeH6fjW2zNRudjalLpG35BOlUwn-LTo1eE5iC591NqK7kgRN009RoBvYLa49pAdXdN9lybr65dY0Qe9wSui2mR_8taUXeqvdTRyY2wsQ3jA_jJRYQygg7R4KSTQLOs-tb5S3qUsj2srEuSv2JD3_XqvGZXIe0XZu4NQEtmrfYDvdq1YDjWaT8LkU')"></div>
+<div class="absolute inset-0 bg-gradient-to-t from-background to-transparent"></div>
+<div class="absolute bottom-4 left-4">
+<p class="font-headline-sm text-headline-sm text-on-surface">Specialized Epic Evo</p>
+<p class="font-label-caps text-[10px] text-primary">S-WORKS | SERIAL: SP-22019483</p>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div class="p-3 border border-outline-variant rounded bg-background">
+<span class="font-label-caps text-[10px] text-on-surface-variant">AÑO/MODELO</span>
+<p class="font-body-md text-on-surface">2023 Ltd.</p>
+</div>
+<div class="p-3 border border-outline-variant rounded bg-background">
+<span class="font-label-caps text-[10px] text-on-surface-variant">TRANSMISIÓN</span>
+<p class="font-body-md text-on-surface">SRAM AXS</p>
+</div>
+</div>
+</div>
+</section>
+</div>
+<!-- Visual Checklist & Faults (Middle Column) -->
+<div class="col-span-12 lg:col-span-5 space-y-gutter">
+<section class="bg-surface-container industrial-border p-6 rounded-lg h-full">
+<div class="flex items-center justify-between mb-8">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">rule</span>
+<h2 class="font-label-caps text-label-caps text-on-surface">CHECK-LIST DE ESTADO</h2>
+</div>
+<span class="text-[10px] font-label-caps px-2 py-1 bg-surface-container-highest border border-outline-variant rounded">ESTADO INICIAL</span>
+</div>
+<div class="space-y-6">
+<!-- Checklist Item -->
+<div class="flex items-start gap-4 p-4 hover:bg-surface-container-high rounded transition-colors group">
+<div class="mt-1">
+<input checked="" class="w-5 h-5 bg-background border-outline-variant text-primary rounded focus:ring-primary focus:ring-offset-background" type="checkbox"/>
+</div>
+<div class="flex-1">
+<p class="font-body-md text-on-surface group-hover:text-primary transition-colors">Cuadro / Basculante</p>
+<p class="text-body-sm text-on-surface-variant">Sin fisuras visibles. Rayones leves en tubo inferior.</p>
+</div>
+<div class="flex gap-2">
+<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-on-surface">photo_camera</span>
+</div>
+</div>
+<!-- Checklist Item -->
+<div class="flex items-start gap-4 p-4 hover:bg-surface-container-high rounded transition-colors group">
+<div class="mt-1">
+<input class="w-5 h-5 bg-background border-outline-variant text-primary rounded focus:ring-primary focus:ring-offset-background" type="checkbox"/>
+</div>
+<div class="flex-1">
+<p class="font-body-md text-on-surface group-hover:text-primary transition-colors">Ruedas / Neumáticos</p>
+<p class="text-body-sm text-on-surface-variant">Requiere centrado rueda trasera. Neumático 30% vida.</p>
+</div>
+<div class="flex gap-2">
+<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-on-surface">photo_camera</span>
+</div>
+</div>
+<!-- Checklist Item -->
+<div class="flex items-start gap-4 p-4 hover:bg-surface-container-high rounded transition-colors group">
+<div class="mt-1">
+<input checked="" class="w-5 h-5 bg-background border-outline-variant text-primary rounded focus:ring-primary focus:ring-offset-background" type="checkbox"/>
+</div>
+<div class="flex-1">
+<p class="font-body-md text-on-surface group-hover:text-primary transition-colors">Accesorios / Ciclocomputador</p>
+<p class="text-body-sm text-on-surface-variant">Garmin Edge 830 incluido. Soporte integrado.</p>
+</div>
+</div>
+<!-- Fault Description Area -->
+<div class="mt-10 border-t border-outline-variant pt-8">
+<label class="block font-label-caps text-label-caps text-primary mb-4">FALLA REPORTADA POR EL USUARIO</label>
+<textarea class="w-full bg-background border border-outline-variant rounded-lg p-4 text-body-md text-on-surface placeholder:text-on-surface-variant focus:ring-1 focus:ring-primary focus:border-primary resize-none" placeholder="Describa los síntomas reportados... Ej: Crujido en el eje de pedalier al hacer fuerza." rows="4"></textarea>
+</div>
+</div>
+</section>
+</div>
+<!-- Right Column (Action & Signature) -->
+<div class="col-span-12 lg:col-span-3 space-y-gutter">
+<section class="bg-surface-container industrial-border p-6 rounded-lg">
+<div class="flex items-center gap-2 mb-6">
+<span class="material-symbols-outlined text-primary">draw</span>
+<h2 class="font-label-caps text-label-caps text-on-surface">FIRMA DE RECEPCIÓN</h2>
+</div>
+<div class="mb-4">
+<div class="industrial-border bg-background rounded-lg p-1 mb-2">
+<canvas class="w-full h-48 bg-background rounded" height="192" id="signature-pad" width="300"></canvas>
+</div>
+<div class="flex justify-between items-center">
+<button class="text-[10px] font-label-caps text-on-surface-variant hover:text-error transition-colors flex items-center gap-1" id="clear-sig">
+<span class="material-symbols-outlined text-sm">delete</span>
+                                LIMPIAR FIRMA
+                            </button>
+<span class="text-[10px] font-label-caps text-on-surface-variant">VALIDACIÓN BIOMÉTRICA OFF</span>
+</div>
+</div>
+<div class="bg-surface-container-low p-4 border border-outline-variant rounded text-[11px] text-on-surface-variant leading-relaxed">
+<p class="mb-2">El cliente acepta el estado inicial registrado. El taller no se hace responsable por accesorios no declarados.</p>
+<p>Plazo estimado: 48-72 horas hábiles.</p>
+</div>
+</section>
+<section class="space-y-4">
+<button class="w-full py-4 bg-primary text-on-primary font-headline-sm text-headline-sm rounded-lg bevel-button shadow-lg shadow-black/20 hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-3">
+<span class="material-symbols-outlined">task_alt</span>
+                        FINALIZAR INGRESO
+                    </button>
+<button class="w-full py-3 bg-transparent border border-outline-variant text-on-surface font-label-caps text-label-caps rounded-lg hover:bg-surface-container transition-all flex items-center justify-center gap-2">
+<span class="material-symbols-outlined">print</span>
+                        IMPRIMIR TICKET
+                    </button>
+<button class="w-full py-3 bg-transparent border border-outline-variant text-on-surface font-label-caps text-label-caps rounded-lg hover:bg-surface-container transition-all flex items-center justify-center gap-2">
+<span class="material-symbols-outlined">mail</span>
+                        ENVIAR COPIA DIGITAL
+                    </button>
+</section>
+<!-- Workshop Floor Status (Quick Look) -->
+<div class="bg-surface-container-lowest industrial-border p-4 rounded-lg">
+<p class="font-label-caps text-[10px] text-on-surface-variant mb-3">TALLER STATUS</p>
+<div class="flex items-center gap-4">
+<div class="flex-1">
+<div class="flex justify-between mb-1">
+<span class="text-[10px] text-on-surface">CAPACIDAD</span>
+<span class="text-[10px] text-primary">82%</span>
+</div>
+<div class="h-1 bg-surface-variant rounded-full overflow-hidden">
+<div class="h-full bg-primary w-[82%]"></div>
+</div>
+</div>
+<div class="text-right">
+<p class="text-headline-sm font-bold text-on-surface">12</p>
+<p class="text-[8px] text-on-surface-variant uppercase">BICIS HOY</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Floating Action Button (Limited to Workshop Main screens) -->
+<button class="fixed bottom-10 right-10 w-16 h-16 bg-primary text-on-primary rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-[60] border-4 border-background">
+<span class="material-symbols-outlined text-3xl">add</span>
+</button>
+<script>
+        // Simple Signature Pad Logic
+        const canvas = document.getElementById('signature-pad');
+        const ctx = canvas.getContext('2d');
+        const clearBtn = document.getElementById('clear-sig');
+        let drawing = false;
+
+        function startDrawing(e) {
+            drawing = true;
+            draw(e);
+        }
+
+        function stopDrawing() {
+            drawing = false;
+            ctx.beginPath();
+        }
+
+        function draw(e) {
+            if (!drawing) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX || e.touches[0].clientX) - rect.left;
+            const y = (e.clientY || e.touches[0].clientY) - rect.top;
+
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = '#bfce7f'; // Primary color
+
+            ctx.lineTo(x, y);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+        }
+
+        canvas.addEventListener('mousedown', startDrawing);
+        canvas.addEventListener('mousemove', draw);
+        canvas.addEventListener('mouseup', stopDrawing);
+        canvas.addEventListener('mouseout', stopDrawing);
+
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            startDrawing(e);
+        });
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            draw(e);
+        });
+        canvas.addEventListener('touchend', stopDrawing);
+
+        clearBtn.addEventListener('click', () => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        });
+
+        // Responsive canvas adjustment
+        function resizeCanvas() {
+            const container = canvas.parentElement;
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // Micro-interactions for buttons
+        document.querySelectorAll('button').forEach(btn => {
+            btn.addEventListener('click', function() {
+                this.classList.add('scale-95');
+                setTimeout(() => this.classList.remove('scale-95'), 150);
+            });
+        });
+    </script>
+</body></html>

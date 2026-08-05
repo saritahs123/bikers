@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Bikers' Fort Core - Gestión de Orden de Trabajo</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "outline-variant": "#46483b",
+                    "on-primary-fixed-variant": "#3d4c05",
+                    "primary": "#bbcf7c",
+                    "on-primary": "#293500",
+                    "surface-container-low": "#1c1b1b",
+                    "surface-container-highest": "#353534",
+                    "tertiary-container": "#929090",
+                    "surface-tint": "#bbcf7c",
+                    "inverse-surface": "#e5e2e1",
+                    "surface-container-high": "#2a2a2a",
+                    "surface": "#131313",
+                    "on-secondary-container": "#b7b5b4",
+                    "tertiary-fixed": "#e4e2e1",
+                    "inverse-primary": "#54651e",
+                    "tertiary": "#c8c6c5",
+                    "on-primary-container": "#232e00",
+                    "surface-container": "#201f1f",
+                    "surface-container-lowest": "#0e0e0e",
+                    "on-tertiary-fixed-variant": "#474746",
+                    "inverse-on-surface": "#313030",
+                    "secondary-container": "#474746",
+                    "surface-bright": "#3a3939",
+                    "on-tertiary-fixed": "#1b1c1c",
+                    "on-primary-fixed": "#161e00",
+                    "surface-dim": "#131313",
+                    "primary-fixed": "#d7ec95",
+                    "primary-container": "#86984c",
+                    "on-secondary": "#313030",
+                    "surface-variant": "#353534",
+                    "on-tertiary-container": "#2a2a2a",
+                    "tertiary-fixed-dim": "#c8c6c5",
+                    "secondary-fixed": "#e5e2e1",
+                    "on-background": "#e5e2e1",
+                    "secondary": "#c8c6c5",
+                    "on-surface-variant": "#c6c8b6",
+                    "on-secondary-fixed-variant": "#474746",
+                    "error": "#ffb4ab",
+                    "error-container": "#93000a",
+                    "secondary-fixed-dim": "#c8c6c5",
+                    "primary-fixed-dim": "#bbcf7c",
+                    "on-error-container": "#ffdad6",
+                    "on-error": "#690005",
+                    "on-tertiary": "#303030",
+                    "background": "#131313",
+                    "on-surface": "#e5e2e1",
+                    "outline": "#909282",
+                    "on-secondary-fixed": "#1c1b1b"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "xs": "4px",
+                    "md": "16px",
+                    "base": "4px",
+                    "sm": "8px",
+                    "lg": "24px",
+                    "gutter": "24px",
+                    "container-max": "1440px",
+                    "xl": "40px"
+            },
+            "fontFamily": {
+                    "title-md": ["Inter"],
+                    "headline-lg": ["Inter"],
+                    "label-caps": ["JetBrains Mono"],
+                    "stats-number": ["Inter"],
+                    "display-lg": ["Inter"],
+                    "body-sm": ["Inter"],
+                    "body-lg": ["Inter"]
+            },
+            "fontSize": {
+                    "title-md": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                    "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "500"}],
+                    "stats-number": ["36px", {"lineHeight": "44px", "letterSpacing": "-0.03em", "fontWeight": "700"}],
+                    "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .inner-stroke {
+            box-shadow: inset 0 0 0 1px #262626;
+        }
+        .glow-olive {
+            box-shadow: 0 0 15px rgba(112, 130, 56, 0.15);
+        }
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0e0e0e;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #262626;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #353534;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body-lg">
+<!-- SIDE NAVIGATION SHELL -->
+<aside class="fixed left-0 top-0 h-screen w-64 flex flex-col py-lg bg-surface-container-lowest border-r border-outline-variant z-50">
+<div class="px-md mb-xl">
+<h1 class="font-headline-lg text-headline-lg font-bold text-on-surface">Bikers' Fort</h1>
+<p class="font-label-caps text-label-caps text-on-surface-variant opacity-70">Core Management</p>
+</div>
+<nav class="flex-1 space-y-1 px-sm">
+<div class="flex items-center gap-md px-md py-sm cursor-pointer transition-all duration-200 ease-in-out hover:bg-surface-container-low hover:text-on-surface text-on-surface-variant">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-caps text-label-caps">Dashboard</span>
+</div>
+<div class="flex items-center gap-md px-md py-sm cursor-pointer transition-all duration-200 ease-in-out hover:bg-surface-container-low hover:text-on-surface text-on-surface-variant">
+<span class="material-symbols-outlined">login</span>
+<span class="font-label-caps text-label-caps">Reception</span>
+</div>
+<div class="flex items-center gap-md px-md py-sm cursor-pointer transition-all duration-200 ease-in-out text-primary border-r-2 border-primary bg-primary-container/10">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">build</span>
+<span class="font-label-caps text-label-caps">Work Orders</span>
+</div>
+<div class="flex items-center gap-md px-md py-sm cursor-pointer transition-all duration-200 ease-in-out hover:bg-surface-container-low hover:text-on-surface text-on-surface-variant">
+<span class="material-symbols-outlined">inventory_2</span>
+<span class="font-label-caps text-label-caps">Inventory</span>
+</div>
+<div class="flex items-center gap-md px-md py-sm cursor-pointer transition-all duration-200 ease-in-out hover:bg-surface-container-low hover:text-on-surface text-on-surface-variant">
+<span class="material-symbols-outlined">group</span>
+<span class="font-label-caps text-label-caps">Customers</span>
+</div>
+<div class="flex items-center gap-md px-md py-sm cursor-pointer transition-all duration-200 ease-in-out hover:bg-surface-container-low hover:text-on-surface text-on-surface-variant">
+<span class="material-symbols-outlined">analytics</span>
+<span class="font-label-caps text-label-caps">Reports</span>
+</div>
+</nav>
+<div class="px-md mt-auto space-y-4">
+<button class="w-full bg-primary text-on-primary font-bold py-md rounded transition-opacity active:opacity-80">
+                New Work Order
+            </button>
+<div class="pt-lg border-t border-outline-variant space-y-1">
+<div class="flex items-center gap-md px-md py-sm cursor-pointer transition-all duration-200 ease-in-out hover:bg-surface-container-low hover:text-on-surface text-on-surface-variant">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-label-caps text-label-caps">Settings</span>
+</div>
+<div class="flex items-center gap-md px-md py-sm cursor-pointer transition-all duration-200 ease-in-out hover:bg-surface-container-low hover:text-on-surface text-on-surface-variant">
+<span class="material-symbols-outlined">help</span>
+<span class="font-label-caps text-label-caps">Support</span>
+</div>
+</div>
+</div>
+</aside>
+<!-- MAIN CONTENT CANVAS -->
+<main class="ml-64 flex flex-col min-h-screen">
+<!-- TOP NAVIGATION SHELL -->
+<header class="w-full h-16 flex justify-between items-center px-gutter bg-surface border-b border-outline-variant sticky top-0 z-40">
+<div class="flex items-center gap-md">
+<span class="font-title-md text-title-md font-bold text-primary">Bikers' Fort Core</span>
+<div class="h-4 w-px bg-outline-variant mx-sm"></div>
+<div class="flex items-center gap-sm bg-surface-container-high px-md py-xs rounded inner-stroke">
+<span class="material-symbols-outlined text-on-surface-variant text-sm">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-body-sm w-48 text-on-surface" placeholder="Buscar OT, cliente..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-lg">
+<div class="flex gap-md text-on-surface-variant">
+<span class="material-symbols-outlined cursor-pointer hover:text-primary transition-colors">notifications</span>
+<span class="material-symbols-outlined cursor-pointer hover:text-primary transition-colors">settings</span>
+</div>
+<div class="flex items-center gap-sm">
+<div class="text-right">
+<p class="text-body-sm font-bold">Carlos M.</p>
+<p class="text-[10px] font-label-caps uppercase text-on-surface-variant">Senior Mechanic</p>
+</div>
+<img class="w-10 h-10 rounded-full border border-outline-variant object-cover" data-alt="A professional close-up portrait of a skilled bicycle mechanic with a short beard, wearing a dark work apron and a focused expression. High-contrast industrial lighting with warm highlights against a dark, moody bicycle workshop background, emphasizing technical expertise and attention to detail." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCmoMb84FZVdqTox1klIlStfUj0YEYty0oj6QbsEvMfM-GV_90SCAC-f6PA92vI_eMxGJ6AInRFxD5CyUkw7dsCcZxlsvH-4Q95Fl0yK0RG3CwflZDmxwSPKoacuFZ1hFvxxD2UVq-OomHB6RGBKlmKZ-3urS5W9XG9vJCfOKaVUg52a5b_4PRNaaTS9QZfsxh_ziQrXgQR4I3Rg6PTacGO7h-j1rACj4CpPi35VM5zSi9CCzMyBeNr99Ry9slGuspxU3ZEVryuxhwK"/>
+</div>
+</div>
+</header>
+<!-- DASHBOARD BODY -->
+<div class="p-xl flex-1 max-w-container-max mx-auto w-full">
+<!-- HEADER / STATS BAR -->
+<div class="flex flex-col md:flex-row justify-between items-start md:items-end mb-xl gap-lg">
+<div>
+<div class="flex items-center gap-sm mb-xs">
+<span class="px-md py-xs bg-primary/10 text-primary font-label-caps text-label-caps rounded border border-primary/20">TRABAJO ACTIVO</span>
+<span class="text-on-surface-variant font-label-caps text-label-caps">Iniciada: 14:30 PM</span>
+</div>
+<h2 class="font-headline-lg text-headline-lg text-on-surface">Orden de Trabajo #OT-4502</h2>
+<p class="text-on-surface-variant">Specialized S-Works Tarmac SL7 — Mantenimiento General</p>
+</div>
+<div class="grid grid-cols-2 gap-xl">
+<div class="text-right">
+<p class="font-label-caps text-label-caps text-on-surface-variant mb-xs">ESTADO</p>
+<div class="flex items-center justify-end gap-sm">
+<div class="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
+<span class="font-title-md text-title-md text-primary">En Proceso</span>
+</div>
+</div>
+<div class="text-right border-l border-outline-variant pl-xl">
+<p class="font-label-caps text-label-caps text-on-surface-variant mb-xs">TIEMPO TRANSCURRIDO</p>
+<span class="font-stats-number text-stats-number font-bold text-on-surface">01:42:15</span>
+</div>
+</div>
+</div>
+<!-- BENTO GRID CONTENT -->
+<div class="grid grid-cols-12 gap-lg">
+<!-- COLUMN LEFT: Details and Checklist -->
+<div class="col-span-12 lg:col-span-8 space-y-lg">
+<!-- Section 1: Technical Details -->
+<div class="bg-surface-container rounded-lg inner-stroke p-lg">
+<div class="flex items-center gap-md mb-lg">
+<span class="material-symbols-outlined text-primary">info</span>
+<h3 class="font-title-md text-title-md">Detalles Técnicos</h3>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-xl">
+<div>
+<label class="font-label-caps text-label-caps text-on-surface-variant mb-sm block">DESCRIPCIÓN DEL PROBLEMA</label>
+<p class="text-body-lg text-on-surface leading-relaxed">
+                                    Crujido persistente en la zona del pedalier bajo carga. El cliente reporta que el cambio trasero no está sincronizando correctamente en los piñones centrales (4-5-6).
+                                </p>
+</div>
+<div class="bg-surface-container-low rounded p-md border border-outline-variant/30">
+<label class="font-label-caps text-label-caps text-primary mb-sm block">NOTAS DEL CLIENTE</label>
+<p class="text-body-sm italic text-on-surface-variant">
+                                    "Por favor, revisad también el desgaste de las pastillas delanteras. Siento que han perdido mordiente en bajadas largas."
+                                </p>
+</div>
+</div>
+</div>
+<!-- Section 2: Tasks Checklist -->
+<div class="bg-surface-container rounded-lg inner-stroke p-lg">
+<div class="flex justify-between items-center mb-lg">
+<div class="flex items-center gap-md">
+<span class="material-symbols-outlined text-primary">checklist</span>
+<h3 class="font-title-md text-title-md">Lista de Tareas</h3>
+</div>
+<span class="font-label-caps text-label-caps text-on-surface-variant">4 / 7 COMPLETADAS</span>
+</div>
+<div class="space-y-sm">
+<div class="flex items-center justify-between p-md bg-surface-container-high rounded border border-outline-variant/20 hover:border-primary/50 transition-colors group cursor-pointer">
+<div class="flex items-center gap-md">
+<div class="w-6 h-6 rounded border-2 border-primary bg-primary/20 flex items-center justify-center">
+<span class="material-symbols-outlined text-on-primary text-sm font-bold">check</span>
+</div>
+<span class="line-through text-on-surface-variant">Limpieza profunda de transmisión</span>
+</div>
+<span class="font-label-caps text-label-caps text-primary">Listo</span>
+</div>
+<div class="flex items-center justify-between p-md bg-surface-container-high rounded border border-outline-variant/20 hover:border-primary/50 transition-colors group cursor-pointer">
+<div class="flex items-center gap-md">
+<div class="w-6 h-6 rounded border-2 border-primary bg-primary/20 flex items-center justify-center">
+<span class="material-symbols-outlined text-on-primary text-sm font-bold">check</span>
+</div>
+<span class="line-through text-on-surface-variant">Desmontaje y engrase de pedalier</span>
+</div>
+<span class="font-label-caps text-label-caps text-primary">Listo</span>
+</div>
+<div class="flex items-center justify-between p-md bg-surface-container-low rounded border border-outline-variant group cursor-pointer">
+<div class="flex items-center gap-md">
+<div class="w-6 h-6 rounded border-2 border-outline-variant bg-transparent flex items-center justify-center group-hover:border-primary transition-colors"></div>
+<span class="text-on-surface">Ajuste y sincronización de desviador</span>
+</div>
+<span class="font-label-caps text-label-caps text-on-surface-variant">Pendiente</span>
+</div>
+<div class="flex items-center justify-between p-md bg-surface-container-low rounded border border-outline-variant group cursor-pointer">
+<div class="flex items-center gap-md">
+<div class="w-6 h-6 rounded border-2 border-outline-variant bg-transparent flex items-center justify-center group-hover:border-primary transition-colors"></div>
+<span class="text-on-surface">Revisión y purgado de frenos</span>
+</div>
+<span class="font-label-caps text-label-caps text-on-surface-variant">Pendiente</span>
+</div>
+<div class="flex items-center justify-between p-md bg-surface-container-low rounded border border-outline-variant group cursor-pointer">
+<div class="flex items-center gap-md">
+<div class="w-6 h-6 rounded border-2 border-outline-variant bg-transparent flex items-center justify-center group-hover:border-primary transition-colors"></div>
+<span class="text-on-surface">Centrado de rueda trasera</span>
+</div>
+<span class="font-label-caps text-label-caps text-on-surface-variant">Pendiente</span>
+</div>
+</div>
+<button class="mt-lg flex items-center gap-sm text-primary font-label-caps text-label-caps hover:opacity-80 transition-opacity">
+<span class="material-symbols-outlined text-sm">add</span> AÑADIR TAREA PERSONALIZADA
+                        </button>
+</div>
+<!-- Section 3: Tech Notes -->
+<div class="bg-surface-container rounded-lg inner-stroke p-lg">
+<div class="flex items-center gap-md mb-lg">
+<span class="material-symbols-outlined text-primary">history_edu</span>
+<h3 class="font-title-md text-title-md">Registro de Notas Técnicas</h3>
+</div>
+<div class="space-y-md">
+<textarea class="w-full bg-surface-container-lowest border border-outline-variant rounded p-md text-on-surface focus:ring-1 focus:ring-primary focus:border-primary min-h-[120px]" placeholder="Escribe aquí tus observaciones técnicas sobre la reparación..."></textarea>
+<div class="flex justify-between items-center">
+<div class="flex gap-md">
+<button class="flex items-center gap-xs px-md py-sm bg-surface-container-high border border-outline-variant rounded hover:bg-surface-container-highest transition-colors">
+<span class="material-symbols-outlined text-sm">photo_camera</span>
+<span class="font-label-caps text-label-caps">ADJUNTAR FOTO</span>
+</button>
+<button class="flex items-center gap-xs px-md py-sm bg-surface-container-high border border-outline-variant rounded hover:bg-surface-container-highest transition-colors">
+<span class="material-symbols-outlined text-sm">mic</span>
+<span class="font-label-caps text-label-caps">Voz</span>
+</button>
+</div>
+<button class="px-lg py-sm bg-outline-variant text-on-surface font-label-caps text-label-caps rounded hover:bg-on-tertiary-fixed-variant transition-colors">
+                                    GUARDAR NOTA
+                                </button>
+</div>
+</div>
+</div>
+</div>
+<!-- COLUMN RIGHT: Inventory and Actions -->
+<div class="col-span-12 lg:col-span-4 space-y-lg">
+<!-- Section 4: Spare Parts Table -->
+<div class="bg-surface-container rounded-lg inner-stroke p-lg">
+<div class="flex items-center justify-between mb-lg">
+<div class="flex items-center gap-md">
+<span class="material-symbols-outlined text-primary">data_check</span>
+<h3 class="font-title-md text-title-md">Repuestos</h3>
+</div>
+<button class="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center hover:bg-primary/30 transition-colors">
+<span class="material-symbols-outlined text-md">add</span>
+</button>
+</div>
+<div class="overflow-hidden border border-outline-variant rounded">
+<table class="w-full text-left border-collapse">
+<thead class="bg-surface-container-high">
+<tr>
+<th class="p-sm font-label-caps text-label-caps text-on-surface-variant">PIEZA</th>
+<th class="p-sm font-label-caps text-label-caps text-on-surface-variant">CANT</th>
+<th class="p-sm font-label-caps text-label-caps text-on-surface-variant"></th>
+</tr>
+</thead>
+<tbody class="text-body-sm">
+<tr class="border-t border-outline-variant/30">
+<td class="p-sm">
+<p class="font-medium">Cadena Shimano Ultegra 12v</p>
+<p class="text-[10px] font-label-caps text-on-surface-variant">SKU: CH-88922</p>
+</td>
+<td class="p-sm font-mono">1</td>
+<td class="p-sm text-right">
+<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-error transition-colors">delete</span>
+</td>
+</tr>
+<tr class="border-t border-outline-variant/30">
+<td class="p-sm">
+<p class="font-medium">Pastillas Galfer Road</p>
+<p class="text-[10px] font-label-caps text-on-surface-variant">SKU: BP-021</p>
+</td>
+<td class="p-sm font-mono">2</td>
+<td class="p-sm text-right">
+<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-error transition-colors">delete</span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="mt-md pt-md border-t border-outline-variant flex justify-between">
+<span class="font-label-caps text-label-caps text-on-surface-variant">TOTAL ESTIMADO</span>
+<span class="font-mono font-bold text-primary">€84.50</span>
+</div>
+</div>
+<!-- ACTION BUTTONS -->
+<div class="space-y-md">
+<button class="w-full bg-primary text-on-primary font-bold py-lg rounded-lg glow-olive flex items-center justify-center gap-md transition-transform active:scale-[0.98]">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">task_alt</span>
+                            COMPLETAR TRABAJO
+                        </button>
+<div class="grid grid-cols-2 gap-md">
+<button class="flex flex-col items-center justify-center gap-sm bg-surface-container-high border border-outline-variant py-lg rounded-lg hover:bg-surface-container-highest transition-colors">
+<span class="material-symbols-outlined">pause_circle</span>
+<span class="font-label-caps text-label-caps">Pausar</span>
+</button>
+<button class="flex flex-col items-center justify-center gap-sm bg-surface-container-high border border-outline-variant py-lg rounded-lg hover:bg-surface-container-highest transition-colors">
+<span class="material-symbols-outlined text-secondary">hourglass_top</span>
+<span class="font-label-caps text-label-caps">Esperando Repuesto</span>
+</button>
+</div>
+<button class="w-full bg-transparent border border-error text-error font-label-caps text-label-caps py-md rounded-lg hover:bg-error/10 transition-colors">
+                            CANCELAR / NOTIFICAR ERROR
+                        </button>
+</div>
+<!-- Progress Bar (Mini) -->
+<div class="bg-surface-container rounded-lg inner-stroke p-lg">
+<div class="flex justify-between items-center mb-sm">
+<span class="font-label-caps text-label-caps text-on-surface-variant">Progreso de OT</span>
+<span class="font-mono text-sm text-primary">57%</span>
+</div>
+<div class="w-full bg-surface-container-lowest h-1 rounded-full overflow-hidden">
+<div class="bg-primary h-full transition-all duration-700" style="width: 57%;"></div>
+</div>
+</div>
+<!-- Quick Access Info -->
+<div class="bg-surface-container-lowest rounded-lg border border-outline-variant/30 p-lg">
+<label class="font-label-caps text-label-caps text-on-surface-variant mb-md block">HISTORIAL DE LA BICICLETA</label>
+<div class="space-y-md">
+<div class="flex gap-md">
+<div class="w-8 h-8 rounded bg-surface-container-high flex items-center justify-center">
+<span class="material-symbols-outlined text-sm">calendar_month</span>
+</div>
+<div>
+<p class="text-body-sm font-bold">Ult. Revisión: 12/03/23</p>
+<p class="text-[10px] text-on-surface-variant">Cambio de cubiertas y tubeless.</p>
+</div>
+</div>
+<div class="flex gap-md">
+<div class="w-8 h-8 rounded bg-surface-container-high flex items-center justify-center">
+<span class="material-symbols-outlined text-sm">warning</span>
+</div>
+<div>
+<p class="text-body-sm font-bold text-error">Alerta de Fatiga</p>
+<p class="text-[10px] text-on-surface-variant">Cuadro de carbono inspeccionado hace 6 meses.</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- FLOATING CHIP (Visual Feedback Only) -->
+<div class="fixed bottom-lg right-lg bg-surface-container-highest border border-primary px-lg py-md rounded shadow-2xl z-[60] flex items-center gap-md opacity-0 translate-y-10 transition-all duration-300" id="status-toast">
+<span class="material-symbols-outlined text-primary">save</span>
+<span class="font-label-caps text-label-caps">Progreso guardado automáticamente</span>
+</div>
+<script>
+        // Micro-interaction: Auto-save simulator
+        setInterval(() => {
+            const toast = document.getElementById('status-toast');
+            toast.classList.remove('opacity-0', 'translate-y-10');
+            toast.classList.add('opacity-100', 'translate-y-0');
+            
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-10');
+                toast.classList.remove('opacity-100', 'translate-y-0');
+            }, 3000);
+        }, 30000);
+
+        // Task toggle interaction
+        document.querySelectorAll('.group.cursor-pointer').forEach(item => {
+            item.addEventListener('click', function() {
+                const checkDiv = this.querySelector('.border-2');
+                const text = this.querySelector('span:not(.material-symbols-outlined)');
+                const status = this.querySelector('.font-label-caps');
+                
+                if (status.innerText === 'Pendiente') {
+                    checkDiv.classList.remove('border-outline-variant', 'bg-transparent');
+                    checkDiv.classList.add('border-primary', 'bg-primary/20');
+                    checkDiv.innerHTML = '<span class="material-symbols-outlined text-on-primary text-sm font-bold">check</span>';
+                    text.classList.add('line-through', 'text-on-surface-variant');
+                    status.innerText = 'Listo';
+                    status.classList.remove('text-on-surface-variant');
+                    status.classList.add('text-primary');
+                } else {
+                    checkDiv.classList.add('border-outline-variant', 'bg-transparent');
+                    checkDiv.classList.remove('border-primary', 'bg-primary/20');
+                    checkDiv.innerHTML = '';
+                    text.classList.remove('line-through', 'text-on-surface-variant');
+                    status.innerText = 'Pendiente';
+                    status.classList.add('text-on-surface-variant');
+                    status.classList.remove('text-primary');
+                }
+            });
+        });
+    </script>
+</body></html>

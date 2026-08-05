@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Biker's Fort Core - Master Catalog</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800&amp;family=JetBrains+Mono:wght@600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind Configuration -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "secondary-fixed-dim": "#c3c6d0",
+                    "on-tertiary-container": "#202a3a",
+                    "on-secondary-container": "#b2b5be",
+                    "primary-fixed": "#dbea98",
+                    "tertiary": "#bdc7dc",
+                    "surface-container": "#1f201a",
+                    "on-surface-variant": "#c7c8b7",
+                    "on-primary-fixed": "#181e00",
+                    "inverse-surface": "#e4e3d9",
+                    "primary-container": "#89974f",
+                    "on-tertiary-fixed-variant": "#3d4759",
+                    "on-primary": "#2b3400",
+                    "on-primary-container": "#252d00",
+                    "error-container": "#93000a",
+                    "surface-bright": "#393a33",
+                    "secondary": "#c3c6d0",
+                    "outline": "#919282",
+                    "on-tertiary": "#273141",
+                    "tertiary-container": "#8791a5",
+                    "outline-variant": "#46483b",
+                    "secondary-fixed": "#dfe2ec",
+                    "primary-fixed-dim": "#bfce7f",
+                    "on-secondary": "#2d3138",
+                    "on-primary-fixed-variant": "#404c0a",
+                    "surface": "#13140f",
+                    "inverse-on-surface": "#30312b",
+                    "surface-container-low": "#1b1c17",
+                    "error": "#ffb4ab",
+                    "tertiary-fixed-dim": "#bdc7dc",
+                    "surface-container-lowest": "#0e0f0a",
+                    "surface-tint": "#bfce7f",
+                    "on-secondary-fixed": "#181c23",
+                    "on-background": "#e4e3d9",
+                    "surface-container-highest": "#35352f",
+                    "primary": "#bfce7f",
+                    "on-error": "#690005",
+                    "background": "#13140f",
+                    "surface-dim": "#13140f",
+                    "surface-container-high": "#2a2a24",
+                    "secondary-container": "#43474f",
+                    "on-surface": "#e4e3d9",
+                    "on-secondary-fixed-variant": "#43474f",
+                    "inverse-primary": "#576421",
+                    "on-error-container": "#ffdad6",
+                    "tertiary-fixed": "#d9e3f9",
+                    "on-tertiary-fixed": "#121c2c",
+                    "surface-variant": "#35352f"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "spacing": {
+                    "gutter": "24px",
+                    "unit": "4px",
+                    "margin-desktop": "40px",
+                    "container-max": "1440px",
+                    "margin-mobile": "16px"
+            },
+            "fontFamily": {
+                    "headline-md": ["Hanken Grotesk"],
+                    "body-sm": ["Hanken Grotesk"],
+                    "body-md": ["Hanken Grotesk"],
+                    "headline-sm": ["Hanken Grotesk"],
+                    "body-lg": ["Hanken Grotesk"],
+                    "label-caps": ["JetBrains Mono"],
+                    "headline-lg": ["Hanken Grotesk"],
+                    "headline-lg-mobile": ["Hanken Grotesk"]
+            },
+            "fontSize": {
+                    "headline-md": ["32px", {"lineHeight": "1.2", "fontWeight": "700"}],
+                    "body-sm": ["14px", {"lineHeight": "1.4", "fontWeight": "400"}],
+                    "body-md": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                    "headline-sm": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                    "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                    "label-caps": ["12px", {"lineHeight": "1", "letterSpacing": "0.1em", "fontWeight": "600"}],
+                    "headline-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "800"}],
+                    "headline-lg-mobile": ["32px", {"lineHeight": "1.2", "fontWeight": "800"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            background-color: #0a0c10;
+            background-image: 
+                radial-gradient(circle at 2px 2px, rgba(45, 55, 72, 0.15) 1px, transparent 0);
+            background-size: 32px 32px;
+            color: #e4e3d9;
+        }
+        .industrial-border {
+            border: 1px solid #2d3748;
+        }
+        .industrial-card {
+            background-color: #161a21;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .industrial-card:hover {
+            border-color: #4a5568;
+            transform: translateY(-2px);
+            box-shadow: 4px 4px 0px rgba(0,0,0,0.5);
+        }
+        .segmented-progress {
+            background: repeating-linear-gradient(
+                90deg,
+                transparent,
+                transparent 4px,
+                #13140f 4px,
+                #13140f 6px
+            );
+        }
+        .btn-industrial {
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+    </style>
+</head>
+<body class="font-body-md overflow-x-hidden">
+<!-- Sidebar Navigation -->
+<aside class="w-64 h-screen fixed left-0 top-0 bg-surface-container dark:bg-surface-container border-r border-outline-variant dark:border-outline-variant flex flex-col py-6 z-50">
+<div class="px-6 mb-10">
+<h1 class="font-headline-sm text-headline-sm text-on-surface">Master Catalog</h1>
+<p class="font-label-caps text-label-caps text-on-surface-variant opacity-70">System Administration</p>
+</div>
+<nav class="flex-1 space-y-1">
+<a class="text-primary border-r-4 border-primary bg-surface-container-high px-4 py-3 flex items-center gap-3 active:translate-x-1 transition-transform" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">dashboard</span>
+<span class="font-body-md text-body-md">Dashboard</span>
+</a>
+<a class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest px-4 py-3 flex items-center gap-3 transition-all active:translate-x-1" href="#">
+<span class="material-symbols-outlined">domain</span>
+<span class="font-body-md text-body-md">Empresas</span>
+</a>
+<a class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest px-4 py-3 flex items-center gap-3 transition-all active:translate-x-1" href="#">
+<span class="material-symbols-outlined">category</span>
+<span class="font-body-md text-body-md">Tipos de Empresa</span>
+</a>
+<a class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest px-4 py-3 flex items-center gap-3 transition-all active:translate-x-1" href="#">
+<span class="material-symbols-outlined">group</span>
+<span class="font-body-md text-body-md">Usuarios</span>
+</a>
+<a class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest px-4 py-3 flex items-center gap-3 transition-all active:translate-x-1" href="#">
+<span class="material-symbols-outlined">corporate_fare</span>
+<span class="font-body-md text-body-md">Departamentos</span>
+</a>
+<a class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest px-4 py-3 flex items-center gap-3 transition-all active:translate-x-1" href="#">
+<span class="material-symbols-outlined">schema</span>
+<span class="font-body-md text-body-md">Áreas</span>
+</a>
+<a class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest px-4 py-3 flex items-center gap-3 transition-all active:translate-x-1" href="#">
+<span class="material-symbols-outlined">badge</span>
+<span class="font-body-md text-body-md">Cargos</span>
+</a>
+</nav>
+<div class="px-4 mt-auto border-t border-outline-variant pt-6">
+<a class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest px-4 py-3 flex items-center gap-3 transition-all" href="#">
+<span class="material-symbols-outlined">support_agent</span>
+<span class="font-body-md text-body-md">Support</span>
+</a>
+<a class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest px-4 py-3 flex items-center gap-3 transition-all" href="#">
+<span class="material-symbols-outlined">logout</span>
+<span class="font-body-md text-body-md">Logout</span>
+</a>
+</div>
+</aside>
+<!-- Top App Bar -->
+<header class="w-full top-0 sticky z-40 bg-surface dark:bg-surface border-b border-outline-variant dark:border-outline-variant flex justify-between items-center h-16 px-gutter ml-0 pl-64">
+<div class="flex items-center gap-4">
+<span class="font-headline-md text-headline-md font-bold text-primary dark:text-primary">Biker's Fort Core</span>
+</div>
+<div class="flex items-center gap-6">
+<div class="relative group">
+<input class="bg-surface-container-lowest border border-outline-variant text-on-surface text-body-sm px-4 py-2 w-64 focus:ring-1 focus:ring-primary focus:border-primary outline-none transition-all" placeholder="Search catalogs..." type="text"/>
+<span class="material-symbols-outlined absolute right-3 top-2 text-on-surface-variant">search</span>
+</div>
+<div class="flex items-center gap-3">
+<button class="material-symbols-outlined text-primary hover:bg-surface-container-high p-2 transition-colors cursor-pointer active:scale-95">notifications</button>
+<button class="material-symbols-outlined text-primary hover:bg-surface-container-high p-2 transition-colors cursor-pointer active:scale-95">settings</button>
+<div class="w-8 h-8 industrial-border rounded-full bg-surface-container-high flex items-center justify-center overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A professional headshot of a workshop administrator wearing technical gear, lit with dramatic rim lighting against a blurred dark industrial background. The aesthetic matches the charcoal and olive theme of the application." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBTvZ-fnDL2kuMicLScAtzM2GLuODMwZHCr8wl46C0aAUH9l5UQqHQxlYAGM0UKfiCjDDtvxx1jvK0XZAmJ19YRJ3Sorcas6Oncfr-xZOk3Sq7F9Ipehvt8OybfauOUOuOKk68vuL0Ft_3OHLKFcLyjNQDPFcwuXeGu7D6SQsuB0oQAVtV_mp4iEFQYbdkxqexSiqFi_PJm_K3oLpVkE5eYE3gffDNKlc96UarlltZMFBUpKk6kHOvT"/>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Content -->
+<main class="ml-64 p-margin-desktop max-w-container-max mx-auto">
+<!-- Welcome Hero Section -->
+<section class="mb-12 relative overflow-hidden industrial-border p-8 bg-surface-container-low">
+<div class="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+<span class="material-symbols-outlined text-[120px]">precision_manufacturing</span>
+</div>
+<div class="relative z-10">
+<h2 class="font-headline-lg text-headline-lg mb-2">Panel de Control de Catálogos</h2>
+<p class="font-body-lg text-body-lg text-on-surface-variant max-w-2xl">Gestione la arquitectura organizacional y operativa de Biker's Fort. Configure entidades, estructuras jerárquicas y roles maestros con precisión industrial.</p>
+<div class="mt-6 flex gap-4">
+<div class="flex flex-col">
+<span class="font-label-caps text-label-caps text-primary">STATUS DEL SISTEMA</span>
+<div class="flex items-center gap-2 mt-1">
+<div class="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
+<span class="font-body-sm text-body-sm text-on-surface">Operacional</span>
+</div>
+</div>
+<div class="w-px h-10 bg-outline-variant mx-4"></div>
+<div class="flex flex-col">
+<span class="font-label-caps text-label-caps text-primary">ÚLTIMO RESPALDO</span>
+<span class="font-body-sm text-body-sm text-on-surface mt-1">Hace 14 minutos</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Catalog Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+<!-- Card: Empresas -->
+<div class="industrial-card industrial-border p-6 flex flex-col">
+<div class="flex justify-between items-start mb-6">
+<div class="w-12 h-12 bg-surface-container-highest industrial-border flex items-center justify-center">
+<span class="material-symbols-outlined text-primary text-3xl">domain</span>
+</div>
+<span class="font-label-caps text-label-caps px-2 py-1 bg-primary-container text-on-primary-container">ACTIVO</span>
+</div>
+<h3 class="font-headline-sm text-headline-sm mb-1">Empresas</h3>
+<p class="text-on-surface-variant text-body-sm mb-6">Gestión de sucursales y filiales operativas de la corporación.</p>
+<div class="mt-auto">
+<div class="flex justify-between items-end mb-2">
+<span class="font-label-caps text-label-caps text-on-surface-variant">REGISTROS</span>
+<span class="font-headline-sm text-headline-sm text-on-surface">24</span>
+</div>
+<div class="w-full h-1 bg-surface-container-highest relative overflow-hidden mb-6">
+<div class="absolute left-0 top-0 h-full bg-primary segmented-progress" style="width: 75%"></div>
+</div>
+<button class="btn-industrial w-full bg-primary text-on-primary font-label-caps py-3 hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+                        ADMINISTRAR <span class="material-symbols-outlined text-sm">arrow_forward</span>
+</button>
+</div>
+</div>
+<!-- Card: Tipos de Empresa -->
+<div class="industrial-card industrial-border p-6 flex flex-col">
+<div class="flex justify-between items-start mb-6">
+<div class="w-12 h-12 bg-surface-container-highest industrial-border flex items-center justify-center">
+<span class="material-symbols-outlined text-primary text-3xl">category</span>
+</div>
+</div>
+<h3 class="font-headline-sm text-headline-sm mb-1">Tipos de Empresa</h3>
+<p class="text-on-surface-variant text-body-sm mb-6">Clasificación por sector, tamaño y estructura legal.</p>
+<div class="mt-auto">
+<div class="flex justify-between items-end mb-2">
+<span class="font-label-caps text-label-caps text-on-surface-variant">REGISTROS</span>
+<span class="font-headline-sm text-headline-sm text-on-surface">8</span>
+</div>
+<div class="w-full h-1 bg-surface-container-highest relative overflow-hidden mb-6">
+<div class="absolute left-0 top-0 h-full bg-primary segmented-progress" style="width: 40%"></div>
+</div>
+<button class="btn-industrial w-full bg-primary text-on-primary font-label-caps py-3 hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+                        ADMINISTRAR <span class="material-symbols-outlined text-sm">arrow_forward</span>
+</button>
+</div>
+</div>
+<!-- Card: Tipos de Usuario -->
+<div class="industrial-card industrial-border p-6 flex flex-col">
+<div class="flex justify-between items-start mb-6">
+<div class="w-12 h-12 bg-surface-container-highest industrial-border flex items-center justify-center">
+<span class="material-symbols-outlined text-primary text-3xl">group</span>
+</div>
+</div>
+<h3 class="font-headline-sm text-headline-sm mb-1">Tipos de Usuario</h3>
+<p class="text-on-surface-variant text-body-sm mb-6">Definición de perfiles de acceso y permisos base.</p>
+<div class="mt-auto">
+<div class="flex justify-between items-end mb-2">
+<span class="font-label-caps text-label-caps text-on-surface-variant">REGISTROS</span>
+<span class="font-headline-sm text-headline-sm text-on-surface">12</span>
+</div>
+<div class="w-full h-1 bg-surface-container-highest relative overflow-hidden mb-6">
+<div class="absolute left-0 top-0 h-full bg-primary segmented-progress" style="width: 60%"></div>
+</div>
+<button class="btn-industrial w-full bg-primary text-on-primary font-label-caps py-3 hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+                        ADMINISTRAR <span class="material-symbols-outlined text-sm">arrow_forward</span>
+</button>
+</div>
+</div>
+<!-- Card: Departamentos -->
+<div class="industrial-card industrial-border p-6 flex flex-col">
+<div class="flex justify-between items-start mb-6">
+<div class="w-12 h-12 bg-surface-container-highest industrial-border flex items-center justify-center">
+<span class="material-symbols-outlined text-primary text-3xl">corporate_fare</span>
+</div>
+</div>
+<h3 class="font-headline-sm text-headline-sm mb-1">Departamentos</h3>
+<p class="text-on-surface-variant text-body-sm mb-6">Unidades funcionales superiores del organigrama.</p>
+<div class="mt-auto">
+<div class="flex justify-between items-end mb-2">
+<span class="font-label-caps text-label-caps text-on-surface-variant">REGISTROS</span>
+<span class="font-headline-sm text-headline-sm text-on-surface">15</span>
+</div>
+<div class="w-full h-1 bg-surface-container-highest relative overflow-hidden mb-6">
+<div class="absolute left-0 top-0 h-full bg-primary segmented-progress" style="width: 50%"></div>
+</div>
+<button class="btn-industrial w-full bg-primary text-on-primary font-label-caps py-3 hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+                        ADMINISTRAR <span class="material-symbols-outlined text-sm">arrow_forward</span>
+</button>
+</div>
+</div>
+<!-- Card: Áreas -->
+<div class="industrial-card industrial-border p-6 flex flex-col">
+<div class="flex justify-between items-start mb-6">
+<div class="w-12 h-12 bg-surface-container-highest industrial-border flex items-center justify-center">
+<span class="material-symbols-outlined text-primary text-3xl">schema</span>
+</div>
+</div>
+<h3 class="font-headline-sm text-headline-sm mb-1">Áreas</h3>
+<p class="text-on-surface-variant text-body-sm mb-6">Sub-unidades operativas enfocadas en tareas específicas.</p>
+<div class="mt-auto">
+<div class="flex justify-between items-end mb-2">
+<span class="font-label-caps text-label-caps text-on-surface-variant">REGISTROS</span>
+<span class="font-headline-sm text-headline-sm text-on-surface">42</span>
+</div>
+<div class="w-full h-1 bg-surface-container-highest relative overflow-hidden mb-6">
+<div class="absolute left-0 top-0 h-full bg-primary segmented-progress" style="width: 85%"></div>
+</div>
+<button class="btn-industrial w-full bg-primary text-on-primary font-label-caps py-3 hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+                        ADMINISTRAR <span class="material-symbols-outlined text-sm">arrow_forward</span>
+</button>
+</div>
+</div>
+<!-- Card: Cargos -->
+<div class="industrial-card industrial-border p-6 flex flex-col">
+<div class="flex justify-between items-start mb-6">
+<div class="w-12 h-12 bg-surface-container-highest industrial-border flex items-center justify-center">
+<span class="material-symbols-outlined text-primary text-3xl">badge</span>
+</div>
+</div>
+<h3 class="font-headline-sm text-headline-sm mb-1">Cargos</h3>
+<p class="text-on-surface-variant text-body-sm mb-6">Definición de posiciones, responsabilidades y tabuladores.</p>
+<div class="mt-auto">
+<div class="flex justify-between items-end mb-2">
+<span class="font-label-caps text-label-caps text-on-surface-variant">REGISTROS</span>
+<span class="font-headline-sm text-headline-sm text-on-surface">56</span>
+</div>
+<div class="w-full h-1 bg-surface-container-highest relative overflow-hidden mb-6">
+<div class="absolute left-0 top-0 h-full bg-primary segmented-progress" style="width: 92%"></div>
+</div>
+<button class="btn-industrial w-full bg-primary text-on-primary font-label-caps py-3 hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+                        ADMINISTRAR <span class="material-symbols-outlined text-sm">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Technical List Section -->
+<section class="mt-12 industrial-border bg-surface-container-low overflow-hidden">
+<div class="px-6 py-4 border-b border-outline-variant flex justify-between items-center bg-surface-container">
+<h3 class="font-label-caps text-label-caps">ACTIVIDAD RECIENTE DE CATÁLOGOS</h3>
+<button class="text-primary text-body-sm flex items-center gap-1 hover:underline">
+                    Ver registro completo <span class="material-symbols-outlined text-xs">open_in_new</span>
+</button>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-high text-on-surface-variant font-label-caps text-[10px]">
+<th class="px-6 py-3 border-b border-outline-variant">FECHA / HORA</th>
+<th class="px-6 py-3 border-b border-outline-variant">USUARIO</th>
+<th class="px-6 py-3 border-b border-outline-variant">CATÁLOGO</th>
+<th class="px-6 py-3 border-b border-outline-variant">ACCIÓN</th>
+<th class="px-6 py-3 border-b border-outline-variant">ESTADO</th>
+</tr>
+</thead>
+<tbody class="text-body-sm">
+<tr class="hover:bg-surface-container-high transition-colors border-b border-outline-variant">
+<td class="px-6 py-4 font-label-caps text-xs">2023-10-24 14:22</td>
+<td class="px-6 py-4">Admin_Rodriguez</td>
+<td class="px-6 py-4">Empresas</td>
+<td class="px-6 py-4">Actualización: Sucursal Norte</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary-container/20 text-primary text-[10px] font-bold border border-primary/30">COMPLETADO</span>
+</td>
+</tr>
+<tr class="bg-surface-container-lowest/30 hover:bg-surface-container-high transition-colors border-b border-outline-variant">
+<td class="px-6 py-4 font-label-caps text-xs">2023-10-24 13:05</td>
+<td class="px-6 py-4">Sys_Auto_Task</td>
+<td class="px-6 py-4">Cargos</td>
+<td class="px-6 py-4">Sincronización masiva (12 items)</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary-container/20 text-primary text-[10px] font-bold border border-primary/30">COMPLETADO</span>
+</td>
+</tr>
+<tr class="hover:bg-surface-container-high transition-colors border-b border-outline-variant">
+<td class="px-6 py-4 font-label-caps text-xs">2023-10-24 11:45</td>
+<td class="px-6 py-4">User_Manager_HQ</td>
+<td class="px-6 py-4">Áreas</td>
+<td class="px-6 py-4">Nuevo registro: I+D Suspensión</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary-container/20 text-primary text-[10px] font-bold border border-primary/30">COMPLETADO</span>
+</td>
+</tr>
+<tr class="bg-surface-container-lowest/30 hover:bg-surface-container-high transition-colors">
+<td class="px-6 py-4 font-label-caps text-xs">2023-10-24 09:12</td>
+<td class="px-6 py-4">Admin_Rodriguez</td>
+<td class="px-6 py-4">Tipos de Empresa</td>
+<td class="px-6 py-4">Baja lógica: Consorcio Temporal</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-error-container/20 text-error text-[10px] font-bold border border-error/30">REVERTIDO</span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+</main>
+<!-- Visual Polish: Noise/Grid Overlay -->
+<div class="fixed inset-0 pointer-events-none opacity-[0.03] z-[100]" style="background-image: url('https://www.transparenttextures.com/patterns/carbon-fibre.png')"></div>
+<script>
+        // Micro-interactions
+        document.querySelectorAll('.industrial-card').forEach(card => {
+            card.addEventListener('mouseenter', () => {
+                const icon = card.querySelector('.material-symbols-outlined');
+                icon.style.transform = 'scale(1.1) rotate(5deg)';
+                icon.style.transition = 'transform 0.3s ease';
+            });
+            card.addEventListener('mouseleave', () => {
+                const icon = card.querySelector('.material-symbols-outlined');
+                icon.style.transform = 'scale(1) rotate(0deg)';
+            });
+        });
+    </script>
+</body></html>

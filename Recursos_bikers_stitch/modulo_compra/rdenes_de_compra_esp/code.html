@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        body {
+            font-family: 'Hanken Grotesk', sans-serif;
+            background-color: #13140f;
+            color: #e4e3d9;
+            margin: 0;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        /* Custom scrollbar for industrial feel */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #13140f; }
+        ::-webkit-scrollbar-thumb { background: #46483b; border-radius: 2px; }
+        ::-webkit-scrollbar-thumb:hover { background: #bfce7f; }
+
+        /* Technical Grid Pattern Overlay */
+        .tech-grid {
+            background-image: radial-gradient(#2d3748 0.5px, transparent 0.5px);
+            background-size: 24px 24px;
+            opacity: 0.05;
+        }
+        
+        .industrial-border {
+            border: 1px solid #46483b;
+        }
+
+        .bevel-button {
+            box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.2);
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "surface": "#13140f",
+                      "inverse-on-surface": "#30312b",
+                      "on-tertiary-container": "#202a3a",
+                      "tertiary-fixed": "#d9e3f9",
+                      "on-secondary-fixed": "#181c23",
+                      "background": "#13140f",
+                      "on-secondary-container": "#b2b5be",
+                      "on-secondary": "#2d3138",
+                      "inverse-surface": "#e4e3d9",
+                      "on-surface-variant": "#c7c8b7",
+                      "tertiary-container": "#8791a5",
+                      "tertiary-fixed-dim": "#bdc7dc",
+                      "surface-tint": "#bfce7f",
+                      "on-primary-fixed": "#181e00",
+                      "on-secondary-fixed-variant": "#43474f",
+                      "primary-fixed-dim": "#bfce7f",
+                      "error": "#ffb4ab",
+                      "tertiary": "#bdc7dc",
+                      "secondary-fixed": "#dfe2ec",
+                      "secondary-container": "#43474f",
+                      "on-primary-container": "#252d00",
+                      "surface-variant": "#35352f",
+                      "error-container": "#93000a",
+                      "on-error-container": "#ffdad6",
+                      "surface-container": "#1f201a",
+                      "primary": "#bfce7f",
+                      "surface-container-highest": "#35352f",
+                      "surface-container-lowest": "#0e0f0a",
+                      "primary-fixed": "#dbea98",
+                      "surface-bright": "#393a33",
+                      "primary-container": "#89974f",
+                      "on-tertiary-fixed-variant": "#3d4759",
+                      "surface-container-high": "#2a2a24",
+                      "inverse-primary": "#576421",
+                      "on-error": "#690005",
+                      "secondary": "#c3c6d0",
+                      "outline-variant": "#46483b",
+                      "on-primary": "#2b3400",
+                      "on-primary-fixed-variant": "#404c0a",
+                      "on-tertiary-fixed": "#121c2c",
+                      "on-background": "#e4e3d9",
+                      "secondary-fixed-dim": "#c3c6d0",
+                      "surface-container-low": "#1b1c17",
+                      "on-surface": "#e4e3d9",
+                      "surface-dim": "#13140f",
+                      "outline": "#919282",
+                      "on-tertiary": "#273141"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "unit": "4px",
+                      "gutter": "24px",
+                      "margin-mobile": "16px",
+                      "margin-desktop": "40px",
+                      "container-max": "1440px"
+              },
+              "fontFamily": {
+                      "label-caps": ["JetBrains Mono"],
+                      "headline-md": ["Hanken Grotesk"],
+                      "body-md": ["Hanken Grotesk"],
+                      "headline-lg": ["Hanken Grotesk"],
+                      "headline-sm": ["Hanken Grotesk"],
+                      "headline-lg-mobile": ["Hanken Grotesk"],
+                      "body-sm": ["Hanken Grotesk"],
+                      "body-lg": ["Hanken Grotesk"]
+              },
+              "fontSize": {
+                      "label-caps": ["12px", {"lineHeight": "1", "letterSpacing": "0.1em", "fontWeight": "600"}],
+                      "headline-md": ["32px", {"lineHeight": "1.2", "fontWeight": "700"}],
+                      "body-md": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                      "headline-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "800"}],
+                      "headline-sm": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                      "headline-lg-mobile": ["32px", {"lineHeight": "1.2", "fontWeight": "800"}],
+                      "body-sm": ["14px", {"lineHeight": "1.4", "fontWeight": "400"}],
+                      "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}]
+              }
+            },
+          },
+        }
+    </script>
+</head>
+<body class="bg-background text-on-surface">
+<div class="fixed inset-0 tech-grid pointer-events-none"></div>
+<!-- SideNavBar (Execution from JSON) -->
+<aside class="fixed left-0 top-0 h-full flex flex-col py-6 px-4 bg-surface-container-lowest border-r border-outline-variant w-64 z-50">
+<div class="mb-10">
+<h1 class="font-headline-sm text-headline-sm font-bold text-primary tracking-tight">Biker's Fort Core</h1>
+<p class="font-label-caps text-[10px] text-on-surface-variant tracking-widest mt-1">WORKSHOP MANAGEMENT</p>
+</div>
+<button class="mb-8 w-full bg-primary-container text-on-primary-container font-headline-sm text-sm py-3 px-4 flex items-center justify-center gap-2 bevel-button hover:opacity-90 transition-all active:scale-[0.98]">
+<span class="material-symbols-outlined text-lg">add_circle</span>
+            Nueva Orden de Compra
+        </button>
+<nav class="flex-grow space-y-1">
+<!-- Navigation Items Mapping -->
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant font-medium hover:bg-surface-container-high hover:text-on-surface transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-caps text-label-caps uppercase">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-primary font-bold border-r-2 border-primary bg-surface-container-high transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+<span class="font-label-caps text-label-caps uppercase">Inventory</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant font-medium hover:bg-surface-container-high hover:text-on-surface transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">handyman</span>
+<span class="font-label-caps text-label-caps uppercase">Builds</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant font-medium hover:bg-surface-container-high hover:text-on-surface transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">calendar_month</span>
+<span class="font-label-caps text-label-caps uppercase">Calendar</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant font-medium hover:bg-surface-container-high hover:text-on-surface transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">analytics</span>
+<span class="font-label-caps text-label-caps uppercase">Analytics</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant font-medium hover:bg-surface-container-high hover:text-on-surface transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">payments</span>
+<span class="font-label-caps text-label-caps uppercase">Payments</span>
+</a>
+</nav>
+<div class="mt-auto pt-6 border-t border-outline-variant space-y-1">
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant font-medium hover:bg-surface-container-high hover:text-on-surface transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-label-caps text-label-caps uppercase">Settings</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant font-medium hover:bg-surface-container-high hover:text-on-surface transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">help</span>
+<span class="font-label-caps text-label-caps uppercase">Support</span>
+</a>
+<div class="mt-6 flex items-center gap-3 px-4">
+<div class="w-8 h-8 bg-surface-container-highest rounded flex items-center justify-center border border-outline-variant">
+<span class="material-symbols-outlined text-sm">person</span>
+</div>
+<div class="flex flex-col">
+<span class="text-[12px] font-bold text-on-surface">Mecánico Jefe</span>
+<span class="text-[10px] text-on-surface-variant">Admin Nivel 4</span>
+</div>
+</div>
+</div>
+</aside>
+<!-- TopNavBar (Execution from JSON) -->
+<header class="flex justify-between items-center px-10 ml-64 w-[calc(100%-16rem)] h-16 sticky top-0 z-40 bg-surface border-b border-outline-variant">
+<div class="flex items-center flex-grow max-w-2xl">
+<div class="relative w-full group">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-xl">search</span>
+<input class="w-full bg-surface-container-lowest border border-outline-variant py-2 pl-10 pr-4 focus:ring-1 focus:ring-primary focus:border-primary outline-none text-body-sm text-on-surface transition-all placeholder:text-outline" placeholder="Buscar órdenes, proveedores o SKUs..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-6 ml-6">
+<button class="relative text-on-surface-variant hover:text-primary transition-all">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute -top-1 -right-1 w-2 h-2 bg-error rounded-full"></span>
+</button>
+<button class="text-on-surface-variant hover:text-primary transition-all">
+<span class="material-symbols-outlined">history</span>
+</button>
+<button class="text-on-surface-variant hover:text-primary transition-all">
+<span class="material-symbols-outlined">account_circle</span>
+</button>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="ml-64 p-10 min-h-[calc(100vh-4rem)]">
+<!-- Header Section -->
+<div class="flex justify-between items-end mb-8">
+<div>
+<h2 class="font-headline-md text-headline-md text-on-surface mb-2">Gestión de Órdenes de Compra</h2>
+<nav class="flex items-center gap-2 text-on-surface-variant text-sm">
+<span>Inventario</span>
+<span class="material-symbols-outlined text-xs">chevron_right</span>
+<span class="text-primary font-medium">Órdenes de Compra</span>
+</nav>
+</div>
+<div class="flex gap-3">
+<button class="flex items-center gap-2 px-4 py-2 border border-outline-variant text-on-surface-variant hover:bg-surface-container-high transition-all font-medium text-sm">
+<span class="material-symbols-outlined text-lg">filter_list</span>
+                    Filtros
+                </button>
+<button class="flex items-center gap-2 px-4 py-2 border border-outline-variant text-on-surface-variant hover:bg-surface-container-high transition-all font-medium text-sm">
+<span class="material-symbols-outlined text-lg">ios_share</span>
+                    Exportar
+                </button>
+</div>
+</div>
+<!-- Summary Cards (Bento Style) -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+<div class="industrial-border bg-surface-container-low p-6 flex flex-col justify-between relative overflow-hidden group">
+<div class="relative z-10">
+<p class="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2">Total en Tránsito</p>
+<h3 class="font-headline-md text-headline-md text-primary">24</h3>
+<p class="text-xs text-on-surface-variant mt-4 flex items-center gap-1">
+<span class="material-symbols-outlined text-xs text-primary">trending_up</span>
+                        +12% respecto al mes pasado
+                    </p>
+</div>
+<span class="material-symbols-outlined absolute -right-4 -bottom-4 text-8xl text-outline-variant opacity-20 pointer-events-none group-hover:rotate-12 transition-transform">local_shipping</span>
+</div>
+<div class="industrial-border bg-surface-container-low p-6 flex flex-col justify-between relative overflow-hidden group">
+<div class="relative z-10">
+<p class="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2">Órdenes Pendientes</p>
+<h3 class="font-headline-md text-headline-md text-secondary">08</h3>
+<p class="text-xs text-on-surface-variant mt-4 flex items-center gap-1">
+<span class="material-symbols-outlined text-xs text-error">priority_high</span>
+                        3 órdenes requieren aprobación
+                    </p>
+</div>
+<span class="material-symbols-outlined absolute -right-4 -bottom-4 text-8xl text-outline-variant opacity-20 pointer-events-none group-hover:-rotate-12 transition-transform">pending_actions</span>
+</div>
+<div class="industrial-border bg-surface-container-low p-6 flex flex-col justify-between relative overflow-hidden group">
+<div class="relative z-10">
+<p class="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2">Presupuesto Comprometido</p>
+<h3 class="font-headline-md text-headline-md text-on-surface">$14,250.00</h3>
+<p class="text-xs text-on-surface-variant mt-4">Actualizado hace 15 minutos</p>
+</div>
+<span class="material-symbols-outlined absolute -right-4 -bottom-4 text-8xl text-outline-variant opacity-20 pointer-events-none group-hover:scale-110 transition-transform">account_balance_wallet</span>
+</div>
+</div>
+<!-- Purchase Orders Table -->
+<div class="industrial-border bg-surface-container-low overflow-hidden">
+<div class="px-6 py-4 border-b border-outline-variant flex justify-between items-center bg-surface-container">
+<h4 class="font-label-caps text-label-caps uppercase text-on-surface">Historial de Órdenes</h4>
+<div class="flex gap-4">
+<div class="flex items-center gap-2 text-xs">
+<span class="w-2 h-2 rounded-full bg-primary"></span> Recibida
+                    </div>
+<div class="flex items-center gap-2 text-xs">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span> En Tránsito
+                    </div>
+<div class="flex items-center gap-2 text-xs">
+<span class="w-2 h-2 rounded-full bg-surface-variant border border-outline"></span> Borrador
+                    </div>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-lowest border-b border-outline-variant">
+<th class="px-6 py-4 font-label-caps text-[11px] text-on-surface-variant uppercase tracking-wider">ID Orden</th>
+<th class="px-6 py-4 font-label-caps text-[11px] text-on-surface-variant uppercase tracking-wider">Proveedor</th>
+<th class="px-6 py-4 font-label-caps text-[11px] text-on-surface-variant uppercase tracking-wider">Fecha Creación</th>
+<th class="px-6 py-4 font-label-caps text-[11px] text-on-surface-variant uppercase tracking-wider">Fecha Est. Entrega</th>
+<th class="px-6 py-4 font-label-caps text-[11px] text-on-surface-variant uppercase tracking-wider">Monto Total</th>
+<th class="px-6 py-4 font-label-caps text-[11px] text-on-surface-variant uppercase tracking-wider">Estado</th>
+<th class="px-6 py-4 font-label-caps text-[11px] text-on-surface-variant uppercase tracking-wider">Acciones</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant divide-opacity-50">
+<!-- Row 1 -->
+<tr class="hover:bg-surface-container-high transition-colors group">
+<td class="px-6 py-4 font-label-caps text-sm text-primary">#PO-2023-089</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-surface-container-highest border border-outline-variant flex items-center justify-center text-[10px] font-bold">SH</div>
+<span class="font-medium text-sm">Shimano Europe B.V.</span>
+</div>
+</td>
+<td class="px-6 py-4 text-sm text-on-surface-variant">12 Oct 2023</td>
+<td class="px-6 py-4 text-sm text-on-surface-variant">28 Oct 2023</td>
+<td class="px-6 py-4 font-label-caps text-sm">$4,250.00</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2 py-1 bg-tertiary-container/20 border border-tertiary text-tertiary text-[10px] font-bold uppercase rounded-sm">En Tránsito</span>
+</td>
+<td class="px-6 py-4 text-on-surface-variant">
+<button class="hover:text-primary transition-colors"><span class="material-symbols-outlined text-lg">visibility</span></button>
+<button class="hover:text-primary transition-colors ml-2"><span class="material-symbols-outlined text-lg">more_vert</span></button>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="bg-surface-container-high/30 hover:bg-surface-container-high transition-colors group">
+<td class="px-6 py-4 font-label-caps text-sm text-primary">#PO-2023-088</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-surface-container-highest border border-outline-variant flex items-center justify-center text-[10px] font-bold text-error">SR</div>
+<span class="font-medium text-sm">SRAM LLC</span>
+</div>
+</td>
+<td class="px-6 py-4 text-sm text-on-surface-variant">10 Oct 2023</td>
+<td class="px-6 py-4 text-sm text-on-surface-variant">24 Oct 2023</td>
+<td class="px-6 py-4 font-label-caps text-sm">$8,120.00</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2 py-1 bg-primary-container/20 border border-primary text-primary text-[10px] font-bold uppercase rounded-sm">Recibida</span>
+</td>
+<td class="px-6 py-4 text-on-surface-variant">
+<button class="hover:text-primary transition-colors"><span class="material-symbols-outlined text-lg">visibility</span></button>
+<button class="hover:text-primary transition-colors ml-2"><span class="material-symbols-outlined text-lg">more_vert</span></button>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-surface-container-high transition-colors group">
+<td class="px-6 py-4 font-label-caps text-sm text-primary">#PO-2023-090</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-surface-container-highest border border-outline-variant flex items-center justify-center text-[10px] font-bold text-on-tertiary">FX</div>
+<span class="font-medium text-sm">Fox Factory Inc.</span>
+</div>
+</td>
+<td class="px-6 py-4 text-sm text-on-surface-variant">14 Oct 2023</td>
+<td class="px-6 py-4 text-sm text-on-surface-variant">-- -- ----</td>
+<td class="px-6 py-4 font-label-caps text-sm">$1,880.00</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2 py-1 bg-surface-variant/50 border border-outline text-on-surface-variant text-[10px] font-bold uppercase rounded-sm">Borrador</span>
+</td>
+<td class="px-6 py-4 text-on-surface-variant">
+<button class="hover:text-primary transition-colors"><span class="material-symbols-outlined text-lg">edit</span></button>
+<button class="hover:text-primary transition-colors ml-2"><span class="material-symbols-outlined text-lg">more_vert</span></button>
+</td>
+</tr>
+<!-- Row 4 -->
+<tr class="bg-surface-container-high/30 hover:bg-surface-container-high transition-colors group">
+<td class="px-6 py-4 font-label-caps text-sm text-primary">#PO-2023-087</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-surface-container-highest border border-outline-variant flex items-center justify-center text-[10px] font-bold">SH</div>
+<span class="font-medium text-sm">Shimano Europe B.V.</span>
+</div>
+</td>
+<td class="px-6 py-4 text-sm text-on-surface-variant">05 Oct 2023</td>
+<td class="px-6 py-4 text-sm text-on-surface-variant">15 Oct 2023</td>
+<td class="px-6 py-4 font-label-caps text-sm">$1,200.00</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2 py-1 bg-error/10 border border-error text-error text-[10px] font-bold uppercase rounded-sm">Cancelada</span>
+</td>
+<td class="px-6 py-4 text-on-surface-variant">
+<button class="hover:text-primary transition-colors"><span class="material-symbols-outlined text-lg">visibility</span></button>
+<button class="hover:text-primary transition-colors ml-2"><span class="material-symbols-outlined text-lg">more_vert</span></button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Footer Pagination -->
+<div class="px-6 py-4 border-t border-outline-variant flex justify-between items-center">
+<span class="text-xs text-on-surface-variant">Mostrando 1 a 10 de 128 órdenes</span>
+<div class="flex gap-2">
+<button class="w-8 h-8 flex items-center justify-center border border-outline-variant hover:bg-surface-container-high transition-all text-on-surface-variant">
+<span class="material-symbols-outlined text-sm">chevron_left</span>
+</button>
+<button class="w-8 h-8 flex items-center justify-center border border-primary bg-surface-container-high text-primary font-bold text-xs">1</button>
+<button class="w-8 h-8 flex items-center justify-center border border-outline-variant hover:bg-surface-container-high transition-all text-on-surface-variant text-xs">2</button>
+<button class="w-8 h-8 flex items-center justify-center border border-outline-variant hover:bg-surface-container-high transition-all text-on-surface-variant text-xs">3</button>
+<button class="w-8 h-8 flex items-center justify-center border border-outline-variant hover:bg-surface-container-high transition-all text-on-surface-variant">
+<span class="material-symbols-outlined text-sm">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Inventory Warning Card (Asymmetric Layout Extra) -->
+<div class="mt-8 grid grid-cols-1 lg:grid-cols-4 gap-6">
+<div class="lg:col-span-3 industrial-border bg-gradient-to-r from-surface-container-high to-surface-container-low p-6 flex items-center justify-between">
+<div class="flex items-center gap-6">
+<div class="w-12 h-12 rounded-full border-2 border-primary flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-3xl">precision_manufacturing</span>
+</div>
+<div>
+<h5 class="text-on-surface font-bold">Optimización de Pedidos Inteligente</h5>
+<p class="text-sm text-on-surface-variant max-w-xl mt-1">El sistema ha detectado baja disponibilidad en pastillas de freno Shimano L05A. Se recomienda generar una orden de reposición de 50 unidades para evitar quiebre de stock.</p>
+</div>
+</div>
+<button class="px-6 py-2 bg-on-surface text-surface font-bold text-sm bevel-button hover:opacity-90">Sugerir Orden</button>
+</div>
+<div class="industrial-border bg-surface-container-low p-6 flex flex-col justify-center text-center">
+<span class="material-symbols-outlined text-primary text-4xl mb-2">monitoring</span>
+<span class="text-2xl font-bold">98.4%</span>
+<span class="text-xs text-on-surface-variant uppercase tracking-widest mt-1">Nivel de Servicio</span>
+</div>
+</div>
+</main>
+<!-- Floating Micro-interactions Script -->
+<script>
+        document.querySelectorAll('tr').forEach(row => {
+            row.addEventListener('mouseenter', () => {
+                row.style.transform = 'translateX(4px)';
+                row.style.transition = 'all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
+            });
+            row.addEventListener('mouseleave', () => {
+                row.style.transform = 'translateX(0)';
+            });
+        });
+
+        // Add a subtle ripple effect to buttons
+        const buttons = document.querySelectorAll('button');
+        buttons.forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                let x = e.clientX - e.target.offsetLeft;
+                let y = e.clientY - e.target.offsetTop;
+                let ripples = document.createElement('span');
+                ripples.style.left = x + 'px';
+                ripples.style.top = y + 'px';
+                this.appendChild(ripples);
+                setTimeout(() => {
+                    ripples.remove();
+                }, 1000);
+            });
+        });
+    </script>
+</body></html>

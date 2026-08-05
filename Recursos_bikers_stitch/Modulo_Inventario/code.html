@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>BIKER'S FORT CORE | Gestión de Inventario</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-bright": "#393a33",
+                        "on-surface-variant": "#c7c8b7",
+                        "on-secondary-fixed": "#181c23",
+                        "on-tertiary-fixed-variant": "#3d4759",
+                        "tertiary-fixed-dim": "#bdc7dc",
+                        "tertiary-container": "#8791a5",
+                        "on-secondary": "#2d3138",
+                        "on-error": "#690005",
+                        "error": "#ffb4ab",
+                        "background": "#13140f",
+                        "on-secondary-container": "#b2b5be",
+                        "on-tertiary-fixed": "#121c2c",
+                        "surface-container-low": "#1b1c17",
+                        "surface-container-lowest": "#0e0f0a",
+                        "surface-dim": "#13140f",
+                        "inverse-on-surface": "#30312b",
+                        "primary-fixed": "#dbea98",
+                        "tertiary": "#bdc7dc",
+                        "primary-container": "#89974f",
+                        "on-tertiary-container": "#202a3a",
+                        "on-error-container": "#ffdad6",
+                        "on-background": "#e4e3d9",
+                        "secondary-fixed-dim": "#c3c6d0",
+                        "on-primary-container": "#252d00",
+                        "tertiary-fixed": "#d9e3f9",
+                        "surface-variant": "#35352f",
+                        "inverse-primary": "#576421",
+                        "secondary-fixed": "#dfe2ec",
+                        "primary-fixed-dim": "#bfce7f",
+                        "surface-container-high": "#2a2a24",
+                        "on-primary-fixed-variant": "#404c0a",
+                        "error-container": "#93000a",
+                        "on-secondary-fixed-variant": "#43474f",
+                        "on-tertiary": "#273141",
+                        "surface-container": "#1f201a",
+                        "on-primary": "#2b3400",
+                        "outline-variant": "#46483b",
+                        "primary": "#bfce7f",
+                        "surface-container-highest": "#35352f",
+                        "secondary": "#c3c6d0",
+                        "surface-tint": "#bfce7f",
+                        "secondary-container": "#43474f",
+                        "outline": "#919282",
+                        "inverse-surface": "#e4e3d9",
+                        "surface": "#13140f",
+                        "on-surface": "#e4e3d9",
+                        "on-primary-fixed": "#181e00",
+                        "industrial-border": "#2d3748"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "margin-mobile": "16px",
+                        "margin-desktop": "40px",
+                        "container-max": "1440px",
+                        "unit": "4px",
+                        "gutter": "24px"
+                    },
+                    "fontFamily": {
+                        "body-lg": ["Hanken Grotesk"],
+                        "label-caps": ["JetBrains Mono"],
+                        "body-md": ["Hanken Grotesk"],
+                        "headline-md": ["Hanken Grotesk"],
+                        "headline-sm": ["Hanken Grotesk"],
+                        "body-sm": ["Hanken Grotesk"],
+                        "headline-lg": ["Hanken Grotesk"]
+                    },
+                    "fontSize": {
+                        "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                        "label-caps": ["12px", {"lineHeight": "1", "letterSpacing": "0.1em", "fontWeight": "600"}],
+                        "body-md": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "headline-md": ["32px", {"lineHeight": "1.2", "fontWeight": "700"}],
+                        "headline-sm": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                        "body-sm": ["14px", {"lineHeight": "1.4", "fontWeight": "400"}],
+                        "headline-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "800"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            background-color: #0a0c10;
+            color: #e4e3d9;
+            font-family: 'Hanken Grotesk', sans-serif;
+            background-image: radial-gradient(#2d3748 0.5px, transparent 0.5px);
+            background-size: 24px 24px;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .industrial-card {
+            background-color: #161a21;
+            border: 1px solid #2d3748;
+            transition: border-color 0.2s ease;
+        }
+        .industrial-card:hover {
+            border-color: #4a5568;
+        }
+        .segmented-progress-container {
+            display: flex;
+            gap: 2px;
+            height: 8px;
+            width: 100px;
+        }
+        .segmented-block {
+            flex: 1;
+            background-color: #35352f;
+        }
+        .segmented-block.active {
+            background-color: #bfce7f;
+        }
+        .segmented-block.low {
+            background-color: #ffb4ab;
+        }
+        .sidebar-active {
+            background-color: #43474f;
+            color: #dfe2ec;
+            border-left: 4px solid #bfce7f;
+            font-weight: 700;
+        }
+    </style>
+</head>
+<body class="flex min-h-screen">
+<!-- SideNavBar -->
+<aside class="fixed left-0 top-0 h-full w-64 bg-surface-container-lowest border-r border-outline-variant flex flex-col pt-4 z-50">
+<div class="px-6 mb-8 flex flex-col items-start">
+<div class="mb-2">
+<span class="font-headline-sm text-on-surface uppercase font-extrabold flex items-center gap-2">
+                    BIKER'S FORT
+                </span>
+<p class="font-label-caps text-[10px] text-on-surface-variant tracking-[0.2em] -mt-1">TALLER • TIENDA</p>
+</div>
+<div class="bg-primary-container text-on-primary-container px-2 py-1 text-[10px] font-bold rounded flex items-center gap-1 border border-primary/20">
+                CORE MANAGEMENT
+            </div>
+</div>
+<nav class="flex-1 px-2 space-y-1">
+<a class="group text-on-surface-variant hover:text-on-surface px-4 py-3 flex items-center gap-3 transition-all font-label-caps" href="#">
+<span class="material-symbols-outlined">dashboard</span> Panel
+            </a>
+<a class="group text-on-surface-variant hover:text-on-surface px-4 py-3 flex items-center gap-3 transition-all font-label-caps" href="#">
+<span class="material-symbols-outlined">event_seat</span> Recepción
+            </a>
+<a class="group text-on-surface-variant hover:text-on-surface px-4 py-3 flex items-center gap-3 transition-all font-label-caps" href="#">
+<span class="material-symbols-outlined">build</span> Órdenes de Trabajo
+            </a>
+<a class="bg-secondary-container text-on-secondary-container border-l-4 border-primary font-bold px-4 py-3 flex items-center gap-3 transition-all font-label-caps" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">inventory_2</span> Inventario y Partes
+            </a>
+<a class="group text-on-surface-variant hover:text-on-surface px-4 py-3 flex items-center gap-3 transition-all font-label-caps" href="#">
+<span class="material-symbols-outlined">group</span> Clientes
+            </a>
+<a class="group text-on-surface-variant hover:text-on-surface px-4 py-3 flex items-center gap-3 transition-all font-label-caps" href="#">
+<span class="material-symbols-outlined">bar_chart</span> Reportes
+            </a>
+</nav>
+<div class="p-4 border-t border-outline-variant space-y-1">
+<button class="w-full bg-[#84924a] text-white font-label-caps py-3 rounded border-t border-[#a0af5e] shadow-[0_2px_0_rgba(0,0,0,0.2)] hover:brightness-110 transition-all flex items-center justify-center gap-2 mb-4">
+<span class="material-symbols-outlined text-[20px]">add</span> NUEVA ORDEN
+            </button>
+<a class="text-on-surface-variant hover:text-on-surface px-4 py-2 flex items-center gap-3 font-label-caps" href="#">
+<span class="material-symbols-outlined">help</span> Soporte
+            </a>
+<a class="text-on-surface-variant hover:text-on-surface px-4 py-2 flex items-center gap-3 font-label-caps" href="#">
+<span class="material-symbols-outlined">logout</span> Cerrar Sesión
+            </a>
+</div>
+</aside>
+<!-- Main Content -->
+<main class="ml-64 flex-1 flex flex-col">
+<!-- TopAppBar -->
+<header class="h-16 flex justify-between items-center px-margin-desktop w-full border-b border-outline-variant bg-background sticky top-0 z-40">
+<div class="flex items-center gap-4">
+<h1 class="font-headline-sm text-primary tracking-tight uppercase">Inventario y Partes</h1>
+<div class="h-4 w-[1px] bg-outline-variant"></div>
+<div class="flex items-center gap-2 bg-surface-container px-3 py-1.5 rounded-lg border border-outline-variant">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-body-sm w-64 p-0 placeholder:text-on-surface-variant/50" placeholder="Buscar componentes, SKU o bicicletas..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<button class="relative hover:bg-surface-container-high p-2 rounded transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 bg-error rounded-full"></span>
+</button>
+<button class="hover:bg-surface-container-high p-2 rounded transition-colors">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<div class="flex items-center gap-3 pl-4 border-l border-outline-variant">
+<div class="text-right">
+<p class="font-label-caps text-[10px] text-on-surface-variant">GERENTE DE TALLER</p>
+<p class="font-body-sm font-bold text-on-surface">Alex Rivera</p>
+</div>
+<img alt="Alex Rivera" class="w-10 h-10 rounded-full border border-outline-variant object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDGEMyU6u19h_bk-Z2O1fgmRunDxDx--UnBB9UWiLnx62kW3nZFAjW6HR_Z89EJAdzoKNUSULmaFhCVfnjJXWQf_CDfKdgeosXJiF3PGMjhxk210wWj5PYzOIzLwRTRjVlEeMA3uP_CRPDgEzDaC8RdHfR6sJFjXRNwC2vU0Qbj-lMAKzWE_lYSJNaRKKol-zoeceuUZd-K5w7SERX9RL6M-8KpH8ZlHM_OCIIZdWCLe_02gSgIhLcn"/>
+</div>
+</div>
+</header>
+<!-- Scrollable Canvas -->
+<div class="p-margin-desktop space-y-8 max-w-container-max">
+<!-- Metrics Row -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<div class="industrial-card p-6 flex items-center justify-between">
+<div>
+<p class="font-label-caps text-on-surface-variant text-[11px] mb-1">ALERTAS DE STOCK BAJO</p>
+<h2 class="font-headline-md text-error">12</h2>
+<p class="font-body-sm text-on-surface-variant/60">Artículos bajo el umbral</p>
+</div>
+<div class="w-12 h-12 rounded bg-error/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-error" style="font-variation-settings: 'FILL' 1;">warning</span>
+</div>
+</div>
+<div class="industrial-card p-6 flex items-center justify-between">
+<div>
+<p class="font-label-caps text-on-surface-variant text-[11px] mb-1">ROTACIÓN DE INVENTARIO</p>
+<h2 class="font-headline-md text-primary">78%</h2>
+<p class="font-body-sm text-on-surface-variant/60">Tasa mensual actual</p>
+</div>
+<div class="w-12 h-12 rounded bg-primary/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">sync_alt</span>
+</div>
+</div>
+<div class="industrial-card p-6 flex items-center justify-between">
+<div>
+<p class="font-label-caps text-on-surface-variant text-[11px] mb-1">VALOR TOTAL DEL INVENTARIO</p>
+<h2 class="font-headline-md text-on-surface">$142,500</h2>
+<p class="font-body-sm text-on-surface-variant/60">Valuación de activos (USD)</p>
+</div>
+<div class="w-12 h-12 rounded bg-surface-container-high flex items-center justify-center">
+<span class="material-symbols-outlined text-on-surface-variant">account_balance_wallet</span>
+</div>
+</div>
+</div>
+<!-- Main Table Section -->
+<div class="industrial-card overflow-hidden">
+<div class="p-6 border-b border-outline-variant flex justify-between items-center">
+<h3 class="font-headline-sm text-on-surface">Catálogo Principal de Inventario</h3>
+<div class="flex gap-2">
+<button class="bg-surface-container-high hover:bg-surface-variant px-4 py-2 font-label-caps text-[11px] border border-outline-variant transition-all">FILTRAR</button>
+<button class="bg-surface-container-high hover:bg-surface-variant px-4 py-2 font-label-caps text-[11px] border border-outline-variant transition-all">EXPORTAR CSV</button>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low font-label-caps text-[11px] text-on-surface-variant border-b border-outline-variant">
+<th class="px-6 py-4 font-normal">PRODUCTO</th>
+<th class="px-6 py-4 font-normal">SKU</th>
+<th class="px-6 py-4 font-normal">CATEGORÍA</th>
+<th class="px-6 py-4 font-normal">NIVEL DE STOCK</th>
+<th class="px-6 py-4 font-normal text-right">PRECIO</th>
+<th class="px-6 py-4 font-normal text-center">ACCIÓN</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/30">
+<!-- Row 1 -->
+<tr class="hover:bg-surface-container-high/50 transition-colors">
+<td class="px-6 py-4">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 bg-surface-container rounded border border-outline-variant overflow-hidden flex-shrink-0">
+<img alt="Shimano XTR Chain" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCrNCGxso9F9sntC-4MD3XhDUPgMpoTu1rNFebccJ0j9aZFYKZpMthX1bnJfz9HGSMu5GNt9yFI26WUsI8SIDx3tQSOX5KYyU9Vc85dtSoPs-XR2hHFk679QgbjTTIt1_HhQuKt3UAbE2Nh70rF1JKmIHttmsP6xgx2gLjUrqnHpZJxgCmAXwDNfzoJreClmK3ft9tAzyN2G_G99z1RlF1dFMiJtbTve_9KNV7VyW4yrGkcAdZDmUQw"/>
+</div>
+<div>
+<p class="font-body-md font-bold text-on-surface">Cadena Shimano XTR</p>
+<p class="text-[12px] text-on-surface-variant">CN-M9100 12 Velocidades</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 font-label-caps text-[12px]">SHI-XTR-12-01</td>
+<td class="px-6 py-4">
+<span class="px-2 py-1 rounded bg-surface-container-high text-on-surface-variant text-[11px] border border-outline-variant">Transmisión</span>
+</td>
+<td class="px-6 py-4">
+<div class="flex flex-col gap-1">
+<div class="segmented-progress-container">
+<div class="segmented-block active"></div>
+<div class="segmented-block active"></div>
+<div class="segmented-block active"></div>
+<div class="segmented-block active"></div>
+<div class="segmented-block active"></div>
+<div class="segmented-block"></div>
+<div class="segmented-block"></div>
+<div class="segmented-block"></div>
+</div>
+<p class="text-[11px] text-primary">45 en stock</p>
+</div>
+</td>
+<td class="px-6 py-4 text-right font-bold">$74.99</td>
+<td class="px-6 py-4 text-center">
+<button class="bg-[#84924a] hover:bg-[#96a554] px-4 py-2 text-[11px] font-label-caps rounded text-white transition-all">AÑADIR A ORDEN</button>
+</td>
+</tr>
+<!-- Row 2 (Low Stock) -->
+<tr class="hover:bg-surface-container-high/50 transition-colors">
+<td class="px-6 py-4">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 bg-surface-container rounded border border-outline-variant overflow-hidden flex-shrink-0">
+<img alt="Maxxis Minion DHF" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBAEjKPc4DEuXpgOX8BO5aLhcZW7RVTvTVrLtPTCG5aEt3ldaQL2BtDP_J5YxodkV8I2bulSA8RDqry7Fy6QVMnWXchdyhTDWgYrdOPaXzjqZhsVTwgVgsuLIv5Nv-BWPPMtt1xC4G4r4RXXMo7BRt3qPaVVCdq0EHmZ7N3L2RGEpQBnuj8Utvb10bVFvMes4ZH1PJr7ZdYcUxErdZs9H4BmKNw4DEiKI0jmSChBbzXmt6ReRFpNxgE"/>
+</div>
+<div>
+<p class="font-body-md font-bold text-on-surface">Maxxis Minion DHF</p>
+<p class="text-[12px] text-on-surface-variant">29 x 2.50WT 3C/EXO</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 font-label-caps text-[12px]">MAXX-DHF-2925</td>
+<td class="px-6 py-4">
+<span class="px-2 py-1 rounded bg-surface-container-high text-on-surface-variant text-[11px] border border-outline-variant">Llantas</span>
+</td>
+<td class="px-6 py-4">
+<div class="flex flex-col gap-1">
+<div class="segmented-progress-container">
+<div class="segmented-block low"></div>
+<div class="segmented-block low"></div>
+<div class="segmented-block"></div>
+<div class="segmented-block"></div>
+<div class="segmented-block"></div>
+<div class="segmented-block"></div>
+<div class="segmented-block"></div>
+<div class="segmented-block"></div>
+</div>
+<p class="text-[11px] text-error font-bold">4 en stock (BAJO)</p>
+</div>
+</td>
+<td class="px-6 py-4 text-right font-bold">$82.00</td>
+<td class="px-6 py-4 text-center">
+<button class="bg-[#84924a] hover:bg-[#96a554] px-4 py-2 text-[11px] font-label-caps rounded text-white transition-all">AÑADIR A ORDEN</button>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-surface-container-high/50 transition-colors">
+<td class="px-6 py-4">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 bg-surface-container rounded border border-outline-variant overflow-hidden flex-shrink-0">
+<img alt="RockShox ZEB Ultimate" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAiPQud3c5dw2XIQ6A4wnRfbW9vUX1zwUMg8GIpzIW4ICOSfCt95uGPipEG2Q8UAw27Q8df8d_ZurO7iPowWiLIdEq3C_Hqb0-4LaTlJmLZdouvUz0YSOyejQcZlWRAljba7nCh58nslIveldJOsJVFOQAmEjREEiBez8oGwx3uZHSRMleN-zglHrmwPTP0sBE94UY_qEeD_guYOT7_L9RekSDQEZcwsq6TKxHMPFuazNlTPIC63XP0"/>
+</div>
+<div>
+<p class="font-body-md font-bold text-on-surface">RockShox ZEB Ultimate</p>
+<p class="text-[12px] text-on-surface-variant">180mm Charger 3 RC2</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 font-label-caps text-[12px]">RS-ZEB-U-180</td>
+<td class="px-6 py-4">
+<span class="px-2 py-1 rounded bg-surface-container-high text-on-surface-variant text-[11px] border border-outline-variant">Suspensión</span>
+</td>
+<td class="px-6 py-4">
+<div class="flex flex-col gap-1">
+<div class="segmented-progress-container">
+<div class="segmented-block active"></div>
+<div class="segmented-block active"></div>
+<div class="segmented-block active"></div>
+<div class="segmented-block active"></div>
+<div class="segmented-block"></div>
+<div class="segmented-block"></div>
+<div class="segmented-block"></div>
+<div class="segmented-block"></div>
+</div>
+<p class="text-[11px] text-primary">12 en stock</p>
+</div>
+</td>
+<td class="px-6 py-4 text-right font-bold">$1,159.00</td>
+<td class="px-6 py-4 text-center">
+<button class="bg-[#84924a] hover:bg-[#96a554] px-4 py-2 text-[11px] font-label-caps rounded text-white transition-all">AÑADIR A ORDEN</button>
+</td>
+</tr>
+<!-- Row 4 -->
+<tr class="hover:bg-surface-container-high/50 transition-colors">
+<td class="px-6 py-4">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 bg-surface-container rounded border border-outline-variant overflow-hidden flex-shrink-0">
+<img alt="SRAM Code Brake Pads" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCO56qNNJE56nJcEFdj1uoCNokaekyotiohVWxKebhaZtp2hV4XuIEb5P1ajhuJn4F4JuFwnIqM3lI-ul_9Qq_IO4erz_kE1pJbHMdeBT_3MY_eCZ0jMY179PkPbmlh0BCDGMRhPLODw1wQs5pzw9_F9CrkDxJDgHdhLw8aDVxKpx-aoQ3sKNGQc2e8IqnN8FJevwC0TkrrvVAm0fg24AacruweGJ-om_ecjAssq3ZR1IKVAjnky0ph"/>
+</div>
+<div>
+<p class="font-body-md font-bold text-on-surface">Pastillas SRAM Code</p>
+<p class="text-[12px] text-on-surface-variant">Sinterizadas / Metal</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 font-label-caps text-[12px]">SRAM-BP-CODE-S</td>
+<td class="px-6 py-4">
+<span class="px-2 py-1 rounded bg-surface-container-high text-on-surface-variant text-[11px] border border-outline-variant">Frenos</span>
+</td>
+<td class="px-6 py-4">
+<div class="flex flex-col gap-1">
+<div class="segmented-progress-container">
+<div class="segmented-block active"></div>
+<div class="segmented-block active"></div>
+<div class="segmented-block active"></div>
+<div class="segmented-block active"></div>
+<div class="segmented-block active"></div>
+<div class="segmented-block active"></div>
+<div class="segmented-block active"></div>
+<div class="segmented-block"></div>
+</div>
+<p class="text-[11px] text-primary">82 en stock</p>
+</div>
+</td>
+<td class="px-6 py-4 text-right font-bold">$29.99</td>
+<td class="px-6 py-4 text-center">
+<button class="bg-[#84924a] hover:bg-[#96a554] px-4 py-2 text-[11px] font-label-caps rounded text-white transition-all">AÑADIR A ORDEN</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="p-4 bg-surface-container-low flex justify-between items-center border-t border-outline-variant">
+<p class="text-body-sm text-on-surface-variant">Mostrando 4 de 2,410 productos</p>
+<div class="flex gap-2">
+<button class="w-8 h-8 flex items-center justify-center rounded border border-outline-variant hover:bg-surface-container text-on-surface-variant transition-all">
+<span class="material-symbols-outlined text-[18px]">chevron_left</span>
+</button>
+<button class="w-8 h-8 flex items-center justify-center rounded border border-primary bg-primary/10 text-primary font-bold text-sm">1</button>
+<button class="w-8 h-8 flex items-center justify-center rounded border border-outline-variant hover:bg-surface-container text-on-surface-variant transition-all text-sm">2</button>
+<button class="w-8 h-8 flex items-center justify-center rounded border border-outline-variant hover:bg-surface-container text-on-surface-variant transition-all text-sm">3</button>
+<button class="w-8 h-8 flex items-center justify-center rounded border border-outline-variant hover:bg-surface-container text-on-surface-variant transition-all">
+<span class="material-symbols-outlined text-[18px]">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Asymmetric Bottom Content -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-8 pb-10">
+<div class="lg:col-span-2 industrial-card p-6 relative overflow-hidden">
+<div class="relative z-10">
+<h4 class="font-headline-sm mb-4">Inteligencia de Optimización de Stock</h4>
+<div class="space-y-4">
+<div class="flex items-start gap-4 p-4 bg-background/50 border border-outline-variant rounded">
+<div class="p-2 rounded bg-primary/20 text-primary">
+<span class="material-symbols-outlined">trending_up</span>
+</div>
+<div>
+<p class="font-bold text-on-surface">Reabastecimiento Predictivo Recomendado</p>
+<p class="text-body-sm text-on-surface-variant">Basado en la demanda histórica de primavera, recomendamos aumentar el inventario de <span class="text-primary font-bold">Líquido de Frenos</span> y <span class="text-primary font-bold">Guayas de Cambio</span> by 25% over the next 15 days.</p>
+</div>
+</div>
+<div class="flex items-start gap-4 p-4 bg-background/50 border border-outline-variant rounded">
+<div class="p-2 rounded bg-secondary-container text-on-secondary-container">
+<span class="material-symbols-outlined">history</span>
+</div>
+<div>
+<p class="font-bold text-on-surface">Movimientos Recientes de Inventario</p>
+<p class="text-body-sm text-on-surface-variant">Alex Rivera actualizó el stock de 12 artículos en 'Transmisión' (hace 5 minutos).</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Technical Pattern Overlay -->
+<div class="absolute -right-16 -bottom-16 w-64 h-64 opacity-5 pointer-events-none">
+<svg class="w-full h-full text-on-surface fill-current" viewbox="0 0 100 100">
+<path d="M50 0 L100 25 L100 75 L50 100 L0 75 L0 25 Z" fill="none" stroke="currentColor" stroke-width="0.5"></path>
+<circle cx="50" cy="50" fill="none" r="30" stroke="currentColor" stroke-width="0.5"></circle>
+<path d="M50 20 L50 80 M20 50 L80 50" stroke="currentColor" stroke-width="0.5"></path>
+</svg>
+</div>
+</div>
+<div class="industrial-card bg-surface-container p-6 border-l-4 border-primary">
+<h4 class="font-label-caps text-on-surface-variant text-[11px] mb-6">ACCIONES RÁPIDAS</h4>
+<div class="grid grid-cols-1 gap-3">
+<button class="flex items-center gap-3 p-3 bg-background border border-outline-variant hover:border-primary transition-all group">
+<span class="material-symbols-outlined text-primary group-hover:scale-110 transition-transform">barcode_scanner</span>
+<span class="font-body-sm">Escanear Nueva Entrada</span>
+</button>
+<button class="flex items-center gap-3 p-3 bg-background border border-outline-variant hover:border-primary transition-all group">
+<span class="material-symbols-outlined text-primary group-hover:scale-110 transition-transform">inventory</span>
+<span class="font-body-sm">Ajuste Masivo</span>
+</button>
+<button class="flex items-center gap-3 p-3 bg-background border border-outline-variant hover:border-primary transition-all group">
+<span class="material-symbols-outlined text-primary group-hover:scale-110 transition-transform">assignment_return</span>
+<span class="font-body-sm">Devoluciones a Proveedor</span>
+</button>
+<button class="flex items-center gap-3 p-3 bg-background border border-outline-variant hover:border-primary transition-all group">
+<span class="material-symbols-outlined text-primary group-hover:scale-110 transition-transform">print</span>
+<span class="font-body-sm">Imprimir Etiquetas</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</main>
+<script>
+        // Simple micro-interactions for the segmented progress bars
+        document.querySelectorAll('.segmented-block').forEach(block => {
+            block.addEventListener('mouseenter', () => {
+                if(block.classList.contains('active') || block.classList.contains('low')) {
+                    block.style.transform = 'scaleY(1.5)';
+                    block.style.transition = 'transform 0.1s ease-out';
+                }
+            });
+            block.addEventListener('mouseleave', () => {
+                block.style.transform = 'scaleY(1)';
+            });
+        });
+    </script>
+</body></html>
