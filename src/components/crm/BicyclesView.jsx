@@ -76,6 +76,7 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
   const [categoriesList, setCategoriesList] = useState([]);
   const [statesList, setStatesList] = useState([]);
   const [isComponentFormOpen, setIsComponentFormOpen] = useState(false);
+  const [editingComponent, setEditingComponent] = useState(null);
   const [componentForm, setComponentForm] = useState({
     categoria_componente_id: "",
     estado_componente_id: 1,
@@ -962,30 +963,58 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
     }
 
     try {
-      const res = await fetch(`/api/crm/bicicletas/${detailBike.id}/components`, {
-        method: "POST",
+      const isEditing = Boolean(editingComponent);
+      const url = `/api/crm/bicicletas/${detailBike.id}/components`;
+      const method = isEditing ? "PUT" : "POST";
+      const payload = isEditing 
+        ? { ...componentForm, bicicleta_componente_id: editingComponent.id || editingComponent.bicicleta_componente_id }
+        : componentForm;
+
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(componentForm)
+        body: JSON.stringify(payload)
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Error al guardar componente.");
 
-      showToast("Componente registrado exitosamente.");
-      setIsComponentFormOpen(false);
-      setComponentForm({
-        categoria_componente_id: categoriesList.length > 0 ? categoriesList[0].id : "",
-        estado_componente_id: 1,
-        marca: "",
-        modelo: "",
-        numero_serie: "",
-        descripcion: "",
-        fecha_instalacion: new Date().toISOString().substring(0, 10),
-        kilometraje_instalacion: 0
-      });
+      showToast(isEditing ? "Componente actualizado exitosamente." : "Componente registrado exitosamente.");
+      handleCancelComponentForm();
       fetchComponents(detailBike.id);
+      fetchData();
     } catch (err) {
       showToast(err.message, "error");
     }
+  };
+
+  const handleEditComponent = (comp) => {
+    setEditingComponent(comp);
+    setComponentForm({
+      categoria_componente_id: comp.categoria_componente_id || (categoriesList.length > 0 ? categoriesList[0].id : ""),
+      estado_componente_id: comp.estado_componente_id || 1,
+      marca: comp.marca || "",
+      modelo: comp.modelo || "",
+      numero_serie: comp.numero_serie || "",
+      descripcion: comp.descripcion || "",
+      fecha_instalacion: comp.fecha_instalacion ? String(comp.fecha_instalacion).substring(0, 10) : new Date().toISOString().substring(0, 10),
+      kilometraje_instalacion: comp.kilometraje_instalacion || 0
+    });
+    setIsComponentFormOpen(true);
+  };
+
+  const handleCancelComponentForm = () => {
+    setIsComponentFormOpen(false);
+    setEditingComponent(null);
+    setComponentForm({
+      categoria_componente_id: categoriesList.length > 0 ? categoriesList[0].id : "",
+      estado_componente_id: 1,
+      marca: "",
+      modelo: "",
+      numero_serie: "",
+      descripcion: "",
+      fecha_instalacion: new Date().toISOString().substring(0, 10),
+      kilometraje_instalacion: 0
+    });
   };
 
   // Hard Delete Component Handler
@@ -1976,11 +2005,12 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
                     >
                       <div className="flex justify-between items-center border-b border-[#2d3748] pb-2">
                         <h4 className="font-bold text-[#bfce7f] uppercase text-xs flex items-center gap-2">
-                          <Plus size={16} /> REGISTRAR NUEVO COMPONENTE DE BICICLETA
+                          {editingComponent ? <Edit2 size={16} /> : <Plus size={16} />}
+                          <span>{editingComponent ? "EDITAR COMPONENTE DE BICICLETA" : "REGISTRAR NUEVO COMPONENTE DE BICICLETA"}</span>
                         </h4>
                         <button
                           type="button"
-                          onClick={() => setIsComponentFormOpen(false)}
+                          onClick={handleCancelComponentForm}
                           className="text-slate-400 hover:text-white p-1 rounded transition-colors"
                         >
                           <X size={16} />
@@ -2066,7 +2096,7 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
                         <div className="flex gap-2 justify-end">
                           <button
                             type="button"
-                            onClick={() => setIsComponentFormOpen(false)}
+                            onClick={handleCancelComponentForm}
                             className="px-4 py-2 rounded-xl border border-[#2d3748] bg-[#0e1117] text-slate-300 hover:text-white transition-colors cursor-pointer"
                           >
                             Cancelar
@@ -2075,8 +2105,8 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
                             type="submit"
                             className="px-5 py-2 rounded-xl bg-[#bfce7f] hover:bg-[#a9ba6b] text-[#1d1f18] font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-lg"
                           >
-                            <Save size={15} />
-                            <span>Guardar Componente</span>
+                            {editingComponent ? <Edit2 size={15} /> : <Save size={15} />}
+                            <span>{editingComponent ? "Actualizar Componente" : "Guardar Componente"}</span>
                           </button>
                         </div>
                       </div>
@@ -2143,13 +2173,22 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
                               </td>
 
                               <td className="py-3.5 px-4 text-right">
-                                <button
-                                  onClick={() => handleDeleteComponent(detailBike.id, comp.id)}
-                                  className="p-1.5 text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
-                                  title="Eliminar componente"
-                                >
-                                  <Trash2 size={15} />
-                                </button>
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    onClick={() => handleEditComponent(comp)}
+                                    className="p-1.5 text-slate-400 hover:text-white hover:bg-[#2d3748] rounded-lg transition-colors cursor-pointer"
+                                    title="Editar componente"
+                                  >
+                                    <Edit2 size={15} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteComponent(detailBike.id, comp.id)}
+                                    className="p-1.5 text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
+                                    title="Eliminar componente"
+                                  >
+                                    <Trash2 size={15} />
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           ))
