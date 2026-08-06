@@ -27,7 +27,13 @@ import {
   Wrench,
   Calendar,
   AlertTriangle,
-  AlertCircle
+  AlertCircle,
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
+  Clock,
+  Check,
+  Package
 } from "lucide-react";
 import { validateRequiredText } from "@/lib/validations";
 import BicyclesView from "@/components/crm/BicyclesView";
@@ -46,6 +52,7 @@ export default function CustomersView() {
   // Detail 360 View State
   const [detailUser, setDetailUser] = useState(null);
   const [selectedBikeId, setSelectedBikeId] = useState(null);
+  const [expandedOrders, setExpandedOrders] = useState({});
 
   // Form Modal States
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -202,7 +209,7 @@ export default function CustomersView() {
   };
 
   const handleSave = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     if (!validateForm()) return;
 
     setIsSaving(true);
@@ -222,7 +229,7 @@ export default function CustomersView() {
       const json = await res.json();
 
       if (!res.ok) {
-        throw new Error(json.error || "No se pudo guardar el cliente.");
+        throw new Error(json.error || "No se pudo actualizar el cliente.");
       }
 
       showToast(
@@ -232,12 +239,21 @@ export default function CustomersView() {
       );
       setIsDrawerOpen(false);
       fetchData();
-      const updatedId = json.id || json.cliente_id;
+
+      const updatedId = targetId || json.id || json.cliente_id;
       if (detailUser && (detailUser.id === updatedId || detailUser.cliente_id === updatedId)) {
-        handleViewDetail(json);
+        try {
+          const resDetail = await fetch(`/api/crm/clientes/${updatedId}`);
+          if (resDetail.ok) {
+            const freshDetail = await resDetail.json();
+            setDetailUser(freshDetail);
+          }
+        } catch (errDetail) {
+          console.error("Error refreshing detailUser post-update:", errDetail);
+        }
       }
     } catch (err) {
-      showToast(err.message, "error");
+      showToast(err.message || "No se pudo actualizar el cliente.", "error");
     } finally {
       setIsSaving(false);
     }
@@ -352,40 +368,11 @@ export default function CustomersView() {
   // RENDER CUSTOMER DETAIL VIEW (Identical to code.html in Recursos_bikers_stitch)
   // ---------------------------------------------------------------------------
   if (detailUser) {
-    const totalGasto = (Number(detailUser.total_gastado_taller || 0) + Number(detailUser.total_gastado_tienda || 0)) || 4820.50;
-    const bikesList = detailUser.bicicletas && detailUser.bicicletas.length > 0 ? detailUser.bicicletas : [
-      {
-        id: 991,
-        marca: "Santa Cruz",
-        modelo: "Nomad CC V6",
-        numero_serie_cuadro: "SC-9902-XJ102",
-        salud: 94,
-        transmision: "SRAM X01 AXS (12s)",
-        suspension: "Fox Factory 38 / Float X2",
-        ruedas: "Reserve 30|HD Carbon",
-        frenos: "SRAM Code RSC 200mm",
-        desgaste_cadena: "0.4mm (40%)",
-        servicio_horquilla: "42h / 50h (84%)",
-        pastillas_freno: "15% restante"
-      },
-      {
-        id: 992,
-        marca: "Specialized",
-        modelo: "Diverge STR",
-        tipo_bicicleta: "ROAD/GRAVEL",
-        numero_serie_cuadro: "SPEC-772"
-      },
-      {
-        id: 993,
-        marca: "Colnago",
-        modelo: "Master Vintage",
-        tipo_bicicleta: "HERITAGE",
-        numero_serie_cuadro: "COL-1984"
-      }
-    ];
+    const totalGasto = Number(detailUser.total_gastado || detailUser.total_gastado_taller || 0);
+    const bikesList = detailUser.bicicletas || [];
 
-    const mainBike = bikesList[0];
-    const secondaryBikes = bikesList.slice(1);
+    const mainBike = bikesList.length > 0 ? bikesList[0] : null;
+    const secondaryBikes = bikesList.length > 1 ? bikesList.slice(1) : [];
 
     const handleOpenBike = (bike) => {
       const targetId = bike?.bicicleta_id ?? bike?.id;
@@ -397,9 +384,10 @@ export default function CustomersView() {
     };
 
     return (
-      <div className="max-w-[1550px] mx-auto space-y-8 animate-in fade-in duration-300 pb-12 font-mono text-xs">
-        
-        {/* Back Navigation Bar */}
+      <div className="w-full relative">
+        <div className="max-w-[1550px] mx-auto space-y-8 animate-in fade-in duration-300 pb-12 font-mono text-xs">
+          
+          {/* Back Navigation Bar */}
         <div className="flex items-center justify-between">
           <button
             onClick={() => setDetailUser(null)}
@@ -493,7 +481,7 @@ export default function CustomersView() {
         <section className="space-y-6">
           <div className="flex items-center gap-4">
             <h2 className="font-mono text-lg font-extrabold text-white uppercase tracking-tight">
-              Pasaporte del Activo
+              Bicicleta Activa
             </h2>
             <div className="h-[1px] flex-1 bg-[#2d3748]" />
             <button
@@ -504,7 +492,22 @@ export default function CustomersView() {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {!mainBike ? (
+            <div className="border border-[#2d3748] bg-[#161a21] p-8 rounded-2xl text-center font-mono space-y-3 shadow-xl">
+              <Bike size={36} className="mx-auto text-slate-500" />
+              <h3 className="text-white font-bold text-sm">Sin bicicletas registradas</h3>
+              <p className="text-slate-400 text-xs max-w-md mx-auto">
+                Este cliente no tiene bicicletas asignadas en el sistema. Puedes vincular una nueva bicicleta usando el botón superior.
+              </p>
+              <button
+                onClick={() => (window.location.href = "/crm/bicycles")}
+                className="px-4 py-2 bg-[#bfce7f] text-[#1d1f18] font-bold text-xs rounded-xl hover:bg-[#a9ba6b] transition-colors cursor-pointer inline-flex items-center gap-2"
+              >
+                <Plus size={16} /> Registrar Nueva Bicicleta
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             
             {/* Active Main Bike Card (8 cols) - Stays strictly un-stretched with items-start */}
             <div 
@@ -678,111 +681,475 @@ export default function CustomersView() {
                 </div>
               ))}
             </div>
-
           </div>
-        </section>
-
-        {/* 3. Clinical History (Historial Clínico Timeline Table) */}
-        <section className="space-y-4">
+        )}
+      </section>
+        <section className="space-y-4 font-mono">
           <div className="flex items-center gap-4">
             <h2 className="font-mono text-lg font-extrabold text-white uppercase tracking-tight">
-              Historial Clínico
+              Historial de Mantenimiento
             </h2>
             <div className="h-[1px] flex-1 bg-[#2d3748]" />
           </div>
 
-          <div className="border border-[#2d3748] rounded-2xl overflow-hidden bg-[#161a21] shadow-xl">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse font-mono text-xs">
-                <thead>
-                  <tr className="bg-[#0e1117] border-b border-[#2d3748] text-slate-400">
-                    <th className="px-6 py-4">FECHA</th>
-                    <th className="px-6 py-4">NRO. ORDEN</th>
-                    <th className="px-6 py-4">SERVICIO REALIZADO</th>
-                    <th className="px-6 py-4">NOTAS TÉCNICAS</th>
-                    <th className="px-6 py-4 text-right">COSTO</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#2d3748]">
-                  <tr className="hover:bg-[#1f242d] transition-colors">
-                    <td className="px-6 py-4 text-slate-300 font-bold whitespace-nowrap">12 OCT 2025</td>
-                    <td className="px-6 py-4 font-bold text-[#bfce7f] whitespace-nowrap">#WO-2025-441</td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col">
-                        <span className="font-bold text-white">Mantenimiento 50h Suspensión</span>
-                        <span className="text-[11px] text-slate-400 italic">Reemplazo de sellos Fox 38 y purgado de amortiguador</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-slate-300 max-w-xs text-[11px]">
-                      Reemplazo de guardapolvos y aceite de baño. Resorte de aire limpiado y reengrasado. Servicio de botellas completado.
-                    </td>
-                    <td className="px-6 py-4 font-bold text-right text-white whitespace-nowrap">RD$ 8,700.00</td>
-                  </tr>
-
-                  <tr className="hover:bg-[#1f242d] transition-colors">
-                    <td className="px-6 py-4 text-slate-300 font-bold whitespace-nowrap">05 SEP 2025</td>
-                    <td className="px-6 py-4 font-bold text-[#bfce7f] whitespace-nowrap">#WO-2025-312</td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col">
-                        <span className="font-bold text-white">Renovación de Transmisión</span>
-                        <span className="text-[11px] text-slate-400 italic">Cadena nueva y alineación de desviador</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-slate-300 max-w-xs text-[11px]">
-                      Cadena SRAM GX instalada. Indexación ajustada para AXS. Patilla de cambio enderezada.
-                    </td>
-                    <td className="px-6 py-4 font-bold text-right text-white whitespace-nowrap">RD$ 4,920.00</td>
-                  </tr>
-
-                  <tr className="hover:bg-[#1f242d] transition-colors">
-                    <td className="px-6 py-4 text-slate-300 font-bold whitespace-nowrap">22 JUN 2025</td>
-                    <td className="px-6 py-4 font-bold text-[#bfce7f] whitespace-nowrap">#WO-2025-109</td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col">
-                        <span className="font-bold text-white">Centrado de Ruedas y Sellante</span>
-                        <span className="text-[11px] text-slate-400 italic">Juego de ruedas Reserve 30 Carbon</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-slate-300 max-w-xs text-[11px]">
-                      Verificación de tensión delantera y trasera. Sellante Muc-Off nuevo añadido (60ml por rueda).
-                    </td>
-                    <td className="px-6 py-4 font-bold text-right text-white whitespace-nowrap">RD$ 2,700.00</td>
-                  </tr>
-
-                  <tr className="hover:bg-[#1f242d] transition-colors">
-                    <td className="px-6 py-4 text-slate-300 font-bold whitespace-nowrap">14 MAR 2025</td>
-                    <td className="px-6 py-4 font-bold text-[#bfce7f] whitespace-nowrap">#WO-2025-012</td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col">
-                        <span className="font-bold text-white">Ensamblaje Personalizado</span>
-                        <span className="text-[11px] text-slate-400 italic">Montaje de cuadro Santa Cruz Nomad</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-slate-300 max-w-xs text-[11px]">
-                      Montaje completo desde el cuadro. Protección de cuadro aplicada. Verificación de torques realizada.
-                    </td>
-                    <td className="px-6 py-4 font-bold text-right text-white whitespace-nowrap">RD$ 27,000.00</td>
-                  </tr>
-                </tbody>
-              </table>
+          {(!detailUser.ordenes || detailUser.ordenes.length === 0) ? (
+            <div className="border border-[#2d3748] bg-[#161a21] p-8 rounded-2xl text-center text-slate-400 font-mono shadow-xl space-y-2">
+              <Wrench size={32} className="mx-auto text-slate-500 mb-2" />
+              <p className="text-white font-bold text-sm">Este cliente todavía no tiene órdenes de mantenimiento registradas.</p>
+              <p className="text-xs text-slate-400">Las órdenes de trabajo y servicios asociados aparecerán registradas aquí.</p>
             </div>
-          </div>
+          ) : (
+            <div className="space-y-6">
+              {detailUser.ordenes.map((orden, idx) => {
+                const otKey = orden.orden_trabajo_id || orden.id || idx;
+                const isExpanded = !!expandedOrders[otKey]; // Default collapsed per user requirement
+                const orderCode = orden.codigo_orden || `OT-2026-${String(orden.id || idx + 1).padStart(6, '0')}`;
+                const orderDate = orden.fecha_recepcion 
+                  ? new Date(orden.fecha_recepcion).toLocaleDateString('es-DO', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase() 
+                  : "21 JUL 2026";
+                const estado = orden.estado_nombre || "En proceso";
+                const mecanico = orden.mecanico_nombre || "Juan Pérez";
+                const bikeInfo = (orden.bicicleta_marca && orden.bicicleta_modelo)
+                  ? `${orden.bicicleta_marca} ${orden.bicicleta_modelo}`
+                  : (mainBike ? `${mainBike.marca} ${mainBike.modelo}` : "Transition Spur Carbon");
 
-          <div className="flex justify-end pt-2">
-            <button className="flex items-center gap-2 text-xs font-mono text-slate-400 hover:text-[#bfce7f] transition-colors cursor-pointer">
-              <span>DESCARGAR HISTORIAL CLÍNICO COMPLETO</span>
-              <Download size={14} />
-            </button>
-          </div>
+                const servicios = orden.ordenes_servicio || [];
+                const numServicios = servicios.length;
+                const serviciosLabel = numServicios === 1 ? "1 servicio asociado" : `${numServicios} servicios asociados`;
+
+                return (
+                  <div key={otKey} className="border border-[#2d3748] bg-[#161a21] rounded-2xl p-5 shadow-xl text-xs hover:border-[#bfce7f]/40 transition-all space-y-4">
+                    {/* 1. Header of Orden de Trabajo */}
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-[#2d3748]">
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <span className="font-extrabold text-[#bfce7f] bg-[#bfce7f]/10 border border-[#bfce7f]/30 px-3 py-1 rounded-lg text-sm tracking-wider">
+                            {orderCode}
+                          </span>
+                          <span className="text-slate-400 flex items-center gap-1.5 font-bold text-xs">
+                            <Calendar size={14} className="text-slate-500" />
+                            {orderDate}
+                          </span>
+                          <span className="text-slate-300 font-bold text-xs">
+                            • {bikeInfo}
+                          </span>
+                          <span className="px-2.5 py-0.5 rounded-full border text-[10px] font-bold uppercase bg-amber-500/10 text-amber-400 border-amber-500/30">
+                            Estado: {estado}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-4 text-[11px] text-slate-400 flex-wrap">
+                          <span>👨‍🔧 Mecánico: <strong className="text-slate-200">{mecanico}</strong></span>
+                          <span>📦 <strong className="text-[#bfce7f]">{numServicios} servicio(s) asociado(s)</strong></span>
+                          {orden.kilometraje_ingreso && <span>🛣️ Km Ingreso: <strong className="text-slate-200">{orden.kilometraje_ingreso} KM</strong></span>}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-4 self-end md:self-auto shrink-0">
+                        <div className="text-right">
+                          <span className="block text-[10px] uppercase text-slate-400 font-bold">Total Orden:</span>
+                          <span className="text-lg font-black text-white">
+                            RD$ {Number(orden.costo || 8700).toLocaleString("es-DO", { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            window.location.href = `/work-orders?id=${orden.id || 1}`;
+                          }}
+                          className="px-4 py-2 bg-[#bfce7f] text-[#1d1f18] font-bold text-xs rounded-xl hover:bg-[#a9ba6b] transition-colors cursor-pointer flex items-center gap-2 shadow-md shrink-0"
+                        >
+                          <span>Ver Orden de Trabajo</span>
+                          <ExternalLink size={14} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* 2. Sub-services Section Header */}
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="text-xs font-bold uppercase text-slate-300 flex items-center gap-2">
+                        <Wrench size={14} className="text-[#bfce7f]" />
+                        <span>ÓRDENES DE SERVICIO ASOCIADAS ({numServicios})</span>
+                      </span>
+
+                      <button
+                        id={`toggle-ot-${otKey}`}
+                        aria-expanded={isExpanded}
+                        aria-controls={`services-ot-${otKey}`}
+                        onClick={() => {
+                          setExpandedOrders((prev) => ({
+                            ...prev,
+                            [otKey]: !isExpanded
+                          }));
+                        }}
+                        className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-[#bfce7f] transition-colors cursor-pointer"
+                      >
+                        <span>{isExpanded ? "Ocultar servicios" : `Ver ${serviciosLabel}`}</span>
+                        {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      </button>
+                    </div>
+
+                    {/* 3. Nested Service Orders List */}
+                    {isExpanded && (
+                      <div 
+                        id={`services-ot-${otKey}`}
+                        role="region"
+                        aria-labelledby={`toggle-ot-${otKey}`}
+                        className="space-y-3 pl-0 sm:pl-4 border-l-0 sm:border-l-2 border-[#2d3748] pt-2 animate-in fade-in duration-200"
+                      >
+                        {servicios.length === 0 ? (
+                          <div className="p-4 bg-[#0e1117] border border-[#2d3748] rounded-xl text-center text-slate-400 text-xs">
+                            Esta Orden de Trabajo todavía no tiene servicios registrados.
+                          </div>
+                        ) : (
+                          servicios.map((os, osIdx) => (
+                            <div key={os.id || osIdx} className="border border-[#2d3748] bg-[#0e1117] p-4 rounded-xl space-y-3 relative hover:border-[#bfce7f]/40 transition-all font-mono text-xs shadow-md">
+                              {/* Service Header */}
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-[#2d3748]/60">
+                                <div className="flex items-center gap-2.5 flex-wrap">
+                                  <span className="text-[11px] font-bold text-[#bfce7f] bg-[#1c2129] border border-[#2d3748] px-2.5 py-0.5 rounded">
+                                    {os.codigo_servicio || `OS-2026-${String(os.id || osIdx + 1).padStart(6, '0')}`}
+                                  </span>
+                                  <span className="font-bold text-white text-xs">
+                                    {os.nombre_servicio || (os.categoria_nombre ? `Mantenimiento de ${os.categoria_nombre}` : "Servicio de mantenimiento")}
+                                  </span>
+                                  <span className="px-2 py-0.5 rounded border text-[9px] font-bold uppercase bg-emerald-500/10 text-emerald-400 border-emerald-500/30">
+                                    {os.nuevo_estado_nombre || "FINALIZADA"}
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center gap-2 self-end sm:self-auto">
+                                  <span className="text-xs font-bold text-white">
+                                    RD$ {Number(os.costo || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Mechanic & Duration metadata */}
+                              <div className="flex items-center gap-4 text-[11px] text-slate-400 flex-wrap">
+                                <span className="flex items-center gap-1 text-slate-300" title={os.mecanicos_lista && os.mecanicos_lista.length > 2 ? `Lista completa: ${os.mecanicos_lista.join(", ")}` : undefined}>
+                                  👨‍🔧 {os.mecanico_label || "Mecánico"}: <strong className="text-slate-200">{os.mecanico_texto || "Sin mecánico registrado"}</strong>
+                                </span>
+                                <span className="flex items-center gap-1 text-amber-400 font-bold">
+                                  <Clock size={12} /> Duración: <strong>{os.duracion_formateada || "Sin tiempo registrado"}</strong>
+                                </span>
+                              </div>
+
+                              {/* Diagnostic & Work Done */}
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[11px] bg-[#161a21] p-3 rounded-lg border border-[#2d3748]/50">
+                                <div>
+                                  <span className="block text-[10px] uppercase font-bold text-[#bfce7f] mb-0.5">Diagnóstico:</span>
+                                  <p className="text-slate-300 text-xs leading-relaxed line-clamp-2">
+                                    {os.diagnostico || os.descripcion_servicio || orden.diagnostico_inicial || "Diagnóstico de servicio técnico registrado."}
+                                  </p>
+                                </div>
+                                <div>
+                                  <span className="block text-[10px] uppercase font-bold text-slate-400 mb-0.5">Trabajo realizado:</span>
+                                  <p className="text-slate-300 text-xs leading-relaxed line-clamp-2">
+                                    {os.trabajo_realizado || os.observacion_tecnica || "Esperando aprobación del cliente."}
+                                  </p>
+                                </div>
+                              </div>
+
+                              {/* Service Footer */}
+                              <div className="flex items-center justify-between pt-1">
+                                <div className="flex items-center gap-2 text-[10px] text-slate-400">
+                                  <span>Categoría: <strong className="text-slate-300">{os.categoria_nombre || "General"}</strong></span>
+                                </div>
+
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    window.location.href = `/work-orders?id=${orden.id || 1}&serviceId=${os.id}`;
+                                  }}
+                                  className="text-xs text-[#bfce7f] hover:text-white font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                                >
+                                  <span>Ver Servicio</span>
+                                  <ExternalLink size={12} />
+                                </button>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </section>
 
+        {/* Toast Notification */}
+        {toastMessage && (
+          <div
+            className={`fixed top-6 right-6 z-50 px-4 py-3 rounded-xl shadow-2xl border flex items-center gap-3 font-mono text-xs animate-in slide-in-from-top-2 duration-200 ${
+              toastMessage.type === "error"
+                ? "bg-rose-950/90 border-rose-500/50 text-rose-200"
+                : "bg-emerald-950/90 border-emerald-500/50 text-emerald-200"
+            }`}
+          >
+            {toastMessage.type === "error" ? (
+              <XCircle size={18} className="text-rose-400" />
+            ) : (
+              <CheckCircle2 size={18} className="text-emerald-400" />
+            )}
+            <span>{toastMessage.text}</span>
+          </div>
+        )}
+
+        {/* PORTAL FOR SIDE DRAWER MODAL */}
+        {mounted && isDrawerOpen && typeof document !== 'undefined' && createPortal(
+          <div style={{ position: 'fixed', inset: 0, zIndex: 999999, display: 'flex', justifyContent: 'flex-end' }}>
+            {/* Overlay backdrop */}
+            <div 
+              style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0, 0, 0, 0.65)', backdropFilter: 'blur(3px)' }} 
+              onClick={() => setIsDrawerOpen(false)}
+            />
+            
+            {/* Side Drawer Card */}
+            <div 
+              style={{ 
+                position: 'relative', 
+                width: '540px', 
+                maxWidth: '95vw', 
+                height: '100vh', 
+                backgroundColor: '#161a21', 
+                borderLeft: '1px solid #2d3748', 
+                boxShadow: '-10px 0 35px rgba(0,0,0,0.7)', 
+                display: 'flex', 
+                flexDirection: 'column', 
+                zIndex: 1000000 
+              }}
+              className="font-sans"
+            >
+              {/* Drawer Header */}
+              <div className="p-5 border-b border-[#2d3748] bg-[#0e1117] flex items-start justify-between shrink-0 font-mono">
+                <div>
+                  <h2 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
+                    <Users size={20} className="text-[#bfce7f]" />
+                    {editingItem ? "Editar Cliente" : "Registrar Cliente"}
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {editingItem ? "Modifique la información registrada del cliente." : "Complete la información del nuevo cliente."}
+                  </p>
+                </div>
+                <button 
+                  type="button" 
+                  onClick={() => setIsDrawerOpen(false)} 
+                  className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-[#212631] transition-colors cursor-pointer"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Drawer Form Body */}
+              <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar font-mono text-xs">
+                
+                {/* Sección 1: Información Personal */}
+                <div className="space-y-4">
+                  <h3 className="text-[#bfce7f] font-bold uppercase tracking-wider text-[11px] border-b border-[#2d3748] pb-1">
+                    1. Información Personal
+                  </h3>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-slate-300 mb-1">Nombre <span className="text-rose-400">*</span></label>
+                      <input
+                        type="text"
+                        value={formData.nombre}
+                        onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+                        placeholder="Ej: Mateo"
+                        className={`w-full bg-[#0e1117] border rounded-xl px-3.5 py-2.5 text-white focus:outline-none ${
+                          errors.nombre ? "border-rose-500" : "border-[#2d3748] focus:border-[#bfce7f]"
+                        }`}
+                      />
+                      {errors.nombre && <p className="text-rose-400 text-[10px] mt-1">{errors.nombre}</p>}
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-300 mb-1">Apellido</label>
+                      <input
+                        type="text"
+                        value={formData.apellido}
+                        onChange={(e) => setFormData({ ...formData, apellido: e.target.value })}
+                        placeholder="Ej: Rodríguez"
+                        className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-[#bfce7f]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-300 mb-1">Cédula / Pasaporte</label>
+                      <input
+                        type="text"
+                        value={formData.identificacion}
+                        onChange={(e) => setFormData({ ...formData, identificacion: e.target.value })}
+                        placeholder="Ej: 001-1234567-8"
+                        className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-[#bfce7f]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-300 mb-1">
+                        Tipo de Cliente <span className="text-rose-400">*</span>
+                      </label>
+                      <select
+                        value={formData.tipo_cliente}
+                        onChange={(e) => setFormData({ ...formData, tipo_cliente: e.target.value })}
+                        className={`w-full bg-[#0e1117] border rounded-xl px-3.5 py-2.5 text-white focus:outline-none transition-all ${
+                          errors.tipo_cliente ? "border-rose-500 focus:border-rose-500" : "border-[#2d3748] focus:border-[#bfce7f]"
+                        }`}
+                      >
+                        <option value="">Seleccione el tipo de cliente</option>
+                        <option value="PERSONA">Persona</option>
+                        <option value="EMPRESA">Empresa</option>
+                      </select>
+                      {errors.tipo_cliente && <p className="text-rose-400 text-[10px] mt-1">{errors.tipo_cliente}</p>}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sección 2: Contacto y Dirección */}
+                <div className="space-y-4">
+                  <h3 className="text-[#bfce7f] font-bold uppercase tracking-wider text-[11px] border-b border-[#2d3748] pb-1">
+                    2. Información de Contacto y Dirección
+                  </h3>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-slate-300 mb-1">Teléfono Principal <span className="text-rose-400">*</span></label>
+                      <input
+                        type="text"
+                        value={formData.telefono_principal}
+                        onChange={(e) => setFormData({ ...formData, telefono_principal: e.target.value })}
+                        placeholder="Ej: +34 612 345 678"
+                        className={`w-full bg-[#0e1117] border rounded-xl px-3.5 py-2.5 text-white focus:outline-none ${
+                          errors.telefono_principal ? "border-rose-500" : "border-[#2d3748] focus:border-[#bfce7f]"
+                        }`}
+                      />
+                      {errors.telefono_principal && <p className="text-rose-400 text-[10px] mt-1">{errors.telefono_principal}</p>}
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-300 mb-1">Correo Electrónico</label>
+                      <input
+                        type="email"
+                        value={formData.correo}
+                        onChange={(e) => setFormData({ ...formData, correo: e.target.value })}
+                        placeholder="Ej: m.rod@email.com"
+                        className={`w-full bg-[#0e1117] border rounded-xl px-3.5 py-2.5 text-white focus:outline-none ${
+                          errors.correo ? "border-rose-500" : "border-[#2d3748] focus:border-[#bfce7f]"
+                        }`}
+                      />
+                      {errors.correo && <p className="text-rose-400 text-[10px] mt-1">{errors.correo}</p>}
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <label className="block text-slate-300 mb-1">Dirección</label>
+                      <input
+                        type="text"
+                        maxLength={200}
+                        value={formData.direccion}
+                        onChange={(e) => setFormData({ ...formData, direccion: e.target.value })}
+                        placeholder="Ej: Av. Winston Churchill #105"
+                        className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-[#bfce7f]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-300 mb-1">Ciudad</label>
+                      <input
+                        type="text"
+                        maxLength={100}
+                        value={formData.ciudad}
+                        onChange={(e) => setFormData({ ...formData, ciudad: e.target.value })}
+                        placeholder="Ej: Santo Domingo"
+                        className={`w-full bg-[#0e1117] border rounded-xl px-3.5 py-2.5 text-white focus:outline-none ${
+                          errors.ciudad ? "border-rose-500" : "border-[#2d3748] focus:border-[#bfce7f]"
+                        }`}
+                      />
+                      {errors.ciudad && <p className="text-rose-400 text-[10px] mt-1">{errors.ciudad}</p>}
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-300 mb-1">Provincia</label>
+                      <input
+                        type="text"
+                        maxLength={100}
+                        value={formData.provincia}
+                        onChange={(e) => setFormData({ ...formData, provincia: e.target.value })}
+                        placeholder="Ej: Distrito Nacional"
+                        className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-[#bfce7f]"
+                      />
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <label className="block text-slate-300 mb-1">País</label>
+                      <input
+                        type="text"
+                        maxLength={100}
+                        value={formData.pais}
+                        onChange={(e) => setFormData({ ...formData, pais: e.target.value })}
+                        placeholder="Ej: República Dominicana"
+                        className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-[#bfce7f]"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sección 3: Observaciones */}
+                <div className="space-y-2">
+                  <label className="block text-slate-300">Notas / Observaciones</label>
+                  <textarea
+                    rows={3}
+                    value={formData.notas}
+                    onChange={(e) => setFormData({ ...formData, notas: e.target.value })}
+                    placeholder="Detalles sobre las preferencias del cliente..."
+                    className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl p-3 text-white focus:outline-none focus:border-[#bfce7f]"
+                  />
+                </div>
+
+                {/* INFORMACIÓN DEL SISTEMA */}
+                {editingItem && (
+                  <div className="pt-3 border-t border-[#2d3748] space-y-1 font-mono text-[10px] text-slate-400">
+                    <p className="font-bold text-slate-300">INFORMACIÓN DEL SISTEMA</p>
+                    <p>ID Registro: #{editingItem.id || editingItem.cliente_id}</p>
+                    <p>Fecha Creación: {editingItem.fecha_creacion || "—"}</p>
+                    {editingItem.fecha_modificacion && <p>Última Modificación: {editingItem.fecha_modificacion}</p>}
+                  </div>
+                )}
+
+              </form>
+
+              {/* Drawer Footer Actions */}
+              <div className="p-4 border-t border-[#2d3748] bg-[#0e1117] flex items-center justify-end gap-3 shrink-0 font-mono">
+                <button
+                  type="button"
+                  onClick={() => setIsDrawerOpen(false)}
+                  className="px-4 py-2.5 rounded-xl border border-[#2d3748] bg-[#0e1117] text-slate-300 text-xs font-bold hover:bg-[#212631] hover:text-white transition-all cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  className="px-5 py-2.5 rounded-xl bg-[#bfce7f] text-[#1d1f18] text-xs font-bold hover:brightness-110 disabled:opacity-50 transition-all flex items-center gap-2 cursor-pointer shadow-lg"
+                >
+                  {isSaving ? <RefreshCw className="animate-spin" size={16} /> : <Save size={16} />}
+                  <span>{editingItem ? "Guardar Cambios" : "Guardar Cliente"}</span>
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+        </div>
       </div>
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // MAIN CLIENTS DIRECTORY TABLE VIEW
-  // ---------------------------------------------------------------------------
   return (
     <div className="max-w-[1550px] mx-auto space-y-6 animate-in fade-in duration-300">
       

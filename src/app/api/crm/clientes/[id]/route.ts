@@ -74,10 +74,163 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
       foto_url: (b.foto_url && !b.foto_url.includes("default.png")) ? b.foto_url : getFallbackPhotoUrl(b.tipo_bicicleta)
     }));
 
+    // Fetch work orders (Historial de Mantenimientos) for this client
+    const parentOrders = await query(`
+      SELECT 
+        ot.orden_trabajo_id AS id,
+        ot.orden_trabajo_id,
+        ot.codigo_orden,
+        ot.fecha_recepcion,
+        ot.fecha_registro,
+        COALESCE(ot.descripcion_cliente, 'Mantenimiento General') AS descripcion_cliente,
+        COALESCE(ot.descripcion_cliente, 'Mantenimiento General') AS servicio_realizado,
+        COALESCE(ot.diagnostico_inicial, 'Diagnóstico de ingreso registrado') AS diagnostico_inicial,
+        ot.diagnostico_inicial AS notas_tecnicas,
+        ot.observacion_interna,
+        COALESCE(ot.total_orden, 0) AS costo,
+        ot.kilometraje_ingreso,
+        ot.salud_global_porcentaje,
+        ot.bicicleta_id,
+        b.marca AS bicicleta_marca,
+        b.modelo AS bicicleta_modelo,
+        COALESCE(eot.nombre, 'En proceso') AS estado_nombre,
+        COALESCE(pot.nombre, 'Normal') AS prioridad_nombre
+      FROM admin.ordenes_trabajo ot
+      LEFT JOIN admin.bicicletas b ON ot.bicicleta_id = b.bicicleta_id
+      LEFT JOIN admin.estado_orden_trabajo eot ON ot.estado_orden_id = eot.estado_orden_id
+      LEFT JOIN admin.prioridad_orden_trabajo pot ON ot.prioridad_orden_id = pot.prioridad_orden_trabajo_id
+      WHERE ot.cliente_id = $1 AND (ot.activo = true OR ot.activo IS NULL)
+      ORDER BY ot.fecha_recepcion DESC, ot.orden_trabajo_id DESC
+    `, [clienteId]);
+
+    const orderIds = (parentOrders || []).map((o: any) => o.orden_trabajo_id);
+    let subServicesMap: Record<number, any[]> = {};
+
+    if (orderIds.length > 0) {
+      const subServicesRows = await query(`
+        SELECT 
+          os.orden_servicio_id AS id,
+          os.orden_servicio_id,
+          os.orden_trabajo_id,
+          os.secuencia,
+          os.descripcion_servicio,
+          os.observacion_tecnica,
+          COALESCE(os.precio_unitario, 0) AS costo,
+          os.bicicleta_componente_id,
+          os.nuevo_estado_componente_id,
+          ts.nombre AS tipo_servicio_nombre,
+          bc.marca AS componente_marca,
+          bc.modelo AS componente_modelo,
+          cc.nombre AS categoria_nombre,
+          nest.nombre AS nuevo_estado_nombre,
+          COALESCE(mo_agg.minutos_total, 0) AS minutos_trabajados_total,
+          mo_agg.mecanicos_list
+        FROM admin.orden_servicios os
+        LEFT JOIN admin.tipo_servicio ts ON os.tipo_servicio_id = ts.tipo_servicio_id
+        LEFT JOIN admin.bicicleta_componentes bc ON os.bicicleta_componente_id = bc.bicicleta_componente_id
+        LEFT JOIN admin.categoria_componente cc ON bc.categoria_componente_id = cc.categoria_componente_id
+        LEFT JOIN admin.estado_componente nest ON os.nuevo_estado_componente_id = nest.estado_componente_id
+        LEFT JOIN (
+          SELECT 
+            mo.orden_servicio_id,
+            COALESCE(SUM(mo.minutos_trabajados), 0) AS minutos_total,
+            ARRAY_AGG(
+              DISTINCT CASE 
+                WHEN TRIM(COALESCE(ui.nombre, '') || ' ' || COALESCE(ui.apellido, '')) <> '' 
+                THEN TRIM(COALESCE(ui.nombre, '') || ' ' || COALESCE(ui.apellido, ''))
+                ELSE 'Usuario no disponible'
+              END
+            ) AS mecanicos_list
+          FROM admin.orden_servicio_mano_obra mo
+          LEFT JOIN admin.usuario_identidad ui ON mo.usuario_id = ui.usuario_id
+          WHERE mo.activo = true OR mo.activo IS NULL
+          GROUP BY mo.orden_servicio_id
+        ) mo_agg ON os.orden_servicio_id = mo_agg.orden_servicio_id
+        WHERE os.orden_trabajo_id IN (${orderIds.join(',')}) AND (os.activo = true OR os.activo IS NULL)
+        ORDER BY os.secuencia ASC, os.orden_servicio_id ASC
+      `);
+
+      const formatDuracion = (m: number) => {
+        const mins = Number(m || 0);
+        if (!mins || mins <= 0) return "Sin tiempo registrado";
+        const h = Math.floor(mins / 60);
+        const remMins = mins % 60;
+        if (h === 0) return `${remMins}m`;
+        if (remMins === 0) return `${h}h`;
+        return `${h}h ${remMins}m`;
+      };
+
+      const formatMecanicosData = (arr: any) => {
+        let list: string[] = [];
+        if (Array.isArray(arr)) {
+          list = arr.filter((n: any) => typeof n === 'string' && n.trim() !== '');
+        }
+        if (list.length === 0) {
+          return { label: "Mecánico", text: "Sin mecánico registrado", list: [] };
+        }
+        if (list.length === 1) {
+          return { label: "Mecánico", text: list[0], list };
+        }
+        if (list.length === 2) {
+          return { label: "Mecánicos", text: `${list[0]}, ${list[1]}`, list };
+        }
+        const mainTwo = list.slice(0, 2).join(", ");
+        const rem = list.length - 2;
+        return { label: "Mecánicos", text: `${mainTwo} +${rem}`, list };
+      };
+
+      for (const row of (subServicesRows || [])) {
+        const otId = Number(row.orden_trabajo_id);
+        if (!subServicesMap[otId]) subServicesMap[otId] = [];
+        
+        const serviceTitle = row.tipo_servicio_nombre || 
+          (row.categoria_nombre ? `Mantenimiento de ${row.categoria_nombre}` : "Servicio de mantenimiento");
+
+        const mins = Number(row.minutos_trabajados_total || 0);
+        const mecInfo = formatMecanicosData(row.mecanicos_list);
+
+        subServicesMap[otId].push({
+          id: row.orden_servicio_id,
+          codigo_servicio: `OS-2026-${String(row.orden_servicio_id).padStart(6, '0')}`,
+          nombre_servicio: serviceTitle,
+          descripcion_servicio: row.descripcion_servicio,
+          diagnostico: row.descripcion_servicio || "Diagnóstico de servicio técnico registrado.",
+          observacion_tecnica: row.observacion_tecnica || null,
+          trabajo_realizado: row.observacion_tecnica || "Esperando aprobación del cliente.",
+          categoria_nombre: row.categoria_nombre || "General",
+          componente_marca: row.componente_marca,
+          componente_modelo: row.componente_modelo,
+          costo: Number(row.costo || 0),
+          nuevo_estado_nombre: row.nuevo_estado_nombre || "FINALIZADA",
+          minutos_trabajados_total: mins,
+          duracion_formateada: formatDuracion(mins),
+          mecanicos_info: mecInfo,
+          mecanico_label: mecInfo.label,
+          mecanico_texto: mecInfo.text,
+          mecanicos_lista: mecInfo.list
+        });
+      }
+    }
+
+    const mappedOrdenes = (parentOrders || []).map((ot: any) => ({
+      ...ot,
+      ordenes_servicio: subServicesMap[ot.orden_trabajo_id] || []
+    }));
+
+    const totalGastadoRow = await query(`
+      SELECT COALESCE(SUM(total_orden), 0) AS total_gastado
+      FROM admin.ordenes_trabajo
+      WHERE cliente_id = $1 AND (activo = true OR activo IS NULL)
+    `, [clienteId]);
+
+    const totalGastado = Number(totalGastadoRow[0]?.total_gastado || 0);
+
     return NextResponse.json({
       id: cliente.cliente_id,
       ...cliente,
-      bicicletas: mappedBikes
+      total_gastado: totalGastado,
+      bicicletas: mappedBikes,
+      ordenes: mappedOrdenes
     });
   } catch (error: any) {
     console.error("Error in GET /api/crm/clientes/[id]:", error);
