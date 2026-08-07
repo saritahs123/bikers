@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Historial de Estados - OT-2026-00087</title>
+<!-- Google Fonts & Material Symbols -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800&amp;family=JetBrains+Mono:wght@600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-primary-container": "#252d00",
+                      "surface-container": "#1f201a",
+                      "secondary-fixed": "#dfe2ec",
+                      "primary-fixed-dim": "#bfce7f",
+                      "on-secondary-container": "#b2b5be",
+                      "on-surface-variant": "#c7c8b7",
+                      "surface-dim": "#13140f",
+                      "on-primary-fixed": "#181e00",
+                      "error": "#ffb4ab",
+                      "tertiary": "#bdc7dc",
+                      "on-background": "#e4e3d9",
+                      "surface-variant": "#35352f",
+                      "on-tertiary-fixed": "#121c2c",
+                      "outline-variant": "#46483b",
+                      "surface": "#13140f",
+                      "surface-tint": "#bfce7f",
+                      "on-tertiary": "#273141",
+                      "on-secondary-fixed": "#181c23",
+                      "primary": "#bfce7f",
+                      "secondary-container": "#43474f",
+                      "surface-bright": "#393a33",
+                      "on-error": "#690005",
+                      "inverse-on-surface": "#30312b",
+                      "surface-container-highest": "#35352f",
+                      "inverse-primary": "#576421",
+                      "on-secondary-fixed-variant": "#43474f",
+                      "on-primary": "#2b3400",
+                      "on-surface": "#e4e3d9",
+                      "outline": "#919282",
+                      "tertiary-fixed-dim": "#bdc7dc",
+                      "on-error-container": "#ffdad6",
+                      "on-tertiary-fixed-variant": "#3d4759",
+                      "surface-container-high": "#2a2a24",
+                      "secondary": "#c3c6d0",
+                      "tertiary-fixed": "#d9e3f9",
+                      "on-primary-fixed-variant": "#404c0a",
+                      "inverse-surface": "#e4e3d9",
+                      "secondary-fixed-dim": "#c3c6d0",
+                      "primary-container": "#89974f",
+                      "on-secondary": "#2d3138",
+                      "error-container": "#93000a",
+                      "background": "#13140f",
+                      "primary-fixed": "#dbea98",
+                      "surface-container-low": "#1b1c17",
+                      "tertiary-container": "#8791a5",
+                      "surface-container-lowest": "#0e0f0a",
+                      "on-tertiary-container": "#202a3a"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "unit": "4px",
+                      "gutter": "24px",
+                      "container-max": "1440px",
+                      "margin-mobile": "16px",
+                      "margin-desktop": "40px"
+              },
+              "fontFamily": {
+                      "headline-sm": ["Hanken Grotesk"],
+                      "headline-lg": ["Hanken Grotesk"],
+                      "headline-md": ["Hanken Grotesk"],
+                      "body-lg": ["Hanken Grotesk"],
+                      "body-sm": ["Hanken Grotesk"],
+                      "body-md": ["Hanken Grotesk"],
+                      "headline-lg-mobile": ["Hanken Grotesk"],
+                      "label-caps": ["JetBrains Mono"]
+              },
+              "fontSize": {
+                      "headline-sm": ["24px", { "lineHeight": "1.3", "fontWeight": "600" }],
+                      "headline-lg": ["48px", { "lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "800" }],
+                      "headline-md": ["32px", { "lineHeight": "1.2", "fontWeight": "700" }],
+                      "body-lg": ["18px", { "lineHeight": "1.6", "fontWeight": "400" }],
+                      "body-sm": ["14px", { "lineHeight": "1.4", "fontWeight": "400" }],
+                      "body-md": ["16px", { "lineHeight": "1.5", "fontWeight": "400" }],
+                      "headline-lg-mobile": ["32px", { "lineHeight": "1.2", "fontWeight": "800" }],
+                      "label-caps": ["12px", { "lineHeight": "1", "letterSpacing": "0.1em", "fontWeight": "600" }]
+              }
+            }
+          }
+        }
+    </script>
+<style>
+        /* Industrial blueprint pattern */
+        body {
+            background-image: radial-gradient(circle at 1px 1px, rgba(199, 200, 183, 0.05) 1px, transparent 0);
+            background-size: 24px 24px;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .icon-fill {
+            font-variation-settings: 'FILL' 1;
+        }
+    </style>
+</head>
+<body class="bg-surface-container-lowest text-on-background min-h-screen antialiased selection:bg-primary-container selection:text-on-primary-container">
+<!-- App Header / Breadcrumb -->
+<header class="sticky top-0 z-50 bg-surface-container-low/90 backdrop-blur-sm border-b border-outline-variant w-full">
+<div class="max-w-[container-max] mx-auto px-margin-mobile md:px-margin-desktop h-16 flex items-center justify-between">
+<div class="flex items-center gap-4">
+<button class="p-2 hover:bg-surface-container-highest border border-transparent hover:border-outline-variant transition-colors rounded">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="arrow_back">arrow_back</span>
+</button>
+<div class="flex flex-col">
+<span class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Work Orders / Detalle</span>
+<h1 class="font-headline-sm text-headline-sm text-on-surface">OT-2026-00087</h1>
+</div>
+</div>
+<div class="hidden md:flex items-center gap-3">
+<span class="font-label-caps text-label-caps text-on-surface-variant uppercase">Estado Actual:</span>
+<div class="bg-primary-container border-t border-primary px-3 py-1.5 flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-on-primary-container animate-pulse"></span>
+<span class="font-label-caps text-label-caps text-on-primary-container uppercase">En Proceso</span>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="max-w-[container-max] mx-auto px-margin-mobile md:px-margin-desktop py-8 md:py-12">
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-gutter">
+<!-- Left Column: Timeline -->
+<div class="lg:col-span-8 space-y-6">
+<div class="flex items-center justify-between mb-2">
+<h2 class="font-headline-md text-headline-md text-on-surface">Historial de Estados</h2>
+<button class="flex items-center gap-2 font-label-caps text-label-caps text-primary hover:text-primary-fixed transition-colors">
+<span class="material-symbols-outlined text-sm" data-icon="filter_list">filter_list</span>
+                        Filtros
+                    </button>
+</div>
+<!-- Timeline Container -->
+<div class="bg-surface-container-low border border-outline-variant p-6 md:p-8">
+<div class="relative border-l-2 border-outline-variant ml-4 space-y-12 pb-4">
+<!-- Timeline Item: En Proceso (Current) -->
+<div class="relative group">
+<!-- Node -->
+<div class="absolute -left-[17px] top-4 w-8 h-8 bg-surface-container-lowest border-2 border-primary rounded-full flex items-center justify-center z-10">
+<span class="material-symbols-outlined text-primary text-sm icon-fill" data-icon="build">build</span>
+</div>
+<!-- Content Card -->
+<div class="ml-10 bg-surface-container border border-primary/50 p-5 hover:border-primary transition-colors relative overflow-hidden shadow-[4px_4px_0px_rgba(0,0,0,0.3)]">
+<div class="absolute top-0 left-0 w-1 h-full bg-primary"></div>
+<div class="flex flex-col md:flex-row md:items-start justify-between gap-4">
+<div>
+<div class="flex items-center gap-3 mb-1">
+<h3 class="font-headline-sm text-headline-sm text-on-surface">En Proceso</h3>
+<span class="font-label-caps text-[10px] bg-primary/20 text-primary px-2 py-0.5 border border-primary/30 uppercase">Activo</span>
+</div>
+<div class="flex items-center gap-2 text-on-surface-variant font-body-sm mb-4">
+<span class="material-symbols-outlined text-[16px]" data-icon="account_circle">account_circle</span>
+<span>Mecánico: Carlos Rivera</span>
+<span class="mx-2 text-outline-variant">|</span>
+<span class="material-symbols-outlined text-[16px]" data-icon="schedule">schedule</span>
+<span>Hoy, 09:30 AM</span>
+</div>
+</div>
+</div>
+<!-- Comments -->
+<div class="bg-surface-container-lowest border border-outline-variant p-3 font-body-sm text-on-surface">
+<p class="mb-1 text-on-surface-variant font-label-caps text-label-caps uppercase">Registro de Actividad:</p>
+<p>Desmontaje de suspensión delantera completado. Se requiere reemplazo de retenes. Comenzando purgado de frenos.</p>
+</div>
+</div>
+</div>
+<!-- Timeline Item: Esperando Aprobación -->
+<div class="relative group">
+<div class="absolute -left-[17px] top-4 w-8 h-8 bg-surface-container border border-outline-variant rounded-full flex items-center justify-center z-10 group-hover:border-on-surface-variant transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant text-sm" data-icon="pending_actions">pending_actions</span>
+</div>
+<div class="ml-10 bg-surface-container-highest border border-outline-variant p-5 hover:border-on-surface-variant transition-colors">
+<div class="flex flex-col md:flex-row md:items-start justify-between gap-4">
+<div>
+<h3 class="font-body-lg text-body-lg font-semibold text-on-surface mb-1">Esperando Aprobación</h3>
+<div class="flex items-center gap-2 text-on-surface-variant font-body-sm mb-4">
+<span class="material-symbols-outlined text-[16px]" data-icon="support_agent">support_agent</span>
+<span>Asesor: Laura Gómez</span>
+<span class="mx-2 text-outline-variant">|</span>
+<span class="material-symbols-outlined text-[16px]" data-icon="calendar_today">calendar_today</span>
+<span>Ayer, 16:45 PM</span>
+</div>
+</div>
+</div>
+<div class="bg-surface-container-lowest border border-outline-variant p-3 font-body-sm text-on-surface">
+<p class="mb-1 text-on-surface-variant font-label-caps text-label-caps uppercase">Notas del Asesor:</p>
+<p>Cotización enviada al cliente vía correo electrónico. A la espera de confirmación para proceder con el servicio de horquilla.</p>
+</div>
+</div>
+</div>
+<!-- Timeline Item: En Diagnóstico -->
+<div class="relative group">
+<div class="absolute -left-[17px] top-4 w-8 h-8 bg-surface-container border border-outline-variant rounded-full flex items-center justify-center z-10 group-hover:border-on-surface-variant transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant text-sm" data-icon="troubleshoot">troubleshoot</span>
+</div>
+<div class="ml-10 bg-surface-container-highest border border-outline-variant p-5 hover:border-on-surface-variant transition-colors">
+<div class="flex flex-col md:flex-row md:items-start justify-between gap-4">
+<div>
+<h3 class="font-body-lg text-body-lg font-semibold text-on-surface mb-1">En Diagnóstico</h3>
+<div class="flex items-center gap-2 text-on-surface-variant font-body-sm">
+<span class="material-symbols-outlined text-[16px]" data-icon="account_circle">account_circle</span>
+<span>Mecánico: Carlos Rivera</span>
+<span class="mx-2 text-outline-variant">|</span>
+<span class="material-symbols-outlined text-[16px]" data-icon="calendar_today">calendar_today</span>
+<span>Ayer, 14:00 PM</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Timeline Item: Creada -->
+<div class="relative group">
+<div class="absolute -left-[17px] top-4 w-8 h-8 bg-surface-container border border-outline-variant rounded-full flex items-center justify-center z-10 group-hover:border-on-surface-variant transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant text-sm" data-icon="note_add">note_add</span>
+</div>
+<div class="ml-10 bg-surface-container-highest border border-outline-variant p-5 hover:border-on-surface-variant transition-colors">
+<div class="flex flex-col md:flex-row md:items-start justify-between gap-4">
+<div>
+<h3 class="font-body-lg text-body-lg font-semibold text-on-surface mb-1">Creada (Ticket Asignado)</h3>
+<div class="flex items-center gap-2 text-on-surface-variant font-body-sm">
+<span class="material-symbols-outlined text-[16px]" data-icon="settings">settings</span>
+<span>Sistema Auto-asignación</span>
+<span class="mx-2 text-outline-variant">|</span>
+<span class="material-symbols-outlined text-[16px]" data-icon="calendar_today">calendar_today</span>
+<span>24 Oct 2023, 10:15 AM</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Timeline Item: Recepción -->
+<div class="relative group">
+<div class="absolute -left-[17px] top-4 w-8 h-8 bg-surface-container border border-outline-variant rounded-full flex items-center justify-center z-10 group-hover:border-on-surface-variant transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant text-sm" data-icon="inventory_2">inventory_2</span>
+</div>
+<div class="ml-10 bg-surface-container-highest border border-outline-variant p-5 hover:border-on-surface-variant transition-colors">
+<div class="flex flex-col md:flex-row md:items-start justify-between gap-4">
+<div>
+<h3 class="font-body-lg text-body-lg font-semibold text-on-surface mb-1">Recepción de Equipo</h3>
+<div class="flex items-center gap-2 text-on-surface-variant font-body-sm mb-4">
+<span class="material-symbols-outlined text-[16px]" data-icon="support_agent">support_agent</span>
+<span>Recepción: Mario Ruiz</span>
+<span class="mx-2 text-outline-variant">|</span>
+<span class="material-symbols-outlined text-[16px]" data-icon="calendar_today">calendar_today</span>
+<span>24 Oct 2023, 09:50 AM</span>
+</div>
+</div>
+</div>
+<div class="bg-surface-container-lowest border border-outline-variant p-3 font-body-sm text-on-surface">
+<p class="mb-1 text-on-surface-variant font-label-caps text-label-caps uppercase">Inventario Inicial:</p>
+<p>Bicicleta MTB Enduro Talla M. Cliente reporta ruido extraño en suspensión delantera y frenos largos. Entregada sin accesorios adicionales.</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Right Column: Analytics & Metrics -->
+<div class="lg:col-span-4 space-y-6">
+<h2 class="font-headline-md text-headline-md text-on-surface opacity-0 md:opacity-100 hidden lg:block">Métricas</h2>
+<!-- Duration Summary Card -->
+<div class="bg-surface-container-low border border-outline-variant p-6">
+<div class="flex items-center gap-3 mb-6 border-b border-outline-variant pb-4">
+<span class="material-symbols-outlined text-primary" data-icon="timer">timer</span>
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Duración por Estado</h3>
+</div>
+<div class="space-y-6">
+<!-- Stat: En Proceso -->
+<div>
+<div class="flex justify-between text-body-sm mb-2">
+<span class="text-primary font-semibold">En Proceso (Actual)</span>
+<span class="text-on-surface font-label-caps">03h 15m</span>
+</div>
+<!-- Segmented Progress Bar (Bike Chain Style) -->
+<div class="flex gap-1 h-2 w-full">
+<div class="bg-primary flex-1"></div>
+<div class="bg-primary flex-1"></div>
+<div class="bg-primary flex-1"></div>
+<div class="bg-primary flex-1"></div>
+<div class="bg-surface-container-highest flex-1"></div>
+<div class="bg-surface-container-highest flex-1"></div>
+<div class="bg-surface-container-highest flex-1"></div>
+<div class="bg-surface-container-highest flex-1"></div>
+<div class="bg-surface-container-highest flex-1"></div>
+<div class="bg-surface-container-highest flex-1"></div>
+</div>
+</div>
+<!-- Stat: Esperando Aprobación -->
+<div>
+<div class="flex justify-between text-body-sm mb-2">
+<span class="text-on-surface-variant">Esperando Aprobación</span>
+<span class="text-on-surface font-label-caps">16h 45m</span>
+</div>
+<div class="flex gap-1 h-2 w-full">
+<div class="bg-outline-variant flex-1"></div>
+<div class="bg-outline-variant flex-1"></div>
+<div class="bg-outline-variant flex-1"></div>
+<div class="bg-outline-variant flex-1"></div>
+<div class="bg-outline-variant flex-1"></div>
+<div class="bg-outline-variant flex-1"></div>
+<div class="bg-outline-variant flex-1"></div>
+<div class="bg-outline-variant flex-1"></div>
+<div class="bg-outline-variant flex-1 opacity-50"></div>
+<div class="bg-surface-container-highest flex-1"></div>
+</div>
+</div>
+<!-- Stat: En Diagnóstico -->
+<div>
+<div class="flex justify-between text-body-sm mb-2">
+<span class="text-on-surface-variant">En Diagnóstico</span>
+<span class="text-on-surface font-label-caps">02h 45m</span>
+</div>
+<div class="flex gap-1 h-2 w-full">
+<div class="bg-outline-variant flex-1"></div>
+<div class="bg-outline-variant flex-1"></div>
+<div class="bg-outline-variant flex-1 opacity-50"></div>
+<div class="bg-surface-container-highest flex-1"></div>
+<div class="bg-surface-container-highest flex-1"></div>
+<div class="bg-surface-container-highest flex-1"></div>
+<div class="bg-surface-container-highest flex-1"></div>
+<div class="bg-surface-container-highest flex-1"></div>
+<div class="bg-surface-container-highest flex-1"></div>
+<div class="bg-surface-container-highest flex-1"></div>
+</div>
+</div>
+<!-- Stat: Recepción a Creada -->
+<div>
+<div class="flex justify-between text-body-sm mb-2">
+<span class="text-on-surface-variant">Recepción / Creación</span>
+<span class="text-on-surface font-label-caps">00h 25m</span>
+</div>
+<div class="flex gap-1 h-2 w-full">
+<div class="bg-outline-variant flex-[0.5]"></div>
+<div class="bg-surface-container-highest flex-[9.5]"></div>
+</div>
+</div>
+<!-- Total Time Footer -->
+<div class="mt-8 pt-4 border-t border-outline-variant flex justify-between items-center">
+<span class="font-label-caps text-label-caps text-on-surface-variant uppercase">Tiempo Total Acumulado</span>
+<span class="font-headline-md text-headline-md text-on-surface">23h 10m</span>
+</div>
+</div>
+</div>
+<!-- Quick Actions Panel -->
+<div class="bg-surface border border-outline-variant p-6 flex flex-col gap-4">
+<span class="font-label-caps text-label-caps text-on-surface-variant uppercase border-b border-outline-variant pb-2">Acciones de Orden</span>
+<button class="w-full bg-primary-container text-on-primary-container border-t border-primary/50 py-3 px-4 flex items-center justify-center gap-2 hover:bg-primary transition-colors font-body-md font-semibold">
+<span class="material-symbols-outlined text-sm" data-icon="edit_document">edit_document</span>
+                        Añadir Comentario Técnico
+                    </button>
+<button class="w-full bg-surface-container-highest text-on-surface border border-outline-variant py-3 px-4 flex items-center justify-center gap-2 hover:bg-surface-variant transition-colors font-body-md">
+<span class="material-symbols-outlined text-sm" data-icon="print">print</span>
+                        Imprimir Historial
+                    </button>
+</div>
+</div>
+</div>
+</main>
+</body></html>

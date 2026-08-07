@@ -706,7 +706,7 @@ export default function PositionsSecurityView() {
         title="¿Eliminar Cargo?"
         description={`¿Está seguro que desea eliminar permanentemente el cargo "${itemToDelete?.nombre || itemToDelete?.cargo || ''}"? Esta acción es irreversible.`}
         confirmLabel="Eliminar"
-        isLoading={isSubmitting}
+        isLoading={isSaving}
         loadingLabel="Eliminando..."
         details={itemToDelete ? [
           { label: 'Cargo', value: itemToDelete.nombre || itemToDelete.cargo },

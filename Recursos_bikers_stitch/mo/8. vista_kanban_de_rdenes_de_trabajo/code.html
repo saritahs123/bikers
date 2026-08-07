@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Biker's Fort - Work Orders</title>
+<!-- Google Fonts: Hanken Grotesk & JetBrains Mono -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:ital,wght@0,100..900;1,100..900&amp;family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Theme Configuration -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "error": "#ffb4ab",
+                    "on-error-container": "#ffdad6",
+                    "secondary": "#c3c6d0",
+                    "secondary-fixed": "#dfe2ec",
+                    "surface-container-high": "#2a2a24",
+                    "surface-container-low": "#1b1c17",
+                    "surface-tint": "#bfce7f",
+                    "inverse-primary": "#576421",
+                    "outline-variant": "#46483b",
+                    "primary": "#bfce7f",
+                    "on-surface-variant": "#c7c8b7",
+                    "on-secondary": "#2d3138",
+                    "primary-fixed-dim": "#bfce7f",
+                    "background": "#13140f",
+                    "on-primary-fixed": "#181e00",
+                    "secondary-fixed-dim": "#c3c6d0",
+                    "on-secondary-fixed": "#181c23",
+                    "on-tertiary-container": "#202a3a",
+                    "surface": "#13140f",
+                    "inverse-surface": "#e4e3d9",
+                    "on-error": "#690005",
+                    "on-primary-container": "#252d00",
+                    "on-surface": "#e4e3d9",
+                    "surface-container": "#1f201a",
+                    "surface-dim": "#13140f",
+                    "tertiary-fixed-dim": "#bdc7dc",
+                    "error-container": "#93000a",
+                    "secondary-container": "#43474f",
+                    "on-secondary-fixed-variant": "#43474f",
+                    "tertiary": "#bdc7dc",
+                    "on-tertiary-fixed": "#121c2c",
+                    "outline": "#919282",
+                    "on-primary-fixed-variant": "#404c0a",
+                    "surface-container-lowest": "#0e0f0a",
+                    "surface-container-highest": "#35352f",
+                    "primary-fixed": "#dbea98",
+                    "tertiary-container": "#8791a5",
+                    "primary-container": "#89974f",
+                    "on-tertiary": "#273141",
+                    "inverse-on-surface": "#30312b",
+                    "on-tertiary-fixed-variant": "#3d4759",
+                    "surface-bright": "#393a33",
+                    "on-primary": "#2b3400",
+                    "surface-variant": "#35352f",
+                    "on-secondary-container": "#b2b5be",
+                    "on-background": "#e4e3d9",
+                    "tertiary-fixed": "#d9e3f9"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "spacing": {
+                    "container-max": "1440px",
+                    "unit": "4px",
+                    "margin-mobile": "16px",
+                    "margin-desktop": "40px",
+                    "gutter": "24px"
+            },
+            "fontFamily": {
+                    "headline-sm": [
+                            "Hanken Grotesk"
+                    ],
+                    "headline-md": [
+                            "Hanken Grotesk"
+                    ],
+                    "body-sm": [
+                            "Hanken Grotesk"
+                    ],
+                    "headline-lg-mobile": [
+                            "Hanken Grotesk"
+                    ],
+                    "label-caps": [
+                            "JetBrains Mono"
+                    ],
+                    "body-lg": [
+                            "Hanken Grotesk"
+                    ],
+                    "headline-lg": [
+                            "Hanken Grotesk"
+                    ],
+                    "body-md": [
+                            "Hanken Grotesk"
+                    ]
+            },
+            "fontSize": {
+                    "headline-sm": [
+                            "24px",
+                            {
+                                    "lineHeight": "1.3",
+                                    "fontWeight": "600"
+                            }
+                    ],
+                    "headline-md": [
+                            "32px",
+                            {
+                                    "lineHeight": "1.2",
+                                    "fontWeight": "700"
+                            }
+                    ],
+                    "body-sm": [
+                            "14px",
+                            {
+                                    "lineHeight": "1.4",
+                                    "fontWeight": "400"
+                            }
+                    ],
+                    "headline-lg-mobile": [
+                            "32px",
+                            {
+                                    "lineHeight": "1.2",
+                                    "fontWeight": "800"
+                            }
+                    ],
+                    "label-caps": [
+                            "12px",
+                            {
+                                    "lineHeight": "1",
+                                    "letterSpacing": "0.1em",
+                                    "fontWeight": "600"
+                            }
+                    ],
+                    "body-lg": [
+                            "18px",
+                            {
+                                    "lineHeight": "1.6",
+                                    "fontWeight": "400"
+                            }
+                    ],
+                    "headline-lg": [
+                            "48px",
+                            {
+                                    "lineHeight": "1.1",
+                                    "letterSpacing": "-0.02em",
+                                    "fontWeight": "800"
+                            }
+                    ],
+                    "body-md": [
+                            "16px",
+                            {
+                                    "lineHeight": "1.5",
+                                    "fontWeight": "400"
+                            }
+                    ]
+            }
+        },
+        },
+      }
+    </script>
+<style>
+        /* Custom scrollbar for Kanban board to fit industrial theme */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #13140f; 
+            border: 1px solid #46483b;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #35352f; 
+            border-radius: 0px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #46483b; 
+        }
+
+        /* Industrial Grid Pattern */
+        .bg-industrial-grid {
+            background-image: radial-gradient(#46483b 1px, transparent 1px);
+            background-size: 16px 16px;
+        }
+
+        /* Drag offset simulation */
+        .card-drag-active {
+            box-shadow: 4px 4px 0px rgba(0,0,0,0.8);
+            transform: rotate(2deg) scale(1.02);
+            z-index: 50;
+            border-color: #bfce7f !important;
+            cursor: grabbing !important;
+        }
+        
+        .segmented-progress {
+            display: flex;
+            gap: 2px;
+            height: 6px;
+            width: 100%;
+        }
+        .segment {
+            flex: 1;
+            background-color: #35352f;
+        }
+        .segment.filled {
+            background-color: #bfce7f;
+        }
+        .segment.filled-urgent {
+            background-color: #ffb4ab;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background h-screen w-full flex overflow-hidden">
+<!-- Pattern Overlay for Workshop Vibe -->
+<div class="fixed inset-0 bg-industrial-grid opacity-10 pointer-events-none z-0"></div>
+<!-- JSON: SideNavBar -->
+<nav class="flex flex-col h-screen fixed left-0 top-0 py-6 bg-surface-container-low dark:bg-surface-container-low border-r border-outline-variant docked left-0 h-full w-64 z-20">
+<!-- Header -->
+<div class="px-6 mb-8 flex items-center gap-3">
+<div class="w-10 h-10 rounded border border-outline-variant bg-surface flex items-center justify-center overflow-hidden shrink-0">
+<img alt="Workshop Logo" class="w-full h-full object-cover opacity-80" data-alt="A macro shot of a meticulously machined titanium bicycle sprocket, lit by harsh industrial workshop lighting against a deep black background, highlighting the raw metal texture and mechanical precision." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDBjldapEgrd3GmGT4WTnG_AuXB0H132Rxxcplb5L3u-TgoJkV78EU__pctiEa8zlds0vnxU5zf1MV_4xeRjTP6k5jdeGs-Wh9oTmro_-BLygxN9gnXXuyyxbdRTMJj39iN8qx5tYH9C0HaEBlWDKSdzrPCQiyTM9OE6hMjenbiJiIycAdK90nRq-4S0Wb3OGSUHUU2-TJFHJKqSCADQiGQd0aaGfrI2C2_AF0e2fetlDl6KvNRputn"/>
+</div>
+<div>
+<h1 class="font-headline-md text-headline-md text-primary tracking-tight">Biker's Fort</h1>
+<p class="font-label-caps text-label-caps text-on-surface-variant">Precision Workshop</p>
+</div>
+</div>
+<!-- Navigation Links -->
+<ul class="flex-1 flex flex-col gap-1 px-4">
+<!-- Dashboard (Inactive) -->
+<li>
+<a class="flex items-center gap-3 px-4 py-3 rounded text-on-surface-variant hover:text-primary hover:bg-surface-container transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">dashboard</span>
+<span class="font-body-md text-body-md">Dashboard</span>
+</a>
+</li>
+<!-- Reception (Inactive) -->
+<li>
+<a class="flex items-center gap-3 px-4 py-3 rounded text-on-surface-variant hover:text-primary hover:bg-surface-container transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">event_seat</span>
+<span class="font-body-md text-body-md">Reception</span>
+</a>
+</li>
+<!-- Work Orders (Active Match based on intent) -->
+<li>
+<a class="flex items-center gap-3 px-4 py-3 rounded text-primary border-r-2 border-primary bg-surface-container-high transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">build</span>
+<span class="font-body-md text-body-md font-semibold">Work Orders</span>
+</a>
+</li>
+<!-- Inventory (Inactive) -->
+<li>
+<a class="flex items-center gap-3 px-4 py-3 rounded text-on-surface-variant hover:text-primary hover:bg-surface-container transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">inventory_2</span>
+<span class="font-body-md text-body-md">Inventory</span>
+</a>
+</li>
+<!-- CRM (Inactive) -->
+<li>
+<a class="flex items-center gap-3 px-4 py-3 rounded text-on-surface-variant hover:text-primary hover:bg-surface-container transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">groups</span>
+<span class="font-body-md text-body-md">CRM</span>
+</a>
+</li>
+<!-- Security (Inactive) -->
+<li>
+<a class="flex items-center gap-3 px-4 py-3 rounded text-on-surface-variant hover:text-primary hover:bg-surface-container transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">shield</span>
+<span class="font-body-md text-body-md">Security</span>
+</a>
+</li>
+<!-- Reports (Inactive) -->
+<li>
+<a class="flex items-center gap-3 px-4 py-3 rounded text-on-surface-variant hover:text-primary hover:bg-surface-container transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">analytics</span>
+<span class="font-body-md text-body-md">Reports</span>
+</a>
+</li>
+</ul>
+<!-- Footer Links -->
+<div class="px-4 mt-auto flex flex-col gap-1">
+<a class="flex items-center gap-3 px-4 py-3 rounded text-on-surface-variant hover:text-primary hover:bg-surface-container transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">help</span>
+<span class="font-body-md text-body-md">Support</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded text-on-surface-variant hover:text-primary hover:bg-surface-container transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">logout</span>
+<span class="font-body-md text-body-md">Logout</span>
+</a>
+</div>
+</nav>
+<!-- Main Content Canvas -->
+<main class="ml-64 flex-1 flex flex-col min-w-0 h-screen z-10 relative">
+<!-- Header (Contextual Top Bar for Kanban) -->
+<header class="h-20 bg-surface/90 backdrop-blur border-b border-outline-variant px-margin-desktop flex items-center justify-between shrink-0">
+<div class="flex items-center gap-4">
+<h2 class="font-headline-sm text-headline-sm text-on-background">Work Orders <span class="text-on-surface-variant font-normal">/ Kanban</span></h2>
+<div class="px-2 py-1 bg-surface-container-highest border border-outline-variant rounded font-label-caps text-label-caps text-on-surface-variant flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-primary inline-block"></span>
+                    24 Active
+                </div>
+</div>
+<!-- Filters & Actions -->
+<div class="flex items-center gap-4">
+<!-- Mechanic Filter -->
+<div class="relative">
+<select class="appearance-none bg-surface-container text-on-surface border border-outline-variant rounded px-4 py-2 pr-10 font-body-sm text-body-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none cursor-pointer">
+<option>All Mechanics</option>
+<option>J. Doe (Lead)</option>
+<option>S. Smith (Suspension)</option>
+<option>M. Rivera (General)</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none">arrow_drop_down</span>
+</div>
+<!-- Priority Filter -->
+<div class="relative">
+<select class="appearance-none bg-surface-container text-on-surface border border-outline-variant rounded px-4 py-2 pr-10 font-body-sm text-body-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none cursor-pointer">
+<option>All Priorities</option>
+<option>Urgent</option>
+<option>High</option>
+<option>Standard</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none">arrow_drop_down</span>
+</div>
+<!-- New Order CTA -->
+<button class="bg-primary-container text-on-primary-container border-t border-primary-fixed rounded px-6 py-2 font-body-sm text-body-sm font-semibold flex items-center gap-2 hover:bg-primary-fixed transition-colors active:scale-95 duration-100 shadow-[2px_2px_0px_rgba(0,0,0,0.5)]">
+<span class="material-symbols-outlined text-sm">add</span>
+                    New Order
+                </button>
+</div>
+</header>
+<!-- Kanban Board Area -->
+<div class="flex-1 overflow-x-auto overflow-y-hidden p-6">
+<div class="flex gap-6 h-full items-start w-max">
+<!-- Column 1: Pendiente -->
+<div class="w-80 h-full flex flex-col bg-surface-container-lowest border border-outline-variant rounded-sm shrink-0">
+<div class="p-4 border-b border-outline-variant flex justify-between items-center bg-surface-container">
+<h3 class="font-label-caps text-label-caps text-on-surface">Pendiente</h3>
+<span class="bg-surface-variant text-on-surface-variant px-2 py-0.5 rounded font-label-caps text-[10px]">2</span>
+</div>
+<div class="p-3 flex-1 overflow-y-auto space-y-3">
+<!-- Card: Standard -->
+<div class="bg-surface border border-outline-variant rounded-sm p-4 cursor-grab hover:border-primary-container transition-colors relative group">
+<!-- Card Header -->
+<div class="flex justify-between items-start mb-3">
+<span class="font-label-caps text-label-caps text-primary">#WO-1082</span>
+<span class="border border-outline-variant text-on-surface-variant px-2 py-0.5 rounded-sm font-label-caps text-[10px]">Standard</span>
+</div>
+<!-- Core Info -->
+<h4 class="font-body-md text-body-md font-semibold text-on-surface mb-1">Trek Slash 9.8</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-4">Client: Carlos Mendoza<br/><span class="text-secondary">Full Tune-up &amp; Bleed</span></p>
+<!-- Progress segmented -->
+<div class="mb-4">
+<div class="segmented-progress">
+<div class="segment"></div><div class="segment"></div><div class="segment"></div><div class="segment"></div>
+</div>
+<div class="flex justify-between mt-1">
+<span class="font-label-caps text-[10px] text-on-surface-variant">0%</span>
+</div>
+</div>
+<!-- Footer Info -->
+<div class="flex justify-between items-center border-t border-outline-variant pt-3 mt-auto">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-surface-variant border border-outline-variant flex items-center justify-center text-[10px] font-bold">MR</div>
+</div>
+<span class="font-label-caps text-label-caps text-on-surface">RD$ 4,500</span>
+</div>
+</div>
+<!-- Card: Drag State Simulation -->
+<div class="bg-surface border border-outline-variant rounded-sm p-4 card-drag-active relative group">
+<div class="absolute -top-3 -right-3 w-6 h-6 bg-surface border border-outline-variant rounded-full flex items-center justify-center shadow-sm z-10 cursor-grabbing">
+<span class="material-symbols-outlined text-sm text-primary">pan_tool</span>
+</div>
+<!-- Card Header -->
+<div class="flex justify-between items-start mb-3">
+<span class="font-label-caps text-label-caps text-primary">#WO-1085</span>
+<span class="bg-error-container text-on-error-container px-2 py-0.5 rounded-sm font-label-caps text-[10px]">Urgent</span>
+</div>
+<!-- Core Info -->
+<h4 class="font-body-md text-body-md font-semibold text-on-surface mb-1">Specialized Enduro</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-4">Client: Laura Gomez<br/><span class="text-secondary">Shock Rebuild</span></p>
+<!-- Progress segmented -->
+<div class="mb-4">
+<div class="segmented-progress">
+<div class="segment"></div><div class="segment"></div><div class="segment"></div><div class="segment"></div>
+</div>
+</div>
+<!-- Footer Info -->
+<div class="flex justify-between items-center border-t border-outline-variant pt-3 mt-auto">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-surface-variant border border-outline-variant flex items-center justify-center text-[10px] font-bold">JD</div>
+</div>
+<span class="font-label-caps text-label-caps text-on-surface">RD$ 8,200</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Column 2: En diagnóstico -->
+<div class="w-80 h-full flex flex-col bg-surface-container-lowest border border-outline-variant rounded-sm shrink-0">
+<div class="p-4 border-b border-outline-variant flex justify-between items-center bg-surface-container">
+<h3 class="font-label-caps text-label-caps text-on-surface">En diagnóstico</h3>
+<span class="bg-surface-variant text-on-surface-variant px-2 py-0.5 rounded font-label-caps text-[10px]">1</span>
+</div>
+<div class="p-3 flex-1 overflow-y-auto space-y-3">
+<!-- Drop Zone Indicator -->
+<div class="border-2 border-dashed border-outline-variant rounded-sm h-32 flex items-center justify-center opacity-50 bg-surface/50">
+<span class="font-label-caps text-label-caps text-on-surface-variant">Drop Here</span>
+</div>
+<!-- Card -->
+<div class="bg-surface border border-outline-variant rounded-sm p-4 cursor-grab hover:border-primary-container transition-colors relative">
+<!-- Card Header -->
+<div class="flex justify-between items-start mb-3">
+<span class="font-label-caps text-label-caps text-primary">#WO-1077</span>
+<span class="border border-outline-variant text-on-surface-variant px-2 py-0.5 rounded-sm font-label-caps text-[10px]">High</span>
+</div>
+<!-- Core Info -->
+<h4 class="font-body-md text-body-md font-semibold text-on-surface mb-1">Santa Cruz Megatower</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-4">Client: Alex Reyes<br/><span class="text-secondary">Creaking BB, check bearings</span></p>
+<!-- Progress segmented -->
+<div class="mb-4">
+<div class="segmented-progress">
+<div class="segment filled"></div><div class="segment"></div><div class="segment"></div><div class="segment"></div>
+</div>
+<div class="flex justify-between mt-1">
+<span class="font-label-caps text-[10px] text-on-surface-variant">25%</span>
+</div>
+</div>
+<!-- Footer Info -->
+<div class="flex justify-between items-center border-t border-outline-variant pt-3 mt-auto">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-surface-variant border border-outline-variant flex items-center justify-center overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A small, stylized profile avatar photo of a professional mechanic wearing a dark workshop apron, softly lit against a dark grey background." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDZ2khLiMGrZl18Jw4YzvD6d4gmIIzVTetlpNWW0m0OFHaURCnDSO2MSR3NVmzoLR8wamHl4FGKJUXB_P73Rwpm-b1cpk2_63IzUzgPP62MQNwB3B-s2DWYPgTRzkmSA5sjIFbxJLS1mdy7mAHIyJ7R2FGrJ7hdkoY-Yw9C7h8TkNbto3vhfjCA6BOlJJTb8xP89z5bM-CfJHd77lE5kSrr5Q4ZKNFj8Sj2B8YDJ_nf2K1vRsoL80Y-"/>
+</div>
+</div>
+<span class="font-label-caps text-label-caps text-on-surface">TBD</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Column 3: Esperando Aprobación -->
+<div class="w-80 h-full flex flex-col bg-surface-container-lowest border border-outline-variant rounded-sm shrink-0">
+<div class="p-4 border-b border-outline-variant flex justify-between items-center bg-surface-container">
+<h3 class="font-label-caps text-label-caps text-on-surface">Esperando Aprobación</h3>
+<span class="bg-surface-variant text-on-surface-variant px-2 py-0.5 rounded font-label-caps text-[10px]">0</span>
+</div>
+<div class="p-3 flex-1 flex flex-col items-center justify-center opacity-30">
+<span class="material-symbols-outlined text-4xl mb-2">hourglass_empty</span>
+<p class="font-label-caps text-label-caps text-center">Empty List</p>
+</div>
+</div>
+<!-- Column 4: Aprobada -->
+<div class="w-80 h-full flex flex-col bg-surface-container-lowest border border-outline-variant rounded-sm shrink-0">
+<div class="p-4 border-b border-outline-variant flex justify-between items-center bg-surface-container">
+<h3 class="font-label-caps text-label-caps text-on-surface">Aprobada</h3>
+<span class="bg-surface-variant text-on-surface-variant px-2 py-0.5 rounded font-label-caps text-[10px]">1</span>
+</div>
+<div class="p-3 flex-1 overflow-y-auto space-y-3">
+<!-- Card -->
+<div class="bg-surface border border-outline-variant rounded-sm p-4 cursor-grab hover:border-primary-container transition-colors relative">
+<!-- Card Header -->
+<div class="flex justify-between items-start mb-3">
+<span class="font-label-caps text-label-caps text-primary">#WO-1065</span>
+<span class="border border-outline-variant text-on-surface-variant px-2 py-0.5 rounded-sm font-label-caps text-[10px]">Standard</span>
+</div>
+<!-- Core Info -->
+<h4 class="font-body-md text-body-md font-semibold text-on-surface mb-1">Giant Trance X</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-4">Client: Pedro V.<br/><span class="text-secondary">Fork Lower Leg Service</span></p>
+<!-- Progress segmented -->
+<div class="mb-4">
+<div class="segmented-progress">
+<div class="segment filled"></div><div class="segment filled"></div><div class="segment"></div><div class="segment"></div>
+</div>
+<div class="flex justify-between mt-1">
+<span class="font-label-caps text-[10px] text-on-surface-variant">50%</span>
+</div>
+</div>
+<!-- Footer Info -->
+<div class="flex justify-between items-center border-t border-outline-variant pt-3 mt-auto">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-surface-variant border border-outline-variant flex items-center justify-center text-[10px] font-bold">SS</div>
+</div>
+<span class="font-label-caps text-label-caps text-on-surface">RD$ 3,800</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Column 5: En proceso (With Overdue Example) -->
+<div class="w-80 h-full flex flex-col bg-surface-container-lowest border border-outline-variant rounded-sm shrink-0">
+<div class="p-4 border-b border-outline-variant flex justify-between items-center bg-surface-container">
+<h3 class="font-label-caps text-label-caps text-on-surface">En Proceso</h3>
+<span class="bg-surface-variant text-on-surface-variant px-2 py-0.5 rounded font-label-caps text-[10px]">2</span>
+</div>
+<div class="p-3 flex-1 overflow-y-auto space-y-3">
+<!-- Card: Overdue (Atraso) -->
+<div class="bg-surface border-l-4 border-l-error border-y border-r border-outline-variant rounded-sm p-4 cursor-grab hover:border-r-primary-container transition-colors relative">
+<!-- Overdue Badge -->
+<div class="absolute -top-2 right-2 bg-error text-on-error px-2 py-0.5 rounded border border-error-container font-label-caps text-[10px] flex items-center gap-1 shadow-sm">
+<span class="material-symbols-outlined text-[12px]">warning</span> ATRASO
+                            </div>
+<!-- Card Header -->
+<div class="flex justify-between items-start mb-3 mt-1">
+<span class="font-label-caps text-label-caps text-primary">#WO-1050</span>
+<span class="bg-surface-variant text-on-surface-variant px-2 py-0.5 rounded-sm font-label-caps text-[10px]">High</span>
+</div>
+<!-- Core Info -->
+<h4 class="font-body-md text-body-md font-semibold text-on-surface mb-1">Yeti SB150</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-4">Client: Marcos F.<br/><span class="text-secondary">Full Frame Bearing Swap</span></p>
+<!-- Progress segmented (Urgent color) -->
+<div class="mb-4">
+<div class="segmented-progress">
+<div class="segment filled-urgent"></div><div class="segment filled-urgent"></div><div class="segment filled-urgent"></div><div class="segment"></div>
+</div>
+<div class="flex justify-between mt-1">
+<span class="font-label-caps text-[10px] text-error">75% - Awaiting Parts</span>
+</div>
+</div>
+<!-- Footer Info -->
+<div class="flex justify-between items-center border-t border-outline-variant pt-3 mt-auto">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-surface-variant border border-outline-variant flex items-center justify-center text-[10px] font-bold">JD</div>
+</div>
+<span class="font-label-caps text-label-caps text-on-surface">RD$ 12,500</span>
+</div>
+</div>
+<!-- Card: Normal in progress -->
+<div class="bg-surface border border-outline-variant rounded-sm p-4 cursor-grab hover:border-primary-container transition-colors relative">
+<!-- Card Header -->
+<div class="flex justify-between items-start mb-3">
+<span class="font-label-caps text-label-caps text-primary">#WO-1072</span>
+<span class="border border-outline-variant text-on-surface-variant px-2 py-0.5 rounded-sm font-label-caps text-[10px]">Standard</span>
+</div>
+<!-- Core Info -->
+<h4 class="font-body-md text-body-md font-semibold text-on-surface mb-1">Orbea Occam</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-4">Client: Diana T.<br/><span class="text-secondary">Drivetrain cleaning &amp; tune</span></p>
+<!-- Progress segmented -->
+<div class="mb-4">
+<div class="segmented-progress">
+<div class="segment filled"></div><div class="segment filled"></div><div class="segment filled"></div><div class="segment"></div>
+</div>
+<div class="flex justify-between mt-1">
+<span class="font-label-caps text-[10px] text-on-surface-variant">80%</span>
+</div>
+</div>
+<!-- Footer Info -->
+<div class="flex justify-between items-center border-t border-outline-variant pt-3 mt-auto">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-surface-variant border border-outline-variant flex items-center justify-center text-[10px] font-bold">MR</div>
+</div>
+<span class="font-label-caps text-label-caps text-on-surface">RD$ 2,200</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Column 6: Pausada -->
+<div class="w-80 h-full flex flex-col bg-surface-container-lowest border border-outline-variant rounded-sm shrink-0 opacity-80">
+<div class="p-4 border-b border-outline-variant flex justify-between items-center bg-surface-container">
+<h3 class="font-label-caps text-label-caps text-on-surface flex items-center gap-2"><span class="material-symbols-outlined text-sm">pause</span> Pausada</h3>
+<span class="bg-surface-variant text-on-surface-variant px-2 py-0.5 rounded font-label-caps text-[10px]">0</span>
+</div>
+<div class="p-3 flex-1 flex flex-col items-center justify-center opacity-30">
+<span class="material-symbols-outlined text-4xl mb-2">inventory_2</span>
+<p class="font-label-caps text-label-caps text-center">No paused work</p>
+</div>
+</div>
+<!-- Column 7: Terminada -->
+<div class="w-80 h-full flex flex-col bg-surface-container-lowest border border-outline-variant rounded-sm shrink-0">
+<div class="p-4 border-b border-outline-variant flex justify-between items-center bg-surface-container">
+<h3 class="font-label-caps text-label-caps text-on-surface">Terminada</h3>
+<span class="bg-surface-variant text-on-surface-variant px-2 py-0.5 rounded font-label-caps text-[10px]">1</span>
+</div>
+<div class="p-3 flex-1 overflow-y-auto space-y-3">
+<!-- Card -->
+<div class="bg-surface border border-outline-variant rounded-sm p-4 cursor-grab hover:border-primary-container transition-colors relative">
+<!-- Card Header -->
+<div class="flex justify-between items-start mb-3">
+<span class="font-label-caps text-label-caps text-primary">#WO-1044</span>
+<span class="border border-outline-variant text-on-surface-variant px-2 py-0.5 rounded-sm font-label-caps text-[10px]">Standard</span>
+</div>
+<!-- Core Info -->
+<h4 class="font-body-md text-body-md font-semibold text-on-surface mb-1">Cannondale Scalpel</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-4">Client: Luis R.<br/><span class="text-secondary">Tubeless Setup</span></p>
+<!-- Progress segmented -->
+<div class="mb-4">
+<div class="segmented-progress">
+<div class="segment filled"></div><div class="segment filled"></div><div class="segment filled"></div><div class="segment filled"></div>
+</div>
+<div class="flex justify-between mt-1">
+<span class="font-label-caps text-[10px] text-primary">100% - Ready for QC</span>
+</div>
+</div>
+<!-- Footer Info -->
+<div class="flex justify-between items-center border-t border-outline-variant pt-3 mt-auto">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-surface-variant border border-outline-variant flex items-center justify-center overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A small avatar of a mechanic inspecting a bike wheel, shot in moody workshop lighting, emphasizing precision and quality control." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDLTvy8uIDKWjz5Sq4UW3EvsNFDLHAlM4gWmkiLwVmR8scDvim-LhyI7RJkVe52BqO2yeUBKh5G-zVnSdU7Uq_QRV2KziCZC0ji3RLbjx_VZMLaNFd_sNvU0Txkz5Ww33ogau70oJ8IRQALa_VSa_B2PatSXVrtLebsbpx2JLCoT_JWN2tWwipUaWl4Ng4MyeqOYJlsDpaTq99lr5pUd9C3q9bSMMhd2HB-lIB9u_WZbxv2UzJ1tG9Y"/>
+</div>
+</div>
+<span class="font-label-caps text-label-caps text-on-surface">RD$ 1,500</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Column 8: Lista para entrega -->
+<div class="w-80 h-full flex flex-col bg-surface-container-lowest border border-outline-variant rounded-sm shrink-0 border-r-primary/30">
+<div class="p-4 border-b border-outline-variant flex justify-between items-center bg-surface-container">
+<h3 class="font-label-caps text-label-caps text-primary flex items-center gap-2"><span class="material-symbols-outlined text-sm">verified</span> Lista para entrega</h3>
+<span class="bg-primary/20 text-primary border border-primary/30 px-2 py-0.5 rounded font-label-caps text-[10px]">1</span>
+</div>
+<div class="p-3 flex-1 overflow-y-auto space-y-3 bg-primary/5">
+<!-- Card -->
+<div class="bg-surface border-l-2 border-l-primary border-y border-r border-outline-variant rounded-sm p-4 cursor-grab hover:border-primary-container transition-colors relative">
+<!-- Card Header -->
+<div class="flex justify-between items-start mb-3">
+<span class="font-label-caps text-label-caps text-primary">#WO-1021</span>
+<span class="bg-surface-variant text-on-surface-variant px-2 py-0.5 rounded-sm font-label-caps text-[10px]">High</span>
+</div>
+<!-- Core Info -->
+<h4 class="font-body-md text-body-md font-semibold text-on-surface mb-1">Pivot Firebird</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-4">Client: J. Valera<br/><span class="text-secondary">Custom Build Assembly</span></p>
+<!-- Action Required State -->
+<div class="mb-4 bg-surface-container border border-outline-variant p-2 rounded flex items-center justify-between">
+<span class="font-label-caps text-[10px] text-on-surface-variant">Invoice generated</span>
+<button class="text-primary font-label-caps text-[10px] hover:underline">Notify Client</button>
+</div>
+<!-- Footer Info -->
+<div class="flex justify-between items-center border-t border-outline-variant pt-3 mt-auto">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-surface-variant border border-outline-variant flex items-center justify-center text-[10px] font-bold">JD</div>
+</div>
+<span class="font-label-caps text-label-caps text-on-surface">RD$ 25,000</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Spacer to allow scrolling past the last column -->
+<div class="w-8 shrink-0"></div>
+</div>
+</div>
+</main>
+</body></html>

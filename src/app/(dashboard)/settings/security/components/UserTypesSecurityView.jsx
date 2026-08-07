@@ -829,7 +829,7 @@ export default function UserTypesSecurityView() {
         title="¿Eliminar Tipo de Usuario?"
         description={`¿Está seguro que desea eliminar permanentemente el tipo de usuario "${itemToDelete?.nombre || itemToDelete?.tipo_usuario || ''}"? Esta acción es irreversible.`}
         confirmLabel="Eliminar"
-        isLoading={isSubmitting}
+        isLoading={isSaving}
         loadingLabel="Eliminando..."
         details={itemToDelete ? [
           { label: 'Tipo de Usuario', value: itemToDelete.nombre || itemToDelete.tipo_usuario },

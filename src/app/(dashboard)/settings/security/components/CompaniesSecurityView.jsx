@@ -1138,7 +1138,7 @@ export default function CompaniesSecurityView() {
         title="¿Eliminar Empresa?"
         description={`¿Está seguro que desea eliminar permanentemente la empresa "${itemToDelete?.nombre_comercial || itemToDelete?.razon_social || ''}"? Esta acción es irreversible.`}
         confirmLabel="Eliminar"
-        isLoading={isSubmitting}
+        isLoading={isSaving}
         loadingLabel="Eliminando..."
         details={itemToDelete ? [
           { label: 'Nombre Comercial', value: itemToDelete.nombre_comercial || itemToDelete.razon_social },

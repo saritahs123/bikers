@@ -1,6 +1,5 @@
 "use client";
 import React, { useState, useMemo, useEffect } from 'react';
-import { INITIAL_ROLES_DATA, INITIAL_SECURITY_MODULES, ALL_ACTIONS } from '@/config/catalogs/rolesCatalog';
 import SecurityConfirmDialog from '@/components/security/SecurityConfirmDialog';
 import { createPortal } from 'react-dom';
 import { 

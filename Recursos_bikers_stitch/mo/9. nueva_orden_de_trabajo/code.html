@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Nueva Orden de Trabajo - Fort Core</title>
+<!-- Tailwind & Google Fonts -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800&amp;family=JetBrains+Mono:wght@600&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind Config injected from system prompt instructions -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface-container": "#1f201a",
+                    "on-primary-container": "#252d00",
+                    "secondary-fixed-dim": "#c3c6d0",
+                    "secondary": "#c3c6d0",
+                    "primary": "#bfce7f",
+                    "on-secondary-fixed": "#181c23",
+                    "error": "#ffb4ab",
+                    "surface-tint": "#bfce7f",
+                    "on-tertiary-fixed-variant": "#3d4759",
+                    "tertiary-fixed": "#d9e3f9",
+                    "on-error": "#690005",
+                    "surface-container-highest": "#35352f",
+                    "tertiary-container": "#8791a5",
+                    "on-primary-fixed": "#181e00",
+                    "on-error-container": "#ffdad6",
+                    "surface-container-low": "#1b1c17",
+                    "surface-bright": "#393a33",
+                    "on-secondary-container": "#b2b5be",
+                    "surface-container-high": "#2a2a24",
+                    "inverse-surface": "#e4e3d9",
+                    "on-secondary-fixed-variant": "#43474f",
+                    "on-tertiary-fixed": "#121c2c",
+                    "secondary-fixed": "#dfe2ec",
+                    "secondary-container": "#43474f",
+                    "on-tertiary-container": "#202a3a",
+                    "on-tertiary": "#273141",
+                    "outline-variant": "#46483b",
+                    "on-secondary": "#2d3138",
+                    "surface-variant": "#35352f",
+                    "primary-fixed": "#dbea98",
+                    "tertiary": "#bdc7dc",
+                    "tertiary-fixed-dim": "#bdc7dc",
+                    "background": "#13140f",
+                    "error-container": "#93000a",
+                    "inverse-primary": "#576421",
+                    "on-primary": "#2b3400",
+                    "primary-container": "#89974f",
+                    "primary-fixed-dim": "#bfce7f",
+                    "on-surface": "#e4e3d9",
+                    "inverse-on-surface": "#30312b",
+                    "surface-dim": "#13140f",
+                    "surface": "#13140f",
+                    "on-primary-fixed-variant": "#404c0a",
+                    "on-surface-variant": "#c7c8b7",
+                    "on-background": "#e4e3d9",
+                    "outline": "#919282",
+                    "surface-container-lowest": "#0e0f0a"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "spacing": {
+                    "margin-mobile": "16px",
+                    "unit": "4px",
+                    "gutter": "24px",
+                    "margin-desktop": "40px",
+                    "container-max": "1440px"
+            },
+            "fontFamily": {
+                    "body-sm": [
+                            "Hanken Grotesk"
+                    ],
+                    "headline-lg": [
+                            "Hanken Grotesk"
+                    ],
+                    "body-md": [
+                            "Hanken Grotesk"
+                    ],
+                    "body-lg": [
+                            "Hanken Grotesk"
+                    ],
+                    "headline-md": [
+                            "Hanken Grotesk"
+                    ],
+                    "label-caps": [
+                            "JetBrains Mono"
+                    ],
+                    "headline-lg-mobile": [
+                            "Hanken Grotesk"
+                    ],
+                    "headline-sm": [
+                            "Hanken Grotesk"
+                    ]
+            },
+            "fontSize": {
+                    "body-sm": [
+                            "14px",
+                            {
+                                    "lineHeight": "1.4",
+                                    "fontWeight": "400"
+                            }
+                    ],
+                    "headline-lg": [
+                            "48px",
+                            {
+                                    "lineHeight": "1.1",
+                                    "letterSpacing": "-0.02em",
+                                    "fontWeight": "800"
+                            }
+                    ],
+                    "body-md": [
+                            "16px",
+                            {
+                                    "lineHeight": "1.5",
+                                    "fontWeight": "400"
+                            }
+                    ],
+                    "body-lg": [
+                            "18px",
+                            {
+                                    "lineHeight": "1.6",
+                                    "fontWeight": "400"
+                            }
+                    ],
+                    "headline-md": [
+                            "32px",
+                            {
+                                    "lineHeight": "1.2",
+                                    "fontWeight": "700"
+                            }
+                    ],
+                    "label-caps": [
+                            "12px",
+                            {
+                                    "lineHeight": "1",
+                                    "letterSpacing": "0.1em",
+                                    "fontWeight": "600"
+                            }
+                    ],
+                    "headline-lg-mobile": [
+                            "32px",
+                            {
+                                    "lineHeight": "1.2",
+                                    "fontWeight": "800"
+                            }
+                    ],
+                    "headline-sm": [
+                            "24px",
+                            {
+                                    "lineHeight": "1.3",
+                                    "fontWeight": "600"
+                            }
+                    ]
+            }
+          },
+        }
+      }
+    </script>
+<style>
+        /* Base styles & Industrial Textures */
+        body {
+            background-color: theme('colors.background');
+            color: theme('colors.on-background');
+            background-image: 
+                linear-gradient(rgba(10, 12, 16, 0.95), rgba(10, 12, 16, 0.95)), 
+                radial-gradient(circle at 50% 50%, rgba(255,255,255,0.02) 1px, transparent 1px);
+            background-size: 100% 100%, 20px 20px;
+        }
+        
+        .material-symbols-outlined {
+          font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: theme('colors.surface-container-low'); 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: theme('colors.outline-variant'); 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: theme('colors.outline'); 
+        }
+    </style>
+</head>
+<body class="font-body-md text-body-md antialiased overflow-hidden flex h-screen">
+<!-- SideNavBar Shell -->
+<nav class="h-screen w-64 fixed left-0 top-0 bg-surface-container-low dark:bg-surface-container-low text-primary dark:text-primary font-label-caps text-label-caps border-r border-outline-variant flex flex-col h-full py-unit hidden md:flex z-50">
+<!-- Header -->
+<div class="px-gutter py-4 border-b border-outline-variant mb-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 bg-surface-variant rounded flex items-center justify-center border border-outline-variant">
+<span class="material-symbols-outlined text-on-surface" style="font-variation-settings: 'FILL' 1;">pedal_bike</span>
+</div>
+<div>
+<h1 class="font-headline-sm text-headline-sm font-black text-primary leading-tight">Fort Core</h1>
+<p class="text-on-surface-variant text-[10px] tracking-widest mt-1">V3.4 Industrial</p>
+</div>
+</div>
+</div>
+<!-- Main Navigation -->
+<div class="flex-1 overflow-y-auto px-unit">
+<ul class="space-y-1">
+<li>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-variant duration-200 transition-all ease-in-out rounded" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+                        Dashboard
+                    </a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-variant duration-200 transition-all ease-in-out rounded" href="#">
+<span class="material-symbols-outlined">login</span>
+                        Reception
+                    </a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 bg-primary-container text-on-primary-container border-l-4 border-primary transition-all ease-in-out rounded-r" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">handyman</span>
+                        Work Orders
+                    </a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-variant duration-200 transition-all ease-in-out rounded" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+                        Inventory
+                    </a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-variant duration-200 transition-all ease-in-out rounded" href="#">
+<span class="material-symbols-outlined">group</span>
+                        Clients
+                    </a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-variant duration-200 transition-all ease-in-out rounded" href="#">
+<span class="material-symbols-outlined">payments</span>
+                        Billing
+                    </a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-variant duration-200 transition-all ease-in-out rounded" href="#">
+<span class="material-symbols-outlined">analytics</span>
+                        Reports
+                    </a>
+</li>
+</ul>
+</div>
+<!-- CTA & Footer -->
+<div class="px-gutter py-4 border-t border-outline-variant mt-auto space-y-4">
+<button class="w-full bg-[#84924a] text-white py-2 px-4 rounded font-label-caps text-label-caps border-t border-[#a1b35b] hover:bg-opacity-90 transition-colors shadow-[4px_4px_0px_rgba(0,0,0,0.5)]">
+                New Work Order
+            </button>
+<ul class="space-y-1">
+<li>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-variant duration-200 transition-all ease-in-out rounded" href="#">
+<span class="material-symbols-outlined">help</span>
+                        Support
+                    </a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-variant duration-200 transition-all ease-in-out rounded" href="#">
+<span class="material-symbols-outlined">logout</span>
+                        Sign Out
+                    </a>
+</li>
+</ul>
+</div>
+</nav>
+<!-- Main Content Canvas -->
+<main class="flex-1 ml-0 md:ml-64 flex flex-col h-screen overflow-hidden">
+<!-- TopNavBar Shell -->
+<header class="bg-surface-container dark:bg-surface-container font-body-md text-body-md w-full h-16 border-b border-outline-variant flex justify-between items-center px-margin-desktop w-full ml-0 z-40 sticky top-0">
+<div class="flex items-center gap-4">
+<button class="md:hidden text-on-surface-variant hover:bg-surface-variant transition-colors p-2 rounded cursor-pointer active:opacity-80">
+<span class="material-symbols-outlined">menu</span>
+</button>
+<h2 class="font-headline-sm text-headline-sm font-bold text-primary dark:text-primary tracking-tight">Nueva Orden: OT-2026-00087</h2>
+</div>
+<div class="flex items-center gap-6">
+<div class="hidden md:flex items-center bg-[#0a0c10] border border-[#2d3748] rounded px-3 py-1.5 focus-within:border-primary transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant mr-2 text-sm">search</span>
+<input class="bg-transparent border-none outline-none text-on-surface font-body-sm text-body-sm w-48 placeholder:text-on-surface-variant focus:ring-0 p-0" placeholder="Buscar OT, cliente..." type="text"/>
+</div>
+<div class="flex items-center gap-2">
+<button class="text-on-surface-variant hover:bg-surface-variant transition-colors p-2 rounded cursor-pointer active:opacity-80">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="text-on-surface-variant hover:bg-surface-variant transition-colors p-2 rounded cursor-pointer active:opacity-80">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<div class="w-8 h-8 rounded-full border border-outline-variant overflow-hidden ml-2 cursor-pointer">
+<img class="w-full h-full object-cover" data-alt="Close up portrait of an industrial workshop manager, realistic lighting, dark moody background, high resolution, highly detailed, dramatic shadows, confident expression." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCtGriS8QsCL0trscByL4DckmlZUEm_jGTPUiqeWcKcceTisgk7wO9ejlI7BXuW-7ReVL3TOli4UrHe9FnyU0jf0rh3d0iyXEJLJsAG6P3vHyOrUZcqX6bCbzYfWxnYPZj0BObA1tngj3bHwjte6-V9UhHFqIG4QtTul24wy7KZrBvhvO4Lus1ihkVH1Uqjnt8U4Y73k0cDogIZYaveipo06BqrEtlgfcCIJsy_z9nZrWYJhMcHNUlT"/>
+</div>
+</div>
+</div>
+</header>
+<!-- Scrollable Content Area -->
+<div class="flex-1 overflow-y-auto p-margin-mobile md:p-gutter lg:p-margin-desktop pb-24">
+<div class="max-w-container-max mx-auto">
+<!-- Action Bar Mobile (Visible only on small screens) -->
+<div class="flex md:hidden justify-between items-center mb-4 gap-2">
+<button class="flex-1 border border-[#2d3748] bg-[#161a21] text-on-surface py-2 rounded font-label-caps text-label-caps">Borrador</button>
+<button class="flex-1 bg-[#84924a] text-white py-2 rounded font-label-caps text-label-caps border-t border-[#a1b35b] shadow-[2px_2px_0px_rgba(0,0,0,0.5)]">Guardar</button>
+</div>
+<div class="flex flex-col lg:flex-row gap-gutter">
+<!-- Left Column: Form Sections -->
+<div class="flex-1 space-y-gutter">
+<!-- Section 1: Recepción Relacionada & Entidades -->
+<div class="bg-[#161a21] border border-[#2d3748] rounded hover:border-[#4a5568] transition-colors p-6">
+<h3 class="font-headline-sm text-headline-sm text-on-surface mb-6 border-b border-[#2d3748] pb-2 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">link</span>
+                                Contexto de Recepción
+                            </h3>
+<!-- Búsqueda Recepción -->
+<div class="mb-6">
+<label class="block font-label-caps text-label-caps text-on-surface-variant mb-2">Vincular Recepción Previa (Opcional)</label>
+<div class="flex gap-2">
+<div class="flex-1 bg-[#0a0c10] border border-[#2d3748] rounded px-3 py-2 flex items-center focus-within:border-primary transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant mr-2 text-sm">search</span>
+<input class="bg-transparent border-none outline-none text-on-surface font-body-sm text-body-sm w-full p-0 focus:ring-0" type="text" value="REC-2026-1142"/>
+</div>
+<button class="bg-[#1c2129] border border-[#2d3748] hover:bg-surface-variant text-on-surface px-4 py-2 rounded font-label-caps text-label-caps transition-colors">
+                                        Cargar
+                                    </button>
+</div>
+</div>
+<!-- Tarjetas Cliente & Bici (Bento Style) -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<!-- Cliente -->
+<div class="bg-[#1c2129] border border-[#2d3748] rounded p-4 relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-6xl">person</span>
+</div>
+<div class="flex items-start gap-4 relative z-10">
+<div class="w-12 h-12 rounded bg-[#0a0c10] border border-[#2d3748] overflow-hidden flex-shrink-0">
+<img class="w-full h-full object-cover" data-alt="Portrait of a male mountain biker customer, wearing a dark casual jacket, neutral studio lighting, industrial workshop background, realistic, detailed." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBnu8-4KVIkn4ZcelSakfaV-yKClF5Z7T7Klymz7jFxECGv9JEyff7I5791bWtnWJeCRM0EQ1yEGZphyqfCaGSuYBcG9OkHi_kux12DgdYbvX2XcorSh5E5fJVMn_CAs2f7Inc9ucYE0kh3IRiEq_F5zw4sGSNd0mLIGDgIXnW50GKgt9C3-ejB0mjnPhOvF8CFISX39PzqxZYs3rILZryIVG7AD--HZFXLFA1IOwvGJt0OAAw35m6L"/>
+</div>
+<div>
+<h4 class="font-bold text-on-surface">Carlos Mendoza</h4>
+<p class="text-body-sm text-on-surface-variant">ID: CLI-00842</p>
+<div class="mt-2 flex gap-2">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-label-caps bg-surface-container-highest border border-outline-variant text-on-surface">VIP</span>
+<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-label-caps bg-surface-container-highest border border-outline-variant text-on-surface">Enduro</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Bicicleta -->
+<div class="bg-[#1c2129] border border-[#2d3748] rounded p-4 relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-6xl">pedal_bike</span>
+</div>
+<div class="flex flex-col h-full justify-between relative z-10">
+<div>
+<h4 class="font-bold text-on-surface">Trek Slash 9.8 (2023)</h4>
+<p class="text-body-sm text-on-surface-variant">Carbon Matte / 29"</p>
+</div>
+<div class="mt-3 grid grid-cols-2 gap-2 text-xs font-label-caps text-on-surface-variant">
+<div>Serie: <span class="text-on-surface">TSK-992-X1</span></div>
+<div>Últ. Sv: <span class="text-on-surface">12/08/25</span></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Section 2: Información General -->
+<div class="bg-[#161a21] border border-[#2d3748] rounded hover:border-[#4a5568] transition-colors p-6">
+<h3 class="font-headline-sm text-headline-sm text-on-surface mb-6 border-b border-[#2d3748] pb-2 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">assignment</span>
+                                Detalles de la Orden
+                            </h3>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+<!-- Mecánico -->
+<div>
+<label class="block font-label-caps text-label-caps text-on-surface-variant mb-2">Mecánico Asignado</label>
+<select class="w-full bg-[#0a0c10] border border-[#2d3748] rounded px-3 py-2 text-on-surface font-body-sm focus:border-primary focus:ring-0 appearance-none">
+<option>Seleccionar mecánico...</option>
+<option selected="">J. Ramírez (Suspensiones)</option>
+<option>M. Soto (General)</option>
+<option>L. Vargas (Transmisión)</option>
+</select>
+</div>
+<!-- Prioridad -->
+<div>
+<label class="block font-label-caps text-label-caps text-on-surface-variant mb-2">Prioridad</label>
+<div class="flex gap-2">
+<label class="flex-1 cursor-pointer relative">
+<input class="peer sr-only" name="priority" type="radio"/>
+<div class="text-center py-2 border border-[#2d3748] rounded bg-[#1c2129] peer-checked:bg-surface-variant peer-checked:border-outline text-on-surface-variant font-label-caps text-label-caps transition-all">Normal</div>
+</label>
+<label class="flex-1 cursor-pointer relative">
+<input checked="" class="peer sr-only" name="priority" type="radio"/>
+<div class="text-center py-2 border border-[#93000a] rounded bg-[#690005] bg-opacity-20 peer-checked:bg-[#93000a] peer-checked:text-[#ffdad6] text-[#ffb4ab] font-label-caps text-label-caps transition-all shadow-none peer-checked:shadow-[2px_2px_0px_rgba(0,0,0,0.5)]">Alta</div>
+</label>
+</div>
+</div>
+<!-- Fecha Promesa -->
+<div>
+<label class="block font-label-caps text-label-caps text-on-surface-variant mb-2">Fecha Entrega (Est.)</label>
+<div class="flex bg-[#0a0c10] border border-[#2d3748] rounded px-3 py-2 focus-within:border-primary transition-colors">
+<input class="bg-transparent border-none outline-none text-on-surface font-body-sm w-full p-0 focus:ring-0 [color-scheme:dark]" type="date" value="2026-03-15"/>
+</div>
+</div>
+</div>
+</div>
+<!-- Section 3: Diagnóstico -->
+<div class="bg-[#161a21] border border-[#2d3748] rounded hover:border-[#4a5568] transition-colors p-6">
+<h3 class="font-headline-sm text-headline-sm text-on-surface mb-6 border-b border-[#2d3748] pb-2 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">medical_information</span>
+                                Diagnóstico Técnico
+                            </h3>
+<div class="mb-4">
+<label class="block font-label-caps text-label-caps text-on-surface-variant mb-2">Notas del Diagnóstico</label>
+<textarea class="w-full bg-[#0a0c10] border border-[#2d3748] rounded p-3 text-on-surface font-body-sm focus:border-primary focus:ring-0 placeholder:text-on-surface-variant/50 resize-y" placeholder="Describe el estado de la bicicleta al recibirla..." rows="3">Cliente reporta ruido en caja de pedalier bajo carga pesada. Suspensión delantera RockShox Zeb requiere mantenimiento de 200h (pérdida leve de sensibilidad inicial). Cadena con 0.75% de desgaste.</textarea>
+</div>
+<div>
+<label class="block font-label-caps text-label-caps text-on-surface-variant mb-2">Evidencia Visual</label>
+<div class="flex gap-3 overflow-x-auto pb-2">
+<div class="w-24 h-24 flex-shrink-0 border border-[#2d3748] border-dashed rounded bg-[#1c2129] flex flex-col items-center justify-center cursor-pointer hover:bg-surface-variant transition-colors group">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-primary mb-1">add_a_photo</span>
+<span class="text-[10px] font-label-caps text-on-surface-variant">Agregar</span>
+</div>
+<div class="w-24 h-24 flex-shrink-0 border border-[#2d3748] rounded overflow-hidden relative group">
+<img class="w-full h-full object-cover" data-alt="Close up shot of a worn out mountain bike chain on a dirty cassette, industrial workshop lighting, highly detailed, macro photography, showing grime and wear." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBXucWb0JOpdGItM9uLFog7mgHVewwQU_Bz989DRN9kbqsRz2qSnRAiAiF5plbzagEpvDp49KtBCZaHDjESmF1Z2avZc9Y_NLMZjN-N4suIZAFteNHzQ8yKnsLsU7resk5U4mySn3NlQF6CYhRik36eUMfMvBAMA98HZj5BeCPa1ZWT1xOOSjcCrtb7rLg31ccHWkJPJ10tBEPfb8g8GI6jPWi3riD3E0utUfUu1QZGuzXt9cZpPGOx"/>
+<div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer">
+<span class="material-symbols-outlined text-white">delete</span>
+</div>
+</div>
+<div class="w-24 h-24 flex-shrink-0 border border-[#2d3748] rounded overflow-hidden relative group">
+<img class="w-full h-full object-cover" data-alt="Close up of a scratched mountain bike suspension fork stanchion, technical photography, sharp focus on the damage, dark workshop background." src="https://lh3.googleusercontent.com/aida-public/AB6AXuClZhTX9_lE9Tc19_pb9mMawuIi8iVCR9Sf-GcvaCpFQ_iMLa_IFbeu9NdCBUVOSGAibgSJhbynPTtUxS857sCBCV77aWOlhuRtNbUhlY0Pv_LIry8RLqylT5wX9P2m_kq44VYUwnMU9Kouz3Mm8mHDj9cQnc06xLJgcmygcR0ooiei3L9nnoV-NQVqQ2YENmXPiYaIBRQjIO2t-dOrMNHtvu3YlG1Aggty7gFbgVdtFASQy3h_yd30"/>
+<div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer">
+<span class="material-symbols-outlined text-white">delete</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Section 4: Servicios Requeridos -->
+<div class="bg-[#161a21] border border-[#2d3748] rounded hover:border-[#4a5568] transition-colors p-6">
+<div class="flex justify-between items-end border-b border-[#2d3748] pb-2 mb-6">
+<h3 class="font-headline-sm text-headline-sm text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">build</span>
+                                    Servicios y Repuestos
+                                </h3>
+<button class="text-primary hover:text-primary-fixed font-label-caps text-label-caps flex items-center gap-1 transition-colors">
+<span class="material-symbols-outlined text-sm">add</span> Agregar
+                                </button>
+</div>
+<!-- Tabla Estilo Cebra Industrial -->
+<div class="w-full overflow-x-auto border border-[#2d3748] rounded">
+<table class="w-full text-left border-collapse min-w-[600px]">
+<thead>
+<tr class="bg-[#1c2129] border-b border-[#2d3748] font-label-caps text-label-caps text-on-surface-variant">
+<th class="p-3 w-8"></th>
+<th class="p-3">Categoría</th>
+<th class="p-3">Descripción</th>
+<th class="p-3 w-20 text-center">Cant.</th>
+<th class="p-3 text-right">Precio Un.</th>
+<th class="p-3 text-right">Total</th>
+<th class="p-3 w-10"></th>
+</tr>
+</thead>
+<tbody class="font-body-sm">
+<!-- Row 1: Servicio -->
+<tr class="border-b border-[#2d3748] hover:bg-[#1c2129] transition-colors">
+<td class="p-3 text-center">
+<span class="material-symbols-outlined text-on-surface-variant text-sm">drag_indicator</span>
+</td>
+<td class="p-3">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-label-caps bg-primary-container/20 text-primary border border-primary/30">Mano de Obra</span>
+</td>
+<td class="p-3">
+<input class="bg-transparent border-none outline-none text-on-surface w-full p-0 focus:ring-0" type="text" value="Mantenimiento Suspensión 200h (Zeb)"/>
+</td>
+<td class="p-3 text-center">
+<input class="bg-[#0a0c10] border border-[#2d3748] rounded w-12 text-center text-on-surface py-1 px-0 mx-auto text-sm focus:border-primary focus:ring-0" type="number" value="1"/>
+</td>
+<td class="p-3 text-right text-on-surface-variant">RD$ 3,500.00</td>
+<td class="p-3 text-right font-bold text-on-surface">RD$ 3,500.00</td>
+<td class="p-3 text-center">
+<button class="text-error hover:text-error-container transition-colors"><span class="material-symbols-outlined text-sm">close</span></button>
+</td>
+</tr>
+<!-- Row 2: Repuesto -->
+<tr class="bg-[#0a0c10] border-b border-[#2d3748] hover:bg-[#1c2129] transition-colors">
+<td class="p-3 text-center">
+<span class="material-symbols-outlined text-on-surface-variant text-sm">drag_indicator</span>
+</td>
+<td class="p-3">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-label-caps bg-tertiary-container/20 text-tertiary border border-tertiary/30">Repuesto</span>
+</td>
+<td class="p-3">
+<input class="bg-transparent border-none outline-none text-on-surface w-full p-0 focus:ring-0" type="text" value="Kit Retenes RockShox 38mm"/>
+</td>
+<td class="p-3 text-center">
+<input class="bg-[#161a21] border border-[#2d3748] rounded w-12 text-center text-on-surface py-1 px-0 mx-auto text-sm focus:border-primary focus:ring-0" type="number" value="1"/>
+</td>
+<td class="p-3 text-right text-on-surface-variant">RD$ 2,800.00</td>
+<td class="p-3 text-right font-bold text-on-surface">RD$ 2,800.00</td>
+<td class="p-3 text-center">
+<button class="text-error hover:text-error-container transition-colors"><span class="material-symbols-outlined text-sm">close</span></button>
+</td>
+</tr>
+<!-- Row 3: Servicio -->
+<tr class="border-b border-[#2d3748] hover:bg-[#1c2129] transition-colors">
+<td class="p-3 text-center">
+<span class="material-symbols-outlined text-on-surface-variant text-sm">drag_indicator</span>
+</td>
+<td class="p-3">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-label-caps bg-primary-container/20 text-primary border border-primary/30">Mano de Obra</span>
+</td>
+<td class="p-3">
+<input class="bg-transparent border-none outline-none text-on-surface w-full p-0 focus:ring-0" type="text" value="Revisión / Ajuste Caja Pedalier"/>
+</td>
+<td class="p-3 text-center">
+<input class="bg-[#0a0c10] border border-[#2d3748] rounded w-12 text-center text-on-surface py-1 px-0 mx-auto text-sm focus:border-primary focus:ring-0" type="number" value="1"/>
+</td>
+<td class="p-3 text-right text-on-surface-variant">RD$ 800.00</td>
+<td class="p-3 text-right font-bold text-on-surface">RD$ 800.00</td>
+<td class="p-3 text-center">
+<button class="text-error hover:text-error-container transition-colors"><span class="material-symbols-outlined text-sm">close</span></button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<!-- Right Column: Resumen Financiero & Acciones (Sticky) -->
+<div class="w-full lg:w-80 flex-shrink-0">
+<div class="sticky top-20 space-y-4">
+<!-- Financial Summary Card -->
+<div class="bg-[#1c2129] border border-[#2d3748] rounded p-6">
+<h3 class="font-label-caps text-label-caps text-on-surface-variant mb-4 flex items-center justify-between">
+                                    Resumen Financiero
+                                    <span class="material-symbols-outlined text-sm">receipt_long</span>
+</h3>
+<div class="space-y-3 font-body-sm text-on-surface-variant mb-6">
+<div class="flex justify-between">
+<span>Mano de Obra</span>
+<span>RD$ 4,300.00</span>
+</div>
+<div class="flex justify-between">
+<span>Repuestos</span>
+<span>RD$ 2,800.00</span>
+</div>
+<div class="flex justify-between text-primary">
+<span>Descuento VIP (10%)</span>
+<span>-RD$ 710.00</span>
+</div>
+<div class="flex justify-between">
+<span>Subtotal</span>
+<span>RD$ 6,390.00</span>
+</div>
+<div class="flex justify-between border-b border-[#2d3748] pb-3">
+<span>ITBIS (18%)</span>
+<span>RD$ 1,150.20</span>
+</div>
+<div class="flex justify-between items-end pt-2">
+<span class="font-label-caps text-label-caps">Total Est.</span>
+<span class="font-headline-sm text-headline-sm font-bold text-on-surface">RD$ 7,540.20</span>
+</div>
+</div>
+<!-- Segmented Progress (Visual touch) -->
+<div class="mb-6 flex gap-1 h-1.5 opacity-50">
+<div class="flex-1 bg-primary rounded-full"></div>
+<div class="flex-1 bg-primary rounded-full"></div>
+<div class="flex-1 bg-[#2d3748] rounded-full"></div>
+<div class="flex-1 bg-[#2d3748] rounded-full"></div>
+<div class="flex-1 bg-[#2d3748] rounded-full"></div>
+</div>
+<div class="space-y-3 hidden md:block">
+<button class="w-full bg-[#84924a] text-white py-3 px-4 rounded font-label-caps text-label-caps border-t border-[#a1b35b] hover:bg-opacity-90 transition-colors shadow-[4px_4px_0px_rgba(0,0,0,0.5)] flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-sm">save</span>
+                                        Guardar Orden
+                                    </button>
+<button class="w-full bg-surface-container-highest border border-outline-variant text-on-surface py-3 px-4 rounded font-label-caps text-label-caps hover:bg-surface-variant transition-colors flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-sm">send</span>
+                                        Solicitar Aprob.
+                                    </button>
+<button class="w-full bg-transparent border border-transparent text-on-surface-variant py-2 px-4 rounded font-label-caps text-label-caps hover:text-on-surface transition-colors">
+                                        Guardar Borrador
+                                    </button>
+</div>
+</div>
+<!-- Additional Info widget -->
+<div class="bg-[#0a0c10] border border-[#2d3748] rounded p-4 border-dashed opacity-70">
+<p class="font-label-caps text-[10px] text-on-surface-variant flex items-center gap-2">
+<span class="material-symbols-outlined text-[14px]">info</span>
+                                    La orden generará notificaciones automáticas al cliente según avance el estado.
+                                </p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

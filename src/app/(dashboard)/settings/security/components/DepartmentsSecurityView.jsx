@@ -706,7 +706,7 @@ export default function DepartmentsSecurityView() {
         title="¿Eliminar Departamento?"
         description={`¿Está seguro que desea eliminar permanentemente el departamento "${itemToDelete?.nombre || itemToDelete?.departamento || ''}"? Esta acción es irreversible.`}
         confirmLabel="Eliminar"
-        isLoading={isSubmitting}
+        isLoading={isSaving}
         loadingLabel="Eliminando..."
         details={itemToDelete ? [
           { label: 'Departamento', value: itemToDelete.nombre || itemToDelete.departamento },

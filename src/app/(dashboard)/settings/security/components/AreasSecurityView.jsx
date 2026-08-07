@@ -779,7 +779,7 @@ export default function AreasSecurityView() {
         title="¿Eliminar Área?"
         description={`¿Está seguro que desea eliminar permanentemente el área "${itemToDelete?.nombre || itemToDelete?.area || ''}"? Esta acción es irreversible.`}
         confirmLabel="Eliminar"
-        isLoading={isSubmitting}
+        isLoading={isSaving}
         loadingLabel="Eliminando..."
         details={itemToDelete ? [
           { label: 'Área', value: itemToDelete.nombre || itemToDelete.area },

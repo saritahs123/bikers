@@ -723,7 +723,7 @@ export default function CompanyTypesSecurityView() {
         title="¿Eliminar Tipo de Empresa?"
         description={`¿Está seguro que desea eliminar permanentemente el tipo "${itemToDelete?.nombre || itemToDelete?.tipo_empresa || ''}"? Esta acción es irreversible.`}
         confirmLabel="Eliminar"
-        isLoading={isSubmitting}
+        isLoading={isSaving}
         loadingLabel="Eliminando..."
         details={itemToDelete ? [
           { label: 'Tipo de Empresa', value: itemToDelete.nombre || itemToDelete.tipo_empresa },
