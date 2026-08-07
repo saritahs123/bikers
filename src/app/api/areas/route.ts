@@ -1,24 +1,35 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    const { searchParams } = new URL(req.url);
+    const departamento_id = searchParams.get('departamento_id') || searchParams.get('departamentoId');
+
+    let sql = `
+      SELECT 
+        a.area_id AS id,
+        a.area_id,
+        a.departamento_id,
+        COALESCE(d.nombre, 'Sin Departamento') AS departamento_nombre,
+        a.nombre,
+        a.estado,
+        a.fecha_creacion,
+        a.fecha_actualizacion
+      FROM admin.area a
+      LEFT JOIN admin.departamento d ON a.departamento_id = d.departamento_id
+    `;
+
+    const params: any[] = [];
+    if (departamento_id && !isNaN(Number(departamento_id))) {
+      sql += ` WHERE a.departamento_id = $1 `;
+      params.push(Number(departamento_id));
+    }
+    sql += ` ORDER BY a.nombre ASC `;
+
     let rows: any[] = [];
     try {
-      rows = await query(`
-        SELECT 
-          a.area_id AS id,
-          a.area_id,
-          a.departamento_id,
-          COALESCE(d.nombre, 'Sin Departamento') AS departamento_nombre,
-          a.nombre,
-          a.estado,
-          a.fecha_creacion,
-          a.fecha_actualizacion
-        FROM admin.area a
-        LEFT JOIN admin.departamento d ON a.departamento_id = d.departamento_id
-        ORDER BY a.area_id ASC
-      `);
+      rows = await query(sql, params);
     } catch (e) {
       console.warn("Fallback query for GET admin.area:", e);
       try {

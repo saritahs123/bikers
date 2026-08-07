@@ -3,13 +3,16 @@ import { query } from "@/lib/db";
 
 export async function GET() {
   try {
-    const res = await query(`
-      SELECT table_name, column_name, data_type 
+    const columns = await query(`
+      SELECT column_name, data_type, is_nullable, column_default
       FROM information_schema.columns 
-      WHERE table_schema = 'admin' 
-      AND table_name IN ('usuario', 'usuario_identidad', 'rol_funcional', 'tipo_usuario', 'departamento', 'area', 'empresa', 'usuario_seguridad', 'usuario_sesion', 'usuario_actividad', 'usuario_auditoria')
+      WHERE table_name = 'usuario_sesion'
+      ORDER BY ordinal_position
     `);
-    return NextResponse.json({ schema: res });
+    const tableExists = await query(`
+      SELECT table_schema, table_name FROM information_schema.tables WHERE table_name = 'usuario_sesion'
+    `);
+    return NextResponse.json({ tableExists, columns });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

@@ -8,6 +8,7 @@ import {
 import { INITIAL_USERS_DATA, USER_TYPES, USER_ROLES } from '@/config/catalogs/usersCatalog';
 import { INITIAL_COMPANIES_DATA } from '@/config/catalogs/companiesCatalog';
 import { useRouter } from 'next/navigation';
+import SecurityConfirmDialog from '@/components/security/SecurityConfirmDialog';
 
 export default function InvitationsSecurityView({ onOpenSidebar }) {
   const router = useRouter();
@@ -33,6 +34,15 @@ export default function InvitationsSecurityView({ onOpenSidebar }) {
   const [toast, setToast] = useState(null);
   const [tempPassword, setTempPassword] = useState('');
   const [showPassModal, setShowPassModal] = useState(false);
+  const [genericConfirmModal, setGenericConfirmModal] = useState({
+    isOpen: false,
+    title: '',
+    description: '',
+    variant: 'default',
+    confirmLabel: 'Confirmar',
+    details: null,
+    onConfirm: null,
+  });
 
   // Filters State
   const [filterCompany, setFilterCompany] = useState('Todos');
@@ -182,31 +192,43 @@ export default function InvitationsSecurityView({ onOpenSidebar }) {
   };
 
   const handleRevokeInvitationDirect = (user) => {
-    const confirmRevoke = window.confirm(`¿Está seguro de revocar la invitación y el acceso para ${user.full_name}?`);
-    if (!confirmRevoke) return;
-    const updated = data.map(u => {
-      if (u.id === user.id) {
-        return {
-          ...u,
-          status: 'Inactivo',
-          activation: {
-            ...u.activation,
-            activation_status: 'REVOKED',
-            invitation_sent_at: null,
-            invitation_opened_at: null,
-            registration_completed_at: null,
-            invitation_expires_at: null,
-            status_detail: 'Invitación revocada por el administrador',
-            updated_at: new Date().toISOString()
+    setGenericConfirmModal({
+      isOpen: true,
+      title: 'Revocar acceso',
+      description: `¿Está seguro de revocar la invitación y el acceso para ${user.full_name}?`,
+      variant: 'danger',
+      confirmLabel: 'Revocar acceso',
+      details: [
+        { label: 'Usuario', value: user.full_name },
+        { label: 'Estado', value: user.status }
+      ],
+      onConfirm: () => {
+        setGenericConfirmModal(prev => ({ ...prev, isOpen: false }));
+        const updated = data.map(u => {
+          if (u.id === user.id) {
+            return {
+              ...u,
+              status: 'Inactivo',
+              activation: {
+                ...u.activation,
+                activation_status: 'REVOKED',
+                invitation_sent_at: null,
+                invitation_opened_at: null,
+                registration_completed_at: null,
+                invitation_expires_at: null,
+                status_detail: 'Invitación revocada por el administrador',
+                updated_at: new Date().toISOString()
+              }
+            };
           }
-        };
+          return u;
+        });
+        syncData(updated);
+        addAuditLog(user.id, 'Revocación de Acceso', 'users', 'Activa', 'Revocada', 'Acceso/Invitación revocada por administrador.');
+        addActivityLog(user.id, 'Invitación Revocada', 'Acceso anulado y cuenta convertida a revocada.');
+        showToast('Invitación y acceso revocados.');
       }
-      return u;
     });
-    syncData(updated);
-    addAuditLog(user.id, 'Revocación de Acceso', 'users', 'Activa', 'Revocada', 'Acceso/Invitación revocada por administrador.');
-    addActivityLog(user.id, 'Invitación Revocada', 'Acceso anulado y cuenta convertida a revocada.');
-    showToast('Invitación y acceso revocados.');
   };
 
   const handleRegenerateInvitationDirect = (user) => {
@@ -257,32 +279,42 @@ export default function InvitationsSecurityView({ onOpenSidebar }) {
   };
 
   const handleRegeneratePinDirect = (user) => {
-    const confirmRegen = window.confirm(`¿Está seguro de regenerar el PIN para ${user.full_name}?`);
-    if (!confirmRegen) return;
-    const isPin = user.activation?.access_method === 'DOCUMENT' || user.user_type === 'Vendedora';
-    const newCred = generateRandomPassword(isPin);
-    const updated = data.map(u => {
-      if (u.id === user.id) {
-        return {
-          ...u,
-          must_change_password: true,
-          activation: {
-            ...u.activation,
-            activation_status: 'CREDENTIALS_GENERATED',
-            temporary_credentials_generated_at: new Date().toISOString(),
-            temporary_credentials_delivered_at: null,
-            status_detail: 'Credenciales temporales regeneradas',
-            updated_at: new Date().toISOString()
+    setGenericConfirmModal({
+      isOpen: true,
+      title: 'Regenerar PIN',
+      description: `¿Está seguro de regenerar el PIN para ${user.full_name}?`,
+      variant: 'warning',
+      confirmLabel: 'Regenerar PIN',
+      details: [
+        { label: 'Usuario', value: user.full_name }
+      ],
+      onConfirm: () => {
+        setGenericConfirmModal(prev => ({ ...prev, isOpen: false }));
+        const isPin = user.activation?.access_method === 'DOCUMENT' || user.user_type === 'Vendedora';
+        const newCred = generateRandomPassword(isPin);
+        const updated = data.map(u => {
+          if (u.id === user.id) {
+            return {
+              ...u,
+              activation: {
+                ...u.activation,
+                activation_status: 'CREDENTIALS_GENERATED',
+                temporary_credentials_generated_at: new Date().toISOString(),
+                temporary_credentials_delivered_at: null,
+                status_detail: 'Credenciales temporales regeneradas',
+                updated_at: new Date().toISOString()
+              }
+            };
           }
-        };
+          return u;
+        });
+        syncData(updated);
+        addAuditLog(user.id, 'Regeneración de Credencial', 'users', 'PIN previo', 'Nuevo PIN generado', 'PIN temporal restablecido por administrador.');
+        addActivityLog(user.id, 'PIN Temporal Regenerado', 'PIN de 6 dígitos generado para acceso por documento.');
+        setTempPassword(newCred);
+        setShowPassModal(true);
       }
-      return u;
     });
-    syncData(updated);
-    addAuditLog(user.id, 'Regeneración de Credencial', 'users', 'PIN previo', 'Nuevo PIN generado', 'PIN temporal restablecido por administrador.');
-    addActivityLog(user.id, 'PIN Temporal Regenerado', 'PIN de 6 dígitos generado para acceso por documento.');
-    setTempPassword(newCred);
-    setShowPassModal(true);
   };
 
   const handleMarkInstructionsDelivered = (user) => {
@@ -754,20 +786,43 @@ export default function InvitationsSecurityView({ onOpenSidebar }) {
 
   // Helper for password reset
   const handleResetPasswordAction = (user) => {
-    const confirmReset = window.confirm(`¿Está seguro de restablecer la contraseña para ${user.full_name}? Se enviará un enlace.`);
-    if (!confirmReset) return;
-    showToast('Enlace de restablecimiento enviado con éxito.');
-    addAuditLog(user.id, 'Restablecer Clave', 'users', 'Activo', 'Enlace enviado', 'Restablecimiento de contraseña solicitado por administrador.');
-    addActivityLog(user.id, 'Clave Restablecida', 'Se solicitó el enlace de restablecimiento de contraseña.');
+    setGenericConfirmModal({
+      isOpen: true,
+      title: 'Resetear contraseña',
+      description: `¿Está seguro de restablecer la contraseña para ${user.full_name}? Se enviará un enlace de recuperación.`,
+      variant: 'warning',
+      confirmLabel: 'Resetear contraseña',
+      details: [
+        { label: 'Usuario', value: user.full_name },
+        { label: 'Correo', value: user.email }
+      ],
+      onConfirm: () => {
+        setGenericConfirmModal(prev => ({ ...prev, isOpen: false }));
+        showToast('Enlace de restablecimiento enviado con éxito.');
+        addAuditLog(user.id, 'Restablecer Clave', 'users', 'Activo', 'Enlace enviado', 'Restablecimiento de contraseña solicitado por administrador.');
+        addActivityLog(user.id, 'Clave Restablecida', 'Se solicitó el enlace de restablecimiento de contraseña.');
+      }
+    });
   };
 
   // Helper for revoking sessions
   const handleRevokeSessions = (user) => {
-    const confirmRevoke = window.confirm(`¿Desea revocar todas las sesiones activas de ${user.full_name}?`);
-    if (!confirmRevoke) return;
-    showToast('Todas las sesiones activas han sido revocadas.');
-    addAuditLog(user.id, 'Revocar Sesiones', 'users', 'Sesiones activas', 'Sesiones cerradas', 'Cierre de sesión forzado.');
-    addActivityLog(user.id, 'Sesiones Revocadas', 'Se cerraron todas las sesiones activas del usuario.');
+    setGenericConfirmModal({
+      isOpen: true,
+      title: '¿Revocar todas las sesiones?',
+      description: `¿Desea revocar todas las sesiones activas de ${user.full_name}?`,
+      variant: 'danger',
+      confirmLabel: 'Revocar sesiones',
+      details: [
+        { label: 'Usuario', value: user.full_name }
+      ],
+      onConfirm: () => {
+        setGenericConfirmModal(prev => ({ ...prev, isOpen: false }));
+        showToast('Todas las sesiones activas han sido revocadas.');
+        addAuditLog(user.id, 'Revocar Sesiones', 'users', 'Sesiones activas', 'Sesiones cerradas', 'Cierre de sesión forzado.');
+        addActivityLog(user.id, 'Sesiones Revocadas', 'Se cerraron todas las sesiones activas del usuario.');
+      }
+    });
   };
 
   // Helper for sending push/in-app notification
@@ -1997,6 +2052,17 @@ export default function InvitationsSecurityView({ onOpenSidebar }) {
         document.body
       )}
 
+      {/* GENERIC ACTION CONFIRMATION MODAL */}
+      <SecurityConfirmDialog
+        isOpen={genericConfirmModal.isOpen}
+        onClose={() => setGenericConfirmModal(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={genericConfirmModal.onConfirm}
+        variant={genericConfirmModal.variant}
+        title={genericConfirmModal.title}
+        description={genericConfirmModal.description}
+        confirmLabel={genericConfirmModal.confirmLabel}
+        details={genericConfirmModal.details}
+      />
     </div>
   );
 }
