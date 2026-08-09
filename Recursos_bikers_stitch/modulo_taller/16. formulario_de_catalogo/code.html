@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Biker's Fort Core - Formulario de Catálogo</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800&amp;family=JetBrains+Mono:wght@600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-primary-container": "#252d00",
+                        "surface-container": "#1f201a",
+                        "secondary-fixed": "#dfe2ec",
+                        "primary-fixed-dim": "#bfce7f",
+                        "on-secondary-container": "#b2b5be",
+                        "on-surface-variant": "#c7c8b7",
+                        "surface-dim": "#13140f",
+                        "on-primary-fixed": "#181e00",
+                        "error": "#ffb4ab",
+                        "tertiary": "#bdc7dc",
+                        "on-background": "#e4e3d9",
+                        "surface-variant": "#35352f",
+                        "on-tertiary-fixed": "#121c2c",
+                        "outline-variant": "#46483b",
+                        "surface": "#13140f",
+                        "surface-tint": "#bfce7f",
+                        "on-tertiary": "#273141",
+                        "on-secondary-fixed": "#181c23",
+                        "primary": "#bfce7f",
+                        "secondary-container": "#43474f",
+                        "surface-bright": "#393a33",
+                        "on-error": "#690005",
+                        "inverse-on-surface": "#30312b",
+                        "surface-container-highest": "#35352f",
+                        "inverse-primary": "#576421",
+                        "on-secondary-fixed-variant": "#43474f",
+                        "on-primary": "#2b3400",
+                        "on-surface": "#e4e3d9",
+                        "outline": "#919282",
+                        "tertiary-fixed-dim": "#bdc7dc",
+                        "on-error-container": "#ffdad6",
+                        "on-tertiary-fixed-variant": "#3d4759",
+                        "surface-container-high": "#2a2a24",
+                        "secondary": "#c3c6d0",
+                        "tertiary-fixed": "#d9e3f9",
+                        "on-primary-fixed-variant": "#404c0a",
+                        "inverse-surface": "#e4e3d9",
+                        "secondary-fixed-dim": "#c3c6d0",
+                        "primary-container": "#89974f",
+                        "on-secondary": "#2d3138",
+                        "error-container": "#93000a",
+                        "background": "#13140f",
+                        "primary-fixed": "#dbea98",
+                        "surface-container-low": "#1b1c17",
+                        "tertiary-container": "#8791a5",
+                        "surface-container-lowest": "#0e0f0a",
+                        "on-tertiary-container": "#202a3a"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "unit": "4px",
+                        "gutter": "24px",
+                        "container-max": "1440px",
+                        "margin-mobile": "16px",
+                        "margin-desktop": "40px"
+                    },
+                    "fontFamily": {
+                        "headline-sm": ["Hanken Grotesk"],
+                        "headline-lg": ["Hanken Grotesk"],
+                        "headline-md": ["Hanken Grotesk"],
+                        "body-lg": ["Hanken Grotesk"],
+                        "body-sm": ["Hanken Grotesk"],
+                        "body-md": ["Hanken Grotesk"],
+                        "headline-lg-mobile": ["Hanken Grotesk"],
+                        "label-caps": ["JetBrains Mono"]
+                    },
+                    "fontSize": {
+                        "headline-sm": ["24px", { "lineHeight": "1.3", "fontWeight": "600" }],
+                        "headline-lg": ["48px", { "lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "800" }],
+                        "headline-md": ["32px", { "lineHeight": "1.2", "fontWeight": "700" }],
+                        "body-lg": ["18px", { "lineHeight": "1.6", "fontWeight": "400" }],
+                        "body-sm": ["14px", { "lineHeight": "1.4", "fontWeight": "400" }],
+                        "body-md": ["16px", { "lineHeight": "1.5", "fontWeight": "400" }],
+                        "headline-lg-mobile": ["32px", { "lineHeight": "1.2", "fontWeight": "800" }],
+                        "label-caps": ["12px", { "lineHeight": "1", "letterSpacing": "0.1em", "fontWeight": "600" }]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .industrial-border { border: 1px solid #2d3748; }
+        .industrial-shadow { box-shadow: 4px 4px 0px rgba(0,0,0,0.5); }
+        .industrial-bg-pattern {
+            background-color: #0a0c10;
+            background-image: radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background antialiased font-body-md industrial-bg-pattern min-h-screen flex flex-col md:flex-row">
+<!-- SideNavBar (Desktop) -->
+<nav class="hidden md:flex flex-col h-screen w-64 border-r border-outline-variant bg-surface-container-low py-unit-6 px-unit-4 flex-shrink-0 sticky top-0">
+<div class="mb-10">
+<h1 class="font-headline-md text-headline-md font-bold text-primary tracking-tighter">Biker's Fort Core</h1>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">Workshop Management</p>
+</div>
+<button class="w-full bg-[#84924a] text-white border-t border-[#9fb159] py-3 px-4 rounded mb-8 font-label-caps text-label-caps flex items-center justify-center gap-2 hover:bg-[#6c783c] transition-colors">
+<span class="material-symbols-outlined text-[18px]">add</span>
+            New Repair Ticket
+        </button>
+<ul class="flex-1 space-y-2">
+<li><a class="flex items-center gap-3 px-4 py-3 rounded text-on-surface-variant font-body-md hover:bg-surface-container-highest transition-colors duration-200" href="#"><span class="material-symbols-outlined">dashboard</span>Dashboard</a></li>
+<li><a class="flex items-center gap-3 px-4 py-3 rounded text-primary font-bold border-r-2 border-primary bg-surface-container-highest bg-opacity-50" href="#"><span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">inventory_2</span>Inventory</a></li>
+<li><a class="flex items-center gap-3 px-4 py-3 rounded text-on-surface-variant font-body-md hover:bg-surface-container-highest transition-colors duration-200" href="#"><span class="material-symbols-outlined">build</span>Work Orders</a></li>
+<li><a class="flex items-center gap-3 px-4 py-3 rounded text-on-surface-variant font-body-md hover:bg-surface-container-highest transition-colors duration-200" href="#"><span class="material-symbols-outlined">calendar_today</span>Schedule</a></li>
+<li><a class="flex items-center gap-3 px-4 py-3 rounded text-on-surface-variant font-body-md hover:bg-surface-container-highest transition-colors duration-200" href="#"><span class="material-symbols-outlined">analytics</span>Reports</a></li>
+</ul>
+<ul class="mt-auto space-y-2 pt-6 border-t border-outline-variant">
+<li><a class="flex items-center gap-3 px-4 py-3 rounded text-on-surface-variant font-body-md hover:bg-surface-container-highest transition-colors duration-200" href="#"><span class="material-symbols-outlined">settings</span>Settings</a></li>
+<li><a class="flex items-center gap-3 px-4 py-3 rounded text-on-surface-variant font-body-md hover:bg-surface-container-highest transition-colors duration-200" href="#"><span class="material-symbols-outlined">help</span>Support</a></li>
+</ul>
+</nav>
+<!-- TopNavBar (Mobile only structural representation) -->
+<header class="md:hidden flex justify-between items-center w-full px-margin-mobile h-16 border-b border-outline-variant bg-surface-container sticky top-0 z-50">
+<h1 class="font-headline-sm text-headline-sm font-extrabold text-on-surface">Biker's Fort Core</h1>
+<button class="text-primary"><span class="material-symbols-outlined">menu</span></button>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-1 p-margin-mobile md:p-margin-desktop max-w-container-max mx-auto w-full overflow-y-auto">
+<header class="mb-gutter flex justify-between items-end border-b border-outline-variant pb-4">
+<div>
+<nav class="text-on-surface-variant font-body-sm text-body-sm mb-2 flex items-center gap-2">
+<a class="hover:text-primary" href="#">Inventory</a>
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+<a class="hover:text-primary" href="#">Catalog</a>
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+<span class="text-on-surface">New Service Type</span>
+</nav>
+<h2 class="font-headline-md text-headline-md md:font-headline-lg md:text-headline-lg font-bold text-on-surface">Formulario de Catálogo</h2>
+</div>
+<div class="hidden md:flex gap-4">
+<button class="px-6 py-2 border border-outline-variant rounded text-on-surface font-label-caps text-label-caps hover:bg-surface-container-high transition-colors">Cancelar</button>
+<button class="px-6 py-2 bg-[#84924a] text-white border-t border-[#9fb159] rounded font-label-caps text-label-caps hover:bg-[#6c783c] transition-colors">Guardar Registro</button>
+</div>
+</header>
+<!-- Form Layout (Bento Grid Style) -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-gutter">
+<!-- Left Column: Form Fields -->
+<div class="lg:col-span-8 space-y-gutter">
+<!-- Basic Info Card -->
+<div class="bg-[#161a21] p-6 rounded-DEFAULT industrial-border hover:border-[#4a5568] transition-colors">
+<h3 class="font-headline-sm text-headline-sm text-primary mb-6 flex items-center gap-2 border-b border-outline-variant pb-2">
+<span class="material-symbols-outlined">info</span>
+                        Información Básica
+                    </h3>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<div class="space-y-2">
+<label class="block font-label-caps text-label-caps text-on-surface-variant">Código de Servicio</label>
+<input class="w-full bg-[#0a0c10] border border-[#2d3748] rounded px-4 py-2 text-on-surface focus:outline-none focus:border-[#84924a] focus:ring-1 focus:ring-[#84924a] font-label-caps text-body-md transition-all" type="text" value="SRV-BRK-01"/>
+</div>
+<div class="space-y-2">
+<label class="block font-label-caps text-label-caps text-on-surface-variant">Categoría</label>
+<select class="w-full bg-[#0a0c10] border border-[#2d3748] rounded px-4 py-2 text-on-surface focus:outline-none focus:border-[#84924a] font-body-md appearance-none">
+<option>Frenos</option>
+<option>Transmisión</option>
+<option>Suspensión</option>
+<option>Ruedas</option>
+</select>
+</div>
+<div class="space-y-2 md:col-span-2">
+<label class="block font-label-caps text-label-caps text-on-surface-variant">Nombre del Servicio</label>
+<input class="w-full bg-[#0a0c10] border border-[#2d3748] rounded px-4 py-2 text-on-surface focus:outline-none focus:border-[#84924a] font-body-md transition-all" placeholder="Ej. Purga de Frenos Hidráulicos" type="text"/>
+</div>
+<div class="space-y-2 md:col-span-2">
+<label class="block font-label-caps text-label-caps text-on-surface-variant">Descripción Detallada</label>
+<textarea class="w-full bg-[#0a0c10] border border-[#2d3748] rounded px-4 py-2 text-on-surface focus:outline-none focus:border-[#84924a] font-body-md transition-all resize-none" rows="3"></textarea>
+</div>
+</div>
+</div>
+<!-- Technical Details Card -->
+<div class="bg-[#161a21] p-6 rounded-DEFAULT industrial-border hover:border-[#4a5568] transition-colors">
+<h3 class="font-headline-sm text-headline-sm text-primary mb-6 flex items-center gap-2 border-b border-outline-variant pb-2">
+<span class="material-symbols-outlined">build_circle</span>
+                        Detalles Operativos
+                    </h3>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<div class="space-y-2">
+<label class="block font-label-caps text-label-caps text-on-surface-variant">Precio Base (USD)</label>
+<div class="relative">
+<span class="absolute left-3 top-2.5 text-on-surface-variant">$</span>
+<input class="w-full bg-[#0a0c10] border border-[#2d3748] rounded pl-8 pr-4 py-2 text-on-surface focus:outline-none focus:border-[#84924a] font-label-caps text-body-md" placeholder="0.00" type="number"/>
+</div>
+</div>
+<div class="space-y-2">
+<label class="block font-label-caps text-label-caps text-on-surface-variant">Tiempo Est. (Min)</label>
+<div class="relative">
+<span class="absolute left-3 top-2.5 material-symbols-outlined text-[20px] text-on-surface-variant">timer</span>
+<input class="w-full bg-[#0a0c10] border border-[#2d3748] rounded pl-10 pr-4 py-2 text-on-surface focus:outline-none focus:border-[#84924a] font-label-caps text-body-md" placeholder="45" type="number"/>
+</div>
+</div>
+<div class="space-y-2">
+<label class="block font-label-caps text-label-caps text-on-surface-variant">Dificultad</label>
+<select class="w-full bg-[#0a0c10] border border-[#2d3748] rounded px-4 py-2 text-on-surface focus:outline-none focus:border-[#84924a] font-body-md appearance-none">
+<option>Básica (L1)</option>
+<option selected="">Intermedia (L2)</option>
+<option>Avanzada (L3)</option>
+<option>Experta (L4)</option>
+</select>
+</div>
+</div>
+</div>
+</div>
+<!-- Right Column: Live Preview & Tools -->
+<div class="lg:col-span-4 space-y-gutter">
+<div class="bg-[#1c2129] p-6 rounded-DEFAULT industrial-border sticky top-24">
+<h3 class="font-label-caps text-label-caps text-on-surface-variant mb-4 flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]">visibility</span>
+                        Vista Previa en Sistema
+                    </h3>
+<!-- Preview Card -->
+<div class="bg-[#0a0c10] border border-[#2d3748] rounded p-4 industrial-shadow relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-2 opacity-10">
+<span class="material-symbols-outlined text-[64px]">build</span>
+</div>
+<div class="relative z-10">
+<div class="flex justify-between items-start mb-2">
+<span class="bg-surface-variant text-on-surface px-2 py-1 rounded text-[10px] font-label-caps border border-outline-variant">SRV-BRK-01</span>
+<span class="bg-[#84924a]/20 text-[#bfce7f] px-2 py-1 rounded text-[10px] font-label-caps border border-[#84924a]/50">L2 - INTERMEDIO</span>
+</div>
+<h4 class="font-headline-sm text-[18px] text-on-surface font-semibold mb-1">Purga de Frenos Hidráulicos</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-4 line-clamp-2">Servicio completo de sangrado y reemplazo de fluido mineral o DOT para sistemas de frenado hidráulico.</p>
+<div class="flex items-center justify-between border-t border-[#2d3748] pt-3 mt-3">
+<div class="flex items-center gap-1 text-primary font-label-caps text-label-caps">
+<span class="material-symbols-outlined text-[16px]">payments</span>
+                                    $45.00
+                                </div>
+<div class="flex items-center gap-1 text-on-surface-variant font-label-caps text-[11px]">
+<span class="material-symbols-outlined text-[14px]">schedule</span>
+                                    45 min
+                                </div>
+</div>
+</div>
+</div>
+<div class="mt-6 border-t border-outline-variant pt-4">
+<p class="text-[11px] text-on-surface-variant mb-3 font-label-caps text-center">Requisitos de Taller (Auto-generados)</p>
+<div class="flex flex-wrap gap-2">
+<span class="border border-[#2d3748] bg-[#0a0c10] px-2 py-1 rounded text-[10px] font-label-caps text-on-surface-variant flex items-center gap-1"><span class="material-symbols-outlined text-[12px]">water_drop</span> Fluido</span>
+<span class="border border-[#2d3748] bg-[#0a0c10] px-2 py-1 rounded text-[10px] font-label-caps text-on-surface-variant flex items-center gap-1"><span class="material-symbols-outlined text-[12px]">hardware</span> Kit Sangrado</span>
+<span class="border border-[#2d3748] bg-[#0a0c10] px-2 py-1 rounded text-[10px] font-label-caps text-on-surface-variant flex items-center gap-1"><span class="material-symbols-outlined text-[12px]">recycling</span> Disp. Residuos</span>
+</div>
+</div>
+</div>
+<!-- Mobile Action Buttons -->
+<div class="md:hidden flex gap-4 mt-6">
+<button class="flex-1 py-3 border border-outline-variant rounded text-on-surface font-label-caps text-label-caps text-center">Cancelar</button>
+<button class="flex-1 py-3 bg-[#84924a] text-white border-t border-[#9fb159] rounded font-label-caps text-label-caps text-center">Guardar</button>
+</div>
+</div>
+</div>
+</main>
+</body></html>

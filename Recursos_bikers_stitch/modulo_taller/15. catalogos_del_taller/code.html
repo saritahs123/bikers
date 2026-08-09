@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Biker's Fort Core - Catálogos del Taller</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800&amp;family=JetBrains+Mono:wght@600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-primary-container": "#252d00",
+                      "surface-container": "#1f201a",
+                      "secondary-fixed": "#dfe2ec",
+                      "primary-fixed-dim": "#bfce7f",
+                      "on-secondary-container": "#b2b5be",
+                      "on-surface-variant": "#c7c8b7",
+                      "surface-dim": "#13140f",
+                      "on-primary-fixed": "#181e00",
+                      "error": "#ffb4ab",
+                      "tertiary": "#bdc7dc",
+                      "on-background": "#e4e3d9",
+                      "surface-variant": "#35352f",
+                      "on-tertiary-fixed": "#121c2c",
+                      "outline-variant": "#46483b",
+                      "surface": "#13140f",
+                      "surface-tint": "#bfce7f",
+                      "on-tertiary": "#273141",
+                      "on-secondary-fixed": "#181c23",
+                      "primary": "#bfce7f",
+                      "secondary-container": "#43474f",
+                      "surface-bright": "#393a33",
+                      "on-error": "#690005",
+                      "inverse-on-surface": "#30312b",
+                      "surface-container-highest": "#35352f",
+                      "inverse-primary": "#576421",
+                      "on-secondary-fixed-variant": "#43474f",
+                      "on-primary": "#2b3400",
+                      "on-surface": "#e4e3d9",
+                      "outline": "#919282",
+                      "tertiary-fixed-dim": "#bdc7dc",
+                      "on-error-container": "#ffdad6",
+                      "on-tertiary-fixed-variant": "#3d4759",
+                      "surface-container-high": "#2a2a24",
+                      "secondary": "#c3c6d0",
+                      "tertiary-fixed": "#d9e3f9",
+                      "on-primary-fixed-variant": "#404c0a",
+                      "inverse-surface": "#e4e3d9",
+                      "secondary-fixed-dim": "#c3c6d0",
+                      "primary-container": "#89974f",
+                      "on-secondary": "#2d3138",
+                      "error-container": "#93000a",
+                      "background": "#13140f",
+                      "primary-fixed": "#dbea98",
+                      "surface-container-low": "#1b1c17",
+                      "tertiary-container": "#8791a5",
+                      "surface-container-lowest": "#0e0f0a",
+                      "on-tertiary-container": "#202a3a"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "unit": "4px",
+                      "gutter": "24px",
+                      "container-max": "1440px",
+                      "margin-mobile": "16px",
+                      "margin-desktop": "40px"
+              },
+              "fontFamily": {
+                      "headline-sm": [
+                              "Hanken Grotesk"
+                      ],
+                      "headline-lg": [
+                              "Hanken Grotesk"
+                      ],
+                      "headline-md": [
+                              "Hanken Grotesk"
+                      ],
+                      "body-lg": [
+                              "Hanken Grotesk"
+                      ],
+                      "body-sm": [
+                              "Hanken Grotesk"
+                      ],
+                      "body-md": [
+                              "Hanken Grotesk"
+                      ],
+                      "headline-lg-mobile": [
+                              "Hanken Grotesk"
+                      ],
+                      "label-caps": [
+                              "JetBrains Mono"
+                      ]
+              },
+              "fontSize": {
+                      "headline-sm": [
+                              "24px",
+                              {
+                                      "lineHeight": "1.3",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "headline-lg": [
+                              "48px",
+                              {
+                                      "lineHeight": "1.1",
+                                      "letterSpacing": "-0.02em",
+                                      "fontWeight": "800"
+                              }
+                      ],
+                      "headline-md": [
+                              "32px",
+                              {
+                                      "lineHeight": "1.2",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "body-lg": [
+                              "18px",
+                              {
+                                      "lineHeight": "1.6",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "body-sm": [
+                              "14px",
+                              {
+                                      "lineHeight": "1.4",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "body-md": [
+                              "16px",
+                              {
+                                      "lineHeight": "1.5",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "headline-lg-mobile": [
+                              "32px",
+                              {
+                                      "lineHeight": "1.2",
+                                      "fontWeight": "800"
+                              }
+                      ],
+                      "label-caps": [
+                              "12px",
+                              {
+                                      "lineHeight": "1",
+                                      "letterSpacing": "0.1em",
+                                      "fontWeight": "600"
+                              }
+                      ]
+              }
+      },
+          },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-family: 'Material Symbols Outlined';
+            font-weight: normal;
+            font-style: normal;
+            font-size: 24px;
+            line-height: 1;
+            letter-spacing: normal;
+            text-transform: none;
+            display: inline-block;
+            white-space: nowrap;
+            word-wrap: normal;
+            direction: ltr;
+            font-feature-settings: 'liga';
+            -webkit-font-smoothing: antialiased;
+        }
+        
+        /* Industrial Pattern Background */
+        body {
+            background-color: #0a0c10;
+            background-image: radial-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            background-size: 16px 16px;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #13140f; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #46483b; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #89974f; 
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface antialiased flex h-screen overflow-hidden">
+<!-- SideNavBar (Hidden on Mobile) -->
+<nav class="hidden md:flex bg-surface-container-low dark:bg-surface-container-low text-primary dark:text-primary h-screen w-64 border-r border-outline-variant flex-col py-unit-6 px-unit-4 flex-shrink-0 z-20">
+<!-- Brand Header -->
+<div class="mb-gutter">
+<div class="flex items-center gap-3 mb-2">
+<div class="w-10 h-10 rounded bg-primary flex items-center justify-center text-on-primary">
+<span class="material-symbols-outlined" data-weight="fill" style="font-variation-settings: 'FILL' 1;">pedal_bike</span>
+</div>
+<div>
+<h1 class="font-headline-md text-headline-md font-bold text-primary tracking-tighter">Biker's Fort Core</h1>
+<p class="font-label-caps text-label-caps text-on-surface-variant">Workshop Management</p>
+</div>
+</div>
+<button class="w-full mt-4 bg-primary text-on-primary font-label-caps text-label-caps py-3 px-4 rounded border-t border-[#dbea98] shadow-[4px_4px_0px_rgba(0,0,0,0.5)] hover:bg-primary-container hover:text-on-primary-container transition-all active:translate-y-1 active:shadow-[0px_0px_0px_rgba(0,0,0,0.5)] flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-[18px]">add</span>
+                New Repair Ticket
+            </button>
+</div>
+<!-- Navigation Links -->
+<div class="flex-1 overflow-y-auto">
+<ul class="space-y-1">
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded text-on-surface-variant font-body-md hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+                        Dashboard
+                    </a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded text-on-surface-variant font-body-md hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="inventory_2">inventory_2</span>
+                        Inventory
+                    </a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded text-on-surface-variant font-body-md hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="build">build</span>
+                        Work Orders
+                    </a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded text-on-surface-variant font-body-md hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="calendar_today">calendar_today</span>
+                        Schedule
+                    </a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded text-primary font-bold border-r-2 border-primary bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+                        Reports
+                    </a>
+</li>
+</ul>
+</div>
+<!-- Footer Links -->
+<div class="mt-auto pt-4 border-t border-outline-variant">
+<ul class="space-y-1">
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded text-on-surface-variant font-body-md hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+                        Settings
+                    </a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded text-on-surface-variant font-body-md hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+                        Support
+                    </a>
+</li>
+</ul>
+</div>
+</nav>
+<!-- Main Content Area -->
+<main class="flex-1 flex flex-col relative w-full overflow-hidden">
+<!-- TopNavBar -->
+<header class="bg-surface-container dark:bg-surface-container text-primary dark:text-primary docked full-width top-0 border-b border-outline-variant flex justify-between items-center w-full px-margin-mobile md:px-margin-desktop h-16 z-10">
+<!-- Mobile Brand (Hidden on Desktop) -->
+<div class="md:hidden flex items-center gap-2">
+<span class="material-symbols-outlined text-primary" data-weight="fill" style="font-variation-settings: 'FILL' 1;">pedal_bike</span>
+<span class="font-headline-sm text-headline-sm font-extrabold text-on-surface">Biker's Fort Core</span>
+</div>
+<!-- Search (Left aligned) -->
+<div class="hidden md:flex flex-1 max-w-md focus-within:ring-1 focus-within:ring-primary rounded">
+<div class="relative w-full">
+<span class="material-symbols-outlined absolute left-3 top-1/2 transform -translate-y-1/2 text-on-surface-variant">search</span>
+<input class="w-full bg-[#13140f] border border-[#2d3748] rounded py-2 pl-10 pr-4 text-body-md font-body-md text-on-surface focus:outline-none focus:border-primary placeholder-on-surface-variant transition-colors" placeholder="Search orders, inventory..." type="text"/>
+</div>
+</div>
+<!-- Navigation Links (Desktop) -->
+<nav class="hidden md:flex items-center gap-6 mx-6">
+<a class="text-on-surface-variant font-body-md hover:text-primary transition-colors duration-200" href="#">Global View</a>
+<a class="text-on-surface-variant font-body-md hover:text-primary transition-colors duration-200" href="#">Stock Alerts</a>
+</nav>
+<!-- Trailing Actions -->
+<div class="flex items-center gap-4">
+<button class="text-on-surface-variant hover:text-primary transition-colors duration-200 relative">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+<span class="absolute top-0 right-0 w-2 h-2 bg-error rounded-full"></span>
+</button>
+<button class="text-on-surface-variant hover:text-primary transition-colors duration-200">
+<span class="material-symbols-outlined" data-icon="history">history</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-surface-variant border border-outline-variant overflow-hidden ml-2 cursor-pointer">
+<img alt="Workshop Manager Avatar" class="w-full h-full object-cover" data-alt="A detailed, ultra-realistic macro shot of a rugged, greased mechanical gear turning inside a dark, industrial workshop environment. Lit by a harsh, cool white overhead LED, emphasizing the textured metallic surface and deep black grease, reflecting a matte industrial aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBNhA2f9NmN4qioxw8bYUPWBPkdOIMA4lgDIJHsRKEyHNCBaRojTGr_AjyBUGoXR0TxfKJh3z7QchsSRfETJ86n9ufxrF5cptRzDTF0E8R4rOx5j39KDHv_HTc9CvRjepfI56p0EferGxwv0bkW0tV-LUGBFj9A1m2ELQ6WcJe83hzVqWvJLOg6ViHrtE--TIxkRS0MV610hTKSoNGD1WihCf0PElCevwFwPHsN-9gSBuBs5PpaVBWS"/>
+</div>
+</div>
+</header>
+<!-- Page Content -->
+<div class="flex-1 overflow-y-auto p-margin-mobile md:p-margin-desktop bg-surface-container-lowest">
+<!-- Page Header -->
+<div class="mb-gutter flex flex-col md:flex-row md:items-end justify-between gap-4">
+<div>
+<h2 class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg text-on-surface mb-2">Catálogos del Taller</h2>
+<p class="font-body-lg text-body-lg text-on-surface-variant">Gestión centralizada de parámetros y configuraciones del sistema.</p>
+</div>
+<div class="flex gap-3">
+<button class="bg-surface-variant text-on-surface border border-outline-variant font-label-caps text-label-caps py-2 px-4 rounded hover:border-primary transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px]">download</span>
+                        Exportar
+                    </button>
+</div>
+</div>
+<!-- Bento Grid: Catalogs -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+<!-- Catalog Card 1 -->
+<button class="bg-[#161a21] border border-[#2d3748] rounded-xl p-6 text-left hover:border-[#4a5568] transition-colors group relative overflow-hidden" onclick="document.getElementById('catalog-details').classList.remove('hidden'); document.getElementById('empty-state').classList.add('hidden');">
+<div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-6xl text-primary">category</span>
+</div>
+<div class="flex items-center gap-3 mb-4">
+<div class="w-10 h-10 rounded bg-surface-container-high border border-outline-variant flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">category</span>
+</div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Categorías</h3>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant mb-6">Clasificación principal de los servicios ofrecidos en el taller.</p>
+<div class="flex justify-between items-center border-t border-outline-variant pt-4 mt-auto">
+<span class="font-label-caps text-label-caps text-on-surface-variant">Activos</span>
+<span class="font-headline-sm text-headline-sm text-primary">12</span>
+</div>
+</button>
+<!-- Catalog Card 2 -->
+<button class="bg-[#161a21] border border-[#2d3748] rounded-xl p-6 text-left hover:border-[#4a5568] transition-colors group relative overflow-hidden">
+<div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-6xl text-primary">home_repair_service</span>
+</div>
+<div class="flex items-center gap-3 mb-4">
+<div class="w-10 h-10 rounded bg-surface-container-high border border-outline-variant flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">home_repair_service</span>
+</div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Tipos de Servicio</h3>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant mb-6">Definición de trabajos específicos y mantenimientos.</p>
+<div class="flex justify-between items-center border-t border-outline-variant pt-4 mt-auto">
+<span class="font-label-caps text-label-caps text-on-surface-variant">Activos</span>
+<span class="font-headline-sm text-headline-sm text-primary">48</span>
+</div>
+</button>
+<!-- Catalog Card 3 -->
+<button class="bg-[#161a21] border border-[#2d3748] rounded-xl p-6 text-left hover:border-[#4a5568] transition-colors group relative overflow-hidden">
+<div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-6xl text-primary">pending_actions</span>
+</div>
+<div class="flex items-center gap-3 mb-4">
+<div class="w-10 h-10 rounded bg-surface-container-high border border-outline-variant flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">pending_actions</span>
+</div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Estados Recepción</h3>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant mb-6">Fases iniciales del ingreso de bicicletas al taller.</p>
+<div class="flex justify-between items-center border-t border-outline-variant pt-4 mt-auto">
+<span class="font-label-caps text-label-caps text-on-surface-variant">Activos</span>
+<span class="font-headline-sm text-headline-sm text-primary">6</span>
+</div>
+</button>
+<!-- Catalog Card 4 -->
+<button class="bg-[#161a21] border border-[#2d3748] rounded-xl p-6 text-left hover:border-[#4a5568] transition-colors group relative overflow-hidden">
+<div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-6xl text-primary">checklist</span>
+</div>
+<div class="flex items-center gap-3 mb-4">
+<div class="w-10 h-10 rounded bg-surface-container-high border border-outline-variant flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">checklist</span>
+</div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Ítems Checklist</h3>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant mb-6">Puntos de inspección requeridos para diagnósticos.</p>
+<div class="flex justify-between items-center border-t border-outline-variant pt-4 mt-auto">
+<span class="font-label-caps text-label-caps text-on-surface-variant">Activos</span>
+<span class="font-headline-sm text-headline-sm text-primary">24</span>
+</div>
+</button>
+<!-- Catalog Card 5 -->
+<button class="bg-[#161a21] border border-[#2d3748] rounded-xl p-6 text-left hover:border-[#4a5568] transition-colors group relative overflow-hidden">
+<div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-6xl text-primary">flaky</span>
+</div>
+<div class="flex items-center gap-3 mb-4">
+<div class="w-10 h-10 rounded bg-surface-container-high border border-outline-variant flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">flaky</span>
+</div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Estados Checklist</h3>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant mb-6">Condiciones posibles para cada ítem inspeccionado.</p>
+<div class="flex justify-between items-center border-t border-outline-variant pt-4 mt-auto">
+<span class="font-label-caps text-label-caps text-on-surface-variant">Activos</span>
+<span class="font-headline-sm text-headline-sm text-primary">4</span>
+</div>
+</button>
+<!-- Catalog Card 6 -->
+<button class="bg-[#161a21] border border-[#2d3748] rounded-xl p-6 text-left hover:border-[#4a5568] transition-colors group relative overflow-hidden">
+<div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-6xl text-primary">low_priority</span>
+</div>
+<div class="flex items-center gap-3 mb-4">
+<div class="w-10 h-10 rounded bg-surface-container-high border border-outline-variant flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">low_priority</span>
+</div>
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Prioridades</h3>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant mb-6">Niveles de urgencia para órdenes de trabajo.</p>
+<div class="flex justify-between items-center border-t border-outline-variant pt-4 mt-auto">
+<span class="font-label-caps text-label-caps text-on-surface-variant">Activos</span>
+<span class="font-headline-sm text-headline-sm text-primary">3</span>
+</div>
+</button>
+</div>
+<!-- Empty State / Placeholder before selection -->
+<div class="bg-[#1c2129] border border-[#2d3748] rounded-xl p-12 flex flex-col items-center justify-center text-center" id="empty-state">
+<span class="material-symbols-outlined text-6xl text-outline-variant mb-4">touch_app</span>
+<h3 class="font-headline-sm text-headline-sm text-on-surface mb-2">Selecciona un catálogo</h3>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-md">Haz clic en una de las tarjetas superiores para ver y administrar los registros correspondientes.</p>
+</div>
+<!-- Detail Table Area (Hidden initially) -->
+<div class="hidden bg-[#1c2129] border border-[#2d3748] rounded-xl overflow-hidden flex flex-col shadow-[4px_4px_0px_rgba(0,0,0,0.5)]" id="catalog-details">
+<!-- Table Header Actions -->
+<div class="p-6 border-b border-[#2d3748] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-[#161a21]">
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface">Administrar Categorías</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">12 registros encontrados</p>
+</div>
+<div class="flex w-full sm:w-auto gap-3">
+<div class="relative flex-1 sm:w-64">
+<span class="material-symbols-outlined absolute left-3 top-1/2 transform -translate-y-1/2 text-on-surface-variant text-sm">search</span>
+<input class="w-full bg-[#0a0c10] border border-[#2d3748] rounded py-2 pl-9 pr-4 text-body-sm font-body-sm text-on-surface focus:outline-none focus:border-primary" placeholder="Buscar..." type="text"/>
+</div>
+<button class="bg-primary text-on-primary font-label-caps text-label-caps py-2 px-4 rounded border-t border-[#dbea98] hover:bg-primary-container hover:text-on-primary-container transition-all flex items-center gap-2 whitespace-nowrap">
+<span class="material-symbols-outlined text-[16px]">add</span>
+                            Nuevo
+                        </button>
+</div>
+</div>
+<!-- Technical List / Table -->
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-[#161a21] border-b border-[#2d3748]">
+<th class="py-3 px-6 font-label-caps text-label-caps text-on-surface-variant uppercase">ID</th>
+<th class="py-3 px-6 font-label-caps text-label-caps text-on-surface-variant uppercase">Nombre</th>
+<th class="py-3 px-6 font-label-caps text-label-caps text-on-surface-variant uppercase">Descripción</th>
+<th class="py-3 px-6 font-label-caps text-label-caps text-on-surface-variant uppercase">Estado</th>
+<th class="py-3 px-6 font-label-caps text-label-caps text-on-surface-variant uppercase text-right">Acciones</th>
+</tr>
+</thead>
+<tbody class="font-body-sm text-body-sm text-on-surface">
+<!-- Row 1 -->
+<tr class="border-b border-[#2d3748] bg-[#1c2129] hover:bg-[#161a21] transition-colors">
+<td class="py-4 px-6 font-label-caps text-on-surface-variant">CAT-001</td>
+<td class="py-4 px-6 font-semibold">Mantenimiento Preventivo</td>
+<td class="py-4 px-6 text-on-surface-variant">Servicios regulares para prevenir desgaste.</td>
+<td class="py-4 px-6">
+<span class="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-full bg-primary/10 text-primary font-label-caps border border-primary/20">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+                                        Activo
+                                    </span>
+</td>
+<td class="py-4 px-6 text-right">
+<button class="text-on-surface-variant hover:text-primary transition-colors p-1"><span class="material-symbols-outlined text-[18px]">edit</span></button>
+<button class="text-on-surface-variant hover:text-error transition-colors p-1 ml-2"><span class="material-symbols-outlined text-[18px]">delete</span></button>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="border-b border-[#2d3748] bg-[#161a21] hover:bg-[#1c2129] transition-colors">
+<td class="py-4 px-6 font-label-caps text-on-surface-variant">CAT-002</td>
+<td class="py-4 px-6 font-semibold">Reparación Transmisión</td>
+<td class="py-4 px-6 text-on-surface-variant">Ajuste, cambio o reparación de drivetrain.</td>
+<td class="py-4 px-6">
+<span class="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-full bg-primary/10 text-primary font-label-caps border border-primary/20">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+                                        Activo
+                                    </span>
+</td>
+<td class="py-4 px-6 text-right">
+<button class="text-on-surface-variant hover:text-primary transition-colors p-1"><span class="material-symbols-outlined text-[18px]">edit</span></button>
+<button class="text-on-surface-variant hover:text-error transition-colors p-1 ml-2"><span class="material-symbols-outlined text-[18px]">delete</span></button>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="border-b border-[#2d3748] bg-[#1c2129] hover:bg-[#161a21] transition-colors">
+<td class="py-4 px-6 font-label-caps text-on-surface-variant">CAT-003</td>
+<td class="py-4 px-6 font-semibold">Suspensión</td>
+<td class="py-4 px-6 text-on-surface-variant">Service de horquillas y shocks.</td>
+<td class="py-4 px-6">
+<span class="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-full bg-surface-variant text-on-surface-variant font-label-caps border border-outline-variant">
+<span class="w-1.5 h-1.5 rounded-full bg-outline-variant"></span>
+                                        Inactivo
+                                    </span>
+</td>
+<td class="py-4 px-6 text-right">
+<button class="text-on-surface-variant hover:text-primary transition-colors p-1"><span class="material-symbols-outlined text-[18px]">edit</span></button>
+<button class="text-on-surface-variant hover:text-error transition-colors p-1 ml-2"><span class="material-symbols-outlined text-[18px]">delete</span></button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Pagination -->
+<div class="p-4 border-t border-[#2d3748] bg-[#161a21] flex justify-between items-center">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Mostrando 1 a 3 de 12 registros</span>
+<div class="flex gap-2">
+<button class="w-8 h-8 rounded border border-[#2d3748] bg-[#0a0c10] text-on-surface-variant hover:border-primary flex items-center justify-center transition-colors disabled:opacity-50" disabled="">
+<span class="material-symbols-outlined text-[18px]">chevron_left</span>
+</button>
+<button class="w-8 h-8 rounded border border-primary bg-primary/10 text-primary flex items-center justify-center font-label-caps">1</button>
+<button class="w-8 h-8 rounded border border-[#2d3748] bg-[#0a0c10] text-on-surface-variant hover:border-primary flex items-center justify-center font-label-caps transition-colors">2</button>
+<button class="w-8 h-8 rounded border border-[#2d3748] bg-[#0a0c10] text-on-surface-variant hover:border-primary flex items-center justify-center transition-colors">
+<span class="material-symbols-outlined text-[18px]">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

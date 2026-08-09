@@ -52,7 +52,7 @@ export default function DataScopesSecurityView({ onOpenSidebar = () => {} }) {
     window.usersData = INITIAL_USERS_DATA;
   }
 
-  const [users, setUsers] = useState(() => window.usersData || INITIAL_USERS_DATA);
+  const [users, setUsers] = useState(() => (typeof window !== 'undefined' ? window.usersData : null) || INITIAL_USERS_DATA);
   const [selectedUserId, setSelectedUserId] = useState(users[0]?.id || '');
   const [searchUser, setSearchUser] = useState('');
   const [toast, setToast] = useState(null);

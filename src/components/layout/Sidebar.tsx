@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
-import { useState, useEffect } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
 
 interface SubMenuItem {
   href?: string;
@@ -19,37 +19,50 @@ interface NavItem {
   submenu?: SubMenuItem[];
 }
 
-export function Sidebar() {
+function SidebarContent() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [expanded, setExpanded] = useState<string | null>(null);
 
+  const currentFullUrl = pathname + (searchParams?.toString() ? `?${searchParams.toString()}` : "");
+
   const navItems: NavItem[] = [
-    { href: "/", icon: "dashboard", label: "Dashboard" },
+    { href: "/", icon: "dashboard", label: "DASHBOARD" },
+    {
+      id: "taller",
+      icon: "build",
+      label: "TALLER",
+      submenu: [
+        { href: "/workshop", label: "PANEL OPERATIVO" },
+        { href: "/workshop?view=list", label: "RECEPCIONES" },
+        { href: "/workshop?action=new", label: "NUEVA RECEPCIÓN" }
+      ]
+    },
     {
       id: "crm",
       icon: "group",
       label: "CRM",
       submenu: [
-        { href: "/crm/customers", label: "Clientes" },
-        { href: "/crm/bicycles", label: "Bicicletas" },
-        { href: "/crm/component-categories", label: "Categorías Componentes" },
-        { href: "/crm/component-states", label: "Estados Componentes" }
+        { href: "/crm/customers", label: "CLIENTES" },
+        { href: "/crm/bicycles", label: "BICICLETAS" },
+        { href: "/crm/component-categories", label: "CATEGORÍAS COMPONENTES" },
+        { href: "/crm/component-states", label: "ESTADOS COMPONENTES" }
       ]
     },
     {
       id: "seguridad",
       icon: "verified_user",
-      label: "Seguridad",
+      label: "SEGURIDAD",
       submenu: [
-        { href: "/settings/security/users", label: "Administrar Usuarios" },
-        { href: "/settings/security/roles", label: "Matriz de Roles" },
-        { href: "/settings/security/catalogs", label: "Panel de Catálogos" },
-        { href: "/settings/security/company-types", label: "Tipos de Empresa" },
-        { href: "/settings/security/companies", label: "Empresas" },
-        { href: "/settings/security/departments", label: "Departamentos" },
-        { href: "/settings/security/areas", label: "Áreas" },
-        { href: "/settings/security/positions", label: "Cargos" },
-        { href: "/settings/security/user-types", label: "Tipos de Usuario" }
+        { href: "/settings/security/users", label: "ADMINISTRAR USUARIOS" },
+        { href: "/settings/security/roles", label: "MATRIZ DE ROLES" },
+        { href: "/settings/security/catalogs", label: "PANEL DE CATÁLOGOS" },
+        { href: "/settings/security/company-types", label: "TIPOS DE EMPRESA" },
+        { href: "/settings/security/companies", label: "EMPRESAS" },
+        { href: "/settings/security/departments", label: "DEPARTAMENTOS" },
+        { href: "/settings/security/areas", label: "ÁREAS" },
+        { href: "/settings/security/positions", label: "CARGOS" },
+        { href: "/settings/security/user-types", label: "TIPOS DE USUARIO" }
       ]
     }
   ];
@@ -58,15 +71,23 @@ export function Sidebar() {
     // Expand menus if a child is active
     navItems.forEach((item) => {
       if (item.submenu) {
-        const hasActiveChild = item.submenu.some(
-          (sub) => sub.href && pathname.startsWith(sub.href)
-        );
+        const hasActiveChild = item.submenu.some((sub) => {
+          if (!sub.href) return false;
+          if (sub.href === "/workshop" && pathname === "/workshop" && (!searchParams || (!searchParams.get("view") && !searchParams.get("action")))) {
+            return true;
+          }
+          if (sub.href.includes("?")) {
+            return currentFullUrl === sub.href || pathname.startsWith(sub.href.split("?")[0]);
+          }
+          return pathname.startsWith(sub.href);
+        });
+
         if (hasActiveChild) {
           setExpanded(item.id!);
         }
       }
     });
-  }, [pathname]);
+  }, [pathname, currentFullUrl, searchParams]);
 
   const toggleExpand = (id: string) => {
     setExpanded(expanded === id ? null : id);
@@ -75,9 +96,16 @@ export function Sidebar() {
   const renderItemCard = (item: NavItem) => {
     if (item.submenu) {
       const isExpanded = expanded === item.id;
-      const hasActiveChild = item.submenu.some(
-        (sub) => sub.href && pathname.startsWith(sub.href)
-      );
+      const hasActiveChild = item.submenu.some((sub) => {
+        if (!sub.href) return false;
+        if (sub.href === "/workshop" && pathname === "/workshop" && (!searchParams || (!searchParams.get("view") && !searchParams.get("action")))) {
+          return true;
+        }
+        if (sub.href.includes("?")) {
+          return currentFullUrl === sub.href;
+        }
+        return pathname === sub.href;
+      });
       const isGroupActive = isExpanded || hasActiveChild;
 
       return (
@@ -98,7 +126,7 @@ export function Sidebar() {
               {item.icon}
             </span>
             <span
-              className={`flex-1 text-left tracking-wide font-medium ${
+              className={`flex-1 text-left tracking-wide font-medium uppercase ${
                 isGroupActive ? "text-white font-bold" : "text-slate-300 group-hover:text-white"
               }`}
             >
@@ -127,13 +155,23 @@ export function Sidebar() {
                   );
                 }
 
-                const isSubActive = pathname === sub.href;
+                let isSubActive = false;
+                if (sub.href) {
+                  if (sub.href === "/workshop") {
+                    isSubActive = pathname === "/workshop" && (!searchParams || (!searchParams.get("view") && !searchParams.get("action") && !searchParams.get("id")));
+                  } else if (sub.href.includes("?")) {
+                    isSubActive = currentFullUrl === sub.href;
+                  } else {
+                    isSubActive = pathname === sub.href;
+                  }
+                }
+
                 return (
                   <Link
                     key={idx}
                     href={sub.href || "#"}
                     title={sub.label}
-                    className={`text-xs py-2 px-3 rounded-lg border transition-all duration-200 whitespace-nowrap truncate block ${
+                    className={`text-xs py-2 px-3 rounded-lg border transition-all duration-200 whitespace-nowrap truncate block uppercase ${
                       isSubActive
                         ? "bg-[#bfce7f]/15 border-[#bfce7f]/40 text-[#bfce7f] font-bold"
                         : "border-transparent text-slate-400 hover:text-white hover:bg-[#161a21] hover:border-[#2d3748]"
@@ -168,7 +206,7 @@ export function Sidebar() {
           {item.icon}
         </span>
         <span
-          className={`tracking-wide font-medium ${
+          className={`tracking-wide font-medium uppercase ${
             isActive ? "text-white font-bold" : "text-slate-300 group-hover:text-white"
           }`}
         >
@@ -180,17 +218,9 @@ export function Sidebar() {
 
   return (
     <aside className="fixed left-0 top-0 h-full w-64 bg-[#0e1117] border-r border-[#2d3748] flex flex-col p-4 z-50 font-mono">
-      <div className="mb-6 flex flex-col items-center">
-        <div className="w-32 h-20 mb-2 relative">
+      <div className="mt-2 mb-6 flex justify-center items-center w-full">
+        <div className="w-[120px] h-[120px] relative shrink-0">
           <Image src="/logo.png" alt="Bikers' Fort Logo" fill className="object-contain" priority />
-        </div>
-        <div className="text-center">
-          <h1 className="font-mono text-lg font-bold text-white leading-tight">
-            Bikers' Fort
-          </h1>
-          <p className="font-mono text-[10px] text-[#bfce7f] tracking-widest uppercase">
-            Core Management
-          </p>
         </div>
       </div>
 
@@ -200,5 +230,17 @@ export function Sidebar() {
         </nav>
       </div>
     </aside>
+  );
+}
+
+export function Sidebar() {
+  return (
+    <Suspense fallback={
+      <aside className="fixed left-0 top-0 h-full w-64 bg-[#0e1117] border-r border-[#2d3748] flex flex-col p-4 z-50 font-mono">
+        <div className="text-xs text-slate-400 p-4">Cargando menú...</div>
+      </aside>
+    }>
+      <SidebarContent />
+    </Suspense>
   );
 }
