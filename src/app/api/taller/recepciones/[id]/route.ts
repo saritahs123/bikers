@@ -34,6 +34,8 @@ export async function GET(
               c.correo as cliente_correo, c.identificacion as cliente_identificacion,
               b.bicicleta_id, b.marca as bicicleta_marca, b.modelo as bicicleta_modelo,
               b.color as bicicleta_color, b.numero_serie_cuadro as bicicleta_serie,
+              b.tipo_bicicleta as bicicleta_tipo, b.ano as bicicleta_ano, b.talla as bicicleta_talla,
+              b.notas_tecnicas as bicicleta_notas,
               er.estado_recepcion_id, er.nombre as estado_nombre, er.codigo as estado_codigo,
               ts.tipo_servicio_id, ts.nombre as tipo_servicio_nombre
        FROM admin.recepciones r
@@ -113,7 +115,11 @@ export async function GET(
           marca: r.bicicleta_marca || "Bicicleta",
           modelo: r.bicicleta_modelo || "",
           color: r.bicicleta_color || "",
-          numero_serie: r.bicicleta_serie || ""
+          numero_serie: r.bicicleta_serie || "",
+          tipo_bicicleta: r.bicicleta_tipo || "MTB",
+          ano: r.bicicleta_ano ? Number(r.bicicleta_ano) : null,
+          talla: r.bicicleta_talla || "",
+          notas_tecnicas: r.bicicleta_notas || ""
         },
         estado: {
           estado_recepcion_id: r.estado_recepcion_id,

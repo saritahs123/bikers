@@ -19,7 +19,13 @@ interface NavItem {
   submenu?: SubMenuItem[];
 }
 
-function SidebarContent() {
+function SidebarContent({
+  mobileOpen,
+  setMobileOpen,
+}: {
+  mobileOpen?: boolean;
+  setMobileOpen?: (open: boolean) => void;
+}) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -68,13 +74,23 @@ function SidebarContent() {
   ];
 
   useEffect(() => {
+    const currentView = searchParams?.get("view");
+    const currentAction = searchParams?.get("action");
+    const currentId = searchParams?.get("id");
+
     // Expand menus if a child is active
     navItems.forEach((item) => {
       if (item.submenu) {
         const hasActiveChild = item.submenu.some((sub) => {
           if (!sub.href) return false;
-          if (sub.href === "/workshop" && pathname === "/workshop" && (!searchParams || (!searchParams.get("view") && !searchParams.get("action")))) {
-            return true;
+          if (sub.href === "/workshop") {
+            return pathname === "/workshop" && !currentView && !currentAction && !currentId;
+          }
+          if (sub.href === "/workshop?view=list") {
+            return pathname === "/workshop" && (currentView === "list" || !!currentId);
+          }
+          if (sub.href === "/workshop?action=new") {
+            return pathname === "/workshop" && currentAction === "new";
           }
           if (sub.href.includes("?")) {
             return currentFullUrl === sub.href || pathname.startsWith(sub.href.split("?")[0]);
@@ -94,12 +110,22 @@ function SidebarContent() {
   };
 
   const renderItemCard = (item: NavItem) => {
+    const currentView = searchParams?.get("view");
+    const currentAction = searchParams?.get("action");
+    const currentId = searchParams?.get("id");
+
     if (item.submenu) {
       const isExpanded = expanded === item.id;
       const hasActiveChild = item.submenu.some((sub) => {
         if (!sub.href) return false;
-        if (sub.href === "/workshop" && pathname === "/workshop" && (!searchParams || (!searchParams.get("view") && !searchParams.get("action")))) {
-          return true;
+        if (sub.href === "/workshop") {
+          return pathname === "/workshop" && !currentView && !currentAction && !currentId;
+        }
+        if (sub.href === "/workshop?view=list") {
+          return pathname === "/workshop" && (currentView === "list" || !!currentId);
+        }
+        if (sub.href === "/workshop?action=new") {
+          return pathname === "/workshop" && currentAction === "new";
         }
         if (sub.href.includes("?")) {
           return currentFullUrl === sub.href;
@@ -158,7 +184,11 @@ function SidebarContent() {
                 let isSubActive = false;
                 if (sub.href) {
                   if (sub.href === "/workshop") {
-                    isSubActive = pathname === "/workshop" && (!searchParams || (!searchParams.get("view") && !searchParams.get("action") && !searchParams.get("id")));
+                    isSubActive = pathname === "/workshop" && !currentView && !currentAction && !currentId;
+                  } else if (sub.href === "/workshop?view=list") {
+                    isSubActive = pathname === "/workshop" && (currentView === "list" || !!currentId);
+                  } else if (sub.href === "/workshop?action=new") {
+                    isSubActive = pathname === "/workshop" && currentAction === "new";
                   } else if (sub.href.includes("?")) {
                     isSubActive = currentFullUrl === sub.href;
                   } else {
@@ -217,30 +247,73 @@ function SidebarContent() {
   };
 
   return (
-    <aside className="fixed left-0 top-0 h-full w-64 bg-[#0e1117] border-r border-[#2d3748] flex flex-col p-4 z-50 font-mono">
-      <div className="mt-2 mb-6 flex justify-center items-center w-full">
-        <div className="w-[120px] h-[120px] relative shrink-0">
-          <Image src="/logo.png" alt="Bikers' Fort Logo" fill className="object-contain" priority />
+    <>
+      {/* Desktop Fixed Sidebar */}
+      <aside className="hidden md:flex fixed left-0 top-0 h-full w-64 bg-[#0e1117] border-r border-[#2d3748] flex-col p-4 z-50 font-mono">
+        <div className="mt-2 mb-6 flex justify-center items-center w-full">
+          <div className="w-[120px] h-[120px] relative shrink-0">
+            <Image src="/logo.png" alt="Bikers' Fort Logo" fill className="object-contain" priority />
+          </div>
         </div>
-      </div>
 
-      <div className="flex-1 overflow-y-auto custom-scrollbar -mx-2 px-2">
-        <nav className="space-y-1">
-          {navItems.map((item) => renderItemCard(item))}
-        </nav>
-      </div>
-    </aside>
+        <div className="flex-1 overflow-y-auto custom-scrollbar -mx-2 px-2">
+          <nav className="space-y-1">
+            {navItems.map((item) => renderItemCard(item))}
+          </nav>
+        </div>
+      </aside>
+
+      {/* Mobile Navigation Drawer */}
+      {mobileOpen && (
+        <div className="md:hidden fixed inset-0 z-50 flex">
+          <div
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity"
+            onClick={() => setMobileOpen && setMobileOpen(false)}
+          />
+          <aside className="relative w-64 max-w-[80vw] bg-[#0e1117] border-r border-[#2d3748] flex flex-col p-4 z-50 font-mono h-full shadow-2xl animate-in slide-in-from-left duration-200">
+            <div className="flex items-center justify-between mt-1 mb-4">
+              <div className="w-[90px] h-[50px] relative shrink-0">
+                <Image src="/logo.png" alt="Bikers' Fort Logo" fill className="object-contain" priority />
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobileOpen && setMobileOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg border border-slate-800"
+              >
+                <span className="material-symbols-outlined text-lg">close</span>
+              </button>
+            </div>
+            <div
+              className="flex-1 overflow-y-auto custom-scrollbar -mx-2 px-2"
+              onClick={() => setMobileOpen && setMobileOpen(false)}
+            >
+              <nav className="space-y-1">
+                {navItems.map((item) => renderItemCard(item))}
+              </nav>
+            </div>
+          </aside>
+        </div>
+      )}
+    </>
   );
 }
 
-export function Sidebar() {
+export function Sidebar({
+  mobileOpen,
+  setMobileOpen,
+}: {
+  mobileOpen?: boolean;
+  setMobileOpen?: (open: boolean) => void;
+}) {
   return (
-    <Suspense fallback={
-      <aside className="fixed left-0 top-0 h-full w-64 bg-[#0e1117] border-r border-[#2d3748] flex flex-col p-4 z-50 font-mono">
-        <div className="text-xs text-slate-400 p-4">Cargando menú...</div>
-      </aside>
-    }>
-      <SidebarContent />
+    <Suspense
+      fallback={
+        <aside className="hidden md:flex fixed left-0 top-0 h-full w-64 bg-[#0e1117] border-r border-[#2d3748] flex-col p-4 z-50 font-mono">
+          <div className="text-xs text-slate-400 p-4">Cargando menú...</div>
+        </aside>
+      }
+    >
+      <SidebarContent mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} />
     </Suspense>
   );
 }
