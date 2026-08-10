@@ -1,22 +1,29 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
-import { LayoutDashboard, ClipboardList, Plus } from "lucide-react";
+import { LayoutDashboard, ClipboardList, Wrench, Plus } from "lucide-react";
 import WorkshopDashboardView from "./WorkshopDashboardView";
 import ReceptionsListView from "./ReceptionsListView";
 import ReceptionDetailView from "./ReceptionDetailView";
 import NewReceptionModal from "./NewReceptionModal";
+import WorkOrdersListView from "./WorkOrdersListView";
+import WorkOrdersKanbanView from "./WorkOrdersKanbanView";
+import WorkOrderDetailView from "./WorkOrderDetailView";
+import NewWorkOrderModal from "./NewWorkOrderModal";
 
 export default function WorkshopModuleContainer() {
   const searchParams = useSearchParams();
-  const [activeTab, setActiveTab] = useState("dashboard"); // 'dashboard' | 'recepciones'
+  const [activeTab, setActiveTab] = useState("dashboard"); // 'dashboard' | 'recepciones' | 'work_orders' | 'kanban'
   const [selectedRecepcionId, setSelectedRecepcionId] = useState(null);
-  const [isNewModalOpen, setIsNewModalOpen] = useState(false);
+  const [selectedOrderId, setSelectedOrderId] = useState(null);
+  const [isNewReceptionModalOpen, setIsNewReceptionModalOpen] = useState(false);
+  const [isNewOrderModalOpen, setIsNewOrderModalOpen] = useState(false);
 
   useEffect(() => {
     const viewParam = searchParams.get("view");
     const actionParam = searchParams.get("action");
     const idParam = searchParams.get("id");
+    const orderIdParam = searchParams.get("order_id");
 
     if (idParam) {
       const id = parseInt(idParam, 10);
@@ -28,26 +35,59 @@ export default function WorkshopModuleContainer() {
       setSelectedRecepcionId(null);
     }
 
-    // Explicitly toggle modal state based on actionParam
-    if (actionParam === "new") {
-      setIsNewModalOpen(true);
+    if (orderIdParam) {
+      const oid = parseInt(orderIdParam, 10);
+      if (!isNaN(oid)) {
+        setSelectedOrderId(oid);
+        setActiveTab("work_orders");
+      }
     } else {
-      setIsNewModalOpen(false);
+      setSelectedOrderId(null);
+    }
+
+    // Modal action params
+    if (actionParam === "new") {
+      setIsNewReceptionModalOpen(true);
+    } else if (actionParam === "new_order") {
+      setIsNewOrderModalOpen(true);
+    } else {
+      setIsNewReceptionModalOpen(false);
+      setIsNewOrderModalOpen(false);
     }
 
     if (viewParam === "list") {
       setActiveTab("recepciones");
-    } else if (viewParam === "dashboard" || (!viewParam && !idParam)) {
+    } else if (viewParam === "work_orders") {
+      setActiveTab("work_orders");
+    } else if (viewParam === "kanban") {
+      setActiveTab("kanban");
+    } else if (viewParam === "dashboard" || (!viewParam && !idParam && !orderIdParam)) {
       setActiveTab("dashboard");
     }
   }, [searchParams]);
 
-  const handleNavigateDetail = (id) => {
+  const handleNavigateRecepcionDetail = (id) => {
     setSelectedRecepcionId(id);
+    setSelectedOrderId(null);
     setActiveTab("recepciones");
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       params.set("id", String(id));
+      params.delete("order_id");
+      const newQuery = params.toString();
+      const newUrl = window.location.pathname + (newQuery ? `?${newQuery}` : "");
+      window.history.replaceState(null, "", newUrl);
+    }
+  };
+
+  const handleNavigateOrderDetail = (orderId) => {
+    setSelectedOrderId(orderId);
+    setSelectedRecepcionId(null);
+    setActiveTab("work_orders");
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      params.set("order_id", String(orderId));
+      params.delete("id");
       const newQuery = params.toString();
       const newUrl = window.location.pathname + (newQuery ? `?${newQuery}` : "");
       window.history.replaceState(null, "", newUrl);
@@ -56,18 +96,21 @@ export default function WorkshopModuleContainer() {
 
   const handleBackFromDetail = () => {
     setSelectedRecepcionId(null);
-    if (typeof window !== "undefined" && searchParams.get("id")) {
+    setSelectedOrderId(null);
+    if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       params.delete("id");
+      params.delete("order_id");
       const newQuery = params.toString();
       const newUrl = window.location.pathname + (newQuery ? `?${newQuery}` : "");
       window.history.replaceState(null, "", newUrl);
     }
   };
 
-  const handleCloseModal = () => {
-    setIsNewModalOpen(false);
-    if (typeof window !== "undefined" && searchParams.get("action") === "new") {
+  const handleCloseModals = () => {
+    setIsNewReceptionModalOpen(false);
+    setIsNewOrderModalOpen(false);
+    if (typeof window !== "undefined" && searchParams.get("action")) {
       const params = new URLSearchParams(window.location.search);
       params.delete("action");
       const newQuery = params.toString();
@@ -78,88 +121,52 @@ export default function WorkshopModuleContainer() {
 
   return (
     <div className="max-w-[1440px] mx-auto space-y-6">
-      {/* Top Header & Navigation Tabs */}
-      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-800">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2">
-            Módulo de Taller
-            <span className="text-xs font-mono font-medium px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded">
-              Bloque 1 • Recepción
-            </span>
-          </h1>
-          <p className="text-xs text-slate-400 mt-1">
-            Gestión operativa de ingreso de bicicletas, inspección técnica inicial y firma digital del cliente.
-          </p>
-        </div>
+      {/* Main Container Views - Single contextual header rendered per view */}
 
-        {/* Tab Switcher */}
-        <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 p-1 rounded-xl">
-          <button
-            onClick={() => {
-              setActiveTab("dashboard");
-              setSelectedRecepcionId(null);
-              handleCloseModal();
-            }}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
-              activeTab === "dashboard" && !selectedRecepcionId
-                ? "bg-slate-800 text-emerald-400 shadow-sm border border-slate-700"
-                : "text-slate-400 hover:text-slate-200"
-            }`}
-          >
-            <LayoutDashboard className="w-4 h-4" />
-            Panel Operativo
-          </button>
-
-          <button
-            onClick={() => {
-              setActiveTab("recepciones");
-              setSelectedRecepcionId(null);
-              handleCloseModal();
-            }}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
-              activeTab === "recepciones" || selectedRecepcionId
-                ? "bg-slate-800 text-emerald-400 shadow-sm border border-slate-700"
-                : "text-slate-400 hover:text-slate-200"
-            }`}
-          >
-            <ClipboardList className="w-4 h-4" />
-            Recepciones
-          </button>
-
-          <button
-            onClick={() => setIsNewModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-medium text-xs rounded-lg transition-all shadow-sm"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Nueva Recepción
-          </button>
-        </div>
-      </div>
-
-      {/* Main Container View */}
+      {/* Main Container Views */}
       {selectedRecepcionId ? (
-        <ReceptionDetailView
-          recepcionId={selectedRecepcionId}
-          onBack={handleBackFromDetail}
-        />
+        <ReceptionDetailView recepcionId={selectedRecepcionId} onBack={handleBackFromDetail} />
+      ) : selectedOrderId ? (
+        <WorkOrderDetailView ordenId={selectedOrderId} onBack={handleBackFromDetail} />
       ) : activeTab === "dashboard" ? (
         <WorkshopDashboardView
           onNavigateList={() => setActiveTab("recepciones")}
-          onViewDetail={(id) => handleNavigateDetail(id)}
+          onNavigateWorkOrders={() => setActiveTab("work_orders")}
+          onViewDetail={(id) => handleNavigateRecepcionDetail(id)}
+        />
+      ) : activeTab === "recepciones" ? (
+        <ReceptionsListView onViewDetail={(id) => handleNavigateRecepcionDetail(id)} />
+      ) : activeTab === "kanban" ? (
+        <WorkOrdersKanbanView
+          onViewDetail={(oid) => handleNavigateOrderDetail(oid)}
+          onOpenNewModal={() => setIsNewOrderModalOpen(true)}
+          onToggleList={() => setActiveTab("work_orders")}
         />
       ) : (
-        <ReceptionsListView
-          onViewDetail={(id) => handleNavigateDetail(id)}
+        <WorkOrdersListView
+          onViewDetail={(oid) => handleNavigateOrderDetail(oid)}
+          onOpenNewModal={() => setIsNewOrderModalOpen(true)}
+          onToggleKanban={() => setActiveTab("kanban")}
         />
       )}
 
       {/* Global New Reception Modal */}
       <NewReceptionModal
-        isOpen={isNewModalOpen}
-        onClose={handleCloseModal}
+        isOpen={isNewReceptionModalOpen}
+        onClose={handleCloseModals}
         onSuccess={() => {
-          handleCloseModal();
+          handleCloseModals();
           setActiveTab("recepciones");
+        }}
+      />
+
+      {/* Global New Work Order Modal */}
+      <NewWorkOrderModal
+        isOpen={isNewOrderModalOpen}
+        onClose={handleCloseModals}
+        onSuccess={(createdOrderId) => {
+          handleCloseModals();
+          handleNavigateOrderDetail(createdOrderId);
         }}
       />
     </div>

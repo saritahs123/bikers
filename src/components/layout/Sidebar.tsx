@@ -41,7 +41,10 @@ function SidebarContent({
       submenu: [
         { href: "/workshop", label: "PANEL OPERATIVO" },
         { href: "/workshop?view=list", label: "RECEPCIONES" },
-        { href: "/workshop?action=new", label: "NUEVA RECEPCIÓN" }
+        { href: "/workshop?action=new", label: "NUEVA RECEPCIÓN" },
+        { href: "/workshop?view=work_orders", label: "ÓRDENES DE TRABAJO" },
+        { href: "/workshop?view=kanban", label: "VISTA KANBAN" },
+        { href: "/workshop?action=new_order", label: "NUEVA ORDEN DE TRABAJO" }
       ]
     },
     {
@@ -73,30 +76,42 @@ function SidebarContent({
     }
   ];
 
-  useEffect(() => {
+  const isSubmenuActive = (subHref?: string) => {
+    if (!subHref) return false;
     const currentView = searchParams?.get("view");
     const currentAction = searchParams?.get("action");
     const currentId = searchParams?.get("id");
+    const currentOrderId = searchParams?.get("order_id");
 
+    if (subHref === "/workshop") {
+      return pathname === "/workshop" && !currentView && !currentAction && !currentId && !currentOrderId;
+    }
+    if (subHref === "/workshop?view=list") {
+      return pathname === "/workshop" && (currentView === "list" || (!!currentId && !currentOrderId));
+    }
+    if (subHref === "/workshop?action=new") {
+      return pathname === "/workshop" && currentAction === "new";
+    }
+    if (subHref === "/workshop?view=work_orders") {
+      return pathname === "/workshop" && (currentView === "work_orders" || !!currentOrderId);
+    }
+    if (subHref === "/workshop?view=kanban") {
+      return pathname === "/workshop" && currentView === "kanban";
+    }
+    if (subHref === "/workshop?action=new_order") {
+      return pathname === "/workshop" && currentAction === "new_order";
+    }
+    if (subHref.includes("?")) {
+      return currentFullUrl === subHref;
+    }
+    return pathname === subHref;
+  };
+
+  useEffect(() => {
     // Expand menus if a child is active
     navItems.forEach((item) => {
       if (item.submenu) {
-        const hasActiveChild = item.submenu.some((sub) => {
-          if (!sub.href) return false;
-          if (sub.href === "/workshop") {
-            return pathname === "/workshop" && !currentView && !currentAction && !currentId;
-          }
-          if (sub.href === "/workshop?view=list") {
-            return pathname === "/workshop" && (currentView === "list" || !!currentId);
-          }
-          if (sub.href === "/workshop?action=new") {
-            return pathname === "/workshop" && currentAction === "new";
-          }
-          if (sub.href.includes("?")) {
-            return currentFullUrl === sub.href || pathname.startsWith(sub.href.split("?")[0]);
-          }
-          return pathname.startsWith(sub.href);
-        });
+        const hasActiveChild = item.submenu.some((sub) => isSubmenuActive(sub.href));
 
         if (hasActiveChild) {
           setExpanded(item.id!);
@@ -110,28 +125,9 @@ function SidebarContent({
   };
 
   const renderItemCard = (item: NavItem) => {
-    const currentView = searchParams?.get("view");
-    const currentAction = searchParams?.get("action");
-    const currentId = searchParams?.get("id");
-
     if (item.submenu) {
       const isExpanded = expanded === item.id;
-      const hasActiveChild = item.submenu.some((sub) => {
-        if (!sub.href) return false;
-        if (sub.href === "/workshop") {
-          return pathname === "/workshop" && !currentView && !currentAction && !currentId;
-        }
-        if (sub.href === "/workshop?view=list") {
-          return pathname === "/workshop" && (currentView === "list" || !!currentId);
-        }
-        if (sub.href === "/workshop?action=new") {
-          return pathname === "/workshop" && currentAction === "new";
-        }
-        if (sub.href.includes("?")) {
-          return currentFullUrl === sub.href;
-        }
-        return pathname === sub.href;
-      });
+      const hasActiveChild = item.submenu.some((sub) => isSubmenuActive(sub.href));
       const isGroupActive = isExpanded || hasActiveChild;
 
       return (
@@ -181,20 +177,7 @@ function SidebarContent({
                   );
                 }
 
-                let isSubActive = false;
-                if (sub.href) {
-                  if (sub.href === "/workshop") {
-                    isSubActive = pathname === "/workshop" && !currentView && !currentAction && !currentId;
-                  } else if (sub.href === "/workshop?view=list") {
-                    isSubActive = pathname === "/workshop" && (currentView === "list" || !!currentId);
-                  } else if (sub.href === "/workshop?action=new") {
-                    isSubActive = pathname === "/workshop" && currentAction === "new";
-                  } else if (sub.href.includes("?")) {
-                    isSubActive = currentFullUrl === sub.href;
-                  } else {
-                    isSubActive = pathname === sub.href;
-                  }
-                }
+                const isSubActive = isSubmenuActive(sub.href);
 
                 return (
                   <Link

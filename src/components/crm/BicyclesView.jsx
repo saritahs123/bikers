@@ -143,10 +143,20 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
 
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
-      const urlId = initialBikeId || params.get("id") || params.get("bikeId");
-      if (urlId) {
-        const startInEdit = params.get("edit") === "true";
-        handleFetchSingleBike(urlId, startInEdit);
+      const action = params.get("action");
+      const urlClienteId = params.get("clienteId") || params.get("cliente_id");
+      
+      if (action === "new" || urlClienteId) {
+        handleOpenDrawer();
+        if (urlClienteId) {
+          setFormData((prev) => ({ ...prev, cliente_id: urlClienteId }));
+        }
+      } else {
+        const urlId = initialBikeId || params.get("id") || params.get("bikeId");
+        if (urlId) {
+          const startInEdit = params.get("edit") === "true";
+          handleFetchSingleBike(urlId, startInEdit);
+        }
       }
     }
   }, [initialBikeId]);
@@ -796,19 +806,29 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
 
   const handleDeleteConfirm = async () => {
     if (!itemToDelete) return;
+    const targetId = itemToDelete.id || itemToDelete.bicicleta_id;
     try {
-      const res = await fetch(`/api/crm/bicicletas/${itemToDelete.id}`, {
+      const res = await fetch(`/api/crm/bicicletas/${targetId}`, {
         method: "DELETE"
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Error al eliminar bicicleta.");
+      const json = await res.json().catch(() => null);
 
-      showToast("Bicicleta eliminada correctamente.");
+      if (!res.ok || json?.success === false) {
+        const errorMsg = json?.message || json?.error || "No fue posible eliminar la bicicleta. Inténtalo nuevamente.";
+        showToast(errorMsg, "error");
+        return;
+      }
+
+      showToast(json?.message || "Bicicleta eliminada correctamente.", "success");
       setIsDeletingModalOpen(false);
       setItemToDelete(null);
+      if (detailBike && (detailBike.id === targetId || detailBike.bicicleta_id === targetId)) {
+        setDetailBike(null);
+      }
       fetchData();
     } catch (err) {
-      showToast(err.message, "error");
+      console.error("Error deleting bike:", err);
+      showToast("No fue posible eliminar la bicicleta. Inténtalo nuevamente.", "error");
     }
   };
 
@@ -2940,33 +2960,55 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
       )}
 
       {/* Confirm Delete Modal */}
-      {isDeletingModalOpen && itemToDelete && (
-        <div className="fixed inset-0 z-[#99999] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 font-mono text-xs">
-          <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200">
+      {mounted && isDeletingModalOpen && itemToDelete && typeof document !== 'undefined' && createPortal(
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000005, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+          <div 
+            style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(4px)' }} 
+            onClick={() => setIsDeletingModalOpen(false)}
+          />
+          <div 
+            style={{ 
+              position: 'relative', 
+              width: '100%', 
+              maxWidth: '440px', 
+              backgroundColor: '#161a21', 
+              border: '1px solid #2d3748', 
+              borderRadius: '16px', 
+              padding: '24px', 
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px'
+            }}
+            className="font-mono text-xs animate-in zoom-in-95 duration-200"
+          >
             <div className="flex items-center gap-3 text-rose-400">
-              <AlertTriangle size={24} />
+              <AlertTriangle size={24} className="shrink-0" />
               <h3 className="text-base font-bold text-white">Confirmar Eliminación</h3>
             </div>
-            <p className="text-slate-300">
+            <p className="text-slate-300 leading-relaxed">
               ¿Está seguro de que desea eliminar la bicicleta{" "}
-              <strong className="text-white">{itemToDelete.marca} {itemToDelete.modelo}</strong>? Esta acción actualizará la base de datos.
+              <strong className="text-white font-bold">{itemToDelete.marca} {itemToDelete.modelo}</strong>? Esta acción actualizará la base de datos.
             </p>
-            <div className="flex justify-end gap-[#2d3748] pt-2">
+            <div className="flex items-center justify-end gap-3 pt-2">
               <button
+                type="button"
                 onClick={() => setIsDeletingModalOpen(false)}
-                className="px-4 py-2 bg-[#2d3748] text-white rounded-xl hover:bg-slate-700 transition-colors cursor-pointer"
+                className="px-4 py-2.5 bg-[#2d3748] hover:bg-slate-700 text-white font-bold rounded-xl transition-colors cursor-pointer"
               >
                 Cancelar
               </button>
               <button
+                type="button"
                 onClick={handleDeleteConfirm}
-                className="px-4 py-2 bg-rose-600 text-white font-bold rounded-xl hover:bg-rose-500 transition-colors cursor-pointer"
+                className="px-4 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl transition-colors cursor-pointer"
               >
                 Eliminar Bicicleta
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
       {/* Save Confirmation Modal */}
       {mounted && isSaveConfirmOpen && typeof document !== 'undefined' && createPortal(

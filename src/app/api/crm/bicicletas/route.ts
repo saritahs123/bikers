@@ -54,7 +54,7 @@ export async function GET() {
         ORDER BY es_principal DESC, bicicleta_foto_id DESC
         LIMIT 1
       ) f ON true
-      WHERE (b.activo = true OR b.activo IS NULL) AND b.fecha_eliminacion IS NULL
+      WHERE b.fecha_eliminacion IS NULL
       ORDER BY b.bicicleta_id DESC
     `;
 

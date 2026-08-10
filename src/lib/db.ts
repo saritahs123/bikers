@@ -86,8 +86,11 @@ export const query = async (sql: string, parameters: any[] = []) => {
     });
 
     return formattedRecords;
-  } catch (error) {
+  } catch (error: any) {
     console.error("Database Query Error:", error);
+    if (error && error.message && error.message.includes("SQLState: 23503")) {
+      error.code = "23503";
+    }
     throw error;
   }
 };

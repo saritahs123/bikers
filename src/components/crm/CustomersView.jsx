@@ -81,6 +81,108 @@ export default function CustomersView() {
   const [itemToDelete, setItemToDelete] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [modalError, setModalError] = useState(null);
+
+  // Bike Drawer Modal States
+  const [isBikeModalOpen, setIsBikeModalOpen] = useState(false);
+  const [bikeFormData, setBikeFormData] = useState({
+    marca: "",
+    modelo: "",
+    tipo_bicicleta: "MTB",
+    ano: new Date().getFullYear(),
+    color: "",
+    talla: "M",
+    numero_serie_cuadro: "",
+    descripcion: "",
+    kilometraje_actual: 0,
+    notas_tecnicas: ""
+  });
+  const [bikeErrors, setBikeErrors] = useState({});
+  const [isSavingBike, setIsSavingBike] = useState(false);
+  const [bikeModalError, setBikeModalError] = useState(null);
+
+  const handleOpenAddBikeModal = () => {
+    setBikeFormData({
+      marca: "",
+      modelo: "",
+      tipo_bicicleta: "MTB",
+      ano: new Date().getFullYear(),
+      color: "",
+      talla: "M",
+      numero_serie_cuadro: "",
+      descripcion: "",
+      kilometraje_actual: 0,
+      notas_tecnicas: ""
+    });
+    setBikeErrors({});
+    setBikeModalError(null);
+    setIsBikeModalOpen(true);
+  };
+
+  const handleSaveBike = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    setBikeModalError(null);
+
+    const errs = {};
+    const marcaRes = validateRequiredText(bikeFormData.marca, "La Marca", 100);
+    if (!marcaRes.isValid) errs.marca = marcaRes.message;
+
+    const modeloRes = validateRequiredText(bikeFormData.modelo, "El Modelo", 100);
+    if (!modeloRes.isValid) errs.modelo = modeloRes.message;
+
+    if (Object.keys(errs).length > 0) {
+      setBikeErrors(errs);
+      const firstErr = Object.values(errs)[0];
+      setBikeModalError(firstErr);
+      showToast(firstErr, "error");
+      return;
+    }
+
+    setIsSavingBike(true);
+    try {
+      const targetClienteId = detailUser?.id ?? detailUser?.cliente_id;
+      const payload = {
+        cliente_id: targetClienteId,
+        ...bikeFormData
+      };
+
+      const res = await fetch("/api/crm/bicicletas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      const json = await res.json().catch(() => null);
+
+      if (!res.ok || json?.error) {
+        const errorMsg = json?.error || json?.message || `No fue posible registrar la bicicleta (${res.status})`;
+        setBikeModalError(errorMsg);
+        showToast(errorMsg, "error");
+        return;
+      }
+
+      showToast("Bicicleta registrada correctamente", "success");
+      setIsBikeModalOpen(false);
+      setBikeModalError(null);
+      setBikeErrors({});
+
+      // Refresh customer detail and global list
+      if (targetClienteId || targetClienteId === 0) {
+        const resDetail = await fetch(`/api/crm/clientes/${targetClienteId}`);
+        if (resDetail.ok) {
+          const freshDetail = await resDetail.json();
+          setDetailUser(freshDetail?.data || freshDetail);
+        }
+      }
+      fetchData();
+    } catch (err) {
+      const msg = err.message || "Error al registrar la bicicleta.";
+      setBikeModalError(msg);
+      showToast(msg, "error");
+    } finally {
+      setIsSavingBike(false);
+    }
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -89,14 +191,21 @@ export default function CustomersView() {
 
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === "Escape" && isDrawerOpen) {
-        setIsDrawerOpen(false);
-        setErrors({});
+      if (e.key === "Escape") {
+        if (isBikeModalOpen) {
+          setIsBikeModalOpen(false);
+          setBikeErrors({});
+          setBikeModalError(null);
+        } else if (isDrawerOpen) {
+          setIsDrawerOpen(false);
+          setErrors({});
+          setModalError(null);
+        }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isDrawerOpen]);
+  }, [isDrawerOpen, isBikeModalOpen]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -104,7 +213,7 @@ export default function CustomersView() {
       const res = await fetch("/api/crm/clientes");
       if (res.ok) {
         const result = await res.json();
-        setData(result);
+        setData(Array.isArray(result) ? result : (result.data || []));
       } else {
         showToast("Error al cargar los clientes.", "error");
       }
@@ -118,7 +227,7 @@ export default function CustomersView() {
 
   const showToast = (text, type = "success") => {
     setToastMessage({ text, type });
-    setTimeout(() => setToastMessage(null), 3500);
+    setTimeout(() => setToastMessage(null), 4000);
   };
 
   const getTipoClienteLabel = (tipo) => {
@@ -129,6 +238,8 @@ export default function CustomersView() {
 
   const validateForm = () => {
     const errs = {};
+    setModalError(null);
+
     const nameRes = validateRequiredText(formData.nombre, "El Nombre", 100);
     if (!nameRes.isValid) errs.nombre = nameRes.message;
 
@@ -141,7 +252,7 @@ export default function CustomersView() {
     }
 
     if (formData.correo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.correo.trim())) {
-      errs.correo = "Ingrese un formato de correo válido (ej: usuario@ejemplo.com).";
+      errs.correo = "El formato del correo electrónico no es válido.";
     }
 
     if (formData.ciudad && formData.ciudad.length > 100) {
@@ -149,10 +260,19 @@ export default function CustomersView() {
     }
 
     setErrors(errs);
-    return Object.keys(errs).length === 0;
+
+    if (Object.keys(errs).length > 0) {
+      const firstMsg = Object.values(errs)[0];
+      setModalError(firstMsg);
+      showToast(firstMsg, "error");
+      return false;
+    }
+
+    return true;
   };
 
   const handleOpenDrawer = (item = null) => {
+    setModalError(null);
     if (item) {
       setEditingItem(item);
       let defaultNombre = item.nombre || "";
@@ -210,6 +330,8 @@ export default function CustomersView() {
 
   const handleSave = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
+    setModalError(null);
+
     if (!validateForm()) return;
 
     setIsSaving(true);
@@ -226,34 +348,42 @@ export default function CustomersView() {
         body: JSON.stringify(formData)
       });
 
-      const json = await res.json();
+      const json = await res.json().catch(() => null);
 
-      if (!res.ok) {
-        throw new Error(json.error || "No se pudo actualizar el cliente.");
+      if (!res.ok || json?.success === false) {
+        const errorMsg = json?.message || json?.error || `No fue posible registrar el cliente (${res.status})`;
+        if (json?.field) {
+          const fieldKey = json.field === "correo_electronico" ? "correo" : json.field;
+          setErrors((prev) => ({ ...prev, [fieldKey]: errorMsg }));
+        }
+        setModalError(errorMsg);
+        showToast(errorMsg, "error");
+        return;
       }
 
-      showToast(
-        editingItem
-          ? "Cliente actualizado correctamente."
-          : "Cliente creado exitosamente."
-      );
+      const successMsg = json?.message || (editingItem ? "Cliente actualizado correctamente." : "Cliente registrado correctamente.");
+      showToast(successMsg, "success");
       setIsDrawerOpen(false);
+      setModalError(null);
+      setErrors({});
       fetchData();
 
-      const updatedId = targetId || json.id || json.cliente_id;
+      const updatedId = targetId || json?.data?.id || json?.id || json?.cliente_id;
       if (detailUser && (detailUser.id === updatedId || detailUser.cliente_id === updatedId)) {
         try {
           const resDetail = await fetch(`/api/crm/clientes/${updatedId}`);
           if (resDetail.ok) {
             const freshDetail = await resDetail.json();
-            setDetailUser(freshDetail);
+            setDetailUser(freshDetail?.data || freshDetail);
           }
         } catch (errDetail) {
           console.error("Error refreshing detailUser post-update:", errDetail);
         }
       }
     } catch (err) {
-      showToast(err.message || "No se pudo actualizar el cliente.", "error");
+      const msg = err.message || "Error inesperado al guardar cliente.";
+      setModalError(msg);
+      showToast(msg, "error");
     } finally {
       setIsSaving(false);
     }
@@ -261,22 +391,31 @@ export default function CustomersView() {
 
   const handleDeleteConfirm = async () => {
     if (!itemToDelete) return;
+    const targetId = itemToDelete.id || itemToDelete.cliente_id;
     try {
-      const res = await fetch(`/api/crm/clientes/${itemToDelete.id}`, {
+      const res = await fetch(`/api/crm/clientes/${targetId}`, {
         method: "DELETE"
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Error al eliminar cliente.");
+      const json = await res.json().catch(() => null);
 
-      showToast("Cliente eliminado correctamente.");
+      if (!res.ok || json?.success === false) {
+        const errorMsg = json?.message || json?.error || "No fue posible eliminar el cliente. Inténtalo nuevamente.";
+        showToast(errorMsg, "error");
+        setIsDeletingModalOpen(false);
+        return;
+      }
+
+      showToast(json?.message || "Cliente eliminado correctamente.", "success");
       setIsDeletingModalOpen(false);
       setItemToDelete(null);
-      if (detailUser && detailUser.id === itemToDelete.id) {
+      if (detailUser && (detailUser.id === targetId || detailUser.cliente_id === targetId)) {
         setDetailUser(null);
       }
       fetchData();
     } catch (err) {
-      showToast(err.message, "error");
+      console.error("Error deleting customer:", err);
+      showToast("No fue posible eliminar el cliente. Inténtalo nuevamente.", "error");
+      setIsDeletingModalOpen(false);
     }
   };
 
@@ -485,26 +624,25 @@ export default function CustomersView() {
             </h2>
             <div className="h-[1px] flex-1 bg-[#2d3748]" />
             <button
-              onClick={() => (window.location.href = "/crm/bicycles")}
-              className="text-xs font-mono text-[#bfce7f] border border-[#bfce7f] px-4 py-2 rounded-xl hover:bg-[#bfce7f] hover:text-[#1d1f18] transition-colors font-bold cursor-pointer"
+              onClick={() => handleOpenAddBikeModal()}
+              className="text-xs font-mono text-[#bfce7f] border border-[#bfce7f] px-4 py-2 rounded-xl hover:bg-[#bfce7f] hover:text-[#1d1f18] transition-colors font-bold cursor-pointer flex items-center gap-1.5 shadow-md"
             >
-              + Añadir Nueva Bicicleta
+              <Plus size={14} /> Añadir Nueva Bicicleta
             </button>
           </div>
 
           {!mainBike ? (
-            <div className="border border-[#2d3748] bg-[#161a21] p-8 rounded-2xl text-center font-mono space-y-3 shadow-xl">
-              <Bike size={36} className="mx-auto text-slate-500" />
-              <h3 className="text-white font-bold text-sm">Sin bicicletas registradas</h3>
-              <p className="text-slate-400 text-xs max-w-md mx-auto">
-                Este cliente no tiene bicicletas asignadas en el sistema. Puedes vincular una nueva bicicleta usando el botón superior.
-              </p>
-              <button
-                onClick={() => (window.location.href = "/crm/bicycles")}
-                className="px-4 py-2 bg-[#bfce7f] text-[#1d1f18] font-bold text-xs rounded-xl hover:bg-[#a9ba6b] transition-colors cursor-pointer inline-flex items-center gap-2"
-              >
-                <Plus size={16} /> Registrar Nueva Bicicleta
-              </button>
+            <div className="w-full border border-[#2d3748] bg-[#161a21] p-8 md:p-12 rounded-2xl flex flex-col items-center justify-center text-center font-mono space-y-3 shadow-xl min-h-[220px]">
+              <div className="w-12 h-12 rounded-full bg-[#1c2129] border border-[#2d3748] flex items-center justify-center text-slate-400 shrink-0 mb-1">
+                <Bike size={24} />
+              </div>
+              <div className="space-y-1.5 w-full flex flex-col items-center">
+                <h3 className="text-white font-bold text-base tracking-tight font-mono">Sin bicicletas registradas</h3>
+                <p className="text-slate-400 text-xs w-full max-w-[420px] mx-auto leading-relaxed text-center font-mono">
+                  Este cliente no tiene bicicletas asignadas en el sistema.
+                  <br className="hidden sm:inline" /> Puedes vincular una nueva bicicleta usando el botón superior.
+                </p>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -1145,6 +1283,208 @@ export default function CustomersView() {
           </div>,
           document.body
         )}
+
+        {/* Bike Drawer Modal Portal */}
+        {isBikeModalOpen && typeof document !== 'undefined' && createPortal(
+          <div className="fixed inset-0 z-[1000000] flex justify-end animate-in fade-in duration-200">
+            {/* Backdrop */}
+            <div 
+              className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+              onClick={() => setIsBikeModalOpen(false)} 
+            />
+
+            {/* Drawer Container */}
+            <div className="relative w-full max-w-lg bg-[#161a21] border-l border-[#2d3748] h-full shadow-2xl flex flex-col z-10 animate-in slide-in-from-right duration-300">
+              
+              {/* Drawer Header */}
+              <div className="p-5 border-b border-[#2d3748] bg-[#0e1117] flex items-start justify-between shrink-0 font-mono">
+                <div>
+                  <h2 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
+                    <Bike size={20} className="text-[#bfce7f]" />
+                    Registrar Nueva Bicicleta
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Vincule una nueva bicicleta al cliente activo.
+                  </p>
+                </div>
+                <button 
+                  type="button" 
+                  onClick={() => setIsBikeModalOpen(false)} 
+                  className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-[#212631] transition-colors cursor-pointer"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Drawer Form Body */}
+              <form onSubmit={handleSaveBike} className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar font-mono text-xs">
+                
+                {bikeModalError && (
+                  <div className="p-3.5 bg-rose-500/15 border border-rose-500/40 rounded-xl text-rose-300 text-xs flex items-center gap-3 font-mono animate-in fade-in duration-200">
+                    <AlertTriangle size={18} className="text-rose-400 shrink-0" />
+                    <span className="font-bold">{bikeModalError}</span>
+                  </div>
+                )}
+
+                {/* Cliente Propietario (Locked) */}
+                <div className="space-y-1">
+                  <label className="block text-slate-300 font-bold">Cliente Propietario <span className="text-rose-400">*</span></label>
+                  <input
+                    type="text"
+                    value={detailUser ? `${detailUser.nombre_completo} (ID: ${detailUser.id || detailUser.cliente_id})` : ""}
+                    disabled
+                    className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2.5 text-slate-300 font-mono cursor-not-allowed opacity-85 font-semibold"
+                  />
+                </div>
+
+                {/* Marca & Modelo */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-slate-300 mb-1">Marca <span className="text-rose-400">*</span></label>
+                    <input
+                      type="text"
+                      value={bikeFormData.marca}
+                      onChange={(e) => setBikeFormData({ ...bikeFormData, marca: e.target.value })}
+                      placeholder="Ej: Trek, Specialized"
+                      className={`w-full bg-[#0e1117] border rounded-xl px-3.5 py-2.5 text-white focus:outline-none ${
+                        bikeErrors.marca ? "border-rose-500" : "border-[#2d3748] focus:border-[#bfce7f]"
+                      }`}
+                    />
+                    {bikeErrors.marca && <p className="text-rose-400 text-[10px] mt-1">{bikeErrors.marca}</p>}
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 mb-1">Modelo <span className="text-rose-400">*</span></label>
+                    <input
+                      type="text"
+                      value={bikeFormData.modelo}
+                      onChange={(e) => setBikeFormData({ ...bikeFormData, modelo: e.target.value })}
+                      placeholder="Ej: Marlin 7, Stumpjumper"
+                      className={`w-full bg-[#0e1117] border rounded-xl px-3.5 py-2.5 text-white focus:outline-none ${
+                        bikeErrors.modelo ? "border-rose-500" : "border-[#2d3748] focus:border-[#bfce7f]"
+                      }`}
+                    />
+                    {bikeErrors.modelo && <p className="text-rose-400 text-[10px] mt-1">{bikeErrors.modelo}</p>}
+                  </div>
+                </div>
+
+                {/* Tipo & Año */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-slate-300 mb-1">Tipo de Bicicleta</label>
+                    <select
+                      value={bikeFormData.tipo_bicicleta}
+                      onChange={(e) => setBikeFormData({ ...bikeFormData, tipo_bicicleta: e.target.value })}
+                      className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-[#bfce7f]"
+                    >
+                      <option value="MTB">MTB (Montaña)</option>
+                      <option value="RUTA">Ruta (Carretera)</option>
+                      <option value="URBANA">Urbana</option>
+                      <option value="GRAVEL">Gravel</option>
+                      <option value="E-BIKE">E-Bike (Eléctrica)</option>
+                      <option value="BMX">BMX</option>
+                      <option value="INFANTIL">Infantil</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 mb-1">Año</label>
+                    <input
+                      type="number"
+                      value={bikeFormData.ano}
+                      onChange={(e) => setBikeFormData({ ...bikeFormData, ano: e.target.value })}
+                      placeholder="Ej: 2024"
+                      className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-[#bfce7f]"
+                    />
+                  </div>
+                </div>
+
+                {/* Color & Talla */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-slate-300 mb-1">Color</label>
+                    <input
+                      type="text"
+                      value={bikeFormData.color}
+                      onChange={(e) => setBikeFormData({ ...bikeFormData, color: e.target.value })}
+                      placeholder="Ej: Negro / Rojo"
+                      className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-[#bfce7f]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 mb-1">Talla del Cuadro</label>
+                    <input
+                      type="text"
+                      value={bikeFormData.talla}
+                      onChange={(e) => setBikeFormData({ ...bikeFormData, talla: e.target.value })}
+                      placeholder="Ej: M, L, 54cm"
+                      className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-[#bfce7f]"
+                    />
+                  </div>
+                </div>
+
+                {/* Número de Serie & Kilometraje */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-slate-300 mb-1">Número de Serie Cuadro</label>
+                    <input
+                      type="text"
+                      value={bikeFormData.numero_serie_cuadro}
+                      onChange={(e) => setBikeFormData({ ...bikeFormData, numero_serie_cuadro: e.target.value })}
+                      placeholder="Ej: WTU12345678X"
+                      className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-[#bfce7f]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 mb-1">Kilometraje Actual (km)</label>
+                    <input
+                      type="number"
+                      value={bikeFormData.kilometraje_actual}
+                      onChange={(e) => setBikeFormData({ ...bikeFormData, kilometraje_actual: e.target.value })}
+                      placeholder="Ej: 150"
+                      className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-[#bfce7f]"
+                    />
+                  </div>
+                </div>
+
+                {/* Notas Técnicas */}
+                <div className="space-y-1">
+                  <label className="block text-slate-300 mb-1">Notas Técnicas / Observaciones</label>
+                  <textarea
+                    rows={3}
+                    value={bikeFormData.notas_tecnicas}
+                    onChange={(e) => setBikeFormData({ ...bikeFormData, notas_tecnicas: e.target.value })}
+                    placeholder="Detalles sobre transmisión, frenos, modificaciones especiales..."
+                    className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl p-3 text-white focus:outline-none focus:border-[#bfce7f]"
+                  />
+                </div>
+              </form>
+
+              {/* Drawer Footer Actions */}
+              <div className="p-4 border-t border-[#2d3748] bg-[#0e1117] flex items-center justify-end gap-3 shrink-0 font-mono">
+                <button
+                  type="button"
+                  onClick={() => setIsBikeModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl border border-[#2d3748] bg-[#0e1117] text-slate-300 text-xs font-bold hover:bg-[#212631] hover:text-white transition-all cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveBike}
+                  disabled={isSavingBike}
+                  className="px-5 py-2.5 rounded-xl bg-[#bfce7f] text-[#1d1f18] text-xs font-bold hover:brightness-110 disabled:opacity-50 transition-all flex items-center gap-2 cursor-pointer shadow-lg"
+                >
+                  {isSavingBike ? <RefreshCw className="animate-spin" size={16} /> : <Save size={16} />}
+                  <span>Guardar Bicicleta</span>
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
         </div>
       </div>
     );
@@ -1153,22 +1493,24 @@ export default function CustomersView() {
   return (
     <div className="max-w-[1550px] mx-auto space-y-6 animate-in fade-in duration-300">
       
-      {/* Toast Notification */}
-      {toastMessage && (
+      {/* Global Toast Notification Portal */}
+      {mounted && toastMessage && typeof document !== 'undefined' && createPortal(
         <div
-          className={`fixed top-6 right-6 z-50 px-4 py-3 rounded-xl shadow-2xl border flex items-center gap-3 font-mono text-xs animate-in slide-in-from-top-2 duration-200 ${
+          style={{ position: 'fixed', top: '24px', right: '24px', zIndex: 2000000 }}
+          className={`px-4 py-3 rounded-xl shadow-2xl border flex items-center gap-3 font-mono text-xs animate-in slide-in-from-top-2 duration-200 ${
             toastMessage.type === "error"
-              ? "bg-rose-950/90 border-rose-500/50 text-rose-200"
-              : "bg-emerald-950/90 border-emerald-500/50 text-emerald-200"
+              ? "bg-rose-950/95 border-rose-500/80 text-rose-100 shadow-rose-950/50"
+              : "bg-emerald-950/95 border-emerald-500/80 text-emerald-100 shadow-emerald-950/50"
           }`}
         >
           {toastMessage.type === "error" ? (
-            <XCircle size={18} className="text-rose-400" />
+            <XCircle size={18} className="text-rose-400 shrink-0" />
           ) : (
-            <CheckCircle2 size={18} className="text-emerald-400" />
+            <CheckCircle2 size={18} className="text-emerald-400 shrink-0" />
           )}
-          <span>{toastMessage.text}</span>
-        </div>
+          <span className="font-bold">{toastMessage.text}</span>
+        </div>,
+        document.body
       )}
 
       {/* Header Bar */}
@@ -1380,11 +1722,21 @@ export default function CustomersView() {
                         </button>
                         <button
                           onClick={() => {
+                            const bikeCount = Number(item.cantidad_bicicletas || 0);
+                            if (bikeCount > 0) {
+                              showToast("No se puede eliminar el cliente porque tiene bicicletas asignadas.", "error");
+                              return;
+                            }
                             setItemToDelete(item);
                             setIsDeletingModalOpen(true);
                           }}
-                          title="Eliminar cliente"
-                          className="p-1.5 text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
+                          disabled={Number(item.cantidad_bicicletas || 0) > 0}
+                          title={Number(item.cantidad_bicicletas || 0) > 0 ? "No se puede eliminar porque tiene bicicletas asignadas" : "Eliminar cliente"}
+                          className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                            Number(item.cantidad_bicicletas || 0) > 0
+                              ? "text-slate-600 opacity-40 cursor-not-allowed"
+                              : "text-rose-400 hover:text-rose-300 hover:bg-rose-950/40"
+                          }`}
                         >
                           <Trash2 size={15} />
                         </button>
@@ -1473,6 +1825,14 @@ export default function CustomersView() {
             {/* Drawer Form Body (Scrollable) */}
             <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar font-mono text-xs">
               
+              {/* Modal Error Alert Banner */}
+              {modalError && (
+                <div className="p-3.5 bg-rose-500/15 border border-rose-500/40 rounded-xl text-rose-300 text-xs flex items-center gap-3 font-mono animate-in fade-in duration-200">
+                  <AlertTriangle size={18} className="text-rose-400 shrink-0" />
+                  <span className="font-bold">{modalError}</span>
+                </div>
+              )}
+
               {/* Sección 1: Información Personal */}
               <div className="space-y-4">
                 <h3 className="text-[#bfce7f] font-bold uppercase tracking-wider text-[11px] border-b border-[#2d3748] pb-1">
@@ -1673,25 +2033,30 @@ export default function CustomersView() {
       )}
 
       {/* Confirm Delete Modal */}
-      {isDeletingModalOpen && itemToDelete && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 font-mono text-xs">
-          <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200">
+      {mounted && isDeletingModalOpen && itemToDelete && typeof document !== 'undefined' && createPortal(
+        <div style={{ position: 'fixed', inset: 0, zIndex: 999999, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(3px)', padding: '16px' }} className="font-mono text-xs">
+          <div 
+            style={{ width: '460px', maxWidth: '92vw', backgroundColor: '#161a21', border: '1px solid #2d3748', borderRadius: '16px', padding: '24px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8)' }}
+            className="space-y-4 font-sans"
+          >
             <div className="flex items-center gap-3 text-rose-400">
-              <AlertTriangle size={24} />
-              <h3 className="text-base font-bold text-white">Confirmar Eliminación</h3>
+              <AlertTriangle size={24} className="shrink-0" />
+              <h3 className="text-base font-bold text-white font-mono">Confirmar Eliminación</h3>
             </div>
-            <p className="text-slate-300">
+            <p className="text-slate-300 font-mono text-xs leading-relaxed">
               ¿Está seguro de que desea eliminar al cliente{" "}
               <strong className="text-white">{itemToDelete.nombre_completo}</strong>? Esta acción actualizará la base de datos.
             </p>
-            <div className="flex justify-end gap-3 pt-2">
+            <div className="flex items-center justify-end gap-3 pt-2 font-mono">
               <button
+                type="button"
                 onClick={() => setIsDeletingModalOpen(false)}
-                className="px-4 py-2 bg-[#2d3748] text-white rounded-xl hover:bg-slate-700 transition-colors cursor-pointer"
+                className="px-4 py-2 bg-[#2d3748] text-white font-bold rounded-xl hover:bg-slate-700 transition-colors cursor-pointer"
               >
                 Cancelar
               </button>
               <button
+                type="button"
                 onClick={handleDeleteConfirm}
                 className="px-4 py-2 bg-rose-600 text-white font-bold rounded-xl hover:bg-rose-500 transition-colors cursor-pointer"
               >
@@ -1699,7 +2064,8 @@ export default function CustomersView() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
     </div>

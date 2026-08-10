@@ -268,19 +268,19 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
     const notas = (body.notas || '').trim();
 
     if (!nombre) {
-      return NextResponse.json({ error: "El Nombre del cliente es obligatorio." }, { status: 400 });
+      return NextResponse.json({ success: false, message: "El Nombre es obligatorio.", field: "nombre" }, { status: 400 });
     }
     if (!['PERSONA', 'EMPRESA'].includes(tipo_cliente)) {
-      return NextResponse.json({ error: "Debe seleccionar el tipo de cliente." }, { status: 400 });
+      return NextResponse.json({ success: false, message: "Debe seleccionar el tipo de cliente.", field: "tipo_cliente" }, { status: 400 });
     }
     if (!telefono_principal) {
-      return NextResponse.json({ error: "El Teléfono Principal es obligatorio." }, { status: 400 });
+      return NextResponse.json({ success: false, message: "El Teléfono Principal es obligatorio.", field: "telefono_principal" }, { status: 400 });
     }
     if (correo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) {
-      return NextResponse.json({ error: "El formato de Correo Electrónico es inválido." }, { status: 400 });
+      return NextResponse.json({ success: false, message: "El formato del correo electrónico no es válido.", field: "correo" }, { status: 400 });
     }
     if (ciudad && ciudad.length > 100) {
-      return NextResponse.json({ error: "La Ciudad no puede exceder los 100 caracteres." }, { status: 400 });
+      return NextResponse.json({ success: false, message: "La Ciudad no puede exceder los 100 caracteres.", field: "ciudad" }, { status: 400 });
     }
 
     // Duplicate email check
@@ -290,7 +290,18 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
         WHERE LOWER(correo) = $1 AND cliente_id <> $2 AND fecha_eliminacion IS NULL
       `, [correo, clienteId]);
       if (existing && existing.length > 0) {
-        return NextResponse.json({ error: "Ya existe otro cliente registrado con este correo electrónico." }, { status: 400 });
+        return NextResponse.json({ success: false, message: "Ya existe un cliente registrado con este correo electrónico", field: "correo_electronico" }, { status: 409 });
+      }
+    }
+
+    // Duplicate identificacion check
+    if (identificacion) {
+      const existingIdent = await query(`
+        SELECT cliente_id FROM admin.clientes
+        WHERE identificacion = $1 AND cliente_id <> $2 AND fecha_eliminacion IS NULL
+      `, [identificacion, clienteId]);
+      if (existingIdent && existingIdent.length > 0) {
+        return NextResponse.json({ success: false, message: "Ya existe un cliente registrado con esta Cédula / Pasaporte", field: "identificacion" }, { status: 409 });
       }
     }
 
@@ -310,7 +321,7 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
         ciudad = $10,
         provincia = $11,
         pais = $12,
-        fecha_nacimiento = CASE WHEN $13 IS NULL OR $13 = '' THEN NULL ELSE $13::date END,
+        fecha_nacimiento = CASE WHEN $13::text IS NULL OR $13::text = '' THEN NULL ELSE $13::date END,
         genero = $14,
         contacto_whatsapp = $15::boolean,
         contacto_email = $16::boolean,
@@ -343,11 +354,18 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
 
     const result = await query(sql, params);
     if (!result || result.length === 0) {
-      return NextResponse.json({ error: "No se pudo actualizar el cliente." }, { status: 404 });
+      return NextResponse.json({ success: false, message: "No se pudo actualizar el cliente." }, { status: 404 });
     }
 
     const r = result[0];
     return NextResponse.json({
+      success: true,
+      message: "Cliente actualizado correctamente",
+      data: {
+        id: r.cliente_id,
+        cliente_id: r.cliente_id,
+        ...r
+      },
       id: r.cliente_id,
       cliente_id: r.cliente_id,
       ...r
@@ -355,7 +373,14 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
 
   } catch (error: any) {
     console.error("Error in PUT /api/crm/clientes/[id]:", error);
-    return NextResponse.json({ error: error.message || "Error al actualizar cliente" }, { status: 500 });
+    const msg = error?.message || error?.toString() || "";
+    if (msg.includes("23505") || msg.includes("uk_clientes_identificacion") || msg.includes("identificacion")) {
+      return NextResponse.json({ success: false, message: "Ya existe un cliente registrado con esta Cédula / Pasaporte", field: "identificacion" }, { status: 409 });
+    }
+    if (msg.includes("uk_clientes_correo") || msg.includes("correo")) {
+      return NextResponse.json({ success: false, message: "Ya existe un cliente registrado con este correo electrónico", field: "correo_electronico" }, { status: 409 });
+    }
+    return NextResponse.json({ success: false, message: error.message || "No fue posible actualizar el cliente" }, { status: 500 });
   }
 }
 
@@ -366,26 +391,60 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
     const clienteId = parseInt(id, 10);
 
     if (isNaN(clienteId)) {
-      return NextResponse.json({ error: "ID de cliente inválido." }, { status: 400 });
+      return NextResponse.json({ success: false, message: "ID de cliente inválido." }, { status: 400 });
     }
 
-    const sql = `
-      UPDATE admin.clientes SET
-        activo = false,
-        fecha_eliminacion = NOW()
+    // 1. Check if client has assigned bicycles in admin.bicicletas
+    const bikeCheck = await query(`
+      SELECT COUNT(*)::integer AS total FROM admin.bicicletas
+      WHERE cliente_id = $1 AND fecha_eliminacion IS NULL
+    `, [clienteId]);
+
+    const hasBikes = Number(bikeCheck[0]?.total || 0) > 0;
+    if (hasBikes) {
+      return NextResponse.json({
+        success: false,
+        message: "No se puede eliminar el cliente porque tiene bicicletas asignadas."
+      }, { status: 409 });
+    }
+
+    // 2. Perform physical DELETE directly
+    const deleteSql = `
+      DELETE FROM admin.clientes
       WHERE cliente_id = $1
-      RETURNING *
+      RETURNING cliente_id
     `;
+    const deleteResult = await query(deleteSql, [clienteId]);
 
-    const result = await query(sql, [clienteId]);
-    if (!result || result.length === 0) {
-      return NextResponse.json({ error: "Cliente no encontrado." }, { status: 404 });
+    // 3. If no rows returned, client does not exist
+    if (!deleteResult || deleteResult.length === 0) {
+      return NextResponse.json({
+        success: false,
+        message: "Cliente no encontrado."
+      }, { status: 404 });
     }
 
-    return NextResponse.json({ message: "Cliente eliminado correctamente.", cliente_id: clienteId });
+    return NextResponse.json({
+      success: true,
+      message: "Cliente eliminado correctamente"
+    }, { status: 200 });
 
   } catch (error: any) {
     console.error("Error in DELETE /api/crm/clientes/[id]:", error);
-    return NextResponse.json({ error: error.message || "Error al eliminar cliente" }, { status: 500 });
+
+    // 6. Detect 23503 using exact code check without text includes()
+    const errorCode = error?.code || error?.cause?.code;
+    if (errorCode === "23503") {
+      return NextResponse.json({
+        success: false,
+        message: "No se puede eliminar el cliente porque tiene bicicletas asignadas."
+      }, { status: 409 });
+    }
+
+    // 5. Any other SQL error returns HTTP 500 without soft-delete fallback
+    return NextResponse.json({
+      success: false,
+      message: "No fue posible eliminar el cliente. Inténtalo nuevamente."
+    }, { status: 500 });
   }
 }

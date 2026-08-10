@@ -35,7 +35,7 @@ export async function GET() {
         c.fecha_modificacion,
         c.usuario_modificacion
       FROM admin.clientes c
-      WHERE (c.activo = true OR c.activo IS NULL) AND c.fecha_eliminacion IS NULL
+      WHERE c.fecha_eliminacion IS NULL
       ORDER BY c.cliente_id DESC
     `;
 
@@ -100,22 +100,22 @@ export async function POST(req: Request) {
 
     // Validations
     if (!nombre) {
-      return NextResponse.json({ error: "El Nombre del cliente es obligatorio." }, { status: 400 });
+      return NextResponse.json({ success: false, message: "El Nombre es obligatorio.", field: "nombre" }, { status: 400 });
     }
     if (nombre.length < 2 || nombre.length > 100) {
-      return NextResponse.json({ error: "El Nombre debe tener entre 2 y 100 caracteres." }, { status: 400 });
+      return NextResponse.json({ success: false, message: "El Nombre debe tener entre 2 y 100 caracteres.", field: "nombre" }, { status: 400 });
     }
     if (!['PERSONA', 'EMPRESA'].includes(tipo_cliente)) {
-      return NextResponse.json({ error: "Debe seleccionar el tipo de cliente." }, { status: 400 });
+      return NextResponse.json({ success: false, message: "Debe seleccionar el tipo de cliente.", field: "tipo_cliente" }, { status: 400 });
     }
     if (!telefono_principal) {
-      return NextResponse.json({ error: "El Teléfono Principal es obligatorio." }, { status: 400 });
+      return NextResponse.json({ success: false, message: "El Teléfono Principal es obligatorio.", field: "telefono_principal" }, { status: 400 });
     }
     if (correo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) {
-      return NextResponse.json({ error: "El formato de Correo Electrónico es inválido." }, { status: 400 });
+      return NextResponse.json({ success: false, message: "El formato del correo electrónico no es válido.", field: "correo" }, { status: 400 });
     }
     if (ciudad && ciudad.length > 100) {
-      return NextResponse.json({ error: "La Ciudad no puede exceder los 100 caracteres." }, { status: 400 });
+      return NextResponse.json({ success: false, message: "La Ciudad no puede exceder los 100 caracteres.", field: "ciudad" }, { status: 400 });
     }
 
     // Check duplicate email if provided
@@ -125,30 +125,45 @@ export async function POST(req: Request) {
         WHERE LOWER(correo) = $1 AND fecha_eliminacion IS NULL
       `, [correo]);
       if (existing && existing.length > 0) {
-        return NextResponse.json({ error: "Ya existe un cliente registrado con este correo electrónico." }, { status: 400 });
+        return NextResponse.json({ success: false, message: "Ya existe un cliente registrado con este correo electrónico", field: "correo_electronico" }, { status: 409 });
+      }
+    }
+
+    // Check duplicate identificacion (Cédula / Pasaporte) if provided
+    if (identificacion) {
+      const existingIdent = await query(`
+        SELECT cliente_id FROM admin.clientes
+        WHERE identificacion = $1 AND fecha_eliminacion IS NULL
+      `, [identificacion]);
+      if (existingIdent && existingIdent.length > 0) {
+        return NextResponse.json({ success: false, message: "Ya existe un cliente registrado con esta Cédula / Pasaporte", field: "identificacion" }, { status: 409 });
       }
     }
 
     const nombre_completo = `${nombre} ${apellido}`.trim();
 
+    const maxIdRes = await query("SELECT COALESCE(MAX(cliente_id), 0) + 1 AS next_id FROM admin.clientes");
+    const nextId = Number(maxIdRes[0]?.next_id || 1);
+
     const sql = `
       INSERT INTO admin.clientes (
-        nombre, apellido, nombre_completo, tipo_cliente, identificacion,
+        cliente_id, nombre, apellido, nombre_completo, tipo_cliente, identificacion,
         telefono_principal, telefono_secundario, correo, direccion, ciudad,
         provincia, pais, fecha_nacimiento, genero, contacto_whatsapp,
         contacto_email, notas, cantidad_bicicletas, total_gastado_taller,
         total_gastado_tienda, activo, fecha_creacion
       ) VALUES (
-        $1, $2, $3, $4, $5,
-        $6, $7, $8, $9, $10,
-        $11, $12, CASE WHEN $13 IS NULL OR $13 = '' THEN NULL ELSE $13::date END, $14, $15::boolean,
-        $16::boolean, $17, 0, 0.00,
+        $1, $2, $3, $4, $5, $6,
+        $7, $8, $9, $10, $11,
+        $12, $13, CASE WHEN $14::text IS NULL OR $14::text = '' THEN NULL ELSE $14::date END, $15, $16::boolean,
+        $17::boolean, $18, 0, 0.00,
         0.00, true, NOW()
       )
       RETURNING *
     `;
 
     const params = [
+      nextId,
       nombre,
       apellido || null,
       nombre_completo,
@@ -171,25 +186,41 @@ export async function POST(req: Request) {
     const result = await query(sql, params);
     const r = result[0] || {};
 
-    return NextResponse.json({
-      id: r.cliente_id,
-      cliente_id: r.cliente_id,
+    const clientData = {
+      id: r.cliente_id || nextId,
+      cliente_id: r.cliente_id || nextId,
       nombre: r.nombre || nombre,
       apellido: r.apellido || apellido,
       nombre_completo: r.nombre_completo || nombre_completo,
       tipo_cliente: r.tipo_cliente || tipo_cliente,
+      identificacion: r.identificacion || identificacion,
       correo: r.correo || correo,
       telefono_principal: r.telefono_principal || telefono_principal,
+      telefono_secundario: r.telefono_secundario || telefono_secundario || "",
       direccion: r.direccion || direccion || "",
       ciudad: r.ciudad || ciudad || "",
       provincia: r.provincia || provincia || "",
       pais: r.pais || pais || "República Dominicana",
       activo: true,
       fecha_creacion: r.fecha_creacion || new Date().toISOString()
-    });
+    };
+
+    return NextResponse.json({
+      success: true,
+      message: "Cliente registrado correctamente",
+      data: clientData,
+      ...clientData
+    }, { status: 201 });
 
   } catch (error: any) {
     console.error("Error in POST /api/crm/clientes:", error);
-    return NextResponse.json({ error: error.message || "Error al crear cliente" }, { status: 500 });
+    const msg = error?.message || error?.toString() || "";
+    if (msg.includes("23505") || msg.includes("uk_clientes_identificacion") || msg.includes("identificacion")) {
+      return NextResponse.json({ success: false, message: "Ya existe un cliente registrado con esta Cédula / Pasaporte", field: "identificacion" }, { status: 409 });
+    }
+    if (msg.includes("uk_clientes_correo") || msg.includes("correo")) {
+      return NextResponse.json({ success: false, message: "Ya existe un cliente registrado con este correo electrónico", field: "correo_electronico" }, { status: 409 });
+    }
+    return NextResponse.json({ success: false, message: error.message || "No fue posible registrar el cliente" }, { status: 500 });
   }
 }
