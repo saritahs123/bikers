@@ -91,11 +91,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
         setCatalogs({
           estados: [
             { estado_orden_id: 1, codigo: "RECIBIDA", nombre: "Recibida" },
-            { estado_orden_id: 2, codigo: "DIAGNOSTICO", nombre: "En Diagnóstico" },
-            { estado_orden_id: 3, codigo: "APROBACION", nombre: "En Aprobación" },
-            { estado_orden_id: 4, codigo: "REPUESTOS", nombre: "Espera Repuestos" },
             { estado_orden_id: 5, codigo: "REPARACION", nombre: "En Reparación" },
-            { estado_orden_id: 6, codigo: "CALIDAD", nombre: "Control de Calidad" },
             { estado_orden_id: 7, codigo: "LISTA_ENTREGA", nombre: "Lista para Entrega" },
             { estado_orden_id: 8, codigo: "ENTREGADA", nombre: "Entregada" }
           ],
@@ -213,15 +209,13 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
     );
   }
 
-  // Determine current pipeline step index (1 to 6)
+  // Determine current pipeline step index
   const currentStepId = order.estado_orden_id || 1;
   const pipelineSteps = [
-    { id: 1, key: "RECIBIDA", label: "Recepción", icon: Check },
-    { id: 2, key: "DIAGNOSTICO", label: "Diagnóstico", icon: Check },
-    { id: 3, key: "APROBACION", label: "Aprobación", icon: Check },
+    { id: 1, key: "RECIBIDA", label: "Recibida", icon: Check },
     { id: 5, key: "REPARACION", label: "Reparación", icon: Wrench },
-    { id: 6, key: "CALIDAD", label: "QC", icon: ShieldCheck },
-    { id: 7, key: "LISTA_ENTREGA", label: "Entrega", icon: Truck }
+    { id: 7, key: "LISTA_ENTREGA", label: "Lista para Entrega", icon: Truck },
+    { id: 8, key: "ENTREGADA", label: "Entregada", icon: ShieldCheck }
   ];
 
   // Calculated totals directly from order object

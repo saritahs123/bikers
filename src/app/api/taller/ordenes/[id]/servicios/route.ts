@@ -76,9 +76,12 @@ export async function POST(
 
     await query("BEGIN");
 
-    // Lock Parent Order Row
+    // Lock Parent Order Row and check order state
     const lockRes = await query(
-      `SELECT orden_trabajo_id FROM admin.ordenes_trabajo WHERE orden_trabajo_id = $1 FOR UPDATE`,
+      `SELECT ot.orden_trabajo_id, ot.estado_orden_id, eot.nombre AS estado_nombre
+       FROM admin.ordenes_trabajo ot
+       LEFT JOIN admin.estado_orden_trabajo eot ON ot.estado_orden_id = eot.estado_orden_id
+       WHERE ot.orden_trabajo_id = $1 FOR UPDATE OF ot`,
       [ordenId]
     );
     if (!lockRes || lockRes.length === 0) {
@@ -86,15 +89,27 @@ export async function POST(
       return NextResponse.json({ error: "Orden de trabajo no encontrada." }, { status: 404 });
     }
 
-    // Get service price base if not specified
+    const parentOrder = lockRes[0];
+    const parentStateId = parentOrder.estado_orden_id;
+
+    // Block adding services if order is in LISTA_ENTREGA (7) or ENTREGADA (8)
+    if (parentStateId === 7 || parentStateId === 8) {
+      await query("ROLLBACK");
+      return NextResponse.json({
+        error: `No se pueden agregar servicios a una orden en estado ${parentOrder.estado_nombre || 'de solo lectura'}.`
+      }, { status: 409 });
+    }
+
+    // Get service info and price base if not specified
+    const tsRes = await query(`SELECT nombre, precio_base FROM admin.tipo_servicio WHERE tipo_servicio_id = $1`, [parseInt(tipo_servicio_id, 10)]);
+    if (tsRes.length === 0) {
+      await query("ROLLBACK");
+      return NextResponse.json({ error: "El tipo de servicio seleccionado no existe." }, { status: 400 });
+    }
+
     let finalPrecio = precio_acordado;
     if (finalPrecio === undefined || finalPrecio === null || finalPrecio === "") {
-      const ts = await query(`SELECT precio_base FROM admin.tipo_servicio WHERE tipo_servicio_id = $1`, [parseInt(tipo_servicio_id, 10)]);
-      if (ts.length > 0) {
-        finalPrecio = ts[0].precio_base;
-      } else {
-        finalPrecio = 0;
-      }
+      finalPrecio = tsRes[0].precio_base || 0;
     }
 
     const insertSql = `
@@ -123,6 +138,26 @@ export async function POST(
       parseFloat(finalPrecio || 0),
       observaciones || null
     ]);
+
+    // If added during REPARACION (5), log an audit history record
+    if (parentStateId === 5) {
+      await query(`
+        INSERT INTO admin.orden_historial_estado (
+          orden_historial_estado_id,
+          orden_trabajo_id,
+          estado_anterior_id,
+          estado_nuevo_id,
+          usuario_cambio,
+          comentario,
+          fecha_cambio,
+          activo,
+          fecha_registro
+        ) VALUES (
+          (SELECT COALESCE(MAX(orden_historial_estado_id), 0) + 1 FROM admin.orden_historial_estado),
+          $1, 5, 5, 1, $2, NOW(), true, NOW()
+        )
+      `, [ordenId, `Servicio adicional agregado durante reparación: ${tsRes[0].nombre}`]);
+    }
 
     await query("COMMIT");
 

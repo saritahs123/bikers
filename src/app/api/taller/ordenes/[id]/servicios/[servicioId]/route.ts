@@ -39,7 +39,7 @@ export async function PUT(
     }
 
     const body = await req.json();
-    const { estado_servicio_id, estado_aprobacion_id, precio_acordado, observaciones, mecanico_usuario_id, usuario_id } = body;
+    const { estado_servicio_id, estado_aprobacion_id, precio_acordado, observaciones, motivo_reapertura, mecanico_usuario_id, usuario_id } = body;
 
     const hasUsuarioId = Object.prototype.hasOwnProperty.call(body, "usuario_id") || Object.prototype.hasOwnProperty.call(body, "mecanico_usuario_id");
     const rawAssignedUser = body.usuario_id !== undefined ? body.usuario_id : body.mecanico_usuario_id;
@@ -58,7 +58,6 @@ export async function PUT(
           );
         }
 
-        // Check user existence first
         const userExists = await query(`SELECT usuario_id FROM admin.usuario WHERE usuario_id = $1`, [parsedValue]);
         if (!userExists || userExists.length === 0) {
           return NextResponse.json(
@@ -67,7 +66,6 @@ export async function PUT(
           );
         }
 
-        // Check active mechanic role
         const valRes = await query(
           `SELECT EXISTS (
              SELECT 1 FROM admin.usuario u
@@ -88,9 +86,12 @@ export async function PUT(
 
     await query("BEGIN");
 
-    // Lock Parent Order Row
+    // Lock Parent Order Row and check state
     const lockRes = await query(
-      `SELECT orden_trabajo_id FROM admin.ordenes_trabajo WHERE orden_trabajo_id = $1 FOR UPDATE`,
+      `SELECT ot.orden_trabajo_id, ot.estado_orden_id, eot.nombre AS estado_nombre
+       FROM admin.ordenes_trabajo ot
+       LEFT JOIN admin.estado_orden_trabajo eot ON ot.estado_orden_id = eot.estado_orden_id
+       WHERE ot.orden_trabajo_id = $1 FOR UPDATE OF ot`,
       [ordenId]
     );
     if (!lockRes || lockRes.length === 0) {
@@ -98,14 +99,100 @@ export async function PUT(
       return NextResponse.json({ error: "Orden de trabajo no encontrada." }, { status: 404 });
     }
 
+    const parentOrder = lockRes[0];
+    const parentStateId = parentOrder.estado_orden_id;
+
+    // Block modifications if order is in LISTA_ENTREGA (7) or ENTREGADA (8)
+    if (parentStateId === 7 || parentStateId === 8) {
+      await query("ROLLBACK");
+      return NextResponse.json({
+        error: `No se pueden modificar servicios de una orden en estado ${parentOrder.estado_nombre || 'de solo lectura'}.`
+      }, { status: 409 });
+    }
+
     // Verify service belongs to order
     const svcExists = await query(
-      `SELECT orden_servicio_id FROM admin.orden_servicios WHERE orden_servicio_id = $1 AND orden_trabajo_id = $2`,
+      `SELECT os.orden_servicio_id, os.estado_orden_servicio_id, eos.codigo AS estado_codigo, ts.nombre AS tipo_servicio_nombre
+       FROM admin.orden_servicios os
+       LEFT JOIN admin.tipo_servicio ts ON os.tipo_servicio_id = ts.tipo_servicio_id
+       LEFT JOIN admin.estado_orden_servicio eos ON os.estado_orden_servicio_id = eos.estado_orden_servicio_id
+       WHERE os.orden_servicio_id = $1 AND os.orden_trabajo_id = $2`,
       [sId, ordenId]
     );
     if (!svcExists || svcExists.length === 0) {
       await query("ROLLBACK");
       return NextResponse.json({ error: "El servicio no existe en esta orden de trabajo." }, { status: 404 });
+    }
+
+    const currentSvc = svcExists[0];
+    const currentSvcStateId = currentSvc.estado_orden_servicio_id;
+    const targetSvcStateId = estado_servicio_id !== undefined ? parseInt(estado_servicio_id, 10) : currentSvcStateId;
+
+    // Rule: In RECIBIDA (1), service state CANNOT be changed to EN_PROCESO (2) or COMPLETADO (3)
+    if (parentStateId === 1 && targetSvcStateId !== currentSvcStateId) {
+      await query("ROLLBACK");
+      return NextResponse.json({
+        error: "No se pueden iniciar ni completar servicios mientras la orden esté en estado Recibida. Pasa la orden a Reparación primero."
+      }, { status: 409 });
+    }
+
+    // Rule: Service State Transitions in REPARACION (5)
+    if (targetSvcStateId !== currentSvcStateId) {
+      // Reopening a COMPLETADO (3) service -> EN_PROCESO (2)
+      if (currentSvcStateId === 3) {
+        if (targetSvcStateId !== 2) {
+          await query("ROLLBACK");
+          return NextResponse.json({
+            error: "Un servicio completado solo puede reabrirse al estado En Proceso."
+          }, { status: 409 });
+        }
+
+        const reason = motivo_reapertura || observaciones;
+        if (!reason || !reason.trim()) {
+          await query("ROLLBACK");
+          return NextResponse.json({
+            error: "Debes ingresar un motivo obligatorio para reabrir un servicio completado."
+          }, { status: 400 });
+        }
+
+        // Log audit history for service reopening
+        await query(`
+          INSERT INTO admin.orden_historial_estado (
+            orden_historial_estado_id,
+            orden_trabajo_id,
+            estado_anterior_id,
+            estado_nuevo_id,
+            usuario_cambio,
+            comentario,
+            fecha_cambio,
+            activo,
+            fecha_registro
+          ) VALUES (
+            (SELECT COALESCE(MAX(orden_historial_estado_id), 0) + 1 FROM admin.orden_historial_estado),
+            $1, 5, 5, 1, $2, NOW(), true, NOW()
+          )
+        `, [ordenId, `Reapertura de servicio '${currentSvc.tipo_servicio_nombre}': ${reason}`]);
+      } else {
+        // Normal transitions:
+        // PENDIENTE (1) -> EN_PROCESO (2)
+        // EN_PROCESO (2) -> PAUSADO (5) / SUSPENDIDO
+        // PAUSADO (5) -> EN_PROCESO (2)
+        // EN_PROCESO (2) -> COMPLETADO (3)
+        const validNextStates: Record<number, number[]> = {
+          1: [2, 4],    // PENDIENTE -> EN_PROCESO, CANCELADO
+          2: [3, 4, 5], // EN_PROCESO -> COMPLETADO, CANCELADO, SUSPENDIDO/PAUSADO
+          5: [2, 4],    // SUSPENDIDO/PAUSADO -> EN_PROCESO, CANCELADO
+          4: []
+        };
+
+        const allowedNext = validNextStates[currentSvcStateId] || [];
+        if (!allowedNext.includes(targetSvcStateId)) {
+          await query("ROLLBACK");
+          return NextResponse.json({
+            error: "Transición no permitida para el servicio. Debe pasar a En Proceso antes de ser Completado."
+          }, { status: 409 });
+        }
+      }
     }
 
     const updateFields: string[] = [];
@@ -175,14 +262,27 @@ export async function DELETE(
 
     await query("BEGIN");
 
-    // Lock Parent Order Row
+    // Lock Parent Order Row and check state
     const lockRes = await query(
-      `SELECT orden_trabajo_id FROM admin.ordenes_trabajo WHERE orden_trabajo_id = $1 FOR UPDATE`,
+      `SELECT ot.orden_trabajo_id, ot.estado_orden_id, eot.nombre AS estado_nombre
+       FROM admin.ordenes_trabajo ot
+       LEFT JOIN admin.estado_orden_trabajo eot ON ot.estado_orden_id = eot.estado_orden_id
+       WHERE ot.orden_trabajo_id = $1 FOR UPDATE OF ot`,
       [ordenId]
     );
     if (!lockRes || lockRes.length === 0) {
       await query("ROLLBACK");
       return NextResponse.json({ error: "Orden de trabajo no encontrada." }, { status: 404 });
+    }
+
+    const parentOrder = lockRes[0];
+    const parentStateId = parentOrder.estado_orden_id;
+
+    if (parentStateId === 7 || parentStateId === 8) {
+      await query("ROLLBACK");
+      return NextResponse.json({
+        error: `No se pueden eliminar servicios de una orden en estado ${parentOrder.estado_nombre || 'de solo lectura'}.`
+      }, { status: 409 });
     }
 
     // Verify service belongs to order
@@ -195,7 +295,20 @@ export async function DELETE(
       return NextResponse.json({ error: "El servicio no existe en esta orden de trabajo." }, { status: 404 });
     }
 
-    // Delete associated labor & products first
+    // Check if labor or products exist for this service
+    const laborCheck = await query(`SELECT COUNT(*)::int AS count FROM admin.orden_servicio_mano_obra WHERE orden_servicio_id = $1`, [sId]);
+    const prodCheck = await query(`SELECT COUNT(*)::int AS count FROM admin.orden_productos WHERE orden_servicio_id = $1`, [sId]);
+
+    const hasLabor = (laborCheck[0]?.count || 0) > 0;
+    const hasProducts = (prodCheck[0]?.count || 0) > 0;
+
+    if (hasLabor || hasProducts) {
+      await query("ROLLBACK");
+      return NextResponse.json({
+        error: "No se puede eliminar un servicio que ya tiene mano de obra o repuestos registrados."
+      }, { status: 409 });
+    }
+
     await query(`DELETE FROM admin.orden_servicio_mano_obra WHERE orden_servicio_id = $1`, [sId]);
     await query(`DELETE FROM admin.orden_productos WHERE orden_servicio_id = $1`, [sId]);
     await query(`DELETE FROM admin.orden_servicios WHERE orden_servicio_id = $1 AND orden_trabajo_id = $2`, [sId, ordenId]);

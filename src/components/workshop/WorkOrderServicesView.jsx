@@ -530,7 +530,7 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
       </div>
 
       {/* KPI Cards Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* KPI 1: Pendientes */}
         <div className="bg-[#161a21] border border-[#2d3748] p-4 rounded-xl flex items-center justify-between">
           <div>
@@ -547,23 +547,7 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
           </div>
         </div>
 
-        {/* KPI 2: Aprobando */}
-        <div className="bg-[#161a21] border border-[#2d3748] p-4 rounded-xl flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-bold block mb-1">
-              Aprobando
-            </span>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl font-black font-mono text-sky-400">{kpiAprobando}</span>
-              <span className="text-xs font-mono text-slate-400">Autorización</span>
-            </div>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400">
-            <ShieldCheck className="w-5 h-5" />
-          </div>
-        </div>
-
-        {/* KPI 3: En Proceso */}
+        {/* KPI 2: En Proceso */}
         <div className="bg-[#161a21] border border-[#2d3748] p-4 rounded-xl flex items-center justify-between">
           <div>
             <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-bold block mb-1">
@@ -579,7 +563,7 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
           </div>
         </div>
 
-        {/* KPI 4: Completados */}
+        {/* KPI 3: Completados */}
         <div className="bg-[#161a21] border border-[#2d3748] p-4 rounded-xl flex items-center justify-between">
           <div>
             <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-bold block mb-1">
@@ -630,7 +614,7 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
                       <th className="p-3.5 pl-4">Código</th>
                       <th className="p-3.5">Tipo / Descripción</th>
                       <th className="p-3.5">Mecánico</th>
-                      <th className="p-3.5">Estado / Aprobación</th>
+                      <th className="p-3.5">ESTADO DEL SERVICIO</th>
                       <th className="p-3.5 text-right">Precio (RD$)</th>
                       <th className="p-3.5 pr-4 text-center">Acciones</th>
                     </tr>
@@ -681,7 +665,7 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
                             </select>
                           </td>
 
-                          {/* Service & Approval Status */}
+                          {/* Service Status */}
                           <td className="p-3.5 whitespace-nowrap space-y-1" onClick={(e) => e.stopPropagation()}>
                             <div className="relative inline-flex items-center">
                               <select
@@ -704,23 +688,6 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
                                 ))}
                               </select>
                               <ChevronDown className="w-3 h-3 text-slate-400 pointer-events-none absolute right-1" />
-                            </div>
-
-                            {/* Approval Status Badge */}
-                            <div className="text-[10px] font-mono">
-                              {svc.estado_aprobacion_id === 2 || svc.estado_aprobacion_codigo === "APROBADO" ? (
-                                <span className="text-emerald-400 flex items-center gap-1">
-                                  <CheckCircle2 className="w-3 h-3" /> Aprobado
-                                </span>
-                              ) : svc.estado_aprobacion_id === 3 || svc.estado_aprobacion_codigo === "RECHAZADO" ? (
-                                <span className="text-rose-400 flex items-center gap-1">
-                                  <X className="w-3 h-3" /> Rechazado
-                                </span>
-                              ) : (
-                                <span className="text-amber-400 flex items-center gap-1">
-                                  <Clock className="w-3 h-3" /> Pendiente Autorización
-                                </span>
-                              )}
                             </div>
                           </td>
 

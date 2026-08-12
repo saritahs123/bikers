@@ -1,15 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 
-// Helper to check if service is completed
-async function isServiceCompleted(servicioId: number): Promise<boolean> {
-  const res = await query(
-    `SELECT estado_orden_servicio_id FROM admin.orden_servicios WHERE orden_servicio_id = $1`,
-    [servicioId]
-  );
-  return res[0]?.estado_orden_servicio_id === 3;
-}
-
 // POST /api/taller/ordenes/[id]/servicios/[servicioId]/mano-obra
 export async function POST(
   req: NextRequest,
@@ -26,14 +17,25 @@ export async function POST(
 
     await query("BEGIN");
 
-    // Lock Parent Order Row
+    // Lock Parent Order Row and check state
     const lockRes = await query(
-      `SELECT orden_trabajo_id FROM admin.ordenes_trabajo WHERE orden_trabajo_id = $1 FOR UPDATE`,
+      `SELECT ot.orden_trabajo_id, ot.estado_orden_id, eot.nombre AS estado_nombre
+       FROM admin.ordenes_trabajo ot
+       LEFT JOIN admin.estado_orden_trabajo eot ON ot.estado_orden_id = eot.estado_orden_id
+       WHERE ot.orden_trabajo_id = $1 FOR UPDATE OF ot`,
       [ordenId]
     );
     if (!lockRes || lockRes.length === 0) {
       await query("ROLLBACK");
       return NextResponse.json({ error: "Orden de trabajo no encontrada." }, { status: 404 });
+    }
+
+    const parentOrder = lockRes[0];
+    if (parentOrder.estado_orden_id !== 5) {
+      await query("ROLLBACK");
+      return NextResponse.json({
+        error: `No se puede registrar mano de obra mientras la orden esté en estado ${parentOrder.estado_nombre || 'actual'}. Pasa la orden a Reparación primero.`
+      }, { status: 409 });
     }
 
     // Verify service belongs to order
@@ -54,7 +56,6 @@ export async function POST(
     const body = await req.json();
     const { mecanico_usuario_id, usuario_id, descripcion, observacion, horas_estimadas, horas_reales, costo_hora } = body;
 
-    // Get assigned mechanic for service if not passed
     let userId = usuario_id || mecanico_usuario_id || svcCheck[0].usuario_id || 2;
     userId = parseInt(userId, 10);
 
@@ -104,10 +105,10 @@ export async function POST(
         NOW() - INTERVAL '1 minute' * $3,
         NOW(),
         $3,
+        $3,
         $4,
         $5,
         $6,
-        $7,
         true,
         NOW()
       )
@@ -117,7 +118,6 @@ export async function POST(
     const res = await query(sql, [
       sId,
       userId,
-      minutos,
       minutos,
       validCostoHora,
       costoTotal,
@@ -163,14 +163,25 @@ export async function PUT(
 
     await query("BEGIN");
 
-    // Lock Parent Order Row
+    // Lock Parent Order Row and check state
     const lockRes = await query(
-      `SELECT orden_trabajo_id FROM admin.ordenes_trabajo WHERE orden_trabajo_id = $1 FOR UPDATE`,
+      `SELECT ot.orden_trabajo_id, ot.estado_orden_id, eot.nombre AS estado_nombre
+       FROM admin.ordenes_trabajo ot
+       LEFT JOIN admin.estado_orden_trabajo eot ON ot.estado_orden_id = eot.estado_orden_id
+       WHERE ot.orden_trabajo_id = $1 FOR UPDATE OF ot`,
       [ordenId]
     );
     if (!lockRes || lockRes.length === 0) {
       await query("ROLLBACK");
       return NextResponse.json({ error: "Orden de trabajo no encontrada." }, { status: 404 });
+    }
+
+    const parentOrder = lockRes[0];
+    if (parentOrder.estado_orden_id !== 5) {
+      await query("ROLLBACK");
+      return NextResponse.json({
+        error: `No se puede modificar la mano de obra mientras la orden esté en estado ${parentOrder.estado_nombre || 'actual'}.`
+      }, { status: 409 });
     }
 
     // Verify service belongs to order
@@ -260,14 +271,25 @@ export async function DELETE(
 
     await query("BEGIN");
 
-    // Lock Parent Order Row
+    // Lock Parent Order Row and check state
     const lockRes = await query(
-      `SELECT orden_trabajo_id FROM admin.ordenes_trabajo WHERE orden_trabajo_id = $1 FOR UPDATE`,
+      `SELECT ot.orden_trabajo_id, ot.estado_orden_id, eot.nombre AS estado_nombre
+       FROM admin.ordenes_trabajo ot
+       LEFT JOIN admin.estado_orden_trabajo eot ON ot.estado_orden_id = eot.estado_orden_id
+       WHERE ot.orden_trabajo_id = $1 FOR UPDATE OF ot`,
       [ordenId]
     );
     if (!lockRes || lockRes.length === 0) {
       await query("ROLLBACK");
       return NextResponse.json({ error: "Orden de trabajo no encontrada." }, { status: 404 });
+    }
+
+    const parentOrder = lockRes[0];
+    if (parentOrder.estado_orden_id !== 5) {
+      await query("ROLLBACK");
+      return NextResponse.json({
+        error: `No se puede eliminar la mano de obra mientras la orden esté en estado ${parentOrder.estado_nombre || 'actual'}.`
+      }, { status: 409 });
     }
 
     // Verify service belongs to order

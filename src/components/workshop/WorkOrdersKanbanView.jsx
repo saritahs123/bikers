@@ -43,10 +43,18 @@ export default function WorkOrdersKanbanView({ onViewDetail, onOpenNewModal, onT
       if (!res.ok) throw new Error(data.error || "Error al cargar órdenes de trabajo.");
 
       setOrders(data.data || []);
+      const operationalEstados = [
+        { estado_orden_id: 1, codigo: "RECIBIDA", nombre: "Recibida" },
+        { estado_orden_id: 5, codigo: "REPARACION", nombre: "En Reparación" },
+        { estado_orden_id: 7, codigo: "LISTA_ENTREGA", nombre: "Lista para Entrega" },
+        { estado_orden_id: 8, codigo: "ENTREGADA", nombre: "Entregada" }
+      ];
       if (data.catalogs?.estados) {
-        // Sort states by orden_visual
-        const sortedEstados = [...data.catalogs.estados].sort((a, b) => (a.orden || a.orden_visual || 0) - (b.orden || b.orden_visual || 0));
-        setEstados(sortedEstados);
+        const operationalIds = [1, 5, 7, 8];
+        const filtered = data.catalogs.estados.filter(e => operationalIds.includes(e.estado_orden_id));
+        setEstados(filtered.length > 0 ? filtered : operationalEstados);
+      } else {
+        setEstados(operationalEstados);
       }
     } catch (err) {
       console.error("fetchKanbanData Error:", err);

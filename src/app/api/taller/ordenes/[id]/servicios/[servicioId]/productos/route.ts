@@ -15,6 +15,25 @@ export async function POST(
       return NextResponse.json({ error: "ID de servicio inválido." }, { status: 400 });
     }
 
+    // Lock Parent Order Row and check state
+    const lockRes = await query(
+      `SELECT ot.orden_trabajo_id, ot.estado_orden_id, eot.nombre AS estado_nombre
+       FROM admin.ordenes_trabajo ot
+       LEFT JOIN admin.estado_orden_trabajo eot ON ot.estado_orden_id = eot.estado_orden_id
+       WHERE ot.orden_trabajo_id = $1`,
+      [!isNaN(ordenId) ? ordenId : 1]
+    );
+    if (!lockRes || lockRes.length === 0) {
+      return NextResponse.json({ error: "Orden de trabajo no encontrada." }, { status: 404 });
+    }
+
+    const parentOrder = lockRes[0];
+    if (parentOrder.estado_orden_id !== 5) {
+      return NextResponse.json({
+        error: `No se pueden asociar repuestos mientras la orden esté en estado ${parentOrder.estado_nombre || 'actual'}. Pasa la orden a Reparación primero.`
+      }, { status: 409 });
+    }
+
     // Check if service is completed
     const svcRes = await query(
       `SELECT orden_trabajo_id, estado_orden_servicio_id FROM admin.orden_servicios WHERE orden_servicio_id = $1`,
@@ -41,6 +60,10 @@ export async function POST(
     const pId = parseInt(producto_id, 10);
     const qty = cantidad ? parseFloat(cantidad) : 1;
 
+    if (isNaN(qty) || qty <= 0) {
+      return NextResponse.json({ error: "La cantidad del producto debe ser mayor a 0." }, { status: 400 });
+    }
+
     // Get unit price if not specified
     let finalPrecio = precio_unitario;
     if (finalPrecio === undefined || finalPrecio === null || finalPrecio === "") {
@@ -52,6 +75,9 @@ export async function POST(
       }
     }
     const unitPrice = parseFloat(finalPrecio || 0);
+    if (isNaN(unitPrice) || unitPrice < 0) {
+      return NextResponse.json({ error: "El precio unitario no puede ser negativo." }, { status: 400 });
+    }
     const subtotal = qty * unitPrice;
 
     const sql = `
@@ -115,11 +141,31 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string; servicioId: string }> }
 ) {
   try {
-    const { servicioId } = await params;
+    const { id, servicioId } = await params;
+    const ordenId = parseInt(id, 10);
     const sId = parseInt(servicioId, 10);
 
     if (isNaN(sId)) {
       return NextResponse.json({ error: "ID de servicio inválido." }, { status: 400 });
+    }
+
+    // Lock Parent Order Row and check state
+    const lockRes = await query(
+      `SELECT ot.orden_trabajo_id, ot.estado_orden_id, eot.nombre AS estado_nombre
+       FROM admin.ordenes_trabajo ot
+       LEFT JOIN admin.estado_orden_trabajo eot ON ot.estado_orden_id = eot.estado_orden_id
+       WHERE ot.orden_trabajo_id = $1`,
+      [!isNaN(ordenId) ? ordenId : 1]
+    );
+    if (!lockRes || lockRes.length === 0) {
+      return NextResponse.json({ error: "Orden de trabajo no encontrada." }, { status: 404 });
+    }
+
+    const parentOrder = lockRes[0];
+    if (parentOrder.estado_orden_id !== 5) {
+      return NextResponse.json({
+        error: `No se pueden desasociar repuestos mientras la orden esté en estado ${parentOrder.estado_nombre || 'actual'}.`
+      }, { status: 409 });
     }
 
     // Check if service is completed

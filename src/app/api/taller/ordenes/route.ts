@@ -110,8 +110,8 @@ export async function GET(req: NextRequest) {
 
     const items = await query(sql, [...queryParams, limit, offset]);
 
-    // Fetch Catalogs for Filters
-    const estados = await query(`SELECT estado_orden_id, nombre, codigo, orden_visual AS orden FROM admin.estado_orden_trabajo WHERE activo = true ORDER BY orden_visual ASC`);
+    // Fetch Catalogs for Filters (Only 4 operational states: RECIBIDA 1, REPARACION 5, LISTA_ENTREGA 7, ENTREGADA 8)
+    const estados = await query(`SELECT estado_orden_id, nombre, codigo, orden_visual AS orden FROM admin.estado_orden_trabajo WHERE activo = true AND estado_orden_id IN (1, 5, 7, 8) ORDER BY orden_visual ASC`);
     const prioridades = await query(`SELECT prioridad_orden_trabajo_id AS prioridad_id, nombre, codigo, color_estado AS color_hex FROM admin.prioridad_orden_trabajo WHERE activo = true ORDER BY prioridad_orden_trabajo_id ASC`);
     const mecanicos = await query(`
       SELECT 

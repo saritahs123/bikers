@@ -63,17 +63,17 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
       if (data.catalogs) setCatalogs(data.catalogs);
       if (data.meta) setMeta(data.meta);
 
-      // Compute Stitch summary metrics dynamically
+      // Compute summary metrics dynamically for the 4 operational states
       const abiertasCount = fetchedOrders.filter(o => o.estado_orden_id !== 8).length;
-      const aprobacionCount = fetchedOrders.filter(o => o.estado_orden_id === 3).length;
-      const enProcesoCount = fetchedOrders.filter(o => o.estado_orden_id === 2 || o.estado_orden_id === 5).length;
-      const atrasadasCount = fetchedOrders.filter(o => o.prioridad_id === 3 || o.prioridad_nombre?.toLowerCase().includes("alta") || o.prioridad_nombre?.toLowerCase().includes("urgente")).length;
+      const recibidasCount = fetchedOrders.filter(o => o.estado_orden_id === 1).length;
+      const enReparacionCount = fetchedOrders.filter(o => o.estado_orden_id === 5).length;
+      const listasEntregaCount = fetchedOrders.filter(o => o.estado_orden_id === 7).length;
 
       setMetrics({
         abiertas: abiertasCount || fetchedOrders.length,
-        aprobacion: aprobacionCount,
-        en_proceso: enProcesoCount,
-        atrasadas: atrasadasCount
+        recibidas: recibidasCount,
+        en_proceso: enReparacionCount,
+        listas_entrega: listasEntregaCount
       });
     } catch (err) {
       console.error("fetchOrders Error:", err);
@@ -97,13 +97,9 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
 
   const getEstadoBadge = (codigo, nombre) => {
     let style = "bg-slate-800 text-slate-300 border-slate-700";
-    if (codigo === "RECIBIDA" || codigo === "RECEPCIONADA") style = "bg-slate-800 text-slate-300 border-slate-700";
-    if (codigo === "DIAGNOSTICO" || codigo === "EN_DIAGNOSTICO") style = "bg-blue-500/20 text-blue-400 border-blue-500/30";
-    if (codigo === "APROBACION" || codigo === "ESPERA_APROBACION") style = "bg-amber-500/20 text-amber-400 border-amber-500/30";
-    if (codigo === "REPUESTOS" || codigo === "ESPERA_REPUESTOS") style = "bg-orange-500/20 text-orange-400 border-orange-500/30";
-    if (codigo === "REPARACION" || codigo === "EN_PROCESO") style = "bg-[#84924a]/20 text-[#bfce7f] border-[#84924a]/40";
-    if (codigo === "CALIDAD") style = "bg-purple-500/20 text-purple-400 border-purple-500/30";
-    if (codigo === "LISTA_ENTREGA" || codigo === "LISTO_PARA_ENTREGA") style = "bg-emerald-500/20 text-emerald-400 border-emerald-500/30";
+    if (codigo === "RECIBIDA") style = "bg-slate-800 text-slate-300 border-slate-700";
+    if (codigo === "REPARACION") style = "bg-[#84924a]/20 text-[#bfce7f] border-[#84924a]/40";
+    if (codigo === "LISTA_ENTREGA") style = "bg-emerald-500/20 text-emerald-400 border-emerald-500/30";
     if (codigo === "ENTREGADA") style = "bg-slate-700/40 text-slate-400 border-slate-600/30";
 
     return (
@@ -115,13 +111,9 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
 
   const getProgressPercentage = (estadoId) => {
     switch (estadoId) {
-      case 1: return { pct: 15, text: "Recibida en taller" };
-      case 2: return { pct: 35, text: "Diagnóstico en proceso" };
-      case 3: return { pct: 45, text: "Pendiente cliente" };
-      case 4: return { pct: 55, text: "Esperando repuestos" };
-      case 5: return { pct: 75, text: "Reparación en proceso" };
-      case 6: return { pct: 90, text: "Control de calidad" };
-      case 7: return { pct: 98, text: "Lista para entrega" };
+      case 1: return { pct: 25, text: "Recibida en taller" };
+      case 5: return { pct: 60, text: "Reparación en proceso" };
+      case 7: return { pct: 90, text: "Lista para entrega" };
       case 8: return { pct: 100, text: "Entregada al cliente" };
       default: return { pct: 50, text: "En progreso" };
     }
