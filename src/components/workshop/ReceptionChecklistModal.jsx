@@ -1,7 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { createPortal } from "react-dom";
-import { X, Check, Upload, AlertCircle, Image as ImageIcon, Camera, Trash2 } from "lucide-react";
+import { X, Check, AlertCircle, Camera, Trash2 } from "lucide-react";
 
 export default function ReceptionChecklistModal({
   isOpen,
@@ -11,21 +10,47 @@ export default function ReceptionChecklistModal({
   checklistState = [],
   onChangeChecklist
 }) {
-  const [activeCategory, setActiveCategory] = useState("TODOS");
+  const [activeCategory, setActiveCategory] = useState("CUADRO");
   const [uploadingItem, setUploadingItem] = useState(null);
+  const [validationError, setValidationError] = useState(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setActiveCategory("CUADRO");
+      setValidationError(null);
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
-  const categories = ["TODOS", ...Array.from(new Set(itemsCatalog.map(i => i.categoria).filter(Boolean)))];
+  // Category ordering & formatting without "TODOS"
+  const CATEGORY_ORDER = [
+    "CUADRO",
+    "SUSPENSION",
+    "SEGURIDAD",
+    "TRANSMISION",
+    "RUEDAS",
+    "COCKPIT",
+    "GENERAL"
+  ];
 
-  const filteredItems = activeCategory === "TODOS"
-    ? itemsCatalog
-    : itemsCatalog.filter(i => i.categoria === activeCategory);
+  const getCategoryLabel = (cat) => {
+    if (cat === "SUSPENSION") return "SUSPENSIÓN";
+    if (cat === "TRANSMISION") return "TRANSMISIÓN";
+    return cat;
+  };
+
+  const rawCategories = Array.from(new Set(itemsCatalog.map(i => i.categoria).filter(Boolean)));
+  const categories = CATEGORY_ORDER.filter(cat => rawCategories.includes(cat)).concat(
+    rawCategories.filter(cat => !CATEGORY_ORDER.includes(cat))
+  );
+
+  const filteredItems = itemsCatalog.filter(i => i.categoria === activeCategory);
 
   const getItemEvaluated = (itemId) => {
     return checklistState.find(c => c.item_checklist_id === itemId) || {
       item_checklist_id: itemId,
-      estado_checklist_id: estadosCatalog[0]?.estado_checklist_id || 1,
+      estado_checklist_id: null,
       observacion: "",
       requiere_trabajo: false,
       upload_token: null,
@@ -35,6 +60,7 @@ export default function ReceptionChecklistModal({
   };
 
   const updateItem = (itemId, updates) => {
+    setValidationError(null);
     const current = getItemEvaluated(itemId);
     const updated = { ...current, ...updates };
     const newList = checklistState.filter(c => c.item_checklist_id !== itemId);
@@ -92,6 +118,30 @@ export default function ReceptionChecklistModal({
     });
   };
 
+  const handleSaveEvaluation = () => {
+    setValidationError(null);
+    const unassignedItem = itemsCatalog.find(item => {
+      const state = checklistState.find(c => c.item_checklist_id === item.item_checklist_id);
+      return !state || state.estado_checklist_id === null || state.estado_checklist_id === undefined;
+    });
+
+    if (unassignedItem) {
+      if (unassignedItem.categoria) {
+        setActiveCategory(unassignedItem.categoria);
+      }
+      setValidationError("Debes seleccionar el estado de todos los componentes antes de guardar la evaluación.");
+      return;
+    }
+
+    if (typeof onClose === "function") {
+      onClose();
+    }
+  };
+
+  const evaluatedCount = checklistState.filter(
+    c => c.estado_checklist_id !== null && c.estado_checklist_id !== undefined
+  ).length;
+
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 p-4">
       <div className="relative w-full max-w-4xl bg-[#0f172a] border-2 border-emerald-500/40 rounded-2xl shadow-[0_0_80px_rgba(0,0,0,0.95)] overflow-hidden flex flex-col max-h-[90vh] z-[10000] text-white">
@@ -110,20 +160,33 @@ export default function ReceptionChecklistModal({
           </button>
         </div>
 
+        {/* Validation Error Banner */}
+        {validationError && (
+          <div className="px-6 py-2.5 bg-rose-500/10 border-b border-rose-500/20 text-rose-400 text-xs flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{validationError}</span>
+            </div>
+          </div>
+        )}
+
         {/* Categories Tab Bar */}
         <div className="flex items-center gap-2 px-6 py-3 border-b border-slate-800 bg-[#0f172a] overflow-x-auto custom-scrollbar">
           {categories.map((cat) => (
             <button
               key={cat}
               type="button"
-              onClick={() => setActiveCategory(cat)}
+              onClick={() => {
+                setActiveCategory(cat);
+                setValidationError(null);
+              }}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
                 activeCategory === cat
                   ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
                   : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
               }`}
             >
-              {cat}
+              {getCategoryLabel(cat)}
             </button>
           ))}
         </div>
@@ -142,7 +205,7 @@ export default function ReceptionChecklistModal({
                     <div>
                       <span className="text-xs font-bold text-white uppercase tracking-wide">{item.nombre}</span>
                       <span className="ml-2 text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded font-mono uppercase">
-                        {item.categoria}
+                        {getCategoryLabel(item.categoria)}
                       </span>
                       {item.descripcion && (
                         <p className="text-[11px] text-slate-400 mt-0.5">{item.descripcion}</p>
@@ -152,7 +215,7 @@ export default function ReceptionChecklistModal({
                     {/* Status Selector Buttons */}
                     <div className="flex items-center gap-2 flex-wrap">
                       {estadosCatalog.map((est) => {
-                        const isSelected = String(evalState.estado_checklist_id) === String(est.estado_checklist_id);
+                        const isSelected = evalState.estado_checklist_id !== null && evalState.estado_checklist_id !== undefined && String(evalState.estado_checklist_id) === String(est.estado_checklist_id);
                         const code = (est.codigo || est.nombre || "").toUpperCase();
 
                         let colorClass = "border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800 bg-slate-900/60";
@@ -245,11 +308,11 @@ export default function ReceptionChecklistModal({
         {/* Footer */}
         <div className="flex items-center justify-between px-6 py-4 border-t border-slate-800 bg-[#162032]">
           <span className="text-xs text-slate-400">
-            Ítems evaluados: <strong className="text-emerald-400">{checklistState.length}</strong> de {itemsCatalog.length}
+            Ítems evaluados: <strong className="text-emerald-400">{evaluatedCount}</strong> de {itemsCatalog.length}
           </span>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleSaveEvaluation}
             className="flex items-center gap-2 px-5 py-2 text-xs font-bold text-slate-950 bg-emerald-400 hover:bg-emerald-300 rounded-xl transition-all shadow-sm cursor-pointer uppercase"
           >
             <Check className="w-4 h-4" />

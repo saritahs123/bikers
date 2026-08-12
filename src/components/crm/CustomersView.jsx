@@ -37,6 +37,94 @@ import {
 } from "lucide-react";
 import { validateRequiredText } from "@/lib/validations";
 import BicyclesView from "@/components/crm/BicyclesView";
+import BikeFormDrawer from "@/components/crm/BikeFormDrawer";
+
+// Helper functions for Dominican Cédula, RNC, and Phone
+export const normalizeDigits = (value) => {
+  if (!value) return "";
+  return String(value).replace(/\D/g, "");
+};
+
+export const formatCedula = (value) => {
+  const digits = normalizeDigits(value).slice(0, 11);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 10) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 10)}-${digits.slice(10, 11)}`;
+};
+
+export const formatRnc = (value) => {
+  const digits = normalizeDigits(value).slice(0, 9);
+  if (digits.length <= 1) return digits;
+  if (digits.length <= 3) return `${digits.slice(0, 1)}-${digits.slice(1)}`;
+  if (digits.length <= 8) return `${digits.slice(0, 1)}-${digits.slice(1, 3)}-${digits.slice(3)}`;
+  return `${digits.slice(0, 1)}-${digits.slice(1, 3)}-${digits.slice(3, 8)}-${digits.slice(8, 9)}`;
+};
+
+export const formatDominicanPhone = (value) => {
+  if (!value) return "";
+  const str = String(value).trim();
+  const hasPlusOne = str.startsWith("+1") || str.startsWith("+ 1");
+  const digits = normalizeDigits(value);
+
+  if ((digits.startsWith("1") && digits.length > 10) || hasPlusOne) {
+    const main10 = digits.startsWith("1") ? digits.slice(1, 11) : digits.slice(0, 10);
+    if (main10.length <= 3) return `+1 ${main10}`;
+    if (main10.length <= 6) return `+1 ${main10.slice(0, 3)}-${main10.slice(3)}`;
+    return `+1 ${main10.slice(0, 3)}-${main10.slice(3, 6)}-${main10.slice(6, 10)}`;
+  } else {
+    const main10 = digits.slice(0, 10);
+    if (main10.length <= 3) return main10;
+    if (main10.length <= 6) return `${main10.slice(0, 3)}-${main10.slice(3)}`;
+    return `${main10.slice(0, 3)}-${main10.slice(3, 6)}-${main10.slice(6, 10)}`;
+  }
+};
+
+export const validateCedula = (value) => {
+  if (!value || !value.trim()) return null;
+  const digits = normalizeDigits(value);
+  if (digits.length !== 11) {
+    return "La Cédula debe contener 11 dígitos.";
+  }
+  return null;
+};
+
+export const validateRnc = (value) => {
+  if (!value || !value.trim()) return null;
+  const digits = normalizeDigits(value);
+  if (digits.length !== 9) {
+    return "El RNC debe contener 9 dígitos.";
+  }
+  return null;
+};
+
+export const validateDominicanPhone = (value) => {
+  if (!value || !value.trim()) {
+    return "El Teléfono Principal es obligatorio.";
+  }
+  const str = String(value).trim();
+  const digits = normalizeDigits(value);
+  let areaCode = "";
+
+  if ((digits.startsWith("1") && digits.length >= 11) || str.startsWith("+1")) {
+    const main10 = digits.startsWith("1") ? digits.slice(1) : digits;
+    if (main10.length !== 10) {
+      return "El teléfono debe contener 10 dígitos.";
+    }
+    areaCode = main10.slice(0, 3);
+  } else {
+    if (digits.length !== 10) {
+      return "El teléfono debe contener 10 dígitos.";
+    }
+    areaCode = digits.slice(0, 3);
+  }
+
+  const validAreaCodes = ["809", "829", "849"];
+  if (!validAreaCodes.includes(areaCode)) {
+    return "Introduce un teléfono válido de República Dominicana.";
+  }
+
+  return null;
+};
 
 export default function CustomersView() {
   const [data, setData] = useState([]);
@@ -247,8 +335,15 @@ export default function CustomersView() {
       errs.tipo_cliente = "Debe seleccionar el tipo de cliente.";
     }
 
-    if (!formData.telefono_principal.trim()) {
-      errs.telefono_principal = "El Teléfono Principal es obligatorio.";
+    const phoneErr = validateDominicanPhone(formData.telefono_principal);
+    if (phoneErr) errs.telefono_principal = phoneErr;
+
+    if (formData.identificacion && formData.identificacion.trim()) {
+      const isEmpresa = formData.tipo_cliente?.toUpperCase() === "EMPRESA";
+      const identErr = isEmpresa
+        ? validateRnc(formData.identificacion)
+        : validateCedula(formData.identificacion);
+      if (identErr) errs.identificacion = identErr;
     }
 
     if (formData.correo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.correo.trim())) {
@@ -284,13 +379,17 @@ export default function CustomersView() {
       }
       const rawTipo = (item.tipo_cliente || "").toUpperCase();
       const validTipo = ['PERSONA', 'EMPRESA'].includes(rawTipo) ? rawTipo : 'PERSONA';
+      const rawIdent = item.identificacion || "";
+      const formattedIdent = validTipo === "EMPRESA" ? formatRnc(rawIdent) : formatCedula(rawIdent);
+      const rawPhone = item.telefono_principal || "";
+      const formattedPhone = formatDominicanPhone(rawPhone);
 
       setFormData({
         nombre: defaultNombre,
         apellido: defaultApellido,
-        identificacion: item.identificacion || "",
+        identificacion: formattedIdent,
         tipo_cliente: validTipo,
-        telefono_principal: item.telefono_principal || "",
+        telefono_principal: formattedPhone,
         telefono_secundario: item.telefono_secundario || "",
         correo: item.correo || "",
         direccion: item.direccion || "",
@@ -342,10 +441,16 @@ export default function CustomersView() {
         : "/api/crm/clientes";
       const method = editingItem ? "PUT" : "POST";
 
+      const payload = {
+        ...formData,
+        identificacion: normalizeDigits(formData.identificacion) || null,
+        telefono_principal: normalizeDigits(formData.telefono_principal) || formData.telefono_principal
+      };
+
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(payload)
       });
 
       const json = await res.json().catch(() => null);
@@ -506,24 +611,23 @@ export default function CustomersView() {
   // ---------------------------------------------------------------------------
   // RENDER CUSTOMER DETAIL VIEW (Identical to code.html in Recursos_bikers_stitch)
   // ---------------------------------------------------------------------------
-  if (detailUser) {
-    const totalGasto = Number(detailUser.total_gastado || detailUser.total_gastado_taller || 0);
-    const bikesList = detailUser.bicicletas || [];
+  const totalGasto = detailUser ? Number(detailUser.total_gastado || detailUser.total_gastado_taller || 0) : 0;
+  const bikesList = detailUser ? (detailUser.bicicletas || []) : [];
+  const mainBike = bikesList.length > 0 ? bikesList[0] : null;
+  const secondaryBikes = bikesList.length > 1 ? bikesList.slice(1) : [];
 
-    const mainBike = bikesList.length > 0 ? bikesList[0] : null;
-    const secondaryBikes = bikesList.length > 1 ? bikesList.slice(1) : [];
+  const handleOpenBike = (bike) => {
+    const targetId = bike?.bicicleta_id ?? bike?.id;
+    if (!targetId && targetId !== 0) {
+      showToast("No se pudo abrir la bicicleta seleccionada.", "error");
+      return;
+    }
+    window.location.href = `/crm/bicycles?id=${targetId}&from=customer`;
+  };
 
-    const handleOpenBike = (bike) => {
-      const targetId = bike?.bicicleta_id ?? bike?.id;
-      if (!targetId && targetId !== 0) {
-        showToast("No se pudo abrir la bicicleta seleccionada.", "error");
-        return;
-      }
-      window.location.href = `/crm/bicycles?id=${targetId}&from=customer`;
-    };
-
-    return (
-      <div className="w-full relative">
+  return (
+    <div className="w-full relative">
+      {detailUser ? (
         <div className="max-w-[1550px] mx-auto space-y-8 animate-in fade-in duration-300 pb-12 font-mono text-xs">
           
           {/* Back Navigation Bar */}
@@ -624,7 +728,7 @@ export default function CustomersView() {
             </h2>
             <div className="h-[1px] flex-1 bg-[#2d3748]" />
             <button
-              onClick={() => handleOpenAddBikeModal()}
+              onClick={() => setIsBikeModalOpen(true)}
               className="text-xs font-mono text-[#bfce7f] border border-[#bfce7f] px-4 py-2 rounded-xl hover:bg-[#bfce7f] hover:text-[#1d1f18] transition-colors font-bold cursor-pointer flex items-center gap-1.5 shadow-md"
             >
               <Plus size={14} /> Añadir Nueva Bicicleta
@@ -667,16 +771,16 @@ export default function CustomersView() {
                       src={mainBike.foto_url}
                       alt={mainBike.modelo || "Bicicleta"}
                       className="w-full h-full object-cover rounded-xl group-hover:scale-105 transition-transform duration-300"
-                      onError={(e) => {
-                        e.currentTarget.src = "https://images.unsplash.com/photo-1576435728678-68d0fbf94e91?auto=format&fit=crop&w=800&q=80";
-                      }}
                     />
                   ) : (
-                    <img
-                      src="https://images.unsplash.com/photo-1576435728678-68d0fbf94e91?auto=format&fit=crop&w=800&q=80"
-                      alt={mainBike?.modelo || "Bicicleta"}
-                      className="w-full h-full object-cover rounded-xl group-hover:scale-105 transition-transform duration-300"
-                    />
+                    <div className="w-full h-full bg-[#11151c] flex flex-col items-center justify-center space-y-2 p-4 text-center">
+                      <div className="w-12 h-12 rounded-full bg-[#1c2129] border border-[#2d3748] flex items-center justify-center text-[#bfce7f] shadow-inner">
+                        <Bike size={26} />
+                      </div>
+                      <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-widest">
+                        {mainBike?.tipo_bicicleta || "Bicicleta"}
+                      </span>
+                    </div>
                   )}
                   <div className="absolute top-2 right-2 bg-[#0e1117]/90 px-2 py-1 text-[9px] font-mono border border-[#2d3748] text-[#bfce7f] font-bold rounded">
                     ACTIVO PRINCIPAL
@@ -785,15 +889,21 @@ export default function CustomersView() {
                       </p>
                     </div>
 
-                    <div className="w-24 h-18 rounded-xl border border-[#2d3748] bg-[#0e1117] overflow-hidden shrink-0">
-                      <img
-                        src={bike.foto_url || "https://images.unsplash.com/photo-1576435728678-68d0fbf94e91?auto=format&fit=crop&w=800&q=80"}
-                        alt={bike.modelo || "Bicicleta"}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        onError={(e) => {
-                          e.currentTarget.src = "https://images.unsplash.com/photo-1576435728678-68d0fbf94e91?auto=format&fit=crop&w=800&q=80";
-                        }}
-                      />
+                    <div className="w-24 h-18 rounded-xl border border-[#2d3748] bg-[#0e1117] overflow-hidden shrink-0 flex items-center justify-center">
+                      {bike.foto_url ? (
+                        <img
+                          src={bike.foto_url}
+                          alt={bike.modelo || "Bicicleta"}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-[#11151c] flex flex-col items-center justify-center p-2 text-center">
+                          <Bike size={20} className="text-[#bfce7f]" />
+                          <span className="text-[9px] font-mono text-slate-400 font-bold uppercase mt-1">
+                            {bike.tipo_bicicleta || "Bici"}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -1118,32 +1228,50 @@ export default function CustomersView() {
                     </div>
 
                     <div>
-                      <label className="block text-slate-300 mb-1">Cédula / Pasaporte</label>
-                      <input
-                        type="text"
-                        value={formData.identificacion}
-                        onChange={(e) => setFormData({ ...formData, identificacion: e.target.value })}
-                        placeholder="Ej: 001-1234567-8"
-                        className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-[#bfce7f]"
-                      />
-                    </div>
-
-                    <div>
                       <label className="block text-slate-300 mb-1">
                         Tipo de Cliente <span className="text-rose-400">*</span>
                       </label>
                       <select
                         value={formData.tipo_cliente}
-                        onChange={(e) => setFormData({ ...formData, tipo_cliente: e.target.value })}
+                        onChange={(e) => {
+                          const newTipo = e.target.value;
+                          setFormData(prev => ({
+                            ...prev,
+                            tipo_cliente: newTipo,
+                            identificacion: ""
+                          }));
+                          setErrors(prev => ({ ...prev, tipo_cliente: null, identificacion: null }));
+                        }}
                         className={`w-full bg-[#0e1117] border rounded-xl px-3.5 py-2.5 text-white focus:outline-none transition-all ${
                           errors.tipo_cliente ? "border-rose-500 focus:border-rose-500" : "border-[#2d3748] focus:border-[#bfce7f]"
                         }`}
                       >
-                        <option value="">Seleccione el tipo de cliente</option>
                         <option value="PERSONA">Persona</option>
                         <option value="EMPRESA">Empresa</option>
                       </select>
                       {errors.tipo_cliente && <p className="text-rose-400 text-[10px] mt-1">{errors.tipo_cliente}</p>}
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-300 mb-1">RNC o Cédula</label>
+                      <input
+                        type="text"
+                        value={formData.identificacion}
+                        onChange={(e) => {
+                          const isEmpresa = formData.tipo_cliente?.toUpperCase() === "EMPRESA";
+                          const formatted = isEmpresa
+                            ? formatRnc(e.target.value)
+                            : formatCedula(e.target.value);
+                          setFormData(prev => ({ ...prev, identificacion: formatted }));
+                          const err = isEmpresa ? validateRnc(formatted) : validateCedula(formatted);
+                          setErrors(prev => ({ ...prev, identificacion: err }));
+                        }}
+                        placeholder={formData.tipo_cliente?.toUpperCase() === "EMPRESA" ? "Ej: 1-01-12345-6" : "Ej: 001-1234567-8"}
+                        className={`w-full bg-[#0e1117] border rounded-xl px-3.5 py-2.5 text-white focus:outline-none ${
+                          errors.identificacion ? "border-rose-500" : "border-[#2d3748] focus:border-[#bfce7f]"
+                        }`}
+                      />
+                      {errors.identificacion && <p className="text-rose-400 text-[10px] mt-1">{errors.identificacion}</p>}
                     </div>
                   </div>
                 </div>
@@ -1160,8 +1288,13 @@ export default function CustomersView() {
                       <input
                         type="text"
                         value={formData.telefono_principal}
-                        onChange={(e) => setFormData({ ...formData, telefono_principal: e.target.value })}
-                        placeholder="Ej: +34 612 345 678"
+                        onChange={(e) => {
+                          const formatted = formatDominicanPhone(e.target.value);
+                          setFormData(prev => ({ ...prev, telefono_principal: formatted }));
+                          const err = validateDominicanPhone(formatted);
+                          setErrors(prev => ({ ...prev, telefono_principal: err }));
+                        }}
+                        placeholder="Ej: 809-555-1234"
                         className={`w-full bg-[#0e1117] border rounded-xl px-3.5 py-2.5 text-white focus:outline-none ${
                           errors.telefono_principal ? "border-rose-500" : "border-[#2d3748] focus:border-[#bfce7f]"
                         }`}
@@ -1284,214 +1417,9 @@ export default function CustomersView() {
           document.body
         )}
 
-        {/* Bike Drawer Modal Portal */}
-        {isBikeModalOpen && typeof document !== 'undefined' && createPortal(
-          <div className="fixed inset-0 z-[1000000] flex justify-end animate-in fade-in duration-200">
-            {/* Backdrop */}
-            <div 
-              className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-              onClick={() => setIsBikeModalOpen(false)} 
-            />
-
-            {/* Drawer Container */}
-            <div className="relative w-full max-w-lg bg-[#161a21] border-l border-[#2d3748] h-full shadow-2xl flex flex-col z-10 animate-in slide-in-from-right duration-300">
-              
-              {/* Drawer Header */}
-              <div className="p-5 border-b border-[#2d3748] bg-[#0e1117] flex items-start justify-between shrink-0 font-mono">
-                <div>
-                  <h2 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
-                    <Bike size={20} className="text-[#bfce7f]" />
-                    Registrar Nueva Bicicleta
-                  </h2>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Vincule una nueva bicicleta al cliente activo.
-                  </p>
-                </div>
-                <button 
-                  type="button" 
-                  onClick={() => setIsBikeModalOpen(false)} 
-                  className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-[#212631] transition-colors cursor-pointer"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-
-              {/* Drawer Form Body */}
-              <form onSubmit={handleSaveBike} className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar font-mono text-xs">
-                
-                {bikeModalError && (
-                  <div className="p-3.5 bg-rose-500/15 border border-rose-500/40 rounded-xl text-rose-300 text-xs flex items-center gap-3 font-mono animate-in fade-in duration-200">
-                    <AlertTriangle size={18} className="text-rose-400 shrink-0" />
-                    <span className="font-bold">{bikeModalError}</span>
-                  </div>
-                )}
-
-                {/* Cliente Propietario (Locked) */}
-                <div className="space-y-1">
-                  <label className="block text-slate-300 font-bold">Cliente Propietario <span className="text-rose-400">*</span></label>
-                  <input
-                    type="text"
-                    value={detailUser ? `${detailUser.nombre_completo} (ID: ${detailUser.id || detailUser.cliente_id})` : ""}
-                    disabled
-                    className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2.5 text-slate-300 font-mono cursor-not-allowed opacity-85 font-semibold"
-                  />
-                </div>
-
-                {/* Marca & Modelo */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-slate-300 mb-1">Marca <span className="text-rose-400">*</span></label>
-                    <input
-                      type="text"
-                      value={bikeFormData.marca}
-                      onChange={(e) => setBikeFormData({ ...bikeFormData, marca: e.target.value })}
-                      placeholder="Ej: Trek, Specialized"
-                      className={`w-full bg-[#0e1117] border rounded-xl px-3.5 py-2.5 text-white focus:outline-none ${
-                        bikeErrors.marca ? "border-rose-500" : "border-[#2d3748] focus:border-[#bfce7f]"
-                      }`}
-                    />
-                    {bikeErrors.marca && <p className="text-rose-400 text-[10px] mt-1">{bikeErrors.marca}</p>}
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-300 mb-1">Modelo <span className="text-rose-400">*</span></label>
-                    <input
-                      type="text"
-                      value={bikeFormData.modelo}
-                      onChange={(e) => setBikeFormData({ ...bikeFormData, modelo: e.target.value })}
-                      placeholder="Ej: Marlin 7, Stumpjumper"
-                      className={`w-full bg-[#0e1117] border rounded-xl px-3.5 py-2.5 text-white focus:outline-none ${
-                        bikeErrors.modelo ? "border-rose-500" : "border-[#2d3748] focus:border-[#bfce7f]"
-                      }`}
-                    />
-                    {bikeErrors.modelo && <p className="text-rose-400 text-[10px] mt-1">{bikeErrors.modelo}</p>}
-                  </div>
-                </div>
-
-                {/* Tipo & Año */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-slate-300 mb-1">Tipo de Bicicleta</label>
-                    <select
-                      value={bikeFormData.tipo_bicicleta}
-                      onChange={(e) => setBikeFormData({ ...bikeFormData, tipo_bicicleta: e.target.value })}
-                      className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-[#bfce7f]"
-                    >
-                      <option value="MTB">MTB (Montaña)</option>
-                      <option value="RUTA">Ruta (Carretera)</option>
-                      <option value="URBANA">Urbana</option>
-                      <option value="GRAVEL">Gravel</option>
-                      <option value="E-BIKE">E-Bike (Eléctrica)</option>
-                      <option value="BMX">BMX</option>
-                      <option value="INFANTIL">Infantil</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-300 mb-1">Año</label>
-                    <input
-                      type="number"
-                      value={bikeFormData.ano}
-                      onChange={(e) => setBikeFormData({ ...bikeFormData, ano: e.target.value })}
-                      placeholder="Ej: 2024"
-                      className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-[#bfce7f]"
-                    />
-                  </div>
-                </div>
-
-                {/* Color & Talla */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-slate-300 mb-1">Color</label>
-                    <input
-                      type="text"
-                      value={bikeFormData.color}
-                      onChange={(e) => setBikeFormData({ ...bikeFormData, color: e.target.value })}
-                      placeholder="Ej: Negro / Rojo"
-                      className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-[#bfce7f]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-300 mb-1">Talla del Cuadro</label>
-                    <input
-                      type="text"
-                      value={bikeFormData.talla}
-                      onChange={(e) => setBikeFormData({ ...bikeFormData, talla: e.target.value })}
-                      placeholder="Ej: M, L, 54cm"
-                      className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-[#bfce7f]"
-                    />
-                  </div>
-                </div>
-
-                {/* Número de Serie & Kilometraje */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-slate-300 mb-1">Número de Serie Cuadro</label>
-                    <input
-                      type="text"
-                      value={bikeFormData.numero_serie_cuadro}
-                      onChange={(e) => setBikeFormData({ ...bikeFormData, numero_serie_cuadro: e.target.value })}
-                      placeholder="Ej: WTU12345678X"
-                      className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-[#bfce7f]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-300 mb-1">Kilometraje Actual (km)</label>
-                    <input
-                      type="number"
-                      value={bikeFormData.kilometraje_actual}
-                      onChange={(e) => setBikeFormData({ ...bikeFormData, kilometraje_actual: e.target.value })}
-                      placeholder="Ej: 150"
-                      className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-[#bfce7f]"
-                    />
-                  </div>
-                </div>
-
-                {/* Notas Técnicas */}
-                <div className="space-y-1">
-                  <label className="block text-slate-300 mb-1">Notas Técnicas / Observaciones</label>
-                  <textarea
-                    rows={3}
-                    value={bikeFormData.notas_tecnicas}
-                    onChange={(e) => setBikeFormData({ ...bikeFormData, notas_tecnicas: e.target.value })}
-                    placeholder="Detalles sobre transmisión, frenos, modificaciones especiales..."
-                    className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl p-3 text-white focus:outline-none focus:border-[#bfce7f]"
-                  />
-                </div>
-              </form>
-
-              {/* Drawer Footer Actions */}
-              <div className="p-4 border-t border-[#2d3748] bg-[#0e1117] flex items-center justify-end gap-3 shrink-0 font-mono">
-                <button
-                  type="button"
-                  onClick={() => setIsBikeModalOpen(false)}
-                  className="px-4 py-2.5 rounded-xl border border-[#2d3748] bg-[#0e1117] text-slate-300 text-xs font-bold hover:bg-[#212631] hover:text-white transition-all cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveBike}
-                  disabled={isSavingBike}
-                  className="px-5 py-2.5 rounded-xl bg-[#bfce7f] text-[#1d1f18] text-xs font-bold hover:brightness-110 disabled:opacity-50 transition-all flex items-center gap-2 cursor-pointer shadow-lg"
-                >
-                  {isSavingBike ? <RefreshCw className="animate-spin" size={16} /> : <Save size={16} />}
-                  <span>Guardar Bicicleta</span>
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
         </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="max-w-[1550px] mx-auto space-y-6 animate-in fade-in duration-300">
+      ) : (
+        <div className="max-w-[1550px] mx-auto space-y-6 animate-in fade-in duration-300">
       
       {/* Global Toast Notification Portal */}
       {mounted && toastMessage && typeof document !== 'undefined' && createPortal(
@@ -1866,32 +1794,50 @@ export default function CustomersView() {
                   </div>
 
                   <div>
-                    <label className="block text-slate-300 mb-1">Cédula / Pasaporte</label>
-                    <input
-                      type="text"
-                      value={formData.identificacion}
-                      onChange={(e) => setFormData({ ...formData, identificacion: e.target.value })}
-                      placeholder="Ej: 001-1234567-8"
-                      className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-[#bfce7f]"
-                    />
-                  </div>
-
-                  <div>
                     <label className="block text-slate-300 mb-1">
                       Tipo de Cliente <span className="text-rose-400">*</span>
                     </label>
                     <select
                       value={formData.tipo_cliente}
-                      onChange={(e) => setFormData({ ...formData, tipo_cliente: e.target.value })}
+                      onChange={(e) => {
+                        const newTipo = e.target.value;
+                        setFormData(prev => ({
+                          ...prev,
+                          tipo_cliente: newTipo,
+                          identificacion: ""
+                        }));
+                        setErrors(prev => ({ ...prev, tipo_cliente: null, identificacion: null }));
+                      }}
                       className={`w-full bg-[#0e1117] border rounded-xl px-3.5 py-2.5 text-white focus:outline-none transition-all ${
                         errors.tipo_cliente ? "border-rose-500 focus:border-rose-500" : "border-[#2d3748] focus:border-[#bfce7f]"
                       }`}
                     >
-                      <option value="">Seleccione el tipo de cliente</option>
                       <option value="PERSONA">Persona</option>
                       <option value="EMPRESA">Empresa</option>
                     </select>
                     {errors.tipo_cliente && <p className="text-rose-400 text-[10px] mt-1">{errors.tipo_cliente}</p>}
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 mb-1">RNC o Cédula</label>
+                    <input
+                      type="text"
+                      value={formData.identificacion}
+                      onChange={(e) => {
+                        const isEmpresa = formData.tipo_cliente?.toUpperCase() === "EMPRESA";
+                        const formatted = isEmpresa
+                          ? formatRnc(e.target.value)
+                          : formatCedula(e.target.value);
+                        setFormData(prev => ({ ...prev, identificacion: formatted }));
+                        const err = isEmpresa ? validateRnc(formatted) : validateCedula(formatted);
+                        setErrors(prev => ({ ...prev, identificacion: err }));
+                      }}
+                      placeholder={formData.tipo_cliente?.toUpperCase() === "EMPRESA" ? "Ej: 1-01-12345-6" : "Ej: 001-1234567-8"}
+                      className={`w-full bg-[#0e1117] border rounded-xl px-3.5 py-2.5 text-white focus:outline-none ${
+                        errors.identificacion ? "border-rose-500" : "border-[#2d3748] focus:border-[#bfce7f]"
+                      }`}
+                    />
+                    {errors.identificacion && <p className="text-rose-400 text-[10px] mt-1">{errors.identificacion}</p>}
                   </div>
                 </div>
               </div>
@@ -1908,8 +1854,13 @@ export default function CustomersView() {
                     <input
                       type="text"
                       value={formData.telefono_principal}
-                      onChange={(e) => setFormData({ ...formData, telefono_principal: e.target.value })}
-                      placeholder="Ej: +34 612 345 678"
+                      onChange={(e) => {
+                        const formatted = formatDominicanPhone(e.target.value);
+                        setFormData(prev => ({ ...prev, telefono_principal: formatted }));
+                        const err = validateDominicanPhone(formatted);
+                        setErrors(prev => ({ ...prev, telefono_principal: err }));
+                      }}
+                      placeholder="Ej: 809-555-1234"
                       className={`w-full bg-[#0e1117] border rounded-xl px-3.5 py-2.5 text-white focus:outline-none ${
                         errors.telefono_principal ? "border-rose-500" : "border-[#2d3748] focus:border-[#bfce7f]"
                       }`}
@@ -2067,6 +2018,37 @@ export default function CustomersView() {
         </div>,
         document.body
       )}
+
+        </div>
+      )}
+
+      {/* Single Top-Level Unified Instance of BikeFormDrawer */}
+      <BikeFormDrawer
+        isOpen={isBikeModalOpen}
+        editingItem={null}
+        clientes={data}
+        preselectedClienteId={detailUser?.cliente_id ?? detailUser?.id ?? null}
+        preselectedClienteName={detailUser ? (detailUser.nombre_completo || `${detailUser.nombre || ""} ${detailUser.apellido || ""}`.trim()) : ""}
+        lockCliente={Boolean(detailUser)}
+        onClose={() => setIsBikeModalOpen(false)}
+        onSuccess={async () => {
+          setIsBikeModalOpen(false);
+          fetchData();
+          const currentId = detailUser?.cliente_id ?? detailUser?.id;
+          if (currentId) {
+            try {
+              const resDetail = await fetch(`/api/crm/clientes/${currentId}`);
+              if (resDetail.ok) {
+                const freshDetail = await resDetail.json();
+                setDetailUser(freshDetail?.data || freshDetail);
+              }
+            } catch (err) {
+              console.error("Error refreshing detailUser post-bike add:", err);
+            }
+          }
+        }}
+        showToast={showToast}
+      />
 
     </div>
   );

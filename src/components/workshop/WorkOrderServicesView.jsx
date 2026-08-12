@@ -848,6 +848,78 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
                   </button>
                 </div>
 
+                {/* Mano de Obra Registrada Section */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between border-b border-[#2d3748] pb-1.5">
+                    <span className="text-xs font-bold font-mono text-slate-300 flex items-center gap-1.5">
+                      <Wrench className="w-4 h-4 text-[#bfce7f]" /> Mano de Obra Registrada
+                    </span>
+                    <button
+                      onClick={() => {
+                        setSelectedServiceId(activeSelectedService.orden_servicio_id);
+                        setLaborDesc("");
+                        setLaborHorasEst("1");
+                        setLaborHorasReal("1");
+                        setLaborCostoHora("0");
+                        setModalError(null);
+                        setAddLaborModalOpen(true);
+                      }}
+                      className="text-[11px] font-mono text-[#bfce7f] hover:underline flex items-center gap-1"
+                    >
+                      + Agregar Mano de Obra
+                    </button>
+                  </div>
+
+                  {activeSelectedService.mano_obra && activeSelectedService.mano_obra.length > 0 ? (
+                    <div className="space-y-2">
+                      {activeSelectedService.mano_obra.map((m) => {
+                        const mId = m.orden_servicio_mano_obra_id || m.mano_obra_id || m.id;
+                        return (
+                          <div
+                            key={mId}
+                            className="p-2.5 bg-[#1c2129] border border-[#2d3748] rounded-xl flex items-center justify-between text-xs font-mono"
+                          >
+                            <div className="flex items-center gap-2 truncate pr-2">
+                              <Wrench className="w-3.5 h-3.5 text-[#bfce7f] shrink-0" />
+                              <div className="truncate">
+                                <span className="truncate text-slate-200 block font-semibold">
+                                  {m.descripcion || m.observacion || "Registro de mano de obra"}
+                                </span>
+                                <span className="text-[10px] text-slate-400 block">
+                                  {m.horas_trabajadas || (m.minutos_trabajados ? (m.minutos_trabajados / 60).toFixed(1) : 1)} hr(s)
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="font-bold text-[#bfce7f]">
+                                RD$ {Number(m.subtotal || m.costo_total || (Number(m.horas_trabajadas || 1) * Number(m.costo_hora || 0))).toLocaleString("es-DO", { minimumFractionDigits: 2 })}
+                              </span>
+                              <button
+                                onClick={() => openEditLaborModal(activeSelectedService.orden_servicio_id, m)}
+                                className="text-slate-500 hover:text-slate-200 transition-colors p-1"
+                                title="Editar mano de obra"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteLabor(activeSelectedService.orden_servicio_id, mId, m.descripcion || m.observacion)}
+                                className="text-slate-500 hover:text-rose-400 transition-colors p-1"
+                                title="Eliminar mano de obra"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-500 italic p-3 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-center font-mono">
+                      Sin registros de mano de obra.
+                    </p>
+                  )}
+                </div>
+
                 {/* Associated Spare Parts / Products Section */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between border-b border-[#2d3748] pb-1.5">

@@ -80,7 +80,7 @@ export async function GET() {
       kilometraje_actual: Number(r.kilometraje_actual || 0),
       fecha_ultima_revision: r.fecha_ultima_revision ? String(r.fecha_ultima_revision).substring(0, 10) : null,
       notas_tecnicas: r.notas_tecnicas || '',
-      foto_url: (r.foto_url && !r.foto_url.includes("default.png")) ? r.foto_url : getFallbackPhotoUrl(r.tipo_bicicleta),
+      foto_url: (r.foto_url && !r.foto_url.includes("default.png")) ? r.foto_url : null,
       activo: r.activo !== false,
       fecha_creacion: r.fecha_creacion ? String(r.fecha_creacion).substring(0, 10) : null
     }));

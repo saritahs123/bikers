@@ -286,7 +286,7 @@ export async function DELETE(
     }
 
     const url = new URL(req.url);
-    const mIdParam = url.searchParams.get("mano_obra_id") || url.searchParams.get("id");
+    const mIdParam = url.searchParams.get("mano_obra_id") || url.searchParams.get("orden_servicio_mano_obra_id") || url.searchParams.get("id");
     if (!mIdParam) {
       await query("ROLLBACK");
       return NextResponse.json({ error: "ID de mano de obra es requerido." }, { status: 400 });

@@ -4,7 +4,7 @@ import { X, Check, Search, Bike, User, FileText, ClipboardCheck, ShieldCheck, Al
 import ReceptionChecklistModal from "./ReceptionChecklistModal";
 import DigitalSignatureCanvasModal from "./DigitalSignatureCanvasModal";
 
-export default function NewReceptionModal({ isOpen, onClose, onSuccess }) {
+export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreated }) {
   const [clients, setClients] = useState([]);
   const [bikes, setBikes] = useState([]);
   const [catalogs, setCatalogs] = useState({ items_checklist: [], estados_checklist: [], tipos_servicio: [] });
@@ -129,8 +129,15 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess }) {
         throw new Error(json.message || json.error || "Error al crear la recepción.");
       }
 
-      onSuccess(json);
-      onClose();
+      if (typeof onSuccess === "function") {
+        await onSuccess(json);
+      } else if (typeof onCreated === "function") {
+        await onCreated(json);
+      }
+      
+      if (typeof onClose === "function") {
+        onClose();
+      }
     } catch (err) {
       setError(err.message || "Error al guardar la recepción.");
     } finally {

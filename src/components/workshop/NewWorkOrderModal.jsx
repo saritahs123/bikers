@@ -112,9 +112,14 @@ export default function NewWorkOrderModal({ isOpen, onClose, onSuccess }) {
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Error al crear la Orden de Trabajo.");
+      if (!res.ok) throw new Error(data.error || data.details || data.message || "Error al crear la Orden de Trabajo.");
 
-      onSuccess(data.data.orden_id);
+      if (typeof onSuccess === "function") {
+        await onSuccess(data.data.orden_id);
+      }
+      if (typeof onClose === "function") {
+        onClose();
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -175,11 +180,15 @@ export default function NewWorkOrderModal({ isOpen, onClose, onSuccess }) {
                   className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
                 >
                   <option value="">-- Selecciona una Recepción Activa --</option>
-                  {receptions.map((r) => (
-                    <option key={r.recepcion_id} value={r.recepcion_id}>
-                      {r.codigo_recepcion} - {r.cliente_nombre} ({r.bicicleta_marca} {r.bicicleta_modelo})
-                    </option>
-                  ))}
+                  {receptions.map((r) => {
+                    const clientName = r.cliente?.nombre_completo || r.cliente_nombre || (typeof r.cliente === 'string' ? r.cliente : "Cliente");
+                    const bikeInfo = r.bicicleta?.resumen || r.bicicleta_resumen || [r.bicicleta_marca, r.bicicleta_modelo].filter(Boolean).join(" ") || "Bicicleta";
+                    return (
+                      <option key={r.recepcion_id} value={r.recepcion_id}>
+                        {r.codigo_recepcion} - {clientName} ({bikeInfo})
+                      </option>
+                    );
+                  })}
                 </select>
                 {receptions.length === 0 && (
                   <span className="text-[11px] text-amber-400 block mt-1">
@@ -195,14 +204,16 @@ export default function NewWorkOrderModal({ isOpen, onClose, onSuccess }) {
                     <span className="flex items-center gap-1.5">
                       <User className="w-3.5 h-3.5 text-slate-500" /> Cliente:
                     </span>
-                    <span className="font-semibold text-slate-200">{selectedRecepcionData.cliente_nombre}</span>
+                    <span className="font-semibold text-slate-200">
+                      {selectedRecepcionData.cliente?.nombre_completo || selectedRecepcionData.cliente_nombre || "Cliente"}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between text-slate-400">
                     <span className="flex items-center gap-1.5">
                       <Bike className="w-3.5 h-3.5 text-emerald-500/80" /> Bicicleta:
                     </span>
                     <span className="text-slate-300">
-                      {selectedRecepcionData.bicicleta_marca} {selectedRecepcionData.bicicleta_modelo}
+                      {selectedRecepcionData.bicicleta?.resumen || selectedRecepcionData.bicicleta_resumen || [selectedRecepcionData.bicicleta_marca, selectedRecepcionData.bicicleta_modelo].filter(Boolean).join(" ") || "Bicicleta"}
                     </span>
                   </div>
                 </div>
@@ -236,7 +247,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onSuccess }) {
                     <option value="">-- Sin asignar por el momento --</option>
                     {mecanicos.map((m) => (
                       <option key={m.usuario_id} value={m.usuario_id}>
-                        {m.nombre_completo} ({m.correo})
+                        {m.nombre_completo} {m.cargo_nombre ? `(${m.cargo_nombre})` : m.correo ? `(${m.correo})` : ""}
                       </option>
                     ))}
                   </select>
@@ -245,12 +256,15 @@ export default function NewWorkOrderModal({ isOpen, onClose, onSuccess }) {
 
               {/* Fecha Prometida */}
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5">Fecha Prometida de Entrega</label>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5 flex items-center gap-1.5">
+                  <Calendar className="w-4 h-4 text-emerald-400" />
+                  <span>Fecha Prometida de Entrega</span>
+                </label>
                 <input
                   type="date"
                   value={fechaPrometida}
                   onChange={(e) => setFechaPrometida(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer [color-scheme:dark]"
                 />
               </div>
 

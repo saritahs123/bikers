@@ -1,6 +1,16 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 
+const cleanFecha = (val: any) => {
+  if (!val) return null;
+  try {
+    const d = new Date(val);
+    return isNaN(d.getTime()) ? null : d.toISOString();
+  } catch {
+    return null;
+  }
+};
+
 // GET /api/crm/bicicletas/[id]/components
 export async function GET(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
@@ -89,7 +99,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
     const modelo = (body.modelo || '').trim();
     const numero_serie = (body.numero_serie || '').trim();
     const descripcion = (body.descripcion || '').trim();
-    const fecha_instalacion = body.fecha_instalacion || new Date().toISOString();
+    const fecha_instalacion = cleanFecha(body.fecha_instalacion) || new Date().toISOString();
     const kilometraje_instalacion = body.kilometraje_instalacion ? parseInt(body.kilometraje_instalacion, 10) : 0;
     const observaciones = (body.observaciones || '').trim();
 
@@ -155,7 +165,7 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
     const modelo = (body.modelo || '').trim();
     const numero_serie = (body.numero_serie || '').trim();
     const descripcion = (body.descripcion || '').trim();
-    const fecha_instalacion = body.fecha_instalacion || null;
+    const fecha_instalacion = cleanFecha(body.fecha_instalacion);
     const kilometraje_instalacion = body.kilometraje_instalacion ? parseInt(body.kilometraje_instalacion, 10) : 0;
     const observaciones = (body.observaciones || '').trim();
 

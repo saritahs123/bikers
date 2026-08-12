@@ -129,14 +129,18 @@ export async function POST(req: Request) {
       }
     }
 
-    // Check duplicate identificacion (Cédula / Pasaporte) if provided
-    if (identificacion) {
+    // Clean identificacion digits for storage and duplicate check
+    const cleanIdentificacion = identificacion ? identificacion.replace(/\D/g, "") : null;
+
+    // Check duplicate identificacion if provided
+    if (cleanIdentificacion) {
       const existingIdent = await query(`
         SELECT cliente_id FROM admin.clientes
-        WHERE identificacion = $1 AND fecha_eliminacion IS NULL
-      `, [identificacion]);
+        WHERE (identificacion = $1 OR identificacion = $2 OR regexp_replace(identificacion, '[^0-9]', '', 'g') = $2)
+          AND fecha_eliminacion IS NULL
+      `, [identificacion, cleanIdentificacion]);
       if (existingIdent && existingIdent.length > 0) {
-        return NextResponse.json({ success: false, message: "Ya existe un cliente registrado con esta Cédula / Pasaporte", field: "identificacion" }, { status: 409 });
+        return NextResponse.json({ success: false, message: "Ya existe un cliente registrado con esta Cédula / RNC", field: "identificacion" }, { status: 409 });
       }
     }
 

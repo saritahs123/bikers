@@ -86,6 +86,9 @@ export async function GET(req: Request) {
         presupuesto_estimado: Number(r.presupuesto_estimado || 0),
         requiere_aprobacion: Boolean(r.requiere_aprobacion),
         aprobado_cliente: r.aprobado_cliente,
+        cliente_nombre: r.cliente_nombre || "Cliente General",
+        bicicleta_resumen: r.bicicleta_resumen || "Bicicleta",
+        estado_nombre: r.estado_nombre || "INGRESADO",
         cliente: {
           cliente_id: r.cliente_id,
           nombre_completo: r.cliente_nombre || "Cliente General",

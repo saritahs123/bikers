@@ -55,23 +55,9 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
       ORDER BY b.bicicleta_id DESC
     `, [clienteId]);
 
-    const getFallbackPhotoUrl = (tipo: string) => {
-      const t = String(tipo || "MTB").toUpperCase();
-      if (t.includes("ROAD") || t.includes("RUTA")) {
-        return "https://images.unsplash.com/photo-1485965120184-e220f721d03e?auto=format&fit=crop&w=800&q=80";
-      }
-      if (t.includes("E-BIKE") || t.includes("ELECTRICA")) {
-        return "https://images.unsplash.com/photo-1532298229144-0ec0c57515c7?auto=format&fit=crop&w=800&q=80";
-      }
-      if (t.includes("GRAVEL")) {
-        return "https://images.unsplash.com/photo-1507035895480-2b3156c31fc8?auto=format&fit=crop&w=800&q=80";
-      }
-      return "https://images.unsplash.com/photo-1576435728678-68d0fbf94e91?auto=format&fit=crop&w=800&q=80";
-    };
-
     const mappedBikes = (bicicletas || []).map((b: any) => ({
       ...b,
-      foto_url: (b.foto_url && !b.foto_url.includes("default.png")) ? b.foto_url : getFallbackPhotoUrl(b.tipo_bicicleta)
+      foto_url: (b.foto_url && !b.foto_url.includes("default.png")) ? b.foto_url : null
     }));
 
     // Fetch work orders (Historial de Mantenimientos) for this client
@@ -295,13 +281,15 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
     }
 
     // Duplicate identificacion check
-    if (identificacion) {
+    const cleanIdentificacion = identificacion ? identificacion.replace(/\D/g, "") : null;
+    if (cleanIdentificacion) {
       const existingIdent = await query(`
         SELECT cliente_id FROM admin.clientes
-        WHERE identificacion = $1 AND cliente_id <> $2 AND fecha_eliminacion IS NULL
-      `, [identificacion, clienteId]);
+        WHERE (identificacion = $1 OR identificacion = $2 OR regexp_replace(identificacion, '[^0-9]', '', 'g') = $2)
+          AND cliente_id <> $3 AND fecha_eliminacion IS NULL
+      `, [identificacion, cleanIdentificacion, clienteId]);
       if (existingIdent && existingIdent.length > 0) {
-        return NextResponse.json({ success: false, message: "Ya existe un cliente registrado con esta Cédula / Pasaporte", field: "identificacion" }, { status: 409 });
+        return NextResponse.json({ success: false, message: "Ya existe un cliente registrado con esta Cédula / RNC", field: "identificacion" }, { status: 409 });
       }
     }
 

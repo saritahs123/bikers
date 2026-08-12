@@ -41,10 +41,14 @@ function SidebarContent({
       submenu: [
         { href: "/workshop", label: "PANEL OPERATIVO" },
         { href: "/workshop?view=list", label: "RECEPCIONES" },
-        { href: "/workshop?action=new", label: "NUEVA RECEPCIÓN" },
+        // Oculto del menú: se accede desde el botón "+ NUEVA RECEPCIÓN" de la pantalla Recepciones.
+        // Conservar ruta y componente para posible reactivación futura.
+        // { href: "/workshop?action=new", label: "NUEVA RECEPCIÓN" },
         { href: "/workshop?view=work_orders", label: "ÓRDENES DE TRABAJO" },
         { href: "/workshop?view=kanban", label: "VISTA KANBAN" },
-        { href: "/workshop?action=new_order", label: "NUEVA ORDEN DE TRABAJO" }
+        // Oculto del menú: se accede desde el botón de Órdenes de Trabajo.
+        // Conservar ruta y componente para posible reactivación futura.
+        // { href: "/workshop?action=new_order", label: "NUEVA ORDEN DE TRABAJO" }
       ]
     },
     {

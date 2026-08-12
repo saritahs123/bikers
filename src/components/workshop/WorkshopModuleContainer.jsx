@@ -158,6 +158,10 @@ export default function WorkshopModuleContainer() {
           handleCloseModals();
           setActiveTab("recepciones");
         }}
+        onCreated={() => {
+          handleCloseModals();
+          setActiveTab("recepciones");
+        }}
       />
 
       {/* Global New Work Order Modal */}

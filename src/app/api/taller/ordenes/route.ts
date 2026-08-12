@@ -80,7 +80,23 @@ export async function GET(req: NextRequest) {
         b.ano AS bicicleta_ano,
         b.numero_serie_cuadro AS bicicleta_serie,
         COALESCE(ot.total_orden, ot.subtotal_general, 0) AS total_estimado,
-        (SELECT COUNT(*) FROM admin.orden_servicios WHERE orden_trabajo_id = ot.orden_trabajo_id) AS total_servicios
+        (SELECT COUNT(*) FROM admin.orden_servicios WHERE orden_trabajo_id = ot.orden_trabajo_id) AS total_servicios,
+        (
+          SELECT COALESCE(NULLIF(TRIM(CONCAT_WS(' ', ui.nombre, ui.apellido)), ''), ui.correo_electronico, ('Mecánico #' || u.usuario_id::text))
+          FROM admin.orden_servicios os
+          JOIN admin.usuario u ON os.usuario_id = u.usuario_id
+          LEFT JOIN admin.usuario_identidad ui ON u.usuario_id = ui.usuario_id
+          WHERE os.orden_trabajo_id = ot.orden_trabajo_id AND os.usuario_id IS NOT NULL AND (os.activo IS DISTINCT FROM false)
+          ORDER BY os.orden_servicio_id ASC
+          LIMIT 1
+        ) AS mecanico_nombre,
+        (
+          SELECT os.usuario_id
+          FROM admin.orden_servicios os
+          WHERE os.orden_trabajo_id = ot.orden_trabajo_id AND os.usuario_id IS NOT NULL AND (os.activo IS DISTINCT FROM false)
+          ORDER BY os.orden_servicio_id ASC
+          LIMIT 1
+        ) AS mecanico_usuario_id
       FROM admin.ordenes_trabajo ot
       LEFT JOIN admin.recepciones r ON ot.recepcion_id = r.recepcion_id
       LEFT JOIN admin.clientes c ON COALESCE(ot.cliente_id, r.cliente_id) = c.cliente_id
@@ -179,9 +195,20 @@ export async function POST(req: NextRequest) {
     const estado_orden_id = 1;
     const usuario_registro = 1; // Default session admin user
 
-    // Insert Order using exact schema
+    const cleanFecha = (val: any) => {
+      if (!val || typeof val !== 'string' || !val.trim()) return null;
+      try {
+        const d = new Date(val);
+        return isNaN(d.getTime()) ? null : d.toISOString();
+      } catch {
+        return null;
+      }
+    };
+
+    // Insert Order using exact schema including orden_trabajo_id primary key
     const insertSql = `
       INSERT INTO admin.ordenes_trabajo (
+        orden_trabajo_id,
         codigo_orden,
         recepcion_id,
         cliente_id,
@@ -195,7 +222,10 @@ export async function POST(req: NextRequest) {
         activo,
         fecha_registro,
         usuario_registro
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9, true, NOW(), $10)
+      ) VALUES (
+        (SELECT COALESCE(MAX(orden_trabajo_id), 0) + 1 FROM admin.ordenes_trabajo),
+        $1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9, true, NOW(), $10
+      )
       RETURNING orden_trabajo_id AS orden_id, codigo_orden
     `;
 
@@ -208,7 +238,7 @@ export async function POST(req: NextRequest) {
       parseInt(prioridad_id, 10),
       diagnostico_inicial || null,
       observaciones || null,
-      fecha_prometida || null,
+      cleanFecha(fecha_prometida),
       usuario_registro
     ]);
 
@@ -224,16 +254,22 @@ export async function POST(req: NextRequest) {
     // Log status history
     await query(`
       INSERT INTO admin.orden_historial_estado (
+        orden_historial_estado_id,
         orden_trabajo_id,
         estado_anterior_id,
         estado_nuevo_id,
         usuario_cambio,
         comentario,
         fecha_cambio
-      ) VALUES ($1, NULL, $2, $3, $4, NOW())
+      ) VALUES (
+        (SELECT COALESCE(MAX(orden_historial_estado_id), 0) + 1 FROM admin.orden_historial_estado),
+        $1, NULL, $2, $3, $4, NOW()
+      )
     `, [createdOrder.orden_id, estado_orden_id, usuario_registro, "Creación e ingreso de Orden de Trabajo"]);
 
-    // Insert initial services if provided
+    // Insert initial services if provided, assigning selected mechanic if specified
+    const mecUserId = mecanico_usuario_id ? parseInt(mecanico_usuario_id, 10) : null;
+
     if (Array.isArray(servicios_iniciales) && servicios_iniciales.length > 0) {
       for (const servId of servicios_iniciales) {
         const tsRes = await query(`
@@ -246,6 +282,7 @@ export async function POST(req: NextRequest) {
           const precio_acordado = tsRes[0].precio_base;
           await query(`
             INSERT INTO admin.orden_servicios (
+              orden_servicio_id,
               orden_trabajo_id,
               tipo_servicio_id,
               estado_orden_servicio_id,
@@ -253,18 +290,48 @@ export async function POST(req: NextRequest) {
               precio_unitario,
               cantidad,
               subtotal,
+              usuario_id,
               activo,
               fecha_registro,
               usuario_registro
-            ) VALUES ($1, $2, 1, 2, $3, 1, $3, true, NOW(), $4)
+            ) VALUES (
+              (SELECT COALESCE(MAX(orden_servicio_id), 0) + 1 FROM admin.orden_servicios),
+              $1, $2, 1, 2, $3, 1, $3, $4, true, NOW(), $5
+            )
           `, [
             createdOrder.orden_id,
             parseInt(servId, 10),
             precio_acordado,
+            mecUserId,
             usuario_registro
           ]);
         }
       }
+    } else if (mecUserId) {
+      // If no initial services were checked but a mechanic was assigned, create an initial general service entry
+      await query(`
+        INSERT INTO admin.orden_servicios (
+          orden_servicio_id,
+          orden_trabajo_id,
+          tipo_servicio_id,
+          estado_orden_servicio_id,
+          estado_aprobacion_id,
+          precio_unitario,
+          cantidad,
+          subtotal,
+          usuario_id,
+          activo,
+          fecha_registro,
+          usuario_registro
+        ) VALUES (
+          (SELECT COALESCE(MAX(orden_servicio_id), 0) + 1 FROM admin.orden_servicios),
+          $1, 1, 1, 2, 0, 1, 0, $2, true, NOW(), $3
+        )
+      `, [
+        createdOrder.orden_id,
+        mecUserId,
+        usuario_registro
+      ]);
     }
 
     return NextResponse.json({
@@ -274,6 +341,11 @@ export async function POST(req: NextRequest) {
     });
   } catch (err: any) {
     console.error("POST /api/taller/ordenes Error:", err);
-    return NextResponse.json({ error: "Error al crear la orden de trabajo.", details: err.message }, { status: 500 });
+    return NextResponse.json({
+      error: err.message || "Error al crear la orden de trabajo.",
+      message: err.message?.includes("convertido_orden_id")
+        ? "Esta recepción ya tiene una orden de trabajo asociada."
+        : (err.message || "Error al crear la orden de trabajo.")
+    }, { status: 500 });
   }
 }

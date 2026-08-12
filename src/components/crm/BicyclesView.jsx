@@ -40,6 +40,20 @@ import {
   Copy
 } from "lucide-react";
 import { validateRequiredText } from "@/lib/validations";
+import BikeFormDrawer from "./BikeFormDrawer";
+
+export const formatDateForInput = (dateVal) => {
+  if (!dateVal) return new Date().toISOString().substring(0, 10);
+  try {
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) {
+      return new Date().toISOString().substring(0, 10);
+    }
+    return d.toISOString().substring(0, 10);
+  } catch {
+    return new Date().toISOString().substring(0, 10);
+  }
+};
 
 export default function BicyclesView({ initialBikeId = null, onClose = null }) {
   const [data, setData] = useState([]);
@@ -876,11 +890,6 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
   const saveOrUpdatePhoto = async (bikeId) => {
     if (!bikeId) return;
 
-    if (editingPhoto && (editingPhoto.tipo_foto === "COMPONENTE" || editingPhoto.bicicleta_componente_id)) {
-      showToast("Las fotografías de componentes son solo para visualización y no permiten edición.", "error");
-      return;
-    }
-
     // Case 1: Editing existing photo (PUT)
     if (editingPhoto) {
       setIsUploading(true);
@@ -1016,7 +1025,7 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
       modelo: comp.modelo || "",
       numero_serie: comp.numero_serie || "",
       descripcion: comp.descripcion || "",
-      fecha_instalacion: comp.fecha_instalacion ? String(comp.fecha_instalacion).substring(0, 10) : new Date().toISOString().substring(0, 10),
+      fecha_instalacion: formatDateForInput(comp.fecha_instalacion),
       kilometraje_instalacion: comp.kilometraje_instalacion || 0
     });
     setIsComponentFormOpen(true);
@@ -1032,7 +1041,7 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
       modelo: "",
       numero_serie: "",
       descripcion: "",
-      fecha_instalacion: new Date().toISOString().substring(0, 10),
+      fecha_instalacion: formatDateForInput(new Date()),
       kilometraje_instalacion: 0
     });
   };
@@ -1150,7 +1159,10 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
         </div>
 
         <button
-          onClick={() => handleOpenDrawer()}
+          onClick={() => {
+            setEditingItem(null);
+            setIsDrawerOpen(true);
+          }}
           className="bg-[#bfce7f] hover:bg-[#a9ba6b] text-[#1d1f18] font-mono text-xs font-bold px-5 py-3 rounded-xl shadow-lg flex items-center gap-2 transition-all cursor-pointer self-start md:self-auto"
         >
           <Plus size={18} />
@@ -1224,14 +1236,20 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
 
               {/* Bicycle Photo Thumbnail on the right */}
               <div className="w-20 h-16 rounded-xl border border-[#2d3748] bg-[#0e1117] overflow-hidden shrink-0 relative flex items-center justify-center">
-                <img
-                  src={item.foto_url || "https://images.unsplash.com/photo-1576435728678-68d0fbf94e91?auto=format&fit=crop&w=800&q=80"}
-                  alt={item.modelo || "Bicicleta"}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  onError={(e) => {
-                    e.currentTarget.src = "https://images.unsplash.com/photo-1576435728678-68d0fbf94e91?auto=format&fit=crop&w=800&q=80";
-                  }}
-                />
+                {item.foto_url ? (
+                  <img
+                    src={item.foto_url}
+                    alt={item.modelo || "Bicicleta"}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  />
+                ) : (
+                  <div className="w-full h-full bg-[#11151c] flex flex-col items-center justify-center p-1.5 text-center">
+                    <Bike size={18} className="text-[#bfce7f]" />
+                    <span className="text-[8px] font-mono text-slate-400 font-bold uppercase mt-0.5">
+                      {item.tipo_bicicleta || "Bici"}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1329,15 +1347,16 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
                   >
                     <td className="py-3.5 px-5">
                       <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-[#2d3748] flex items-center justify-center text-[#bfce7f] border border-[#3b475a] shrink-0 overflow-hidden">
-                          <img
-                            src={item.foto_url || "https://images.unsplash.com/photo-1576435728678-68d0fbf94e91?auto=format&fit=crop&w=800&q=80"}
-                            alt={item.modelo}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              e.currentTarget.src = "https://images.unsplash.com/photo-1576435728678-68d0fbf94e91?auto=format&fit=crop&w=800&q=80";
-                            }}
-                          />
+                        <div className="w-9 h-9 rounded-xl bg-[#1c2129] flex items-center justify-center text-[#bfce7f] border border-[#2d3748] shrink-0 overflow-hidden">
+                          {item.foto_url ? (
+                            <img
+                              src={item.foto_url}
+                              alt={item.modelo}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <Bike size={16} className="text-[#bfce7f]" />
+                          )}
                         </div>
                         <div className="flex flex-col min-w-0">
                           <span className="font-bold text-white group-hover:text-[#bfce7f] transition-colors truncate">
@@ -1446,18 +1465,19 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
 
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-12 h-12 rounded-xl bg-[#bfce7f]/10 border border-[#bfce7f]/30 flex items-center justify-center text-[#bfce7f] overflow-hidden shrink-0">
-                  <img
-                    src={
-                      (bikePhotos.length > 0 && bikePhotos.find(p => p.es_principal)?.url_archivo)
-                        ? (bikePhotos.find(p => p.es_principal)?.url_archivo || bikePhotos[0].url_archivo)
-                        : (detailBike.foto_url || "https://images.unsplash.com/photo-1576435728678-68d0fbf94e91?auto=format&fit=crop&w=800&q=80")
-                    }
-                    alt="Foto de Bicicleta"
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      e.currentTarget.src = "https://images.unsplash.com/photo-1576435728678-68d0fbf94e91?auto=format&fit=crop&w=800&q=80";
-                    }}
-                  />
+                  {((bikePhotos.length > 0 && bikePhotos.find(p => p.es_principal)?.url_archivo) || detailBike.foto_url) ? (
+                    <img
+                      src={
+                        (bikePhotos.length > 0 && bikePhotos.find(p => p.es_principal)?.url_archivo)
+                          ? (bikePhotos.find(p => p.es_principal)?.url_archivo || bikePhotos[0].url_archivo)
+                          : detailBike.foto_url
+                      }
+                      alt="Foto de Bicicleta"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <Bike size={24} className="text-[#bfce7f]" />
+                  )}
                 </div>
 
                 <div className="min-w-0">
@@ -2104,12 +2124,15 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
                         </div>
 
                         <div>
-                          <label className="block text-slate-300 mb-1">Fecha Instalación</label>
+                          <label className="block text-slate-300 mb-1 flex items-center gap-1.5">
+                            <Calendar size={14} className="text-[#bfce7f]" />
+                            <span>Fecha Instalación</span>
+                          </label>
                           <input
                             type="date"
-                            value={componentForm.fecha_instalacion}
+                            value={formatDateForInput(componentForm.fecha_instalacion)}
                             onChange={(e) => setComponentForm({ ...componentForm, fecha_instalacion: e.target.value })}
-                            className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#bfce7f]"
+                            className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#bfce7f] cursor-pointer [color-scheme:dark]"
                           />
                         </div>
 
@@ -2222,8 +2245,6 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
 
               {/* 3. FOTOGRAFÍAS DE ACTIVO TAB */}
               {activeTab === "fotos" && (() => {
-                const isComponentPhotoReadOnly = Boolean(editingPhoto && (editingPhoto.tipo_foto === "COMPONENTE" || editingPhoto.bicicleta_componente_id));
-
                 return (
                   <div className="space-y-6 font-mono text-xs">
                     
@@ -2231,9 +2252,7 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
                     <div
                       className={`p-5 bg-[#161a21] border rounded-2xl space-y-4 transition-all ${
                         editingPhoto
-                          ? isComponentPhotoReadOnly
-                            ? "border-amber-500/50 shadow-[0_0_20px_rgba(245,158,11,0.1)]"
-                            : "border-[#bfce7f] shadow-[0_0_20px_rgba(191,206,127,0.15)]"
+                          ? "border-[#bfce7f] shadow-[0_0_20px_rgba(191,206,127,0.15)]"
                           : "border-[#2d3748]"
                       }`}
                     >
@@ -2241,8 +2260,8 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
                         <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
                           {editingPhoto ? (
                             <>
-                              <Edit2 size={16} className={isComponentPhotoReadOnly ? "text-amber-400" : "text-[#bfce7f]"} />
-                              <span>{isComponentPhotoReadOnly ? "DETALLE DE FOTOGRAFÍA DE COMPONENTE (SOLO LECTURA)" : "EDITAR DATOS DE LA FOTOGRAFÍA SELECCIONADA"}</span>
+                              <Edit2 size={16} className="text-[#bfce7f]" />
+                              <span>EDITAR DATOS DE LA FOTOGRAFÍA SELECCIONADA</span>
                             </>
                           ) : (
                             <>
@@ -2272,7 +2291,7 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
                           </label>
                           {editingPhoto ? (
                             <div className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-2 text-slate-400 text-xs truncate flex items-center gap-2">
-                              <ImageIcon size={14} className={isComponentPhotoReadOnly ? "text-amber-400" : "text-[#bfce7f]"} />
+                              <ImageIcon size={14} className="text-[#bfce7f]" />
                               <span className="truncate">{editingPhoto.nombre_archivo}</span>
                             </div>
                           ) : (
@@ -2289,42 +2308,42 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
                           <label className="block text-slate-300 mb-1">Descripción / Módulo</label>
                           <input
                             type="text"
-                            disabled={isComponentPhotoReadOnly}
                             value={newPhotoDesc}
                             onChange={(e) => setNewPhotoDesc(e.target.value)}
                             placeholder="Ej: Vista lateral, Transmisión"
-                            className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#bfce7f] disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#bfce7f]"
                           />
                         </div>
 
                         <div className="md:col-span-2">
                           <label className="block text-slate-300 mb-1">Tipo</label>
                           <select
-                            disabled={isComponentPhotoReadOnly}
                             value={newPhotoType}
                             onChange={(e) => setNewPhotoType(e.target.value)}
-                            className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-2 py-2 text-white focus:outline-none focus:border-[#bfce7f] disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-2 py-2 text-white focus:outline-none focus:border-[#bfce7f]"
                           >
                             <option value="GENERAL">GENERAL</option>
                             <option value="PRINCIPAL">PRINCIPAL</option>
-                            <option value="COMPONENTE" disabled={!editingPhoto}>COMPONENTE</option>
+                            <option value="COMPONENTE">COMPONENTE</option>
                             <option value="DETALLE">DETALLE</option>
+                            <option value="DANO">DAÑO / DESGASTE</option>
+                            <option value="DIAGNOSTICO">DIAGNÓSTICO</option>
+                            <option value="ANTES">ANTES DEL SERVICIO</option>
+                            <option value="DESPUES">DESPUÉS DEL SERVICIO</option>
                           </select>
                         </div>
 
                         <div className="md:col-span-3">
                           <label className="block text-slate-300 mb-1">Componente Vinculado</label>
                           <select
-                            disabled={true}
                             value={newPhotoComponentId}
                             onChange={(e) => setNewPhotoComponentId(e.target.value)}
-                            className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-2 text-slate-400 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-[#0e1117]"
-                            title="Inhabilitado. Las fotografías asociadas a componentes son únicamente de visualización."
+                            className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#bfce7f] cursor-pointer"
                           >
-                            <option value="">-- Campo Inhabilitado (Solo Visualización) --</option>
+                            <option value="">-- Sin Componente Vinculado (Opcional) --</option>
                             {bikeComponents.map((comp) => (
                               <option key={comp.id} value={comp.id}>
-                                [{comp.categoria_nombre}] {comp.especificacion}
+                                [{comp.categoria_nombre || "COMPONENTE"}] {comp.marca ? `${comp.marca} ${comp.modelo || ""}` : comp.modelo || comp.especificacion || `ID #${comp.id}`}
                               </option>
                             ))}
                           </select>
@@ -2336,12 +2355,11 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
                         <input
                           type="checkbox"
                           id="es_principal_checkbox"
-                          disabled={isComponentPhotoReadOnly}
                           checked={newPhotoEsPrincipal}
                           onChange={(e) => setNewPhotoEsPrincipal(e.target.checked)}
-                          className="w-4 h-4 rounded bg-[#0e1117] border-[#2d3748] text-[#bfce7f] focus:ring-0 cursor-pointer accent-[#bfce7f] disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="w-4 h-4 rounded bg-[#0e1117] border-[#2d3748] text-[#bfce7f] focus:ring-0 cursor-pointer accent-[#bfce7f]"
                         />
-                        <label htmlFor="es_principal_checkbox" className={`font-bold text-xs select-none flex items-center gap-1.5 ${isComponentPhotoReadOnly ? "text-slate-500 cursor-not-allowed" : "text-[#bfce7f] cursor-pointer"}`}>
+                        <label htmlFor="es_principal_checkbox" className="font-bold text-xs select-none flex items-center gap-1.5 text-[#bfce7f] cursor-pointer">
                           <Star size={14} className={newPhotoEsPrincipal ? "fill-[#bfce7f]" : ""} />
                           <span>Marcar como Fotografía Principal del Activo</span>
                         </label>
@@ -2349,11 +2367,7 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
 
                       <div className="flex justify-between items-center pt-2 border-t border-[#2d3748]/50">
                         <div>
-                          {isComponentPhotoReadOnly ? (
-                            <p className="text-[11px] text-amber-400 font-bold flex items-center gap-1.5">
-                              <Info size={14} /> 🔒 Las fotografías de componentes son únicamente de visualización y no permiten modificación desde esta pestaña.
-                            </p>
-                          ) : editingPhoto ? (
+                          {editingPhoto ? (
                             <p className="text-[11px] text-[#bfce7f]">
                               ✏️ Editando datos de la fotografía ID <strong className="text-white">#{editingPhoto.id}</strong>. Modifique sus atributos y presione <strong className="text-white">"Guardar Cambios"</strong>.
                             </p>
@@ -2370,7 +2384,7 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
 
                         <button
                           type="button"
-                          disabled={isUploading || isComponentPhotoReadOnly || (!editingPhoto && !selectedPhotoFile && !selectedPhotoDataUrl)}
+                          disabled={isUploading || (!editingPhoto && !selectedPhotoFile && !selectedPhotoDataUrl)}
                           onClick={() => saveOrUpdatePhoto(detailBike.id)}
                           className="px-6 py-2 bg-[#bfce7f] hover:bg-[#a9ba6b] text-[#1d1f18] font-bold rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 cursor-pointer shadow-lg shrink-0 ml-4"
                         >
@@ -2759,205 +2773,24 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
         document.body
       )}
 
-      {/* Drawer / Modal for Crear / Editar Bicicleta */}
-      {isDrawerOpen && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 font-mono text-xs">
-          <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl flex flex-col animate-in zoom-in-95 duration-200">
-            
-            <div className="p-5 border-b border-[#2d3748] bg-[#0e1117] flex justify-between items-center">
-              <h2 className="font-mono text-lg font-bold text-white flex items-center gap-2">
-                <Bike size={18} className="text-[#bfce7f]" />
-                {editingItem ? "Editar Bicicleta" : "Registrar Nueva Bicicleta"}
-              </h2>
-              <button
-                onClick={() => setIsDrawerOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSave} className="p-6 space-y-6">
-              
-              {/* Sección 1: Propietario */}
-              <div className="space-y-4">
-                <h3 className="text-[#bfce7f] font-bold uppercase tracking-wider text-[11px] border-b border-[#2d3748] pb-1">
-                  1. Cliente Propietario
-                </h3>
-
-                <div>
-                  <label className="block text-slate-300 mb-1">Seleccionar Cliente <span className="text-rose-400">*</span></label>
-                  <select
-                    value={formData.cliente_id}
-                    onChange={(e) => setFormData({ ...formData, cliente_id: e.target.value })}
-                    className={`w-full bg-[#0e1117] border rounded-xl px-3.5 py-2.5 text-white focus:outline-none ${
-                      errors.cliente_id ? "border-rose-500" : "border-[#2d3748] focus:border-[#bfce7f]"
-                    }`}
-                  >
-                    <option value="">-- Seleccionar Propietario --</option>
-                    {clientes.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.nombre_completo} ({c.correo || c.telefono_principal})
-                      </option>
-                    ))}
-                  </select>
-                  {errors.cliente_id && <p className="text-rose-400 text-[10px] mt-1">{errors.cliente_id}</p>}
-                </div>
-              </div>
-
-              {/* Sección 2: Información General */}
-              <div className="space-y-4">
-                <h3 className="text-[#bfce7f] font-bold uppercase tracking-wider text-[11px] border-b border-[#2d3748] pb-1">
-                  2. Especificaciones de la Bicicleta
-                </h3>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-slate-300 mb-1">Marca <span className="text-rose-400">*</span></label>
-                    <input
-                      type="text"
-                      value={formData.marca}
-                      onChange={(e) => setFormData({ ...formData, marca: e.target.value })}
-                      placeholder="Ej: Specialized, Trek, Santa Cruz"
-                      className={`w-full bg-[#0e1117] border rounded-xl px-3.5 py-2.5 text-white focus:outline-none ${
-                        errors.marca ? "border-rose-500" : "border-[#2d3748] focus:border-[#bfce7f]"
-                      }`}
-                    />
-                    {errors.marca && <p className="text-rose-400 text-[10px] mt-1">{errors.marca}</p>}
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-300 mb-1">Modelo <span className="text-rose-400">*</span></label>
-                    <input
-                      type="text"
-                      value={formData.modelo}
-                      onChange={(e) => setFormData({ ...formData, modelo: e.target.value })}
-                      placeholder="Ej: Stumpjumper, Fuel EX 8"
-                      className={`w-full bg-[#0e1117] border rounded-xl px-3.5 py-2.5 text-white focus:outline-none ${
-                        errors.modelo ? "border-rose-500" : "border-[#2d3748] focus:border-[#bfce7f]"
-                      }`}
-                    />
-                    {errors.modelo && <p className="text-rose-400 text-[10px] mt-1">{errors.modelo}</p>}
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-300 mb-1">Tipo de Bicicleta</label>
-                    <select
-                      value={formData.tipo_bicicleta}
-                      onChange={(e) => setFormData({ ...formData, tipo_bicicleta: e.target.value })}
-                      className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-[#bfce7f]"
-                    >
-                      <option value="MTB">MTB (Montaña)</option>
-                      <option value="ROAD">Road (Ruta)</option>
-                      <option value="E-BIKE">E-Bike (Eléctrica)</option>
-                      <option value="GRAVEL">Gravel</option>
-                      <option value="ENDURO">Enduro</option>
-                      <option value="CITY">Urbana / Ciudad</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-300 mb-1">Año</label>
-                    <input
-                      type="number"
-                      value={formData.ano}
-                      onChange={(e) => setFormData({ ...formData, ano: e.target.value })}
-                      placeholder="2025"
-                      className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-[#bfce7f]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-300 mb-1">Color</label>
-                    <input
-                      type="text"
-                      value={formData.color}
-                      onChange={(e) => setFormData({ ...formData, color: e.target.value })}
-                      placeholder="Ej: Negro Mate / Verde Lima"
-                      className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-[#bfce7f]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-300 mb-1">Talla Cuadro</label>
-                    <input
-                      type="text"
-                      value={formData.talla}
-                      onChange={(e) => setFormData({ ...formData, talla: e.target.value })}
-                      placeholder="Ej: M, L, 54cm, S3"
-                      className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-[#bfce7f]"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Sección 3: Información Técnica & Odómetro */}
-              <div className="space-y-4">
-                <h3 className="text-[#bfce7f] font-bold uppercase tracking-wider text-[11px] border-b border-[#2d3748] pb-1">
-                  3. Identificación Técnica & Odómetro
-                </h3>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-slate-300 mb-1">Número de Serie del Cuadro</label>
-                    <input
-                      type="text"
-                      value={formData.numero_serie_cuadro}
-                      onChange={(e) => setFormData({ ...formData, numero_serie_cuadro: e.target.value })}
-                      placeholder="Ej: SPZ-9982-XJ102"
-                      className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-[#bfce7f]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-300 mb-1">Kilometraje Estimado (KM)</label>
-                    <input
-                      type="number"
-                      value={formData.kilometraje_actual}
-                      onChange={(e) => setFormData({ ...formData, kilometraje_actual: e.target.value })}
-                      placeholder="0"
-                      className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-[#bfce7f]"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Sección 4: Observaciones */}
-              <div className="space-y-2">
-                <label className="block text-slate-300">Notas Técnicas u Observaciones</label>
-                <textarea
-                  rows={3}
-                  value={formData.notas_tecnicas}
-                  onChange={(e) => setFormData({ ...formData, notas_tecnicas: e.target.value })}
-                  placeholder="Detalles sobre personalización, accesorios instalados o condición previa..."
-                  className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl p-3 text-white focus:outline-none focus:border-[#bfce7f]"
-                />
-              </div>
-
-              {/* Drawer Footer */}
-              <div className="pt-4 border-t border-[#2d3748] flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setIsDrawerOpen(false)}
-                  className="px-4 py-2.5 bg-[#2d3748] text-white rounded-xl hover:bg-slate-700 transition-colors cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="px-5 py-2.5 bg-[#bfce7f] text-[#1d1f18] font-bold rounded-xl hover:bg-[#a9ba6b] transition-colors disabled:opacity-50 flex items-center gap-2 cursor-pointer"
-                >
-                  {isSaving ? <RefreshCw className="animate-spin" size={16} /> : <Save size={16} />}
-                  <span>{editingItem ? "Guardar Cambios" : "Registrar Bicicleta"}</span>
-                </button>
-              </div>
-
-            </form>
-          </div>
-        </div>,
-        document.body
-      )}
+      {/* BikeFormDrawer Panel */}
+      <BikeFormDrawer
+        isOpen={isDrawerOpen}
+        editingItem={editingItem}
+        clientes={clientes}
+        preselectedClienteId={null}
+        lockCliente={false}
+        onClose={() => {
+          setIsDrawerOpen(false);
+          setEditingItem(null);
+        }}
+        onSuccess={async () => {
+          setIsDrawerOpen(false);
+          setEditingItem(null);
+          fetchData();
+        }}
+        showToast={showToast}
+      />
 
       {/* Confirm Delete Modal */}
       {mounted && isDeletingModalOpen && itemToDelete && typeof document !== 'undefined' && createPortal(

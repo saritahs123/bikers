@@ -62,7 +62,7 @@ export async function loginAction(formData: FormData) {
   let targetUser: UserDbRecord | null = null;
 
   try {
-    const result = await query(
+    const result = await query<UserDbRecord>(
       `SELECT
          u.usuario_id,
          u.estado AS usuario_estado,

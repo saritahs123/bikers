@@ -257,41 +257,47 @@ export default function ReceptionsListView({ onViewDetail }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#2d3748]">
-                {recepciones.map((r) => (
-                  <tr key={r.recepcion_id} className="hover:bg-[#1c2129] transition-colors">
-                    <td className="p-4">
-                      <span className="font-mono font-extrabold text-[#bfce7f] bg-[#bfce7f]/10 px-2 py-0.5 rounded border border-[#bfce7f]/20">
-                        {r.codigo_recepcion}
-                      </span>
-                    </td>
-                    <td className="p-4 font-semibold text-slate-200">{r.cliente_nombre || "Cliente General"}</td>
-                    <td className="p-4 text-slate-300">{r.bicicleta_resumen || "Bicicleta"}</td>
-                    <td className="p-4">
-                      <span className="px-2.5 py-1 rounded text-[11px] font-mono font-bold bg-slate-800 text-slate-300 border border-slate-700 uppercase">
-                        {r.estado_nombre || "INGRESADO"}
-                      </span>
-                    </td>
-                    <td className="p-4 text-right font-mono font-bold text-slate-100">
-                      RD$ {parseFloat(r.presupuesto_estimado || 0).toLocaleString("es-DO", { minimumFractionDigits: 0 })}
-                    </td>
-                    <td className="p-4 text-slate-400 font-mono">
-                      {new Date(r.fecha_recepcion).toLocaleDateString("es-ES", {
-                        day: "2-digit",
-                        month: "short",
-                        year: "numeric"
-                      })}
-                    </td>
-                    <td className="p-4 text-center">
-                      <button
-                        onClick={() => handleOpenDetail(r.recepcion_id)}
-                        className="p-1.5 text-slate-400 hover:text-[#bfce7f] hover:bg-slate-800 rounded-lg transition-colors"
-                        title="Ver Detalle de Recepción"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {recepciones.map((r) => {
+                  const clienteNombre = r.cliente?.nombre_completo || r.cliente_nombre || (typeof r.cliente === 'string' ? r.cliente : "Cliente General");
+                  const bicicletaResumen = r.bicicleta?.resumen || r.bicicleta_resumen || (typeof r.bicicleta === 'string' ? r.bicicleta : "Bicicleta");
+                  const estadoNombre = r.estado?.nombre || r.estado_nombre || "INGRESADO";
+
+                  return (
+                    <tr key={r.recepcion_id} className="hover:bg-[#1c2129] transition-colors">
+                      <td className="p-4">
+                        <span className="font-mono font-extrabold text-[#bfce7f] bg-[#bfce7f]/10 px-2 py-0.5 rounded border border-[#bfce7f]/20">
+                          {r.codigo_recepcion}
+                        </span>
+                      </td>
+                      <td className="p-4 font-semibold text-slate-200">{clienteNombre}</td>
+                      <td className="p-4 text-slate-300">{bicicletaResumen}</td>
+                      <td className="p-4">
+                        <span className="px-2.5 py-1 rounded text-[11px] font-mono font-bold bg-slate-800 text-slate-300 border border-slate-700 uppercase">
+                          {estadoNombre}
+                        </span>
+                      </td>
+                      <td className="p-4 text-right font-mono font-bold text-slate-100">
+                        RD$ {parseFloat(r.presupuesto_estimado || 0).toLocaleString("es-DO", { minimumFractionDigits: 0 })}
+                      </td>
+                      <td className="p-4 text-slate-400 font-mono">
+                        {new Date(r.fecha_recepcion).toLocaleDateString("es-ES", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric"
+                        })}
+                      </td>
+                      <td className="p-4 text-center">
+                        <button
+                          onClick={() => handleOpenDetail(r.recepcion_id)}
+                          className="p-1.5 text-slate-400 hover:text-[#bfce7f] hover:bg-slate-800 rounded-lg transition-colors"
+                          title="Ver Detalle de Recepción"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -328,10 +334,17 @@ export default function ReceptionsListView({ onViewDetail }) {
       <NewReceptionModal
         isOpen={isNewModalOpen}
         onClose={() => setIsNewModalOpen(false)}
-        onCreated={() => {
+        onSuccess={(createdReception) => {
           setIsNewModalOpen(false);
           fetchRecepciones();
           fetchDashboardMetrics();
+          showToast("Recepción creada exitosamente.", "success");
+        }}
+        onCreated={(createdReception) => {
+          setIsNewModalOpen(false);
+          fetchRecepciones();
+          fetchDashboardMetrics();
+          showToast("Recepción creada exitosamente.", "success");
         }}
       />
     </div>
