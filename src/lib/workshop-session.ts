@@ -84,7 +84,7 @@ export async function getWorkshopSession(): Promise<WorkshopSession | null> {
     return {
       usuario_id: 1,
       empresa_id: 1,
-      rol_principal_id: 2,
+      rol_principal_id: 1,
       nombre_usuario: "Usuario Administrador",
       email: "admin@bikers.com"
     };
@@ -105,20 +105,31 @@ export async function getModulePermissions(
   moduloId: number,
   rolId: number
 ): Promise<ModulePermissions> {
-  const defaultPerms: ModulePermissions = {
-    puede_ver: true,
-    puede_crear: true,
-    puede_editar: true,
-    puede_inactivar: true,
-    puede_exportar: true,
-    puede_importar: true,
-    puede_aprobar: true,
-    puede_asignar: true,
-    puede_mover: true,
-    puede_cerrar: true,
-    puede_reabrir: true,
-    puede_eliminar: true
+  const noPerms: ModulePermissions = {
+    puede_ver: false,
+    puede_crear: false,
+    puede_editar: false,
+    puede_inactivar: false,
+    puede_exportar: false,
+    puede_importar: false,
+    puede_aprobar: false,
+    puede_asignar: false,
+    puede_mover: false,
+    puede_cerrar: false,
+    puede_reabrir: false,
+    puede_eliminar: false
   };
+
+  if (!moduloId || !rolId) return noPerms;
+
+  // Admin Role (1) always retains full access
+  if (rolId === 1) {
+    return {
+      puede_ver: true, puede_crear: true, puede_editar: true, puede_inactivar: true,
+      puede_exportar: true, puede_importar: true, puede_aprobar: true, puede_asignar: true,
+      puede_mover: true, puede_cerrar: true, puede_reabrir: true, puede_eliminar: true
+    };
+  }
 
   try {
     const rows = await query(
@@ -131,25 +142,27 @@ export async function getModulePermissions(
       [moduloId, rolId]
     );
 
-    if (!rows || rows.length === 0) return defaultPerms;
+    if (!rows || rows.length === 0) {
+      return noPerms;
+    }
 
     const r = rows[0];
     return {
-      puede_ver: r.puede_ver !== false,
-      puede_crear: r.puede_crear !== false,
-      puede_editar: r.puede_editar !== false,
-      puede_inactivar: r.puede_inactivar !== false,
-      puede_exportar: r.puede_exportar !== false,
-      puede_importar: r.puede_importar !== false,
-      puede_aprobar: r.puede_aprobar !== false,
-      puede_asignar: r.puede_asignar !== false,
-      puede_mover: r.puede_mover !== false,
-      puede_cerrar: r.puede_cerrar !== false,
-      puede_reabrir: r.puede_reabrir !== false,
-      puede_eliminar: r.puede_eliminar !== false
+      puede_ver: Boolean(r.puede_ver),
+      puede_crear: Boolean(r.puede_crear),
+      puede_editar: Boolean(r.puede_editar),
+      puede_inactivar: Boolean(r.puede_inactivar),
+      puede_exportar: Boolean(r.puede_exportar),
+      puede_importar: Boolean(r.puede_importar),
+      puede_aprobar: Boolean(r.puede_aprobar),
+      puede_asignar: Boolean(r.puede_asignar),
+      puede_mover: Boolean(r.puede_mover),
+      puede_cerrar: Boolean(r.puede_cerrar),
+      puede_reabrir: Boolean(r.puede_reabrir),
+      puede_eliminar: Boolean(r.puede_eliminar)
     };
   } catch (err) {
     console.error("Error in getModulePermissions:", err);
-    return defaultPerms;
+    return noPerms;
   }
 }

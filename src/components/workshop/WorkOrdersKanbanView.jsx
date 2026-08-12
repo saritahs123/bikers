@@ -90,6 +90,13 @@ export default function WorkOrdersKanbanView({ onViewDetail, onOpenNewModal, onT
     }
   };
 
+  const ALLOWED_KANBAN_TRANSITIONS = {
+    1: [5],     // RECIBIDA -> REPARACIÓN
+    5: [7],     // REPARACIÓN -> LISTA DE ENTREGA
+    7: [5, 8],  // LISTA DE ENTREGA -> REPARACIÓN (devolución) o ENTREGADA
+    8: []       // ENTREGADA is Read-Only
+  };
+
   const handleDrop = (e, targetId) => {
     e.preventDefault();
     setDragOverStatusId(null);
@@ -105,8 +112,21 @@ export default function WorkOrdersKanbanView({ onViewDetail, onOpenNewModal, onT
     }
 
     if (!orderToMove) return;
+    const currentId = orderToMove.estado_orden_id;
 
-    if (orderToMove.estado_orden_id === targetId) {
+    if (currentId === targetId) {
+      setDraggedOrder(null);
+      return;
+    }
+
+    if (currentId === 8) {
+      setError("La orden ya fue ENTREGADA y está en modo de solo lectura. No se puede mover.");
+      setDraggedOrder(null);
+      return;
+    }
+
+    if (!ALLOWED_KANBAN_TRANSITIONS[currentId]?.includes(targetId)) {
+      setError(`Transición no permitida: no puede mover directamente de "${getNombreEstado(currentId)}" a "${getNombreEstado(targetId)}".`);
       setDraggedOrder(null);
       return;
     }
@@ -123,12 +143,29 @@ export default function WorkOrdersKanbanView({ onViewDetail, onOpenNewModal, onT
     setDragOverStatusId(null);
   };
 
+  const getNombreEstado = (id) => {
+    const found = estados.find(e => e.estado_orden_id === id);
+    return found ? found.nombre : `Estado #${id}`;
+  };
+
   // Accessible Fallback Select Move
   const handleSelectMove = (order, newStatusId) => {
-    const sId = parseInt(newStatusId, 10);
-    if (order.estado_orden_id === sId) return;
+    const targetId = parseInt(newStatusId, 10);
+    const currentId = order.estado_orden_id;
+    if (currentId === targetId) return;
+
+    if (currentId === 8) {
+      setError("La orden ya fue ENTREGADA y está en modo de solo lectura.");
+      return;
+    }
+
+    if (!ALLOWED_KANBAN_TRANSITIONS[currentId]?.includes(targetId)) {
+      setError(`Transición no permitida de "${getNombreEstado(currentId)}" a "${getNombreEstado(targetId)}".`);
+      return;
+    }
+
     setPendingMoveOrder(order);
-    setTargetStatusId(sId);
+    setTargetStatusId(targetId);
     setChangeNotes("");
     setConfirmModalOpen(true);
   };
@@ -143,30 +180,54 @@ export default function WorkOrdersKanbanView({ onViewDetail, onOpenNewModal, onT
 
     const targetId = pendingMoveOrder.orden_id || pendingMoveOrder.orden_trabajo_id;
     if (!targetId) {
-      alert("Error: ID de la orden no especificado.");
+      setError("Error: ID de la orden no especificado.");
       return;
+    }
+
+    // Require persona_recibe for delivery (7 -> 8)
+    if (pendingMoveOrder.estado_orden_id === 7 && targetStatusId === 8) {
+      if (!changeNotes || !changeNotes.trim()) {
+        setError("Debe indicar obligatoriamente el nombre de la persona que recibe la bicicleta al entregar.");
+        return;
+      }
+    }
+
+    // Require motivo for return to repair (7 -> 5)
+    if (pendingMoveOrder.estado_orden_id === 7 && targetStatusId === 5) {
+      if (!changeNotes || !changeNotes.trim()) {
+        setError("Debe indicar obligatoriamente el motivo de devolución a reparación.");
+        return;
+      }
     }
 
     setUpdating(true);
     setError(null);
     try {
+      const payload = {
+        estado_orden_id: targetStatusId,
+        estado_anterior_esperado_id: pendingMoveOrder.estado_orden_id,
+        confirmar_entrega: targetStatusId === 8 ? true : undefined,
+        persona_recibe: targetStatusId === 8 ? changeNotes.trim() : undefined,
+        motivo_devolucion: (pendingMoveOrder.estado_orden_id === 7 && targetStatusId === 5) ? changeNotes.trim() : undefined,
+        observacion_interna: changeNotes || "Movimiento en Tablero Kanban"
+      };
+
       const res = await fetch(`/api/taller/ordenes/${targetId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          estado_orden_id: targetStatusId,
-          estado_anterior_esperado_id: pendingMoveOrder.estado_orden_id,
-          observacion_cambio_estado: changeNotes || "Movimiento en Tablero Kanban"
-        })
+        body: JSON.stringify(payload)
       });
 
       const json = await res.json();
 
       if (!res.ok) {
-        if (res.status === 409) {
-          throw new Error("Conflicto: La orden fue modificada por otro usuario simultáneamente. Se recargarán los datos.");
+        if (res.status === 403 || json.error === "FORBIDDEN") {
+          throw new Error("No tienes permiso para realizar esta acción.");
         }
-        throw new Error(json.error || "Error al actualizar el estado de la orden.");
+        if (res.status === 409) {
+          throw new Error(json.message || "Conflicto: La orden o sus servicios se encuentran en un estado incompatible.");
+        }
+        throw new Error(json.message || json.error || "Error al actualizar el estado de la orden.");
       }
 
       setConfirmModalOpen(false);
@@ -178,7 +239,7 @@ export default function WorkOrdersKanbanView({ onViewDetail, onOpenNewModal, onT
       setTargetStatusId(null);
       await fetchKanbanData();
     } catch (err) {
-      alert(`Error en transición: ${err.message}`);
+      setError(err.message || "No tienes permiso para realizar esta acción.");
       await fetchKanbanData();
     } finally {
       setUpdating(false);

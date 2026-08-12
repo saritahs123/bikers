@@ -40,6 +40,9 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
   const [newMecanicoId, setNewMecanicoId] = useState("");
   const [newPrioridadId, setNewPrioridadId] = useState("");
   const [changeNotes, setChangeNotes] = useState("");
+  const [selectedServiceToReopen, setSelectedServiceToReopen] = useState("");
+  const [personaRecibeInput, setPersonaRecibeInput] = useState("");
+  const [confirmarEntregaCheck, setConfirmarEntregaCheck] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [modalError, setModalError] = useState(null);
 
@@ -48,8 +51,10 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
   const [newTaskInput, setNewTaskInput] = useState("");
   const [showAddTaskInput, setShowAddTaskInput] = useState(false);
 
-  const fetchOrderDetail = async () => {
-    setLoading(true);
+  const fetchOrderDetail = async (isSilent = false) => {
+    if (!isSilent && !order) {
+      setLoading(true);
+    }
     setError(null);
     try {
       const res = await fetch(`/api/taller/ordenes/${ordenId}`);
@@ -106,11 +111,13 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
       }
     } catch (err) {
       console.error("fetchOrderDetail Error:", err);
-      setError(err.message || "Orden no encontrada.");
+      if (!isSilent) setError(err.message || "Orden no encontrada.");
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
   };
+
+  const refreshSilently = () => fetchOrderDetail(true);
 
   useEffect(() => {
     if (ordenId) {
@@ -130,7 +137,10 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
           estado_orden_id: parseInt(newStatusId, 10),
           mecanico_usuario_id: newMecanicoId ? parseInt(newMecanicoId, 10) : null,
           prioridad_id: newPrioridadId ? parseInt(newPrioridadId, 10) : null,
-          observacion_cambio_estado: changeNotes || "Actualización desde Detalle"
+          observacion_cambio_estado: changeNotes || "Actualización desde Detalle",
+          servicio_id_reabrir: selectedServiceToReopen ? parseInt(selectedServiceToReopen, 10) : null,
+          persona_recibe: personaRecibeInput || null,
+          confirmar_entrega: confirmarEntregaCheck
         })
       });
       const data = await res.json();
@@ -147,7 +157,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
       setStatusModalOpen(false);
       setChangeNotes("");
       setModalError(null);
-      fetchOrderDetail();
+      refreshSilently();
     } catch (err) {
       setModalError(err.message);
     } finally {
@@ -218,28 +228,49 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
     { id: 8, key: "ENTREGADA", label: "Entregada", icon: ShieldCheck }
   ];
 
-  // Calculated totals directly from order object
-  const subtotalServicios = Number(order.resumen_financiero?.subtotal_servicios || 0);
-  const subtotalProductos = Number(order.resumen_financiero?.subtotal_productos || 0);
-  const totalEstimado = Number(order.resumen_financiero?.total_estimado || (subtotalServicios + subtotalProductos));
-
   // Financial Items List (services + products) from live backend API
   const financialItems = [
-    ...(order.servicios || []).map((s) => ({
-      nombre: s.tipo_servicio_nombre || "Servicio de Mantenimiento",
-      cantidad: 1,
-      precio: Number(s.precio_acordado || 0),
-      total: Number(s.precio_acordado || 0),
-      tipo: "SERVICIO"
-    })),
-    ...(order.productos || []).map((p) => ({
-      nombre: p.producto_nombre || "Producto / Repuesto",
-      cantidad: Number(p.cantidad || 1),
-      precio: Number(p.precio_unitario || 0),
-      total: Number(p.subtotal || 0),
-      tipo: "REPUESTO"
-    }))
+    ...(order.servicios || []).map((s) => {
+      const cant = Number(s.cantidad || 1);
+      const precioUnit = Number(s.precio_unitario || s.precio || 0);
+      const sub = Number(s.subtotal || 0);
+      const totalItem = sub > 0 ? sub : (cant * precioUnit);
+
+      return {
+        nombre: s.tipo_servicio_nombre || "Servicio de Mantenimiento",
+        cantidad: cant,
+        precio: precioUnit,
+        total: totalItem,
+        tipo: "SERVICIO"
+      };
+    }),
+    ...(order.repuestos || order.productos || []).map((p) => {
+      const cant = Number(p.cantidad || 1);
+      const precioUnit = Number(p.precio_unitario || 0);
+      const sub = Number(p.subtotal || 0);
+      const totalItem = sub > 0 ? sub : (cant * precioUnit);
+
+      return {
+        nombre: p.producto_nombre || "Producto / Repuesto",
+        cantidad: cant,
+        precio: precioUnit,
+        total: totalItem,
+        tipo: "REPUESTO"
+      };
+    })
   ];
+
+  // Calculated totals directly from order object or computed financial items
+  const subtotalServicios = financialItems
+    .filter((i) => i.tipo === "SERVICIO")
+    .reduce((acc, item) => acc + item.total, 0);
+
+  const subtotalProductos = financialItems
+    .filter((i) => i.tipo === "REPUESTO")
+    .reduce((acc, item) => acc + item.total, 0);
+
+  const computedSum = subtotalServicios + subtotalProductos;
+  const totalEstimado = Number(order.total_orden || 0) > 0 ? Number(order.total_orden) : computedSum;
 
   // Dynamic Metrics
   const repairProgressPercent = order.progreso_porcentaje ?? 0;
@@ -440,7 +471,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
             <div className="bg-[#161a21] border border-[#2d3748] p-6 rounded-xl space-y-5">
               <div className="flex items-center justify-between pb-3 border-b border-[#2d3748]">
                 <h3 className="font-mono text-xs font-bold text-slate-300 uppercase tracking-widest">
-                  DIAGNÓSTICO TÉCNICO
+                  OBSERVACIONES Y REVISIÓN TÉCNICA
                 </h3>
                 <FileText className="w-4 h-4 text-slate-400" />
               </div>
@@ -546,36 +577,52 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                   MECÁNICOS ASIGNADOS
                 </h3>
               </div>
-              {order.mecanicos && order.mecanicos.length > 0 ? (
-                <div className="space-y-2.5">
-                  {order.mecanicos.map((m) => (
-                    <div key={m.usuario_id} className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-[#1c2129] border border-[#2d3748] flex items-center justify-center font-mono font-bold text-xs text-[#bfce7f] shrink-0">
-                        {m.nombre
-                          ? m.nombre
-                              .split(" ")
-                              .map((n) => n[0])
-                              .join("")
-                              .substring(0, 2)
-                              .toUpperCase()
-                          : "RM"}
-                      </div>
-                      <div>
-                        <div className="font-bold text-xs text-slate-100 font-sans">
-                          {m.nombre}
+              {(() => {
+                const assignedMechanics = Array.from(
+                  new Map(
+                    (order.servicios || [])
+                      .filter((s) => s.mecanico_usuario_id || s.usuario_id || s.mecanico_nombre)
+                      .map((s) => [
+                        s.mecanico_usuario_id || s.usuario_id || s.mecanico_nombre,
+                        {
+                          usuario_id: s.mecanico_usuario_id || s.usuario_id,
+                          nombre: s.mecanico_nombre || `Mecánico #${s.mecanico_usuario_id || s.usuario_id}`
+                        }
+                      ])
+                  ).values()
+                );
+
+                return assignedMechanics.length > 0 ? (
+                  <div className="space-y-2.5">
+                    {assignedMechanics.map((m, idx) => (
+                      <div key={m.usuario_id || idx} className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-[#1c2129] border border-[#2d3748] flex items-center justify-center font-mono font-bold text-xs text-[#bfce7f] shrink-0">
+                          {m.nombre
+                            ? m.nombre
+                                .split(" ")
+                                .map((n) => n[0])
+                                .join("")
+                                .substring(0, 2)
+                                .toUpperCase()
+                            : "RM"}
                         </div>
-                        <div className="text-[10px] text-slate-400 font-mono">
-                          Técnico de Taller
+                        <div>
+                          <div className="font-bold text-xs text-slate-100 font-sans">
+                            {m.nombre}
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-mono">
+                            Técnico de Taller
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-xs text-slate-500 font-mono italic p-2">
-                  Sin mecánicos asignados
-                </div>
-              )}
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-xs text-slate-500 font-mono italic p-2">
+                    Sin mecánicos asignados
+                  </div>
+                );
+              })()}
             </div>
 
 
@@ -688,7 +735,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
 
       {/* Services Tab */}
       {activeTab === "servicios" && (
-        <WorkOrderServicesView ordenId={ordenId} services={order.servicios || []} onRefresh={fetchOrderDetail} />
+        <WorkOrderServicesView ordenId={ordenId} services={order.servicios || []} onRefresh={refreshSilently} order={order} />
       )}
 
       {/* History Tab */}
@@ -807,13 +854,65 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                       </div>
                     </div>
 
+                    {/* Return to repair conditional field: Select service to reopen */}
+                    {String(order.estado_orden_id) === "7" && String(newStatusId) === "5" && (
+                      <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-2">
+                        <label className="block text-amber-300 font-semibold font-mono text-[11px]">
+                          * Servicio que requiere corrección y reanudación:
+                        </label>
+                        <select
+                          value={selectedServiceToReopen}
+                          onChange={(e) => setSelectedServiceToReopen(e.target.value)}
+                          required
+                          className="w-full p-2 bg-[#0a0c10] border border-[#2d3748] rounded-lg text-slate-200 text-xs focus:outline-none focus:border-[#bfce7f]"
+                        >
+                          <option value="">-- Selecciona el servicio a reabrir --</option>
+                          {(order.servicios || []).map((s) => (
+                            <option key={s.orden_servicio_id} value={String(s.orden_servicio_id)}>
+                              #{s.orden_servicio_id} - {s.tipo_servicio_nombre} ({s.mecanico_nombre})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* Delivery confirmation conditional fields */}
+                    {String(order.estado_orden_id) === "7" && String(newStatusId) === "8" && (
+                      <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl space-y-3">
+                        <div>
+                          <label className="block text-emerald-300 font-semibold font-mono text-[11px] mb-1">
+                            Nombre de la persona que recibe la bicicleta:
+                          </label>
+                          <input
+                            type="text"
+                            value={personaRecibeInput}
+                            onChange={(e) => setPersonaRecibeInput(e.target.value)}
+                            placeholder={order.cliente_nombre || "Nombre del cliente / representante"}
+                            className="w-full p-2 bg-[#0a0c10] border border-[#2d3748] rounded-lg text-slate-200 text-xs focus:outline-none focus:border-emerald-400"
+                          />
+                        </div>
+                        <label className="flex items-center gap-2 text-emerald-200 font-semibold text-xs cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={confirmarEntregaCheck}
+                            onChange={(e) => setConfirmarEntregaCheck(e.target.checked)}
+                            className="w-4 h-4 rounded border-slate-700 text-emerald-500 focus:ring-emerald-400 bg-slate-900"
+                          />
+                          <span>Confirmo que la bicicleta fue entregada conforme al cliente.</span>
+                        </label>
+                      </div>
+                    )}
+
                     <div>
-                      <label className="block text-slate-300 mb-1 font-semibold">Observación / Notas del Cambio</label>
+                      <label className="block text-slate-300 mb-1 font-semibold">
+                        {String(newStatusId) === "5" && String(order.estado_orden_id) === "7" ? "* Motivo obligatorio de devolución a reparación:" : "Observación / Notas del Cambio"}
+                      </label>
                       <textarea
                         rows={3}
                         value={changeNotes}
                         onChange={(e) => setChangeNotes(e.target.value)}
-                        placeholder="Justificación o notas del cambio..."
+                        placeholder={String(newStatusId) === "5" && String(order.estado_orden_id) === "7" ? "Indica obligatoriamente el motivo para devolver la orden a reparación..." : "Justificación o notas del cambio..."}
+                        required={String(newStatusId) === "5" && String(order.estado_orden_id) === "7"}
                         className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-[#bfce7f] leading-relaxed"
                       />
                     </div>
@@ -893,11 +992,11 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
           </div>
         </div>
 
-        {/* Diagnostic info */}
+        {/* Technical inspection info */}
         <div className="border border-slate-300 p-4 rounded-lg mb-6 space-y-2">
-          <h2 className="font-bold font-mono text-slate-900 border-b border-slate-200 pb-1.5 mb-2 uppercase tracking-wider text-[11px]">RECEPCIÓN Y DIAGNÓSTICO TÉCNICO</h2>
+          <h2 className="font-bold font-mono text-slate-900 border-b border-slate-200 pb-1.5 mb-2 uppercase tracking-wider text-[11px]">DATOS DE RECEPCIÓN Y REVISIÓN TÉCNICA</h2>
           <p><strong className="text-slate-700">Recepción Asignada:</strong> {order.codigo_recepcion || "N/A"} • <strong className="text-slate-700">Mecánicos Asignados:</strong> {order.mecanicos && order.mecanicos.length > 0 ? order.mecanicos.map((m) => m.nombre).join(", ") : "Sin mecánicos asignados"}</p>
-          <p><strong className="text-slate-700">Diagnóstico Inicial:</strong> {order.diagnostico_inicial || order.motivo_ingreso || "Sin diagnóstico inicial registrado."}</p>
+          <p><strong className="text-slate-700">Observaciones Técnicas:</strong> {order.diagnostico_inicial || order.motivo_ingreso || "Sin observaciones técnicas registradas."}</p>
         </div>
 
         {/* Services Table */}

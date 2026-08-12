@@ -1,9 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { query } from "@/lib/db";
+import { getPool, query } from "@/lib/db";
+import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
 
 // GET /api/taller/ordenes
 export async function GET(req: NextRequest) {
   try {
+    const session = await getWorkshopSession();
+    if (!session) {
+      return NextResponse.json({ error: "NO_SESSION", message: "No hay sesión activa." }, { status: 401 });
+    }
+
+    // Check IAM permission for Módulo 6 (Órdenes de Trabajo)
+    const perms = await getModulePermissions(6, session.rol_principal_id);
+    if (!perms.puede_ver) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No posee permiso de lectura para acceder a las órdenes de trabajo." }, { status: 403 });
+    }
+
     const { searchParams } = new URL(req.url);
     const search = searchParams.get("search") || "";
     const estadoId = searchParams.get("estado_id") || "";
@@ -80,7 +92,7 @@ export async function GET(req: NextRequest) {
         b.ano AS bicicleta_ano,
         b.numero_serie_cuadro AS bicicleta_serie,
         COALESCE(ot.total_orden, ot.subtotal_general, 0) AS total_estimado,
-        (SELECT COUNT(*) FROM admin.orden_servicios WHERE orden_trabajo_id = ot.orden_trabajo_id) AS total_servicios,
+        (SELECT COUNT(*) FROM admin.orden_servicios WHERE orden_trabajo_id = ot.orden_trabajo_id AND (activo IS DISTINCT FROM false)) AS total_servicios,
         (
           SELECT COALESCE(NULLIF(TRIM(CONCAT_WS(' ', ui.nombre, ui.apellido)), ''), ui.correo_electronico, ('Mecánico #' || u.usuario_id::text))
           FROM admin.orden_servicios os
@@ -110,7 +122,7 @@ export async function GET(req: NextRequest) {
 
     const items = await query(sql, [...queryParams, limit, offset]);
 
-    // Fetch Catalogs for Filters (Only 4 operational states: RECIBIDA 1, REPARACION 5, LISTA_ENTREGA 7, ENTREGADA 8)
+    // Fetch Catalogs for Filters (Only 4 operational states)
     const estados = await query(`SELECT estado_orden_id, nombre, codigo, orden_visual AS orden FROM admin.estado_orden_trabajo WHERE activo = true AND estado_orden_id IN (1, 5, 7, 8) ORDER BY orden_visual ASC`);
     const prioridades = await query(`SELECT prioridad_orden_trabajo_id AS prioridad_id, nombre, codigo, color_estado AS color_hex FROM admin.prioridad_orden_trabajo WHERE activo = true ORDER BY prioridad_orden_trabajo_id ASC`);
     const mecanicos = await query(`
@@ -118,8 +130,9 @@ export async function GET(req: NextRequest) {
         u.usuario_id,
         TRIM(CONCAT_WS(' ', ui.nombre, ui.apellido)) AS nombre_completo
       FROM admin.usuario u
+      JOIN admin.tipo_usuario tu ON tu.tipo_usuario_id = u.tipo_usuario_id
       LEFT JOIN admin.usuario_identidad ui ON ui.usuario_id = u.usuario_id
-      WHERE u.tipo_usuario_id = 2 AND (u.estado = 'ACTIVO' OR u.estado IS NULL)
+      WHERE tu.codigo = 'MECANICO' AND u.estado = 'ACTIVO'
       ORDER BY ui.nombre, ui.apellido, u.usuario_id
     `);
 
@@ -146,7 +159,25 @@ export async function GET(req: NextRequest) {
 
 // POST /api/taller/ordenes
 export async function POST(req: NextRequest) {
+  const pool = getPool();
+  const client = await pool.connect();
+
   try {
+    // 1. Authenticate user from session strictly
+    const session = await getWorkshopSession();
+    if (!session || !session.usuario_id) {
+      client.release();
+      return NextResponse.json({ error: "NO_SESSION", message: "Sesión no válida o expirada. Por favor inicie sesión." }, { status: 401 });
+    }
+    const sessionUserId = session.usuario_id;
+
+    // 2. Check IAM Permission for Módulo 6 (Órdenes de Trabajo)
+    const perms = await getModulePermissions(6, session.rol_principal_id);
+    if (!perms.puede_crear) {
+      client.release();
+      return NextResponse.json({ error: "FORBIDDEN", message: "No posee el permiso necesario para crear órdenes de trabajo." }, { status: 403 });
+    }
+
     const body = await req.json();
     const {
       recepcion_id,
@@ -159,41 +190,33 @@ export async function POST(req: NextRequest) {
     } = body;
 
     if (!recepcion_id || !prioridad_id) {
-      return NextResponse.json(
-        { error: "La recepción y la prioridad son campos obligatorios." },
-        { status: 400 }
-      );
+      client.release();
+      return NextResponse.json({ error: "La recepción y la prioridad son campos obligatorios." }, { status: 400 });
     }
 
+    // Single dedicated client transaction START
+    await client.query("BEGIN");
+
     // Verify reception exists and is not already converted
-    const recCheck = await query(`
+    const recCheck = await client.query(`
       SELECT recepcion_id, codigo_recepcion, cliente_id, bicicleta_id, convertido_orden_id
       FROM admin.recepciones
       WHERE recepcion_id = $1 AND activo = true
+      FOR UPDATE OF recepciones
     `, [parseInt(recepcion_id, 10)]);
 
-    if (recCheck.length === 0) {
+    if (recCheck.rows.length === 0) {
+      await client.query("ROLLBACK");
       return NextResponse.json({ error: "La recepción especificada no existe." }, { status: 404 });
     }
 
-    const rec = recCheck[0];
+    const rec = recCheck.rows[0];
     if (rec.convertido_orden_id) {
-      return NextResponse.json(
-        { error: `Esta recepción ya está vinculada a la Orden de Trabajo ID ${rec.convertido_orden_id}.` },
-        { status: 400 }
-      );
+      await client.query("ROLLBACK");
+      return NextResponse.json({
+        error: `Esta recepción ya está vinculada a la Orden de Trabajo ID ${rec.convertido_orden_id}.`
+      }, { status: 400 });
     }
-
-    // Generate Order Code (OT-YYYYMM-XXXX)
-    const now = new Date();
-    const yearMonth = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`;
-    const seqRes = await query(`SELECT COUNT(*) as count FROM admin.ordenes_trabajo`);
-    const nextNum = parseInt(seqRes[0]?.count || "0", 10) + 1;
-    const codigo_orden = `OT-${yearMonth}-${String(nextNum).padStart(4, "0")}`;
-
-    // Default initial status: RECEPCIONADA (ID 1)
-    const estado_orden_id = 1;
-    const usuario_registro = 1; // Default session admin user
 
     const cleanFecha = (val: any) => {
       if (!val || typeof val !== 'string' || !val.trim()) return null;
@@ -205,82 +228,117 @@ export async function POST(req: NextRequest) {
       }
     };
 
-    // Insert Order using exact schema including orden_trabajo_id primary key
-    const insertSql = `
-      INSERT INTO admin.ordenes_trabajo (
-        orden_trabajo_id,
-        codigo_orden,
-        recepcion_id,
-        cliente_id,
-        bicicleta_id,
-        estado_orden_id,
-        prioridad_orden_id,
-        diagnostico_inicial,
-        observacion_interna,
-        fecha_recepcion,
-        fecha_entrega_estimada,
-        activo,
-        fecha_registro,
-        usuario_registro
-      ) VALUES (
-        (SELECT COALESCE(MAX(orden_trabajo_id), 0) + 1 FROM admin.ordenes_trabajo),
-        $1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9, true, NOW(), $10
-      )
-      RETURNING orden_trabajo_id AS orden_id, codigo_orden
-    `;
+    // Generate Order Code (OT-YYYYMM-XXXX) with up to 5 retries for concurrency safety
+    const now = new Date();
+    const yearMonth = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`;
 
-    const orderRes = await query(insertSql, [
-      codigo_orden,
-      parseInt(recepcion_id, 10),
-      rec.cliente_id,
-      rec.bicicleta_id,
-      estado_orden_id,
-      parseInt(prioridad_id, 10),
-      diagnostico_inicial || null,
-      observaciones || null,
-      cleanFecha(fecha_prometida),
-      usuario_registro
-    ]);
+    let createdOrder = null;
+    let attempts = 0;
+    const maxAttempts = 5;
 
-    const createdOrder = orderRes[0];
+    while (attempts < maxAttempts && !createdOrder) {
+      attempts++;
+      const seqRes = await client.query(`SELECT COUNT(*) as count FROM admin.ordenes_trabajo`);
+      const nextNum = parseInt(seqRes.rows[0]?.count || "0", 10) + attempts;
+      const codigo_orden = `OT-${yearMonth}-${String(nextNum).padStart(4, "0")}`;
+
+      const insertSql = `
+        INSERT INTO admin.ordenes_trabajo (
+          orden_trabajo_id,
+          codigo_orden,
+          recepcion_id,
+          cliente_id,
+          bicicleta_id,
+          estado_orden_id,
+          prioridad_orden_id,
+          diagnostico_inicial,
+          observacion_interna,
+          fecha_recepcion,
+          fecha_entrega_estimada,
+          subtotal_servicios,
+          subtotal_productos,
+          descuento_servicios,
+          descuento_productos,
+          subtotal_general,
+          impuesto,
+          total_orden,
+          activo,
+          fecha_registro,
+          usuario_registro
+        ) VALUES (
+          (SELECT COALESCE(MAX(orden_trabajo_id), 0) + 1 FROM admin.ordenes_trabajo),
+          $1, $2, $3, $4, 1, $5, $6, $7, NOW(), $8, 0, 0, 0, 0, 0, 0, 0, true, NOW(), $9
+        )
+        RETURNING orden_trabajo_id AS orden_id, codigo_orden
+      `;
+
+      try {
+        const orderRes = await client.query(insertSql, [
+          codigo_orden,
+          parseInt(recepcion_id, 10),
+          rec.cliente_id,
+          rec.bicicleta_id,
+          parseInt(prioridad_id, 10),
+          diagnostico_inicial || null,
+          observaciones || null,
+          cleanFecha(fecha_prometida),
+          sessionUserId
+        ]);
+        createdOrder = orderRes.rows[0];
+      } catch (err: any) {
+        if (err.code === '23505' && err.constraint?.includes('codigo_orden')) {
+          console.warn(`[RETRY] Concurrencia detectada en código de orden ${codigo_orden}, reintentando (${attempts}/${maxAttempts})...`);
+          if (attempts >= maxAttempts) {
+            await client.query("ROLLBACK");
+            return NextResponse.json({
+              error: "ORDER_CODE_CONFLICT",
+              message: "No se pudo generar un código único de orden tras varios reintentos por alta concurrencia."
+            }, { status: 409 });
+          }
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    if (!createdOrder) {
+      await client.query("ROLLBACK");
+      return NextResponse.json({ error: "ORDER_CREATION_FAILED", message: "Error al generar el registro de la orden." }, { status: 500 });
+    }
 
     // Link reception to new order
-    await query(`
+    await client.query(`
       UPDATE admin.recepciones
-      SET convertido_orden_id = $1
-      WHERE recepcion_id = $2
-    `, [createdOrder.orden_id, parseInt(recepcion_id, 10)]);
+      SET convertido_orden_id = $1,
+          usuario_modificacion = $2,
+          fecha_modificacion = NOW()
+      WHERE recepcion_id = $3
+    `, [createdOrder.orden_id, sessionUserId, parseInt(recepcion_id, 10)]);
 
-    // Log status history
-    await query(`
+    // Insert order history record (compatible with existing table columns)
+    await client.query(`
       INSERT INTO admin.orden_historial_estado (
-        orden_historial_estado_id,
-        orden_trabajo_id,
-        estado_anterior_id,
-        estado_nuevo_id,
-        usuario_cambio,
-        comentario,
-        fecha_cambio
+        orden_historial_estado_id, orden_trabajo_id, estado_anterior_id, estado_nuevo_id, usuario_cambio, comentario, fecha_cambio, activo, fecha_registro
       ) VALUES (
         (SELECT COALESCE(MAX(orden_historial_estado_id), 0) + 1 FROM admin.orden_historial_estado),
-        $1, NULL, $2, $3, $4, NOW()
+        $1, NULL, $2, $3, $4, NOW(), true, NOW()
       )
-    `, [createdOrder.orden_id, estado_orden_id, usuario_registro, "Creación e ingreso de Orden de Trabajo"]);
+    `, [createdOrder.orden_id, 1, sessionUserId, "Creación e ingreso de Orden de Trabajo"]);
 
-    // Insert initial services if provided, assigning selected mechanic if specified
+    // Insert initial services if provided
     const mecUserId = mecanico_usuario_id ? parseInt(mecanico_usuario_id, 10) : null;
 
     if (Array.isArray(servicios_iniciales) && servicios_iniciales.length > 0) {
       for (const servId of servicios_iniciales) {
-        const tsRes = await query(`
+        const tsRes = await client.query(`
           SELECT tipo_servicio_id, precio_base
           FROM admin.tipo_servicio
-          WHERE tipo_servicio_id = $1
+          WHERE tipo_servicio_id = $1 AND activo = true
         `, [parseInt(servId, 10)]);
 
-        if (tsRes.length > 0) {
-          const precio_acordado = tsRes[0].precio_base;
-          await query(`
+        if (tsRes.rows.length > 0) {
+          const precio_acordado = tsRes.rows[0].precio_base || 0;
+          await client.query(`
             INSERT INTO admin.orden_servicios (
               orden_servicio_id,
               orden_trabajo_id,
@@ -289,6 +347,8 @@ export async function POST(req: NextRequest) {
               estado_aprobacion_id,
               precio_unitario,
               cantidad,
+              porcentaje_descuento,
+              valor_descuento,
               subtotal,
               usuario_id,
               activo,
@@ -296,43 +356,20 @@ export async function POST(req: NextRequest) {
               usuario_registro
             ) VALUES (
               (SELECT COALESCE(MAX(orden_servicio_id), 0) + 1 FROM admin.orden_servicios),
-              $1, $2, 1, 2, $3, 1, $3, $4, true, NOW(), $5
+              $1, $2, 1, 2, $3, 1, 0, 0, $3, $4, true, NOW(), $5
             )
           `, [
             createdOrder.orden_id,
             parseInt(servId, 10),
             precio_acordado,
             mecUserId,
-            usuario_registro
+            sessionUserId
           ]);
         }
       }
-    } else if (mecUserId) {
-      // If no initial services were checked but a mechanic was assigned, create an initial general service entry
-      await query(`
-        INSERT INTO admin.orden_servicios (
-          orden_servicio_id,
-          orden_trabajo_id,
-          tipo_servicio_id,
-          estado_orden_servicio_id,
-          estado_aprobacion_id,
-          precio_unitario,
-          cantidad,
-          subtotal,
-          usuario_id,
-          activo,
-          fecha_registro,
-          usuario_registro
-        ) VALUES (
-          (SELECT COALESCE(MAX(orden_servicio_id), 0) + 1 FROM admin.orden_servicios),
-          $1, 1, 1, 2, 0, 1, 0, $2, true, NOW(), $3
-        )
-      `, [
-        createdOrder.orden_id,
-        mecUserId,
-        usuario_registro
-      ]);
     }
+
+    await client.query("COMMIT");
 
     return NextResponse.json({
       success: true,
@@ -340,6 +377,7 @@ export async function POST(req: NextRequest) {
       message: "Orden de Trabajo creada exitosamente."
     });
   } catch (err: any) {
+    await client.query("ROLLBACK").catch(() => {});
     console.error("POST /api/taller/ordenes Error:", err);
     return NextResponse.json({
       error: err.message || "Error al crear la orden de trabajo.",
@@ -347,5 +385,7 @@ export async function POST(req: NextRequest) {
         ? "Esta recepción ya tiene una orden de trabajo asociada."
         : (err.message || "Error al crear la orden de trabajo.")
     }, { status: 500 });
+  } finally {
+    client.release();
   }
 }

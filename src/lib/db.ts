@@ -1,4 +1,4 @@
-import { Pool, PoolConfig, QueryResultRow } from "pg";
+import { Pool, PoolConfig, PoolClient, QueryResultRow } from "pg";
 
 const globalForPg = globalThis as typeof globalThis & {
   __bikersPgPool?: Pool;
@@ -61,7 +61,7 @@ const createPool = (): Pool => {
   return pool;
 };
 
-const getPool = (): Pool => {
+export const getPool = (): Pool => {
   if (!globalForPg.__bikersPgPool) {
     globalForPg.__bikersPgPool = createPool();
   }
@@ -90,3 +90,20 @@ export const query = async <T = QueryResultRow>(
     throw error;
   }
 };
+
+export async function withTransaction<T>(
+  callback: (client: PoolClient) => Promise<T>
+): Promise<T> {
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const result = await callback(client);
+    await client.query("COMMIT");
+    return result;
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}

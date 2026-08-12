@@ -135,7 +135,7 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
             Órdenes de Trabajo
           </h1>
           <p className="text-sm text-slate-400 mt-1 max-w-2xl font-sans">
-            Administra los diagnósticos, servicios, aprobaciones y reparaciones realizadas en el taller.
+            Administra las recepciones, servicios, reparaciones y entregas del taller.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -165,37 +165,37 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
             <Inbox className="w-5 h-5 text-[#bfce7f]" />
           </div>
           <div className="text-3xl font-extrabold text-slate-100 font-mono">{metrics.abiertas}</div>
-          <div className="text-xs text-[#bfce7f] mt-1 font-medium">+3 hoy</div>
+          <div className="text-xs text-[#bfce7f] mt-1 font-medium">En proceso / activas</div>
         </div>
 
-        {/* Card 2: APROBACIÓN */}
+        {/* Card 2: RECIBIDAS */}
         <div className="bg-[#161a21] border border-[#2d3748] rounded-xl p-5 hover:border-[#4a5568] transition-all relative overflow-hidden group">
           <div className="flex justify-between items-start mb-3">
-            <span className="font-mono text-xs font-bold text-slate-400 tracking-wider uppercase">APROBACIÓN</span>
-            <ClipboardList className="w-5 h-5 text-amber-400" />
+            <span className="font-mono text-xs font-bold text-slate-400 tracking-wider uppercase">RECIBIDAS</span>
+            <Clock className="w-5 h-5 text-slate-400" />
           </div>
-          <div className="text-3xl font-extrabold text-slate-100 font-mono">{metrics.aprobacion}</div>
-          <div className="text-xs text-slate-400 mt-1 font-medium">Pendientes de cliente</div>
+          <div className="text-3xl font-extrabold text-slate-100 font-mono">{metrics.recibidas || 0}</div>
+          <div className="text-xs text-slate-400 mt-1 font-medium">Pendientes de inicio</div>
         </div>
 
-        {/* Card 3: EN PROCESO */}
+        {/* Card 3: EN REPARACIÓN */}
         <div className="bg-[#161a21] border border-[#2d3748] rounded-xl p-5 hover:border-[#4a5568] transition-all relative overflow-hidden group">
           <div className="flex justify-between items-start mb-3">
-            <span className="font-mono text-xs font-bold text-slate-400 tracking-wider uppercase">EN PROCESO</span>
+            <span className="font-mono text-xs font-bold text-slate-400 tracking-wider uppercase">EN REPARACIÓN</span>
             <Wrench className="w-5 h-5 text-[#bfce7f]" />
           </div>
           <div className="text-3xl font-extrabold text-slate-100 font-mono">{metrics.en_proceso}</div>
-          <div className="text-xs text-slate-400 mt-1 font-medium">En taller</div>
+          <div className="text-xs text-slate-400 mt-1 font-medium">Trabajo técnico activo</div>
         </div>
 
-        {/* Card 4: ATRASADAS */}
-        <div className="bg-[#161a21] border border-rose-500/30 rounded-xl p-5 hover:border-rose-500/50 transition-all relative overflow-hidden group">
+        {/* Card 4: LISTAS PARA ENTREGA */}
+        <div className="bg-[#161a21] border border-amber-500/30 rounded-xl p-5 hover:border-amber-500/50 transition-all relative overflow-hidden group">
           <div className="flex justify-between items-start mb-3">
-            <span className="font-mono text-xs font-bold text-rose-400 tracking-wider uppercase">ATRASADAS</span>
-            <AlertTriangle className="w-5 h-5 text-rose-400" />
+            <span className="font-mono text-xs font-bold text-amber-400 tracking-wider uppercase">LISTAS PARA ENTREGA</span>
+            <ClipboardList className="w-5 h-5 text-amber-400" />
           </div>
-          <div className="text-3xl font-extrabold text-rose-400 font-mono">{metrics.atrasadas}</div>
-          <div className="text-xs text-rose-400/80 mt-1 font-medium">Requieren atención</div>
+          <div className="text-3xl font-extrabold text-amber-400 font-mono">{metrics.listas_entrega || 0}</div>
+          <div className="text-xs text-amber-400/80 mt-1 font-medium">Listas para cliente</div>
         </div>
       </div>
 
@@ -214,14 +214,14 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
             Todas
           </button>
           <button
-            onClick={() => { setSelectedEstado("2"); setPage(1); }}
+            onClick={() => { setSelectedEstado("1"); setPage(1); }}
             className={`px-3 py-1.5 rounded font-mono text-xs font-bold tracking-wider uppercase transition-colors whitespace-nowrap ${
-              selectedEstado === "2"
+              selectedEstado === "1"
                 ? "bg-[#2d3748] text-[#bfce7f] border border-slate-600"
                 : "text-slate-400 hover:bg-[#2d3748]/50 hover:text-white border border-transparent"
             }`}
           >
-            Diagnóstico
+            Recibidas
           </button>
           <button
             onClick={() => { setSelectedEstado("5"); setPage(1); }}
@@ -231,17 +231,27 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
                 : "text-slate-400 hover:bg-[#2d3748]/50 hover:text-white border border-transparent"
             }`}
           >
-            Reparación
+            En Reparación
           </button>
           <button
-            onClick={() => { setSelectedEstado("3"); setPage(1); }}
+            onClick={() => { setSelectedEstado("7"); setPage(1); }}
             className={`px-3 py-1.5 rounded font-mono text-xs font-bold tracking-wider uppercase transition-colors whitespace-nowrap ${
-              selectedEstado === "3"
+              selectedEstado === "7"
                 ? "bg-[#2d3748] text-amber-400 border border-slate-600"
                 : "text-slate-400 hover:bg-[#2d3748]/50 hover:text-white border border-transparent"
             }`}
           >
-            Aprobación
+            Listas para Entrega
+          </button>
+          <button
+            onClick={() => { setSelectedEstado("8"); setPage(1); }}
+            className={`px-3 py-1.5 rounded font-mono text-xs font-bold tracking-wider uppercase transition-colors whitespace-nowrap ${
+              selectedEstado === "8"
+                ? "bg-[#2d3748] text-emerald-400 border border-slate-600"
+                : "text-slate-400 hover:bg-[#2d3748]/50 hover:text-white border border-transparent"
+            }`}
+          >
+            Entregadas
           </button>
         </div>
 

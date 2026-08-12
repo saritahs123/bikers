@@ -24,8 +24,10 @@ import {
   CheckSquare,
   Sparkles,
   ArrowRight,
-  ArrowLeft
+  ArrowLeft,
+  RotateCcw
 } from "lucide-react";
+import { getServiceStateRules } from "@/lib/workshop-state-machine";
 
 export default function WorkOrderServicesView({ ordenId, services = [], onRefresh, order, backUrl }) {
   const [tiposServicio, setTiposServicio] = useState([]);
@@ -61,7 +63,21 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
   const [newMecanicoId, setNewMecanicoId] = useState("");
   const [newPrecioAcordado, setNewPrecioAcordado] = useState("");
   const [newObservaciones, setNewObservaciones] = useState("");
-  const [newEstadoAprobacionId, setNewEstadoAprobacionId] = useState("2");
+  const [confirmAdicional, setConfirmAdicional] = useState(false);
+  const [motivoAdicional, setMotivoAdicional] = useState("");
+
+  // Edit Service Reassignment states
+  const [editConfirmReasignar, setEditConfirmReasignar] = useState(false);
+  const [editMotivoReasignar, setEditMotivoReasignar] = useState("");
+
+  // Finish Service Without Labor Modal states
+  const [finishNoLaborModalOpen, setFinishNoLaborModalOpen] = useState(false);
+  const [finishNoLaborService, setFinishNoLaborService] = useState(null);
+  const [finishNoLaborMotivo, setFinishNoLaborMotivo] = useState("");
+  const [finishNoLaborConfirm, setFinishNoLaborConfirm] = useState(false);
+
+  // Track processing service ID for per-button loading state
+  const [processingServiceId, setProcessingServiceId] = useState(null);
 
   // Form inputs - Labor
   const [laborDesc, setLaborDesc] = useState("");
@@ -85,20 +101,29 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
   const [confirmModalTitle, setConfirmModalTitle] = useState("");
   const [confirmModalMessage, setConfirmModalMessage] = useState("");
   const [confirmModalOnConfirm, setConfirmModalOnConfirm] = useState(null);
+  const [confirmModalType, setConfirmModalType] = useState("delete"); // "delete" | "finish"
 
   const [submitting, setSubmitting] = useState(false);
   const [modalError, setModalError] = useState(null);
-  const [toastMessage, setToastMessage] = useState(null);
+  const [toast, setToast] = useState(null);
 
-  const showToast = (msg) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 4000);
+  const showToast = (msg, type = "success") => {
+    if (typeof msg === "object" && msg !== null && msg.text) {
+      setToast(msg);
+    } else {
+      setToast({ text: String(msg || ""), type });
+    }
+    setTimeout(() => setToast(null), 4500);
   };
 
-  const askConfirmation = (title, message, onConfirm) => {
+  const showErrorToast = (msg) => showToast(msg, "error");
+  const showSuccessToast = (msg) => showToast(msg, "success");
+
+  const askConfirmation = (title, message, onConfirm, type = "delete") => {
     setConfirmModalTitle(title);
     setConfirmModalMessage(message);
     setConfirmModalOnConfirm(() => onConfirm);
+    setConfirmModalType(type);
     setConfirmModalOpen(true);
   };
 
@@ -122,14 +147,66 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
     loadCatalogs();
   }, []);
 
+  const getServId = (s) => (s ? Number(s.servicio_id ?? s.orden_servicio_id) : null);
+
   // Auto-select initial service for detail side panel
   useEffect(() => {
-    if (services.length > 0 && (!selectedServiceId || !services.some(s => s.orden_servicio_id === selectedServiceId))) {
-      setSelectedServiceId(services[0].orden_servicio_id);
+    if (services.length > 0 && (!selectedServiceId || !services.some(s => getServId(s) === Number(selectedServiceId)))) {
+      setSelectedServiceId(getServId(services[0]));
     }
   }, [services]);
 
-  const activeSelectedService = services.find(s => s.orden_servicio_id === selectedServiceId) || services[0] || null;
+  const activeSelectedService = services.find(s => getServId(s) === Number(selectedServiceId)) || services[0] || null;
+
+  // Live Timer Counter (HH:MM:SS) for active open session (Item 2)
+  const [liveTimeString, setLiveTimeString] = useState("00:00:00");
+
+  useEffect(() => {
+    if (!activeSelectedService) {
+      setLiveTimeString("00:00:00");
+      return;
+    }
+
+    const closedLabor = activeSelectedService.mano_obra
+      ? activeSelectedService.mano_obra.filter((m) => m.fecha_finalizacion !== null && m.fecha_finalizacion !== undefined)
+      : [];
+    const closedMinutes = closedLabor.reduce((acc, m) => acc + (Number(m.minutos_trabajados) || 0), 0);
+    const closedSeconds = Math.round(closedMinutes * 60);
+
+    const openLabor = activeSelectedService.mano_obra
+      ? activeSelectedService.mano_obra.find((m) => !m.fecha_finalizacion || m.es_abierta)
+      : null;
+
+    if (!openLabor || !openLabor.fecha_inicio) {
+      const h = Math.floor(closedSeconds / 3600);
+      const m = Math.floor((closedSeconds % 3600) / 60);
+      const s = Math.floor(closedSeconds % 60);
+      setLiveTimeString(
+        `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
+      );
+      return;
+    }
+
+    const startTimeMs = new Date(openLabor.fecha_inicio).getTime();
+
+    const updateTimer = () => {
+      const nowMs = Date.now();
+      const elapsedOpenSec = Math.max(0, Math.floor((nowMs - startTimeMs) / 1000));
+      const totalSec = closedSeconds + elapsedOpenSec;
+
+      const h = Math.floor(totalSec / 3600);
+      const m = Math.floor((totalSec % 3600) / 60);
+      const s = Math.floor(totalSec % 60);
+      setLiveTimeString(
+        `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
+      );
+    };
+
+    updateTimer();
+    const intervalId = setInterval(updateTimer, 1000);
+
+    return () => clearInterval(intervalId);
+  }, [activeSelectedService]);
 
   // Calculate KPIs
   const kpiPendientes = services.filter(s => s.estado_servicio_id === 1 || s.estado_servicio_codigo === "PENDIENTE").length;
@@ -168,6 +245,18 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
       return;
     }
 
+    const orderStateId = Number(order?.estado_orden_id || order?.estado_id || 0);
+    if (orderStateId === 5) {
+      if (!newMecanicoId) {
+        setModalError("Para agregar un servicio a una orden en Reparación, debes seleccionar un mecánico asignado.");
+        return;
+      }
+      if (!confirmAdicional || !motivoAdicional.trim()) {
+        setModalError("Para agregar un servicio adicional en una orden en Reparación se requiere confirmación explícita y motivo obligatorio.");
+        return;
+      }
+    }
+
     setSubmitting(true);
     setModalError(null);
     try {
@@ -175,20 +264,34 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          accion: "AGREGAR_SERVICIO",
           tipo_servicio_id: parseInt(newTipoServicioId, 10),
+          mecanico_usuario_id: newMecanicoId ? parseInt(newMecanicoId, 10) : null,
           usuario_id: newMecanicoId ? parseInt(newMecanicoId, 10) : null,
+          precio_unitario: newPrecioAcordado !== "" ? parsedPrecio : null,
           precio_acordado: newPrecioAcordado !== "" ? parsedPrecio : null,
-          observaciones: newObservaciones
+          observaciones: newObservaciones,
+          confirmar: confirmAdicional,
+          motivo: motivoAdicional,
+          confirmar_servicio_adicional: confirmAdicional,
+          motivo_servicio_adicional: motivoAdicional
         })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Error al agregar servicio a la orden.");
+      if (!res.ok) {
+        if (data.error === "CONFIRMATION_REQUIRED") {
+          throw new Error("Para agregar un servicio adicional en una orden en Reparación se requiere confirmación explícita y motivo obligatorio.");
+        }
+        throw new Error(data.message || data.error || "Error al agregar servicio a la orden.");
+      }
 
       setAddServiceModalOpen(false);
       setNewTipoServicioId("");
       setNewMecanicoId("");
       setNewPrecioAcordado("");
       setNewObservaciones("");
+      setConfirmAdicional(false);
+      setMotivoAdicional("");
       setModalError(null);
       showToast("Servicio agregado exitosamente.");
       onRefresh();
@@ -201,11 +304,13 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
 
   // Open Edit Service Modal
   const openEditServiceModal = (svc) => {
+    const mecId = svc.mecanico_usuario_id || svc.usuario_id;
     setEditingService(svc);
-    setNewMecanicoId(svc.usuario_id ? String(svc.usuario_id) : "");
+    setNewMecanicoId(mecId ? String(mecId) : "");
     setNewPrecioAcordado(svc.precio_acordado !== null && svc.precio_acordado !== undefined ? String(svc.precio_acordado) : String(svc.precio_unitario || ""));
     setNewObservaciones(svc.observacion_tecnica || svc.observaciones || "");
-    setNewEstadoAprobacionId(String(svc.estado_aprobacion_id || 2));
+    setEditConfirmReasignar(false);
+    setEditMotivoReasignar("");
     setModalError(null);
     setEditServiceModalOpen(true);
   };
@@ -215,31 +320,73 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
     e.preventDefault();
     if (!editingService) return;
 
+    const targetServId = getServId(editingService);
+    if (!targetServId) {
+      setModalError("ID de servicio no válido.");
+      return;
+    }
+
     const parsedPrecio = parseFloat(newPrecioAcordado);
     if (newPrecioAcordado !== "" && (isNaN(parsedPrecio) || parsedPrecio < 0)) {
       setModalError("El precio acordado debe ser un monto válido no negativo.");
       return;
     }
 
+    const initialMecId = editingService.mecanico_usuario_id || editingService.usuario_id;
+    const selectedMecId = newMecanicoId ? parseInt(newMecanicoId, 10) : null;
+    const isMecChanged = selectedMecId !== (initialMecId ? Number(initialMecId) : null);
+    const orderStateId = Number(order?.estado_orden_id || order?.estado_id || 0);
+
+    if (isMecChanged && orderStateId === 5 && Boolean(initialMecId)) {
+      if (!editConfirmReasignar || !editMotivoReasignar.trim()) {
+        setModalError("Para reasignar el mecánico de un servicio en una orden en Reparación se requiere confirmación explícita y motivo obligatorio.");
+        return;
+      }
+    }
+
     setSubmitting(true);
     setModalError(null);
     try {
-      const res = await fetch(`/api/taller/ordenes/${ordenId}/servicios/${editingService.orden_servicio_id}`, {
+      const payload = {
+        precio_acordado: newPrecioAcordado !== "" ? parsedPrecio : null,
+        precio_unitario: newPrecioAcordado !== "" ? parsedPrecio : null,
+        observaciones: newObservaciones,
+        observacion_tecnica: newObservaciones
+      };
+
+      if (isMecChanged) {
+        payload.usuario_id = selectedMecId;
+        payload.mecanico_usuario_id = selectedMecId;
+        if (orderStateId === 5 && Boolean(initialMecId)) {
+          payload.confirmar_reasignacion = editConfirmReasignar;
+          payload.motivo_reasignacion = editMotivoReasignar.trim();
+        }
+      }
+
+      const res = await fetch(`/api/taller/ordenes/${ordenId}/servicios/${targetServId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          usuario_id: newMecanicoId ? parseInt(newMecanicoId, 10) : null,
-          precio_acordado: newPrecioAcordado !== "" ? parsedPrecio : null,
-          observaciones: newObservaciones,
-          estado_aprobacion_id: parseInt(newEstadoAprobacionId, 10)
-        })
+        body: JSON.stringify(payload)
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Error al actualizar servicio.");
+
+      let data = {};
+      try {
+        const text = await res.text();
+        data = text ? JSON.parse(text) : {};
+      } catch (err) {
+        data = {};
+      }
+
+      if (!res.ok) {
+        const msg = res.status === 403 || data.error === 'FORBIDDEN'
+          ? 'No tienes permiso para realizar esta acción.'
+          : (data.message || data.error || 'Error al actualizar servicio.');
+        throw new Error(msg);
+      }
 
       setEditServiceModalOpen(false);
       setEditingService(null);
-      showToast("Servicio actualizado correctamente.");
+      showSuccessToast("Servicio actualizado correctamente.");
       onRefresh();
     } catch (err) {
       setModalError(err.message);
@@ -248,41 +395,285 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
     }
   };
 
+  // Handler to Stop Active Timer / Open Session while keeping Service EN_PROCESO
+  const handleStopTimer = async (svc) => {
+    if (!svc) return;
+    const sId = getServId(svc);
+    setSubmitting(true);
+    setProcessingServiceId(sId);
+    try {
+      const res = await fetch(`/api/taller/ordenes/${ordenId}/servicios/${sId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accion: "DETENER_CRONOMETRO"
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || data.error || "Error al detener el cronómetro.");
+      }
+      showSuccessToast("Cronómetro detenido. El servicio permanece En Proceso.");
+      onRefresh();
+    } catch (err) {
+      showErrorToast(err.message);
+    } finally {
+      setSubmitting(false);
+      setProcessingServiceId(null);
+    }
+  };
+
+  // Unified Handler for Finishing a Service (used by row button and side panel)
+  const handleFinishServiceClick = (svc) => {
+    if (!svc) return;
+    const sId = getServId(svc);
+    const orderStateId = Number(order?.estado_orden_id || order?.estado_id || 5);
+    const servStateId = Number(svc.estado_servicio_id);
+    const hasMechanic = Boolean(svc.mecanico_usuario_id || svc.usuario_id);
+
+    if (orderStateId === 8) {
+      showErrorToast("La orden se encuentra Entregada y está en solo lectura.");
+      return;
+    }
+    if (servStateId !== 2) {
+      showErrorToast("El servicio debe estar En Proceso para poder finalizarlo.");
+      return;
+    }
+    if (!hasMechanic) {
+      showErrorToast("Debes asignar un mecánico antes de finalizar el servicio.");
+      return;
+    }
+
+    // Check if open time session exists
+    const hasOpenSession = Boolean(
+      svc.en_proceso_cronometro ||
+      (svc.mano_obra && svc.mano_obra.some((m) => m.es_abierta || !m.fecha_finalizacion))
+    );
+    if (hasOpenSession) {
+      showErrorToast("Debes pausar o cerrar la sesión de trabajo antes de finalizar el servicio.");
+      return;
+    }
+
+    // Check if labor/time exists
+    const laborCount = svc.mano_obra ? svc.mano_obra.length : 0;
+    if (laborCount === 0) {
+      setFinishNoLaborService(svc);
+      setFinishNoLaborMotivo("");
+      setFinishNoLaborConfirm(false);
+      setFinishNoLaborModalOpen(true);
+      return;
+    }
+
+    // Positive Finish Confirmation modal
+    askConfirmation(
+      "Finalizar servicio",
+      `¿Confirmas que el servicio "${svc.tipo_servicio_nombre}" fue terminado?\n\nDespués de finalizar quedará en modo de solo lectura.`,
+      () => executeFinishService(sId),
+      "finish"
+    );
+  };
+
+  const executeFinishService = async (sId, extraPayload = {}) => {
+    setSubmitting(true);
+    setProcessingServiceId(sId);
+    try {
+      const res = await fetch(`/api/taller/ordenes/${ordenId}/servicios/${sId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          estado_orden_servicio_id: 3,
+          estado_servicio_id: 3,
+          ...extraPayload
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || data.error || "Error al finalizar el servicio.");
+      }
+      setFinishNoLaborModalOpen(false);
+      setFinishNoLaborService(null);
+      showSuccessToast("Servicio completado exitosamente.");
+      onRefresh();
+    } catch (err) {
+      showErrorToast(err.message);
+    } finally {
+      setSubmitting(false);
+      setProcessingServiceId(null);
+    }
+  };
+
+  const handleFinishNoLaborSubmit = (e) => {
+    e.preventDefault();
+    if (!finishNoLaborService) return;
+    if (!finishNoLaborConfirm || !finishNoLaborMotivo.trim()) {
+      setModalError("Para finalizar un servicio sin mano de obra se requiere confirmación explícita y motivo obligatorio.");
+      return;
+    }
+    const sId = getServId(finishNoLaborService);
+    executeFinishService(sId, {
+      confirmar_sin_mano_obra: true,
+      motivo_sin_mano_obra: finishNoLaborMotivo.trim()
+    });
+  };
+
+  // Form inputs - Reopen Service
+  const [reopenModalOpen, setReopenModalOpen] = useState(false);
+  const [reopenService, setReopenService] = useState(null);
+  const [reopenMotivo, setReopenMotivo] = useState("");
+
+  const openReopenServiceModal = (svc) => {
+    setReopenService(svc);
+    setReopenMotivo("");
+    setModalError(null);
+    setReopenModalOpen(true);
+  };
+
+  const handleReopenServiceSubmit = async (e) => {
+    e.preventDefault();
+    if (!reopenService || !reopenMotivo.trim()) {
+      setModalError("Indica obligatoriamente el motivo de la reapertura.");
+      return;
+    }
+    setSubmitting(true);
+    setModalError(null);
+    try {
+      const sId = getServId(reopenService);
+      const res = await fetch(`/api/taller/ordenes/${ordenId}/servicios/${sId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          estado_orden_servicio_id: 2,
+          estado_servicio_id: 2,
+          motivo_reapertura: reopenMotivo,
+          motivo: reopenMotivo
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        const msg = res.status === 403 || data.error === 'FORBIDDEN'
+          ? 'No tienes permiso para realizar esta acción.'
+          : (data.message || data.error || 'Error al reabrir el servicio.');
+        throw new Error(msg);
+      }
+      setReopenModalOpen(false);
+      setReopenService(null);
+      setReopenMotivo("");
+      showToast("Servicio reabierto exitosamente.");
+      onRefresh();
+    } catch (err) {
+      setModalError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Form inputs - Reassign Mechanic
+  const [reassignModalOpen, setReassignModalOpen] = useState(false);
+  const [reassignServId, setReassignServId] = useState(null);
+  const [reassignNewMecId, setReassignNewMecId] = useState("");
+  const [reassignMotivo, setReassignMotivo] = useState("");
+  const [reassignConfirm, setReassignConfirm] = useState(false);
+
   // Mechanic Direct Change Handler
   const handleMechanicChange = async (servicioId, newMecId) => {
+    const targetServ = services.find((s) => getServId(s) === Number(servicioId));
+    const currentMecId = targetServ?.mecanico_usuario_id || targetServ?.usuario_id;
+    const isReassign = currentMecId && Number(currentMecId) > 0 && newMecId && Number(newMecId) !== Number(currentMecId);
+
+    // If reassigning an already assigned mechanic while order is in REPARACION (5), open confirmation modal
+    if (Number(order?.estado_orden_id || order?.estado_id || 0) === 5 && isReassign) {
+      setReassignServId(servicioId);
+      setReassignNewMecId(newMecId);
+      setReassignMotivo("");
+      setReassignConfirm(false);
+      setModalError(null);
+      setReassignModalOpen(true);
+      return;
+    }
+
     try {
       const res = await fetch(`/api/taller/ordenes/${ordenId}/servicios/${servicioId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          usuario_id: newMecId ? parseInt(newMecId, 10) : null
+          usuario_id: newMecId ? parseInt(newMecId, 10) : null,
+          mecanico_usuario_id: newMecId ? parseInt(newMecId, 10) : null
         })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Error al asignar mecánico.");
-      showToast("Mecánico actualizado correctamente.");
+      if (!res.ok) {
+        const msg = res.status === 403 || data.error === 'FORBIDDEN'
+          ? 'No tienes permiso para realizar esta acción.'
+          : (data.message || data.error || 'Error al asignar mecánico.');
+        showErrorToast(msg);
+        return;
+      }
+      showSuccessToast("Mecánico asignado correctamente.");
       onRefresh();
     } catch (err) {
-      alert(err.message);
+      showErrorToast(err.message);
+    }
+  };
+
+  const handleConfirmReassignMechanic = async (e) => {
+    e.preventDefault();
+    if (!reassignConfirm || !reassignMotivo.trim()) {
+      setModalError("Debes marcar la confirmación e indicar el motivo de la reasignación.");
+      return;
+    }
+    setSubmitting(true);
+    setModalError(null);
+    try {
+      const res = await fetch(`/api/taller/ordenes/${ordenId}/servicios/${reassignServId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          usuario_id: parseInt(reassignNewMecId, 10),
+          mecanico_usuario_id: parseInt(reassignNewMecId, 10),
+          confirmar_reasignacion: true,
+          motivo_reasignacion: reassignMotivo.trim()
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        const msg = res.status === 403 || data.error === 'FORBIDDEN'
+          ? 'No tienes permiso para realizar esta acción.'
+          : (data.message || data.error || 'Error al reasignar mecánico.');
+        throw new Error(msg);
+      }
+      setReassignModalOpen(false);
+      showSuccessToast("Mecánico reasignado correctamente.");
+      onRefresh();
+    } catch (err) {
+      setModalError(err.message);
+    } finally {
+      setSubmitting(false);
     }
   };
 
   // Service Status Change Handler
   const handleServiceStatusChange = async (servicioId, newEstadoId) => {
     try {
+      const parsedState = parseInt(newEstadoId, 10);
       const res = await fetch(`/api/taller/ordenes/${ordenId}/servicios/${servicioId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          estado_servicio_id: parseInt(newEstadoId, 10)
+          estado_orden_servicio_id: parsedState,
+          estado_servicio_id: parsedState
         })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Error al cambiar estado del servicio.");
+      if (!res.ok) {
+        const msg = res.status === 403 || data.error === 'FORBIDDEN'
+          ? 'No tienes permiso para realizar esta acción.'
+          : (data.message || data.error || 'Error al cambiar estado del servicio.');
+        throw new Error(msg);
+      }
       showToast("Estado del servicio actualizado.");
       onRefresh();
     } catch (err) {
-      alert(err.message);
+      showToast(err.message);
     }
   };
 
@@ -297,11 +688,16 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
             method: "DELETE"
           });
           const data = await res.json();
-          if (!res.ok) throw new Error(data.error || "Error al eliminar servicio.");
+          if (!res.ok) {
+            const msg = res.status === 403 || data.error === 'FORBIDDEN'
+              ? 'No tienes permiso para realizar esta acción.'
+              : (data.message || data.error || 'Error al eliminar servicio.');
+            throw new Error(msg);
+          }
           showToast("Servicio eliminado de la orden.");
           onRefresh();
         } catch (err) {
-          alert(err.message);
+          showToast(err.message);
         }
       }
     );
@@ -395,20 +791,41 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
             method: "DELETE"
           });
           const data = await res.json();
-          if (!res.ok) throw new Error(data.error || "Error al eliminar mano de obra.");
+          if (!res.ok) {
+            const msg = res.status === 403 || data.error === 'FORBIDDEN'
+              ? 'No tienes permiso para realizar esta acción.'
+              : (data.message || data.error || 'Error al eliminar mano de obra.');
+            throw new Error(msg);
+          }
           showToast("Mano de obra eliminada.");
           onRefresh();
         } catch (err) {
-          alert(err.message);
+          showToast(err.message);
         }
       }
     );
   };
 
+  // Open Add Product Modal with initialized catalog selection
+  const openAddProductModal = (servicioId) => {
+    setSelectedServiceId(servicioId);
+    if (productosList && productosList.length > 0) {
+      setProdProductoId(String(productosList[0].producto_id));
+      setProdPrecio(String(productosList[0].precio_venta || "0"));
+    } else {
+      setProdProductoId("");
+      setProdPrecio("");
+    }
+    setProdCantidad("1");
+    setModalError(null);
+    setAddProductModalOpen(true);
+  };
+
   // Add Product Handler
   const handleAddProduct = async (e) => {
     e.preventDefault();
-    if (!selectedServiceId || !prodProductoId) {
+    const productoId = Number(prodProductoId);
+    if (!Number.isInteger(productoId) || productoId <= 0) {
       setModalError("Selecciona un producto del inventario.");
       return;
     }
@@ -432,13 +849,13 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          producto_id: parseInt(prodProductoId, 10),
+          producto_id: productoId,
           cantidad: qty,
           precio_unitario: price
         })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Error al asociar producto.");
+      if (!res.ok) throw new Error(data.details || data.message || data.error || "Error al asociar producto.");
 
       setAddProductModalOpen(false);
       setProdProductoId("");
@@ -465,11 +882,16 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
             method: "DELETE"
           });
           const data = await res.json();
-          if (!res.ok) throw new Error(data.error || "Error al eliminar producto del servicio.");
+          if (!res.ok) {
+            const msg = res.status === 403 || data.error === 'FORBIDDEN'
+              ? 'No tienes permiso para realizar esta acción.'
+              : (data.message || data.error || 'Error al eliminar producto del servicio.');
+            throw new Error(msg);
+          }
           showToast("Producto eliminado del servicio.");
           onRefresh();
         } catch (err) {
-          alert(err.message);
+          showToast(err.message);
         }
       }
     );
@@ -478,10 +900,42 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
   return (
     <div className="space-y-6 font-sans text-slate-100">
       {/* Toast Notification */}
-      {toastMessage && (
-        <div className="fixed top-5 right-5 z-50 p-4 bg-emerald-600 text-white rounded-xl shadow-2xl font-mono text-xs flex items-center gap-2 animate-in fade-in slide-in-from-top-3">
-          <CheckCircle2 className="w-5 h-5 shrink-0" />
-          <span>{toastMessage}</span>
+      {toast && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '20px',
+            right: '20px',
+            zIndex: 99999,
+            width: 'min(380px, calc(100vw - 32px))',
+            minWidth: '280px',
+            whiteSpace: 'normal',
+            wordBreak: 'normal',
+            overflowWrap: 'break-word'
+          }}
+          className={`p-4 rounded-xl shadow-2xl font-mono text-xs flex items-start gap-3 border backdrop-blur-md transition-all animate-in fade-in slide-in-from-top-3 ${
+            toast.type === "error"
+              ? "bg-rose-950/95 border-rose-500 text-rose-100 shadow-rose-950/50"
+              : "bg-emerald-950/95 border-emerald-500 text-emerald-100 shadow-emerald-950/50"
+          }`}
+        >
+          {toast.type === "error" ? (
+            <AlertTriangle className="w-5 h-5 shrink-0 text-rose-400 mt-0.5" />
+          ) : (
+            <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-400 mt-0.5" />
+          )}
+          <div className="flex-1 min-w-0">
+            <span className="font-bold block text-xs uppercase tracking-wider mb-0.5 font-mono">
+              {toast.type === "error" ? "Error u Operación" : "Confirmación"}
+            </span>
+            <span className="leading-relaxed font-sans text-xs block text-slate-200">{toast.text}</span>
+          </div>
+          <button
+            onClick={() => setToast(null)}
+            className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors ml-1 shrink-0"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
 
@@ -599,12 +1053,6 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
               <div className="p-12 text-center text-slate-400 font-mono text-xs space-y-3">
                 <Wrench className="w-8 h-8 text-slate-600 mx-auto" />
                 <p>No hay servicios registrados en esta orden de trabajo.</p>
-                <button
-                  onClick={() => setAddServiceModalOpen(true)}
-                  className="px-4 py-2 bg-[#84924a] text-white font-bold rounded-xl hover:brightness-110 font-mono text-xs"
-                >
-                  + AGREGAR PRIMER SERVICIO
-                </button>
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -621,13 +1069,14 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
                   </thead>
                   <tbody className="divide-y divide-[#2d3748]/60">
                     {services.map((svc, idx) => {
-                      const isSelected = svc.orden_servicio_id === selectedServiceId;
+                      const sId = getServId(svc) || (idx + 1);
+                      const isSelected = Number(sId) === Number(selectedServiceId);
                       const srvCode = `SRV-${String(idx + 1).padStart(3, "0")}`;
 
                       return (
                         <tr
-                          key={svc.orden_servicio_id}
-                          onClick={() => setSelectedServiceId(svc.orden_servicio_id)}
+                          key={sId}
+                          onClick={() => setSelectedServiceId(sId)}
                           className={`cursor-pointer transition-colors ${
                             isSelected
                               ? "bg-[#84924a]/10 border-l-4 border-l-[#bfce7f]"
@@ -652,8 +1101,8 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
                           {/* Mechanic Select */}
                           <td className="p-3.5 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                             <select
-                              value={svc.usuario_id ? String(svc.usuario_id) : ""}
-                              onChange={(e) => handleMechanicChange(svc.orden_servicio_id, e.target.value)}
+                              value={(svc.mecanico_usuario_id || svc.usuario_id) ? String(svc.mecanico_usuario_id || svc.usuario_id) : ""}
+                              onChange={(e) => handleMechanicChange(svc.orden_servicio_id || svc.servicio_id, e.target.value)}
                               className="bg-[#0a0c10] border border-[#2d3748] rounded-lg px-2 py-1 text-slate-200 text-xs font-mono focus:outline-none focus:border-[#bfce7f]"
                             >
                               <option value="">Sin asignar</option>
@@ -665,30 +1114,16 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
                             </select>
                           </td>
 
-                          {/* Service Status */}
+                          {/* Service Status Badge */}
                           <td className="p-3.5 whitespace-nowrap space-y-1" onClick={(e) => e.stopPropagation()}>
-                            <div className="relative inline-flex items-center">
-                              <select
-                                value={svc.estado_servicio_id || 1}
-                                onChange={(e) => handleServiceStatusChange(svc.orden_servicio_id, e.target.value)}
-                                className={`px-2 py-0.5 border rounded-md text-[10px] font-mono font-bold appearance-none pr-5 cursor-pointer focus:outline-none transition-colors ${
-                                  svc.estado_servicio_id === 2 || svc.estado_servicio_codigo === "EN_PROCESO"
-                                    ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
-                                    : svc.estado_servicio_id === 3 || svc.estado_servicio_codigo === "COMPLETADO"
-                                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-                                    : svc.estado_servicio_id === 4 || svc.estado_servicio_codigo === "CANCELADO"
-                                    ? "bg-rose-500/10 text-rose-400 border-rose-500/30"
-                                    : "bg-[#1c2129] text-slate-300 border-[#2d3748]"
-                                }`}
-                              >
-                                {estadosServicio.map((st) => (
-                                  <option key={st.estado_orden_servicio_id} value={st.estado_orden_servicio_id} className="bg-[#161a21] text-slate-200">
-                                    {st.nombre}
-                                  </option>
-                                ))}
-                              </select>
-                              <ChevronDown className="w-3 h-3 text-slate-400 pointer-events-none absolute right-1" />
-                            </div>
+                            {(() => {
+                              const rules = getServiceStateRules(svc.estado_servicio_id, svc.mecanico_usuario_id || svc.usuario_id, Number(order?.estado_orden_id || order?.estado_id || 5));
+                              return (
+                                <span className={`px-2.5 py-1 border rounded-md text-[10px] font-mono font-bold inline-block ${rules.badgeClass}`}>
+                                  {rules.badgeLabel}
+                                </span>
+                              );
+                            })()}
                           </td>
 
                           {/* Price */}
@@ -698,43 +1133,139 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
 
                           {/* Actions */}
                           <td className="p-3.5 pr-4 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex items-center justify-center gap-1.5">
-                              {/* Quick play/pause status toggle */}
-                              <button
-                                onClick={() =>
-                                  handleServiceStatusChange(
-                                    svc.orden_servicio_id,
-                                    svc.estado_servicio_id === 2 ? 1 : 2
-                                  )
-                                }
-                                className={`p-1.5 rounded-lg border transition-all ${
-                                  svc.estado_servicio_id === 2
-                                    ? "bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30"
-                                    : "bg-[#1c2129] text-slate-400 border-[#2d3748] hover:text-[#bfce7f]"
-                                }`}
-                                title={svc.estado_servicio_id === 2 ? "Pausar servicio" : "Iniciar servicio"}
-                              >
-                                {svc.estado_servicio_id === 2 ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-                              </button>
+                            {(() => {
+                              const rules = getServiceStateRules(svc.estado_servicio_id, svc.mecanico_usuario_id || svc.usuario_id, Number(order?.estado_orden_id || order?.estado_id || 5));
+                              const hasOpenSession = Boolean(
+                                svc.en_proceso_cronometro ||
+                                (svc.mano_obra && svc.mano_obra.some((m) => m.es_abierta || !m.fecha_finalizacion))
+                              );
 
-                              {/* Edit Service Modal button */}
-                              <button
-                                onClick={() => openEditServiceModal(svc)}
-                                className="p-1.5 text-slate-400 hover:text-slate-200 bg-[#1c2129] hover:bg-[#252c37] border border-[#2d3748] rounded-lg transition-colors"
-                                title="Editar servicio"
-                              >
-                                <Pencil className="w-3.5 h-3.5" />
-                              </button>
+                              return (
+                                <div className="flex items-center justify-center gap-1.5">
+                                  {rules.canStart && (
+                                    <button
+                                      onClick={() => handleServiceStatusChange(sId, 2)}
+                                      className="p-1.5 rounded-lg border bg-[#84924a]/20 text-[#bfce7f] border-[#bfce7f]/40 hover:bg-[#84924a]/30 transition-all"
+                                      title="Iniciar trabajo"
+                                    >
+                                      <Play className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                  {rules.requiresMechanicToStart && (
+                                    <button
+                                      disabled
+                                      className="p-1.5 rounded-lg border bg-slate-800/40 text-slate-600 border-slate-700/50 cursor-not-allowed opacity-60"
+                                      title="Asigna un mecánico antes de iniciar el servicio."
+                                    >
+                                      <Play className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
 
-                              {/* Delete button */}
-                              <button
-                                onClick={() => handleDeleteService(svc.orden_servicio_id, svc.tipo_servicio_nombre)}
-                                className="p-1.5 text-slate-400 hover:text-rose-400 bg-[#1c2129] hover:bg-rose-500/10 border border-[#2d3748] hover:border-rose-500/30 rounded-lg transition-colors"
-                                title="Eliminar servicio"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
+                                  {/* Iniciar Cronómetro button when EN_PROCESO without open session */}
+                                  {Number(svc.estado_servicio_id) === 2 && !hasOpenSession && (
+                                    <button
+                                      onClick={() => handleStartTimer(svc)}
+                                      disabled={submitting || processingServiceId === sId}
+                                      className="p-1.5 rounded-lg border bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30 transition-all"
+                                      title="Iniciar cronómetro"
+                                    >
+                                      {processingServiceId === sId ? (
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                      ) : (
+                                        <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                                      )}
+                                    </button>
+                                  )}
+
+                                  {/* Detener Cronómetro button when EN_PROCESO with open session */}
+                                  {Number(svc.estado_servicio_id) === 2 && hasOpenSession && (
+                                    <button
+                                      onClick={() => handleStopTimer(svc)}
+                                      disabled={submitting || processingServiceId === sId}
+                                      className="p-1.5 rounded-lg border bg-rose-500/20 text-rose-300 border-rose-500/40 hover:bg-rose-500/30 transition-all"
+                                      title="Detener cronómetro"
+                                    >
+                                      {processingServiceId === sId ? (
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                      ) : (
+                                        <Clock className="w-3.5 h-3.5 text-rose-400" />
+                                      )}
+                                    </button>
+                                  )}
+
+                                  {rules.canPause && (
+                                    <button
+                                      onClick={() => handleServiceStatusChange(sId, 5)}
+                                      className="p-1.5 rounded-lg border bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30 transition-all"
+                                      title="Pausar servicio"
+                                    >
+                                      <Pause className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                  {rules.canResume && (
+                                    <button
+                                      onClick={() => handleServiceStatusChange(sId, 2)}
+                                      className="p-1.5 rounded-lg border bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30 transition-all"
+                                      title="Reanudar trabajo"
+                                    >
+                                      <Play className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                  {/* Finalizar servicio: ENABLED if no open session; DISABLED if open session */}
+                                  {rules.canComplete && (
+                                    hasOpenSession ? (
+                                      <button
+                                        disabled
+                                        className="p-1.5 rounded-lg border bg-slate-800/40 text-slate-600 border-slate-700/50 cursor-not-allowed opacity-60"
+                                        title="Debes detener el cronómetro antes de finalizar el servicio."
+                                      >
+                                        <CheckCircle2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    ) : (
+                                      <button
+                                        onClick={() => handleFinishServiceClick(svc)}
+                                        disabled={submitting || processingServiceId === sId}
+                                        className="p-1.5 rounded-lg border bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30 transition-all disabled:opacity-50"
+                                        title="Finalizar servicio"
+                                      >
+                                        {processingServiceId === sId ? (
+                                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        ) : (
+                                          <CheckCircle2 className="w-3.5 h-3.5" />
+                                        )}
+                                      </button>
+                                    )
+                                  )}
+                                  {rules.canReopen && (
+                                    <button
+                                      onClick={() => openReopenServiceModal(svc)}
+                                      className="p-1.5 rounded-lg border bg-indigo-500/20 text-indigo-300 border-indigo-500/40 hover:bg-indigo-500/30 transition-all"
+                                      title="Reabrir servicio"
+                                    >
+                                      <RotateCcw className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+
+                                  {/* Edit Service Modal button */}
+                                  <button
+                                    onClick={() => openEditServiceModal(svc)}
+                                    className="p-1.5 text-slate-400 hover:text-slate-200 bg-[#1c2129] hover:bg-[#252c37] border border-[#2d3748] rounded-lg transition-colors"
+                                    title="Editar servicio"
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </button>
+
+                                  {/* Delete button */}
+                                  <button
+                                    onClick={() => handleDeleteService(sId, svc.tipo_servicio_nombre)}
+                                    className="p-1.5 text-slate-400 hover:text-rose-400 bg-[#1c2129] hover:bg-rose-500/10 border border-[#2d3748] hover:border-rose-500/30 rounded-lg transition-colors"
+                                    title="Eliminar servicio"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              );
+                            })()}
                           </td>
                         </tr>
                       );
@@ -774,200 +1305,327 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
               )}
             </div>
 
-            {activeSelectedService ? (
-              <div className="space-y-4">
-                {/* Service Header Info */}
-                <div>
-                  <h4 className="text-base font-bold text-slate-100 font-sans">
-                    {activeSelectedService.tipo_servicio_nombre}
-                  </h4>
-                  <p className="text-xs text-slate-400 mt-1 leading-relaxed font-sans">
-                    {activeSelectedService.observacion_tecnica || activeSelectedService.tipo_servicio_descripcion || "Sin observaciones técnicas registradas."}
-                  </p>
-                </div>
+            {activeSelectedService ? (() => {
+              const actId = getServId(activeSelectedService);
+              const activeRules = getServiceStateRules(
+                activeSelectedService.estado_servicio_id,
+                activeSelectedService.mecanico_usuario_id || activeSelectedService.usuario_id,
+                Number(order?.estado_orden_id || order?.estado_id || 5)
+              );
+              const actHasOpenSession = Boolean(
+                activeSelectedService.en_proceso_cronometro ||
+                (activeSelectedService.mano_obra && activeSelectedService.mano_obra.some((m) => m.es_abierta || !m.fecha_finalizacion))
+              );
 
-                {/* Worked Time Box */}
-                <div className="p-4 bg-[#0a0c10] border border-[#2d3748] rounded-xl flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <Clock className="w-5 h-5 text-[#bfce7f]" />
-                    <div>
-                      <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 block font-bold">
-                        Tiempo Registrado
-                      </span>
-                      <span className="text-lg font-black font-mono text-slate-100">
-                        {getWorkedTimeString(activeSelectedService.mano_obra || [])}
+              return (
+                <div className="space-y-4">
+                  {/* Service Header Info */}
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <h4 className="text-base font-bold text-slate-100 font-sans">
+                        {activeSelectedService.tipo_servicio_nombre}
+                      </h4>
+                      <span className={`px-2 py-0.5 border rounded-md text-[10px] font-mono font-bold ${activeRules.badgeClass}`}>
+                        {activeRules.badgeLabel}
                       </span>
                     </div>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setSelectedServiceId(activeSelectedService.orden_servicio_id);
-                      setLaborDesc("");
-                      setLaborHorasEst("1");
-                      setLaborHorasReal("1");
-                      setLaborCostoHora("0");
-                      setModalError(null);
-                      setAddLaborModalOpen(true);
-                    }}
-                    className="px-3 py-1.5 bg-[#84924a]/20 text-[#bfce7f] hover:bg-[#84924a]/30 border border-[#bfce7f]/30 rounded-lg text-xs font-mono font-bold transition-all"
-                  >
-                    + Registrar
-                  </button>
-                </div>
-
-                {/* Mano de Obra Registrada Section */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between border-b border-[#2d3748] pb-1.5">
-                    <span className="text-xs font-bold font-mono text-slate-300 flex items-center gap-1.5">
-                      <Wrench className="w-4 h-4 text-[#bfce7f]" /> Mano de Obra Registrada
-                    </span>
-                    <button
-                      onClick={() => {
-                        setSelectedServiceId(activeSelectedService.orden_servicio_id);
-                        setLaborDesc("");
-                        setLaborHorasEst("1");
-                        setLaborHorasReal("1");
-                        setLaborCostoHora("0");
-                        setModalError(null);
-                        setAddLaborModalOpen(true);
-                      }}
-                      className="text-[11px] font-mono text-[#bfce7f] hover:underline flex items-center gap-1"
-                    >
-                      + Agregar Mano de Obra
-                    </button>
+                    <p className="text-xs text-slate-400 mt-1 leading-relaxed font-sans">
+                      {activeSelectedService.observacion_tecnica || activeSelectedService.tipo_servicio_descripcion || "Sin observaciones técnicas registradas."}
+                    </p>
                   </div>
 
-                  {activeSelectedService.mano_obra && activeSelectedService.mano_obra.length > 0 ? (
-                    <div className="space-y-2">
-                      {activeSelectedService.mano_obra.map((m) => {
-                        const mId = m.orden_servicio_mano_obra_id || m.mano_obra_id || m.id;
-                        return (
-                          <div
-                            key={mId}
-                            className="p-2.5 bg-[#1c2129] border border-[#2d3748] rounded-xl flex items-center justify-between text-xs font-mono"
-                          >
-                            <div className="flex items-center gap-2 truncate pr-2">
-                              <Wrench className="w-3.5 h-3.5 text-[#bfce7f] shrink-0" />
-                              <div className="truncate">
-                                <span className="truncate text-slate-200 block font-semibold">
-                                  {m.descripcion || m.observacion || "Registro de mano de obra"}
+                  {/* Worked Time & Live Cronómetro Box */}
+                  <div className="p-4 bg-[#0a0c10] border border-[#2d3748] rounded-xl space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <Clock className={`w-5 h-5 ${actHasOpenSession ? "text-emerald-400 animate-pulse" : "text-[#bfce7f]"}`} />
+                        <div>
+                          <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 block font-bold">
+                            {actHasOpenSession ? "Cronómetro activo" : "Tiempo trabajado"}
+                          </span>
+                          <span className="text-xl font-black font-mono text-slate-100 tracking-wider">
+                            {liveTimeString}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="text-right font-mono">
+                        <span className="text-[10px] text-slate-400 block uppercase">
+                          {actHasOpenSession ? "Tiempo de la sesión actual" : "Tiempo acumulado"}
+                        </span>
+                        <span className="text-xs font-semibold text-slate-300">
+                          {getWorkedTimeString(activeSelectedService.mano_obra || [])}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Cronómetro Control Buttons */}
+                    {Number(activeSelectedService.estado_servicio_id) === 2 && !actHasOpenSession && (
+                      <button
+                        onClick={() => handleStartTimer(activeSelectedService)}
+                        disabled={submitting || processingServiceId === actId}
+                        className="w-full py-2.5 bg-emerald-600/90 hover:bg-emerald-500 text-white font-bold rounded-xl font-mono text-xs transition-all flex items-center justify-center gap-2 border-t border-emerald-400"
+                      >
+                        {processingServiceId === actId ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Clock className="w-4 h-4 text-emerald-200" />
+                        )}
+                        Iniciar Cronómetro
+                      </button>
+                    )}
+
+                    {Number(activeSelectedService.estado_servicio_id) === 2 && actHasOpenSession && (
+                      <button
+                        onClick={() => handleStopTimer(activeSelectedService)}
+                        disabled={submitting || processingServiceId === actId}
+                        className="w-full py-2.5 bg-rose-500/20 text-rose-300 border border-rose-500/40 rounded-xl font-mono text-xs font-bold hover:bg-rose-500/30 transition-all flex items-center justify-center gap-2"
+                      >
+                        {processingServiceId === actId ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Clock className="w-4 h-4 text-rose-400" />
+                        )}
+                        Detener Cronómetro
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Mano de Obra Registrada Section */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between border-b border-[#2d3748] pb-1.5">
+                      <span className="text-xs font-bold font-mono text-slate-300 flex items-center gap-1.5">
+                        <Wrench className="w-4 h-4 text-[#bfce7f]" /> Mano de Obra Registrada
+                      </span>
+                      {activeRules.canAddLabor ? (
+                        <button
+                          onClick={() => {
+                            setSelectedServiceId(actId);
+                            setLaborDesc("");
+                            setLaborHorasEst("1");
+                            setLaborHorasReal("1");
+                            setLaborCostoHora("0");
+                            setModalError(null);
+                            setAddLaborModalOpen(true);
+                          }}
+                          className="text-[11px] font-mono text-[#bfce7f] hover:underline flex items-center gap-1"
+                        >
+                          + Agregar Mano de Obra
+                        </button>
+                      ) : (
+                        <span className="text-[10px] font-mono text-slate-500 italic">
+                          {activeSelectedService.estado_servicio_id === 5 ? "Reanuda para agregar" : "No disponible"}
+                        </span>
+                      )}
+                    </div>
+
+                    {activeSelectedService.mano_obra && activeSelectedService.mano_obra.length > 0 ? (
+                      <div className="space-y-2">
+                        {activeSelectedService.mano_obra.map((m) => {
+                          const mId = m.orden_servicio_mano_obra_id || m.mano_obra_id || m.id;
+                          return (
+                            <div
+                              key={mId}
+                              className="p-2.5 bg-[#1c2129] border border-[#2d3748] rounded-xl flex items-center justify-between text-xs font-mono"
+                            >
+                              <div className="flex items-center gap-2 truncate pr-2">
+                                <Wrench className="w-3.5 h-3.5 text-[#bfce7f] shrink-0" />
+                                <div className="truncate">
+                                  <span className="truncate text-slate-200 block font-semibold">
+                                    {m.descripcion || m.observacion || "Registro de mano de obra"}
+                                  </span>
+                                  <span className="text-[10px] text-slate-400 block">
+                                    {m.horas_trabajadas || (m.minutos_trabajados ? (m.minutos_trabajados / 60).toFixed(1) : 1)} hr(s)
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className="font-bold text-[#bfce7f]">
+                                  RD$ {Number(m.subtotal || m.costo_total || (Number(m.horas_trabajadas || 1) * Number(m.costo_hora || 0))).toLocaleString("es-DO", { minimumFractionDigits: 2 })}
                                 </span>
-                                <span className="text-[10px] text-slate-400 block">
-                                  {m.horas_trabajadas || (m.minutos_trabajados ? (m.minutos_trabajados / 60).toFixed(1) : 1)} hr(s)
-                                </span>
+                                {activeRules.canAddLabor && (
+                                  <>
+                                    <button
+                                      onClick={() => openEditLaborModal(actId, m)}
+                                      className="text-slate-500 hover:text-slate-200 transition-colors p-1"
+                                      title="Editar mano de obra"
+                                    >
+                                      <Pencil className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteLabor(actId, mId, m.descripcion || m.observacion)}
+                                      className="text-slate-500 hover:text-rose-400 transition-colors p-1"
+                                      title="Eliminar mano de obra"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </>
+                                )}
                               </div>
                             </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              <span className="font-bold text-[#bfce7f]">
-                                RD$ {Number(m.subtotal || m.costo_total || (Number(m.horas_trabajadas || 1) * Number(m.costo_hora || 0))).toLocaleString("es-DO", { minimumFractionDigits: 2 })}
-                              </span>
-                              <button
-                                onClick={() => openEditLaborModal(activeSelectedService.orden_servicio_id, m)}
-                                className="text-slate-500 hover:text-slate-200 transition-colors p-1"
-                                title="Editar mano de obra"
-                              >
-                                <Pencil className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteLabor(activeSelectedService.orden_servicio_id, mId, m.descripcion || m.observacion)}
-                                className="text-slate-500 hover:text-rose-400 transition-colors p-1"
-                                title="Eliminar mano de obra"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-slate-500 italic p-3 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-center font-mono">
-                      Sin registros de mano de obra.
-                    </p>
-                  )}
-                </div>
-
-                {/* Associated Spare Parts / Products Section */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between border-b border-[#2d3748] pb-1.5">
-                    <span className="text-xs font-bold font-mono text-slate-300 flex items-center gap-1.5">
-                      <Package className="w-4 h-4 text-sky-400" /> Repuestos Asociados
-                    </span>
-                    <button
-                      onClick={() => {
-                        setSelectedServiceId(activeSelectedService.orden_servicio_id);
-                        setModalError(null);
-                        setAddProductModalOpen(true);
-                      }}
-                      className="text-[11px] font-mono text-sky-400 hover:underline flex items-center gap-1"
-                    >
-                      + Agregar Repuesto
-                    </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-500 italic p-3 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-center font-mono">
+                        Sin registros de mano de obra.
+                      </p>
+                    )}
                   </div>
 
-                  {activeSelectedService.productos && activeSelectedService.productos.length > 0 ? (
-                    <div className="space-y-2">
-                      {activeSelectedService.productos.map((prod) => (
-                        <div
-                          key={prod.orden_producto_id}
-                          className="p-2.5 bg-[#1c2129] border border-[#2d3748] rounded-xl flex items-center justify-between text-xs font-mono"
+                  {/* Associated Spare Parts / Products Section */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between border-b border-[#2d3748] pb-1.5">
+                      <span className="text-xs font-bold font-mono text-slate-300 flex items-center gap-1.5">
+                        <Package className="w-4 h-4 text-sky-400" /> Repuestos Asociados
+                      </span>
+                      {activeRules.canAddProduct ? (
+                        <button
+                          onClick={() => openAddProductModal(actId)}
+                          className="text-[11px] font-mono text-sky-400 hover:underline flex items-center gap-1"
                         >
-                          <div className="flex items-center gap-2 truncate pr-2">
-                            <CheckSquare className="w-4 h-4 text-emerald-400 shrink-0" />
-                            <span className="truncate text-slate-200">{prod.producto_nombre} (x{prod.cantidad})</span>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <span className="font-bold text-sky-400">
-                              RD$ {Number(prod.subtotal || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })}
-                            </span>
-                            <button
-                              onClick={() => handleDeleteProduct(activeSelectedService.orden_servicio_id, prod.orden_producto_id, prod.producto_nombre)}
-                              className="text-slate-500 hover:text-rose-400 transition-colors p-1"
-                              title="Eliminar repuesto"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
+                          + Agregar Repuesto
+                        </button>
+                      ) : (
+                        <span className="text-[10px] font-mono text-slate-500 italic">
+                          {activeSelectedService.estado_servicio_id === 5 ? "Reanuda para agregar" : "No disponible"}
+                        </span>
+                      )}
                     </div>
-                  ) : (
-                    <p className="text-xs text-slate-500 italic p-3 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-center font-mono">
-                      Sin repuestos o productos asociados.
-                    </p>
-                  )}
-                </div>
 
-                {/* Quick Action Buttons */}
-                <div className="pt-3 border-t border-[#2d3748] space-y-2">
-                  {activeSelectedService.estado_servicio_id === 2 ? (
-                    <button
-                      onClick={() => handleServiceStatusChange(activeSelectedService.orden_servicio_id, 1)}
-                      className="w-full py-2.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-xl font-mono text-xs font-bold hover:bg-amber-500/30 transition-all flex items-center justify-center gap-2"
-                    >
-                      <Pause className="w-4 h-4" /> Pausar Trabajo
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => handleServiceStatusChange(activeSelectedService.orden_servicio_id, 2)}
-                      className="w-full py-2.5 bg-[#1c2129] hover:bg-[#252c37] border border-[#2d3748] text-slate-200 rounded-xl font-mono text-xs font-bold transition-all flex items-center justify-center gap-2"
-                    >
-                      <Play className="w-4 h-4 text-[#bfce7f]" /> Iniciar Trabajo
-                    </button>
-                  )}
+                    {activeSelectedService.productos && activeSelectedService.productos.length > 0 ? (
+                      <div className="space-y-2">
+                        {activeSelectedService.productos.map((prod) => {
+                          const pId = prod.orden_producto_id || prod.producto_id || prod.id;
+                          return (
+                            <div
+                              key={pId}
+                              className="p-2.5 bg-[#1c2129] border border-[#2d3748] rounded-xl flex items-center justify-between text-xs font-mono"
+                            >
+                              <div className="flex items-center gap-2 truncate pr-2">
+                                <CheckSquare className="w-4 h-4 text-emerald-400 shrink-0" />
+                                <span className="truncate text-slate-200">{prod.producto_nombre} (x{prod.cantidad})</span>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className="font-bold text-sky-400">
+                                  RD$ {Number(prod.subtotal || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })}
+                                </span>
+                                {activeRules.canAddProduct && (
+                                  <button
+                                    onClick={() => handleDeleteProduct(actId, pId, prod.producto_nombre)}
+                                    className="text-slate-500 hover:text-rose-400 transition-colors p-1"
+                                    title="Eliminar repuesto"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-500 italic p-3 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-center font-mono">
+                        Sin repuestos o productos asociados.
+                      </p>
+                    )}
+                  </div>
 
-                  {activeSelectedService.estado_servicio_id !== 3 && (
-                    <button
-                      onClick={() => handleServiceStatusChange(activeSelectedService.orden_servicio_id, 3)}
-                      className="w-full py-2.5 bg-[#84924a] hover:brightness-110 text-white font-bold rounded-xl font-mono text-xs transition-all flex items-center justify-center gap-2 border-t border-[#a6b66b]"
-                    >
-                      <CheckCircle2 className="w-4 h-4" /> Finalizar Servicio
-                    </button>
-                  )}
+                  {/* Quick Action Buttons */}
+                  <div className="pt-3 border-t border-[#2d3748] space-y-2">
+                    {activeRules.canStart && (
+                      <button
+                        onClick={() => handleServiceStatusChange(actId, 2)}
+                        className="w-full py-2.5 bg-[#84924a] hover:brightness-110 text-white font-bold rounded-xl font-mono text-xs transition-all flex items-center justify-center gap-2 border-t border-[#a6b66b]"
+                      >
+                        <Play className="w-4 h-4" /> Iniciar Trabajo
+                      </button>
+                    )}
+                    {activeRules.requiresMechanicToStart && (
+                      <div className="space-y-1">
+                        <button
+                          disabled
+                          className="w-full py-2.5 bg-slate-800 text-slate-500 border border-slate-700 rounded-xl font-mono text-xs font-bold cursor-not-allowed flex items-center justify-center gap-2"
+                        >
+                          <Play className="w-4 h-4" /> Iniciar Trabajo
+                        </button>
+                        <p className="text-[11px] font-mono text-amber-400 text-center">
+                          Asigna un mecánico antes de iniciar el servicio.
+                        </p>
+                      </div>
+                    )}
+                    {/* Detener Cronómetro button when EN_PROCESO with open session */}
+                    {Number(activeSelectedService.estado_servicio_id) === 2 && actHasOpenSession && (
+                      <button
+                        onClick={() => handleStopTimer(activeSelectedService)}
+                        disabled={submitting || processingServiceId === actId}
+                        className="w-full py-2.5 bg-rose-500/20 text-rose-300 border border-rose-500/40 rounded-xl font-mono text-xs font-bold hover:bg-rose-500/30 transition-all flex items-center justify-center gap-2"
+                      >
+                        {processingServiceId === actId ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Clock className="w-4 h-4 text-rose-400" />
+                        )}
+                        Detener Cronómetro
+                      </button>
+                    )}
+                    {activeRules.canPause && (
+                      <button
+                        onClick={() => handleServiceStatusChange(actId, 5)}
+                        className="w-full py-2.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-xl font-mono text-xs font-bold hover:bg-amber-500/30 transition-all flex items-center justify-center gap-2"
+                      >
+                        <Pause className="w-4 h-4" /> Pausar Trabajo
+                      </button>
+                    )}
+                    {activeRules.canResume && (
+                      <button
+                        onClick={() => handleServiceStatusChange(actId, 2)}
+                        className="w-full py-2.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-xl font-mono text-xs font-bold hover:bg-amber-500/30 transition-all flex items-center justify-center gap-2"
+                      >
+                        <Play className="w-4 h-4 text-amber-300" /> Reanudar Trabajo
+                      </button>
+                    )}
+                    {/* Finalizar Servicio: ENABLED when no open session; DISABLED with clear notice when session is open */}
+                    {activeRules.canComplete && (
+                      actHasOpenSession ? (
+                        <div className="space-y-1">
+                          <button
+                            disabled
+                            className="w-full py-2.5 bg-slate-800 text-slate-500 border border-slate-700 rounded-xl font-mono text-xs font-bold cursor-not-allowed flex items-center justify-center gap-2 opacity-60"
+                          >
+                            <CheckCircle2 className="w-4 h-4" /> Finalizar Servicio
+                          </button>
+                          <p className="text-[11px] font-mono text-amber-400 text-center">
+                            Debes detener el cronómetro antes de finalizar el servicio.
+                          </p>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => handleFinishServiceClick(activeSelectedService)}
+                          disabled={submitting || processingServiceId === actId}
+                          className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl font-mono text-xs transition-all flex items-center justify-center gap-2 border-t border-emerald-400 disabled:opacity-50"
+                        >
+                          {processingServiceId === actId ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="w-4 h-4" />
+                          )}
+                          Finalizar Servicio
+                        </button>
+                      )
+                    )}
+                    {activeRules.canReopen && (
+                      <button
+                        onClick={() => openReopenServiceModal(activeSelectedService)}
+                        className="w-full py-2.5 bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 hover:bg-indigo-500/30 rounded-xl font-mono text-xs font-bold transition-all flex items-center justify-center gap-2"
+                      >
+                        <RotateCcw className="w-4 h-4 text-indigo-300" /> Reabrir Servicio
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <p className="text-xs text-slate-500 italic text-center p-4">
+              );
+            })() : (
+              <p className="text-xs text-slate-500 italic text-center p-4 font-mono">
                 Selecciona un servicio de la tabla para ver su detalle.
               </p>
             )}
@@ -1007,6 +1665,38 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
             )}
 
             <form onSubmit={handleAddService} className="space-y-4 text-xs font-sans">
+              {Number(order?.estado_orden_id || order?.estado_id || 5) === 5 && (
+                <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-2.5 text-amber-300">
+                  <div className="flex items-center gap-2 font-bold text-xs">
+                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span>Orden en Reparación: Servicio Adicional</span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed text-amber-200/90 font-mono">
+                    La orden está en Reparación. Añadir un servicio adicional requiere mecánico asignado, confirmación y motivo explicativo.
+                  </p>
+                  <div className="pt-2 border-t border-amber-500/20 space-y-2 font-mono">
+                    <label className="flex items-center gap-2 cursor-pointer font-semibold text-xs text-amber-200">
+                      <input
+                        type="checkbox"
+                        checked={confirmAdicional}
+                        onChange={(e) => setConfirmAdicional(e.target.checked)}
+                        className="rounded border-amber-500/50 bg-[#0a0c10] text-[#bfce7f] focus:ring-0"
+                      />
+                      Confirmar adición de servicio adicional
+                    </label>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-amber-200/90 mb-1 font-sans">Motivo del servicio adicional *</label>
+                      <input
+                        type="text"
+                        value={motivoAdicional}
+                        onChange={(e) => setMotivoAdicional(e.target.value)}
+                        placeholder="Ej: Detectado desgaste extra durante la revisión técnica"
+                        className="w-full p-2 bg-[#0a0c10] border border-amber-500/40 rounded-lg text-slate-200 text-xs focus:outline-none focus:border-amber-400"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
               <div>
                 <label className="block text-slate-300 mb-1 font-semibold">Tipo de Servicio *</label>
                 <select
@@ -1122,38 +1812,64 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
             )}
 
             <form onSubmit={handleUpdateService} className="space-y-4 text-xs font-sans">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-slate-300 mb-1 font-semibold">Mecánico Responsable</label>
-                  <select
-                    value={newMecanicoId}
-                    onChange={(e) => setNewMecanicoId(e.target.value)}
-                    className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-[#bfce7f] font-mono"
-                  >
-                    <option value="">-- Sin mecánico asignado --</option>
-                    {mecanicosCatalog.map((m) => (
-                      <option key={m.usuario_id} value={String(m.usuario_id)}>
-                        {m.nombre_completo}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-slate-300 mb-1 font-semibold">Estado de Aprobación</label>
-                  <select
-                    value={newEstadoAprobacionId}
-                    onChange={(e) => setNewEstadoAprobacionId(e.target.value)}
-                    className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-[#bfce7f] font-mono"
-                  >
-                    {estadosAprobacion.map((ap) => (
-                      <option key={ap.estado_aprobacion_id} value={String(ap.estado_aprobacion_id)}>
-                        {ap.nombre}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <div>
+                <label className="block text-slate-300 mb-1 font-semibold">Mecánico Responsable</label>
+                <select
+                  value={newMecanicoId}
+                  onChange={(e) => setNewMecanicoId(e.target.value)}
+                  className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-[#bfce7f] font-mono"
+                >
+                  <option value="">-- Sin mecánico asignado --</option>
+                  {mecanicosCatalog.map((m) => (
+                    <option key={m.usuario_id} value={String(m.usuario_id)}>
+                      {m.nombre_completo}
+                    </option>
+                  ))}
+                </select>
               </div>
+
+              {(() => {
+                const selMecId = newMecanicoId ? parseInt(newMecanicoId, 10) : null;
+                const initMecId = editingService.mecanico_usuario_id || editingService.usuario_id;
+                const isMecChanged = selMecId !== (initMecId ? Number(initMecId) : null);
+                const orderStateId = Number(order?.estado_orden_id || order?.estado_id || 5);
+
+                if (isMecChanged && orderStateId === 5 && Boolean(initMecId)) {
+                  return (
+                    <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-2.5 text-amber-300 font-sans">
+                      <div className="flex items-center gap-2 font-bold text-xs">
+                        <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                        <span>Reasignación de Mecánico en Reparación</span>
+                      </div>
+                      <p className="text-[11px] leading-relaxed text-amber-200/90 font-mono">
+                        Estás cambiando el mecánico asignado en una orden en Reparación. Debes confirmar y proporcionar un motivo obligatorio.
+                      </p>
+                      <div className="pt-2 border-t border-amber-500/20 space-y-2 font-mono">
+                        <label className="flex items-center gap-2 cursor-pointer font-semibold text-xs text-amber-200">
+                          <input
+                            type="checkbox"
+                            checked={editConfirmReasignar}
+                            onChange={(e) => setEditConfirmReasignar(e.target.checked)}
+                            className="rounded border-amber-500/50 bg-[#0a0c10] text-[#bfce7f] focus:ring-0"
+                          />
+                          Confirmo la reasignación
+                        </label>
+                        <div>
+                          <label className="block text-[11px] font-semibold text-amber-200/90 mb-1 font-sans">Motivo de la reasignación *</label>
+                          <input
+                            type="text"
+                            value={editMotivoReasignar}
+                            onChange={(e) => setEditMotivoReasignar(e.target.value)}
+                            placeholder="Ej: Reasignación por especialidad / disponibilidad"
+                            className="w-full p-2 bg-[#0a0c10] border border-amber-500/40 rounded-lg text-slate-200 text-xs focus:outline-none focus:border-amber-400 font-sans"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
 
               <div>
                 <label className="block text-slate-300 mb-1 font-semibold">Precio Acordado (RD$)</label>
@@ -1417,7 +2133,7 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
               <div className="p-3 bg-[#0a0c10] border border-[#2d3748] rounded-xl flex items-center justify-between font-mono text-xs">
                 <span className="text-slate-400 font-semibold">Servicio Receptor:</span>
                 <span className="font-bold text-[#bfce7f]">
-                  {services.find((s) => s.orden_servicio_id === selectedServiceId)?.tipo_servicio_nombre || `Servicio #${selectedServiceId}`}
+                  {services.find((s) => getServId(s) === Number(selectedServiceId))?.tipo_servicio_nombre || `Servicio #${selectedServiceId}`}
                 </span>
               </div>
             )}
@@ -1510,17 +2226,107 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
         </div>
       )}
 
-      {/* MODAL 6: Confirmación Eliminación */}
+      {/* MODAL: Finalizar servicio sin mano de obra */}
+      {finishNoLaborModalOpen && finishNoLaborService && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto">
+          <div
+            className="bg-[#161a21] border border-amber-500/40 rounded-2xl p-6 sm:p-7 space-y-5 shadow-2xl relative my-auto shrink-0 z-10 font-sans text-slate-100"
+            style={{ width: "100%", maxWidth: "540px", boxSizing: "border-box" }}
+          >
+            <div className="flex items-center justify-between border-b border-[#2d3748] pb-4">
+              <h3 className="text-base font-bold text-slate-100 font-mono flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-amber-400" />
+                Finalizar Servicio Sin Mano de Obra
+              </h3>
+              <button
+                type="button"
+                onClick={() => setFinishNoLaborModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-[#1c2129] rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {modalError && (
+              <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs font-sans flex items-start gap-2.5">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold block">Error al validar</span>
+                  <span>{modalError}</span>
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={handleFinishNoLaborSubmit} className="space-y-4 text-xs font-sans">
+              <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-2.5 text-amber-300">
+                <p className="text-[11px] leading-relaxed text-amber-200/90 font-mono">
+                  El servicio <strong>"{finishNoLaborService.tipo_servicio_nombre}"</strong> no registra horas ni mano de obra trabajada. Para finalizarlo, debes confirmar explícitamente y justificar el motivo.
+                </p>
+                <div className="pt-2 border-t border-amber-500/20 space-y-2 font-mono">
+                  <label className="flex items-center gap-2 cursor-pointer font-semibold text-xs text-amber-200">
+                    <input
+                      type="checkbox"
+                      checked={finishNoLaborConfirm}
+                      onChange={(e) => setFinishNoLaborConfirm(e.target.checked)}
+                      className="rounded border-amber-500/50 bg-[#0a0c10] text-[#bfce7f] focus:ring-0"
+                    />
+                    Confirmo la finalización sin mano de obra
+                  </label>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-amber-200/90 mb-1 font-sans">
+                      Motivo explicativo obligatorio *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={finishNoLaborMotivo}
+                      onChange={(e) => setFinishNoLaborMotivo(e.target.value)}
+                      placeholder="Ej: Servicio incluido en paquete preliminar / No requirió tiempo adicional"
+                      className="w-full p-2.5 bg-[#0a0c10] border border-amber-500/40 rounded-lg text-slate-200 text-xs focus:outline-none focus:border-amber-400 font-sans"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end items-center gap-3 pt-4 border-t border-[#2d3748]">
+                <button
+                  type="button"
+                  onClick={() => setFinishNoLaborModalOpen(false)}
+                  className="px-4 py-2.5 text-slate-400 hover:text-slate-200 font-mono text-xs"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl flex items-center gap-2 font-mono text-xs border-t border-emerald-400 disabled:opacity-50"
+                >
+                  {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                  Confirmar y Finalizar Servicio
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 6: Confirmación (Eliminación o Finalización) */}
       {confirmModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto">
           <div
-            className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-6 sm:p-7 space-y-5 shadow-2xl relative my-auto shrink-0 z-10 font-sans text-slate-100 animate-in fade-in zoom-in duration-150"
+            className={`bg-[#161a21] border rounded-2xl p-6 sm:p-7 space-y-5 shadow-2xl relative my-auto shrink-0 z-10 font-sans text-slate-100 animate-in fade-in zoom-in duration-150 ${
+              confirmModalType === "finish" ? "border-emerald-500/40" : "border-[#2d3748]"
+            }`}
             style={{ width: "100%", maxWidth: "480px", boxSizing: "border-box" }}
           >
             <div className="flex items-center justify-between border-b border-[#2d3748] pb-4">
               <h3 className="text-base font-bold text-slate-100 font-mono flex items-center gap-2">
-                <AlertCircle className="w-5 h-5 text-rose-400" />
-                {confirmModalTitle || "Confirmación Requerida"}
+                {confirmModalType === "finish" ? (
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                ) : (
+                  <AlertCircle className="w-5 h-5 text-rose-400" />
+                )}
+                {confirmModalTitle || (confirmModalType === "finish" ? "Finalizar servicio" : "Confirmación Requerida")}
               </h3>
               <button
                 type="button"
@@ -1531,7 +2337,7 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
               </button>
             </div>
 
-            <div className="py-2 text-xs sm:text-sm text-slate-300 font-sans leading-relaxed">
+            <div className="py-2 text-xs sm:text-sm text-slate-300 font-sans leading-relaxed whitespace-pre-line">
               {confirmModalMessage}
             </div>
 
@@ -1545,18 +2351,196 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
               </button>
               <button
                 type="button"
+                disabled={submitting}
                 onClick={async () => {
                   setConfirmModalOpen(false);
                   if (confirmModalOnConfirm) {
                     await confirmModalOnConfirm();
                   }
                 }}
-                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl flex items-center gap-2 font-mono text-xs transition-colors border-t border-rose-400"
+                className={`px-5 py-2.5 text-white font-bold rounded-xl flex items-center gap-2 font-mono text-xs transition-colors border-t ${
+                  confirmModalType === "finish"
+                    ? "bg-emerald-600 hover:bg-emerald-500 border-emerald-400"
+                    : "bg-rose-600 hover:bg-rose-500 border-rose-400"
+                }`}
               >
-                <Trash2 className="w-4 h-4" />
-                Confirmar Eliminación
+                {confirmModalType === "finish" ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    Confirmar finalización
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    Confirmar Eliminación
+                  </>
+                )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 6: Reabrir Servicio */}
+      {reopenModalOpen && reopenService && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto">
+          <div
+            className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-6 sm:p-7 space-y-5 shadow-2xl relative my-auto shrink-0 z-10 font-sans text-slate-100"
+            style={{ width: "100%", maxWidth: "540px", boxSizing: "border-box" }}
+          >
+            <div className="flex items-center justify-between border-b border-[#2d3748] pb-4">
+              <h3 className="text-base font-bold text-slate-100 font-mono flex items-center gap-2">
+                <RotateCcw className="w-5 h-5 text-indigo-400" />
+                Reabrir Servicio — {reopenService.tipo_servicio_nombre}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setReopenModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-[#1c2129] rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 bg-indigo-500/10 border border-indigo-500/30 rounded-xl space-y-1.5 text-indigo-300">
+              <div className="flex items-center gap-2 font-bold text-xs">
+                <AlertTriangle className="w-4 h-4 text-indigo-400 shrink-0" />
+                <span>Acción de Control de Calidad</span>
+              </div>
+              <p className="text-[11px] leading-relaxed text-indigo-200/90 font-mono">
+                La reapertura de un servicio completado cambiará su estado a En Proceso y requiere indicar obligatoriamente el motivo explicativo.
+              </p>
+            </div>
+
+            {modalError && (
+              <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs font-sans flex items-start gap-2.5">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold block">Error al validar</span>
+                  <span>{modalError}</span>
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={handleReopenServiceSubmit} className="space-y-4 text-xs font-sans">
+              <div>
+                <label className="block text-slate-300 mb-1 font-semibold">Motivo de Reapertura *</label>
+                <textarea
+                  required
+                  rows={3}
+                  value={reopenMotivo}
+                  onChange={(e) => setReopenMotivo(e.target.value)}
+                  placeholder="Ej: Se requiere revisión adicional debido a leve fricción detectada en prueba de ruta..."
+                  className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-indigo-400 leading-relaxed font-sans"
+                />
+              </div>
+
+              <div className="flex justify-end items-center gap-3 pt-4 border-t border-[#2d3748]">
+                <button
+                  type="button"
+                  onClick={() => setReopenModalOpen(false)}
+                  className="px-4 py-2.5 text-slate-400 hover:text-slate-200 font-mono text-xs"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl flex items-center gap-2 font-mono text-xs transition-all border-t border-indigo-400"
+                >
+                  {submitting && <Loader2 className="w-4 h-4 animate-spin text-white" />}
+                  {submitting ? "Reabriendo..." : "Confirmar Reapertura"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 7: Reasignar Mecánico en Reparación */}
+      {reassignModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto">
+          <div
+            className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-6 sm:p-7 space-y-5 shadow-2xl relative my-auto shrink-0 z-10 font-sans text-slate-100"
+            style={{ width: "100%", maxWidth: "540px", boxSizing: "border-box" }}
+          >
+            <div className="flex items-center justify-between border-b border-[#2d3748] pb-4">
+              <h3 className="text-base font-bold text-slate-100 font-mono flex items-center gap-2">
+                <User className="w-5 h-5 text-amber-400" />
+                Reasignar Mecánico Responsable
+              </h3>
+              <button
+                type="button"
+                onClick={() => setReassignModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-[#1c2129] rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-1.5 text-amber-300 font-mono text-xs">
+              <div className="flex items-center gap-2 font-bold">
+                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>Orden en Reparación: Reasignación de Mecánico</span>
+              </div>
+              <p className="text-[11px] leading-relaxed text-amber-200/90 font-sans">
+                Para cambiar el mecánico asignado en un servicio en Reparación se requiere confirmación explícita y motivo obligatorio.
+              </p>
+            </div>
+
+            {modalError && (
+              <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs font-sans flex items-start gap-2.5">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold block">Error al validar</span>
+                  <span>{modalError}</span>
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={handleConfirmReassignMechanic} className="space-y-4 text-xs font-sans">
+              <div>
+                <label className="flex items-center gap-2 cursor-pointer font-semibold text-amber-200 font-mono">
+                  <input
+                    type="checkbox"
+                    checked={reassignConfirm}
+                    onChange={(e) => setReassignConfirm(e.target.checked)}
+                    className="rounded border-amber-500/50 bg-[#0a0c10] text-[#bfce7f] focus:ring-0"
+                  />
+                  Confirmar reasignación de mecánico en este servicio
+                </label>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 mb-1 font-semibold">Motivo de Reasignación *</label>
+                <input
+                  type="text"
+                  required
+                  value={reassignMotivo}
+                  onChange={(e) => setReassignMotivo(e.target.value)}
+                  placeholder="Ej: Reasignación por rotación de turno / especialidad técnica"
+                  className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div className="flex justify-end items-center gap-3 pt-4 border-t border-[#2d3748]">
+                <button
+                  type="button"
+                  onClick={() => setReassignModalOpen(false)}
+                  className="px-4 py-2.5 text-slate-400 hover:text-slate-200 font-mono text-xs"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="px-5 py-2.5 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl flex items-center gap-2 font-mono text-xs transition-all border-t border-amber-400"
+                >
+                  {submitting && <Loader2 className="w-4 h-4 animate-spin text-white" />}
+                  {submitting ? "Guardando..." : "Confirmar Reasignación"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
