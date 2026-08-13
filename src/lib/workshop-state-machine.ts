@@ -19,7 +19,8 @@ export function getServiceStateRules(
   userPerms: { puede_editar?: boolean; puede_reabrir?: boolean } = {}
 ): ServiceStateActions {
   const hasMechanic = Boolean(mecanicoId && Number(mecanicoId) > 0);
-  const isOrderActive = Number(orderStateId) !== 8; // Active for RECIBIDA (1), REPARACIÓN (5), LISTA PARA ENTREGA (7)
+  const isOrderInRepair = Number(orderStateId) === 5; // Must be REPARACIÓN (5)
+  const isOrderEditable = Number(orderStateId) === 1 || Number(orderStateId) === 5; // RECIBIDA (1) or REPARACIÓN (5)
   const canEdit = Boolean(userPerms.puede_editar ?? true);
   const canReopenPerm = userPerms.puede_reabrir === true;
 
@@ -27,15 +28,15 @@ export function getServiceStateRules(
   switch (Number(estadoServicioId)) {
     case 1: // PENDIENTE
       return {
-        canStart: isOrderActive && hasMechanic && canEdit,
+        canStart: isOrderInRepair && hasMechanic && canEdit,
         canPause: false,
         canResume: false,
         canComplete: false,
         canReopen: false,
         canAddLabor: false,
         canAddProduct: false,
-        canAssignMechanic: isOrderActive && canEdit,
-        requiresMechanicToStart: !hasMechanic,
+        canAssignMechanic: isOrderEditable && canEdit,
+        requiresMechanicToStart: isOrderInRepair && !hasMechanic,
         badgeLabel: "Pendiente",
         badgeClass: "bg-slate-500/10 text-slate-300 border-slate-500/30"
       };
@@ -43,13 +44,13 @@ export function getServiceStateRules(
     case 2: // EN_PROCESO
       return {
         canStart: false,
-        canPause: isOrderActive && canEdit,
+        canPause: isOrderInRepair && canEdit,
         canResume: false,
-        canComplete: isOrderActive && canEdit,
+        canComplete: isOrderInRepair && canEdit,
         canReopen: false,
-        canAddLabor: isOrderActive && canEdit,
-        canAddProduct: isOrderActive && canEdit,
-        canAssignMechanic: isOrderActive && canEdit,
+        canAddLabor: isOrderInRepair && canEdit,
+        canAddProduct: isOrderInRepair && canEdit,
+        canAssignMechanic: isOrderInRepair && canEdit,
         requiresMechanicToStart: false,
         badgeLabel: "En Proceso",
         badgeClass: "bg-amber-500/10 text-amber-400 border-amber-500/30"
@@ -59,7 +60,7 @@ export function getServiceStateRules(
       return {
         canStart: false,
         canPause: false,
-        canResume: isOrderActive && canEdit,
+        canResume: isOrderInRepair && canEdit,
         canComplete: false,
         canReopen: false,
         canAddLabor: false,
@@ -76,7 +77,7 @@ export function getServiceStateRules(
         canPause: false,
         canResume: false,
         canComplete: false,
-        canReopen: isOrderActive && canEdit && canReopenPerm,
+        canReopen: isOrderInRepair && canEdit && canReopenPerm,
         canAddLabor: false,
         canAddProduct: false,
         canAssignMechanic: false,

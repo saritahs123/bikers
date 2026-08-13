@@ -983,6 +983,17 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
         </div>
       </div>
 
+      {/* RECIBIDA Warning Banner */}
+      {Number(order?.estado_orden_id || order?.estado_id || 0) === 1 && (
+        <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center gap-3 text-amber-300 font-sans text-xs shadow-md">
+          <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
+          <div className="flex-1">
+            <strong className="block font-bold text-amber-200 text-sm font-mono mb-0.5">Orden en Recibida</strong>
+            <span>Primero debes iniciar la reparación de la orden desde el encabezado o panel del detalle de la OT para poder iniciar el trabajo en sus servicios.</span>
+          </div>
+        </div>
+      )}
+
       {/* KPI Cards Row */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* KPI 1: Pendientes */}
@@ -1151,7 +1162,16 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
                                       <Play className="w-3.5 h-3.5" />
                                     </button>
                                   )}
-                                  {rules.requiresMechanicToStart && (
+                                  {Number(order?.estado_orden_id || order?.estado_id || 0) === 1 && (
+                                    <button
+                                      disabled
+                                      className="p-1.5 rounded-lg border bg-slate-800/40 text-slate-600 border-slate-700/50 cursor-not-allowed opacity-60"
+                                      title="Primero debes iniciar la reparación de la orden."
+                                    >
+                                      <Play className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                  {Number(order?.estado_orden_id || order?.estado_id || 0) !== 1 && rules.requiresMechanicToStart && (
                                     <button
                                       disabled
                                       className="p-1.5 rounded-lg border bg-slate-800/40 text-slate-600 border-slate-700/50 cursor-not-allowed opacity-60"

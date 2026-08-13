@@ -84,6 +84,15 @@ export async function PUT(
     const currentServ = servRes.rows[0];
     const currentServStateId = currentServ.estado_orden_servicio_id;
 
+    // Enforce order state MUST be REPARACIÓN (5) for service actions (cronometer, start, pause, finish)
+    if (estadoOrdenId === 1 && (body.accion || body.estado_orden_servicio_id !== undefined || body.estado_servicio_id !== undefined)) {
+      await client.query("ROLLBACK");
+      return NextResponse.json({
+        error: "ORDER_NOT_IN_REPAIR",
+        message: "Primero debes iniciar la reparación de la orden."
+      }, { status: 409 });
+    }
+
     // Handle INICIAR_CRONOMETRO Action (starts new live open session for service in EN_PROCESO)
     if (body.accion === "INICIAR_CRONOMETRO") {
       try {
