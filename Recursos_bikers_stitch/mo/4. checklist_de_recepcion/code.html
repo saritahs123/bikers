@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Checklist de Recepción - Biker's Fort</title>
+<!-- Fonts & Icons -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-error": "#690005",
+                        "on-secondary": "#2d3138",
+                        "on-tertiary-fixed": "#121c2c",
+                        "on-primary-fixed": "#181e00",
+                        "on-primary-container": "#252d00",
+                        "secondary-fixed": "#dfe2ec",
+                        "tertiary": "#bdc7dc",
+                        "on-surface-variant": "#c7c8b7",
+                        "on-primary-fixed-variant": "#404c0a",
+                        "outline-variant": "#46483b",
+                        "on-primary": "#2b3400",
+                        "primary-container": "#89974f",
+                        "inverse-surface": "#e4e3d9",
+                        "surface-container": "#1f201a",
+                        "inverse-primary": "#576421",
+                        "surface-bright": "#393a33",
+                        "primary-fixed": "#dbea98",
+                        "inverse-on-surface": "#30312b",
+                        "surface-variant": "#35352f",
+                        "surface-container-highest": "#35352f",
+                        "surface-container-lowest": "#0e0f0a",
+                        "surface": "#13140f",
+                        "surface-container-low": "#1b1c17",
+                        "secondary-container": "#43474f",
+                        "on-error-container": "#ffdad6",
+                        "error": "#ffb4ab",
+                        "on-secondary-fixed-variant": "#43474f",
+                        "secondary-fixed-dim": "#c3c6d0",
+                        "tertiary-fixed-dim": "#bdc7dc",
+                        "on-background": "#e4e3d9",
+                        "on-secondary-container": "#b2b5be",
+                        "on-surface": "#e4e3d9",
+                        "secondary": "#c3c6d0",
+                        "background": "#13140f",
+                        "on-tertiary-fixed-variant": "#3d4759",
+                        "outline": "#919282",
+                        "error-container": "#93000a",
+                        "primary-fixed-dim": "#bfce7f",
+                        "tertiary-fixed": "#d9e3f9",
+                        "on-secondary-fixed": "#181c23",
+                        "primary": "#bfce7f",
+                        "surface-tint": "#bfce7f",
+                        "surface-dim": "#13140f",
+                        "tertiary-container": "#8791a5",
+                        "surface-container-high": "#2a2a24",
+                        "on-tertiary": "#273141",
+                        "on-tertiary-container": "#202a3a"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "gutter": "24px",
+                        "margin-mobile": "16px",
+                        "margin-desktop": "40px",
+                        "container-max": "1440px",
+                        "unit": "4px"
+                    },
+                    "fontFamily": {
+                        "headline-lg": ["Hanken Grotesk"],
+                        "body-sm": ["Hanken Grotesk"],
+                        "headline-md": ["Hanken Grotesk"],
+                        "headline-sm": ["Hanken Grotesk"],
+                        "body-md": ["Hanken Grotesk"],
+                        "body-lg": ["Hanken Grotesk"],
+                        "headline-lg-mobile": ["Hanken Grotesk"],
+                        "label-caps": ["JetBrains Mono"]
+                    },
+                    "fontSize": {
+                        "headline-lg": ["48px", { "lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "800" }],
+                        "body-sm": ["14px", { "lineHeight": "1.4", "fontWeight": "400" }],
+                        "headline-md": ["32px", { "lineHeight": "1.2", "fontWeight": "700" }],
+                        "headline-sm": ["24px", { "lineHeight": "1.3", "fontWeight": "600" }],
+                        "body-md": ["16px", { "lineHeight": "1.5", "fontWeight": "400" }],
+                        "body-lg": ["18px", { "lineHeight": "1.6", "fontWeight": "400" }],
+                        "headline-lg-mobile": ["32px", { "lineHeight": "1.2", "fontWeight": "800" }],
+                        "label-caps": ["12px", { "lineHeight": "1", "letterSpacing": "0.1em", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        /* Custom scrollbar for industrial feel */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #13140f; }
+        ::-webkit-scrollbar-thumb { background: #35352f; border: 1px solid #46483b; }
+        ::-webkit-scrollbar-thumb:hover { background: #46483b; }
+        
+        /* Subtle grid pattern background */
+        .bg-grid-pattern {
+            background-image: linear-gradient(to right, rgba(70, 72, 59, 0.1) 1px, transparent 1px),
+                              linear-gradient(to bottom, rgba(70, 72, 59, 0.1) 1px, transparent 1px);
+            background-size: 24px 24px;
+        }
+
+        .status-btn.selected-bueno { @apply bg-primary-container text-on-primary-container border-primary; }
+        .status-btn.selected-regular { @apply bg-tertiary-container text-on-tertiary-container border-tertiary; }
+        .status-btn.selected-malo { @apply bg-error-container text-on-error-container border-error; }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body-md bg-grid-pattern min-h-screen">
+<!-- TopAppBar -->
+<header class="fixed top-0 right-0 left-64 h-16 bg-surface-container-low border-b border-outline-variant flex justify-between items-center px-margin-desktop z-50">
+<div class="flex items-center gap-4">
+<span class="font-headline-sm text-headline-sm text-primary uppercase tracking-widest">Biker's Fort Core</span>
+</div>
+<div class="flex items-center gap-6">
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+</button>
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined" data-icon="apps">apps</span>
+</button>
+<div class="w-8 h-8 rounded bg-surface-variant border border-outline overflow-hidden">
+<img alt="Manager Avatar" class="w-full h-full object-cover" data-alt="A macro shot of brushed dark metal with subtle scratches, acting as an industrial placeholder avatar for a system manager." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCHnqSY3usu7ZOtN0NPmlBkeVVIUVvko23I9knY2C1TDyQyJQZulTozDtYT5OxNfJSFjcXatZK0LW_IC_vnlvGFL2a8A8we9ij9Tkz334gaLvVgjpIZZ_6Wkgpd6DPet8H8ulJVexZ_0B-cJRNjxT9vx8pUuixd3vaI4MG8oG-wVQ5FXZo3WvxgfOxHL621Fy5hwp7UdTC_1bzi4n0rqBiQRMQI7j3FAQ-uC9ZO4stPFp90FRuuH4BX"/>
+</div>
+</div>
+</header>
+<!-- SideNavBar -->
+<nav class="h-screen w-64 fixed left-0 top-0 bg-surface-container border-r border-outline-variant flex flex-col py-gutter px-unit z-50">
+<div class="px-4 mb-8">
+<h1 class="font-headline-sm text-headline-sm text-primary font-bold tracking-tight mb-1">Biker's Fort</h1>
+<p class="font-label-caps text-label-caps text-on-surface-variant">Management v2.4</p>
+</div>
+<div class="flex-1 overflow-y-auto">
+<ul class="space-y-1">
+<li>
+<a class="flex items-center gap-3 px-4 py-3 rounded text-on-surface-variant hover:bg-surface-variant hover:text-on-surface transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="font-body-md text-body-md">Dashboard</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-4 py-3 rounded bg-secondary-container text-on-secondary-container border-r-4 border-primary font-bold active:scale-[0.98] transition-transform" href="#">
+<span class="material-symbols-outlined" data-icon="login">login</span>
+<span class="font-body-md text-body-md">Reception</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-4 py-3 rounded text-on-surface-variant hover:bg-surface-variant hover:text-on-surface transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="engineering">engineering</span>
+<span class="font-body-md text-body-md">Work Orders</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-4 py-3 rounded text-on-surface-variant hover:bg-surface-variant hover:text-on-surface transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="inventory_2">inventory_2</span>
+<span class="font-body-md text-body-md">Inventory</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-4 py-3 rounded text-on-surface-variant hover:bg-surface-variant hover:text-on-surface transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="groups">groups</span>
+<span class="font-body-md text-body-md">CRM</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-4 py-3 rounded text-on-surface-variant hover:bg-surface-variant hover:text-on-surface transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="security">security</span>
+<span class="font-body-md text-body-md">Security</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-4 py-3 rounded text-on-surface-variant hover:bg-surface-variant hover:text-on-surface transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="assessment">assessment</span>
+<span class="font-body-md text-body-md">Reports</span>
+</a>
+</li>
+</ul>
+</div>
+<div class="mt-auto pt-4 border-t border-outline-variant">
+<button class="w-full flex items-center justify-center gap-2 py-3 bg-primary text-on-primary rounded font-bold hover:bg-primary-fixed transition-colors">
+<span class="material-symbols-outlined text-sm">add</span>
+                New Work Order
+            </button>
+<ul class="space-y-1 mt-4">
+<li>
+<a class="flex items-center gap-3 px-4 py-2 rounded text-on-surface-variant hover:bg-surface-variant transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-base" data-icon="settings">settings</span>
+                        Settings
+                    </a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-4 py-2 rounded text-on-surface-variant hover:bg-surface-variant transition-colors text-sm" href="#">
+<span class="material-symbols-outlined text-base" data-icon="help_outline">help_outline</span>
+                        Support
+                    </a>
+</li>
+</ul>
+</div>
+</nav>
+<!-- Main Content Canvas -->
+<main class="ml-64 mt-16 p-margin-desktop min-h-screen">
+<div class="max-w-container-max mx-auto">
+<!-- Context Header -->
+<div class="mb-8">
+<nav aria-label="Breadcrumb" class="flex text-on-surface-variant font-label-caps text-label-caps mb-4">
+<ol class="inline-flex items-center space-x-2">
+<li><a class="hover:text-primary transition-colors" href="#">Taller</a></li>
+<li><span class="material-symbols-outlined text-sm">chevron_right</span></li>
+<li><a class="hover:text-primary transition-colors" href="#">Recepción</a></li>
+<li><span class="material-symbols-outlined text-sm">chevron_right</span></li>
+<li aria-current="page" class="text-primary">Inspección</li>
+</ol>
+</nav>
+<div class="flex justify-between items-end">
+<div>
+<h2 class="font-headline-md text-headline-md text-on-surface mb-2">Checklist de Recepción</h2>
+<p class="font-body-md text-body-md text-on-surface-variant">Inspección visual y técnica de ingreso.</p>
+</div>
+<div class="bg-surface-container p-3 border border-outline-variant rounded flex gap-4">
+<div>
+<span class="block font-label-caps text-label-caps text-outline">ID ORDEN</span>
+<span class="font-body-md text-primary font-bold">#WO-8892</span>
+</div>
+<div class="w-px bg-outline-variant"></div>
+<div>
+<span class="block font-label-caps text-label-caps text-outline">VEHÍCULO</span>
+<span class="font-body-md text-on-surface">Trek Slash 9.8</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Bento Grid Checklist Layout -->
+<div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+<!-- Item: Cuadro -->
+<div class="bg-surface border border-outline-variant rounded p-6 flex flex-col gap-4 hover:border-outline transition-colors group">
+<div class="flex justify-between items-center border-b border-outline-variant pb-3">
+<h3 class="font-headline-sm text-headline-sm text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">pedal_bike</span>
+                            Cuadro
+                        </h3>
+<span class="font-label-caps text-label-caps px-2 py-1 bg-surface-container rounded border border-outline-variant text-outline group-hover:text-primary transition-colors">SEC-01</span>
+</div>
+<div class="grid grid-cols-3 gap-2">
+<button class="status-btn border border-outline-variant rounded py-2 text-center font-label-caps text-label-caps text-on-surface-variant hover:bg-surface-variant transition-colors" data-state="bueno">
+                            BUENO
+                        </button>
+<button class="status-btn border border-outline-variant rounded py-2 text-center font-label-caps text-label-caps text-on-surface-variant hover:bg-surface-variant transition-colors" data-state="regular">
+                            REGULAR
+                        </button>
+<button class="status-btn border border-outline-variant rounded py-2 text-center font-label-caps text-label-caps text-on-surface-variant hover:bg-surface-variant transition-colors" data-state="malo">
+                            MALO
+                        </button>
+</div>
+<div class="flex-1">
+<label class="block font-label-caps text-label-caps text-outline mb-2">Comentarios Técnicos</label>
+<textarea class="w-full bg-surface-container-lowest border border-outline-variant rounded p-3 text-on-surface font-body-sm focus:ring-1 focus:ring-primary focus:border-primary resize-none h-24" placeholder="Detallar rayones, fisuras, estado de pintura..."></textarea>
+</div>
+</div>
+<!-- Item: Transmisión -->
+<div class="bg-surface border border-outline-variant rounded p-6 flex flex-col gap-4 hover:border-outline transition-colors group">
+<div class="flex justify-between items-center border-b border-outline-variant pb-3">
+<h3 class="font-headline-sm text-headline-sm text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">settings</span>
+                            Transmisión
+                        </h3>
+<span class="font-label-caps text-label-caps px-2 py-1 bg-surface-container rounded border border-outline-variant text-outline group-hover:text-primary transition-colors">SEC-02</span>
+</div>
+<div class="grid grid-cols-3 gap-2">
+<button class="status-btn border border-outline-variant rounded py-2 text-center font-label-caps text-label-caps text-on-surface-variant hover:bg-surface-variant transition-colors" data-state="bueno">
+                            BUENO
+                        </button>
+<button class="status-btn border border-outline-variant rounded py-2 text-center font-label-caps text-label-caps text-on-surface-variant hover:bg-surface-variant transition-colors" data-state="regular">
+                            REGULAR
+                        </button>
+<button class="status-btn border border-outline-variant rounded py-2 text-center font-label-caps text-label-caps text-on-surface-variant hover:bg-surface-variant transition-colors" data-state="malo">
+                            MALO
+                        </button>
+</div>
+<div class="flex-1">
+<label class="block font-label-caps text-label-caps text-outline mb-2">Comentarios Técnicos</label>
+<textarea class="w-full bg-surface-container-lowest border border-outline-variant rounded p-3 text-on-surface font-body-sm focus:ring-1 focus:ring-primary focus:border-primary resize-none h-24" placeholder="Desgaste de cadena, estado de piñones, tensión de cables..."></textarea>
+</div>
+</div>
+<!-- Item: Frenos -->
+<div class="bg-surface border border-outline-variant rounded p-6 flex flex-col gap-4 hover:border-outline transition-colors group xl:col-span-2">
+<div class="flex justify-between items-center border-b border-outline-variant pb-3">
+<h3 class="font-headline-sm text-headline-sm text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">adjust</span>
+                            Frenos
+                        </h3>
+<span class="font-label-caps text-label-caps px-2 py-1 bg-surface-container rounded border border-outline-variant text-outline group-hover:text-primary transition-colors">SEC-03</span>
+</div>
+<div class="flex flex-col md:flex-row gap-6">
+<div class="w-full md:w-1/3 flex flex-col justify-start gap-2">
+<button class="status-btn border border-outline-variant rounded py-3 text-center font-label-caps text-label-caps text-on-surface-variant hover:bg-surface-variant transition-colors" data-state="bueno">
+                                BUENO
+                            </button>
+<button class="status-btn border border-outline-variant rounded py-3 text-center font-label-caps text-label-caps text-on-surface-variant hover:bg-surface-variant transition-colors" data-state="regular">
+                                REGULAR
+                            </button>
+<button class="status-btn border border-outline-variant rounded py-3 text-center font-label-caps text-label-caps text-on-surface-variant hover:bg-surface-variant transition-colors" data-state="malo">
+                                MALO
+                            </button>
+</div>
+<div class="w-full md:w-2/3">
+<label class="block font-label-caps text-label-caps text-outline mb-2">Comentarios Técnicos</label>
+<textarea class="w-full bg-surface-container-lowest border border-outline-variant rounded p-3 text-on-surface font-body-sm focus:ring-1 focus:ring-primary focus:border-primary resize-none h-full min-h-[120px]" placeholder="Estado de pastillas, purgado necesario, roce de discos..."></textarea>
+</div>
+</div>
+</div>
+</div>
+<!-- Floating Action Bar -->
+<div class="mt-8 flex justify-end sticky bottom-6">
+<div class="bg-surface-container border border-outline-variant rounded-full px-6 py-3 shadow-[4px_4px_0px_rgba(0,0,0,0.5)] flex items-center gap-4">
+<span class="text-on-surface-variant font-label-caps text-label-caps mr-4">Progreso: 3/5 Completado</span>
+<button class="px-6 py-2 border border-outline-variant text-on-surface rounded font-bold hover:bg-surface-variant transition-colors">
+                        Guardar Borrador
+                    </button>
+<button class="px-6 py-2 bg-primary text-on-primary rounded font-bold border-t border-primary-fixed hover:bg-primary-fixed transition-colors flex items-center gap-2">
+                        Finalizar Inspección
+                        <span class="material-symbols-outlined text-sm">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+</main>
+<script>
+        // Simple interaction script to toggle status buttons
+        document.querySelectorAll('.status-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                // Find siblings in the same grid/group
+                const parent = this.parentElement;
+                const siblings = parent.querySelectorAll('.status-btn');
+                
+                // Remove all selected classes
+                siblings.forEach(sib => {
+                    sib.classList.remove('selected-bueno', 'selected-regular', 'selected-malo');
+                });
+
+                // Add appropriate class based on data-state
+                const state = this.getAttribute('data-state');
+                if (state === 'bueno') this.classList.add('selected-bueno');
+                if (state === 'regular') this.classList.add('selected-regular');
+                if (state === 'malo') this.classList.add('selected-malo');
+            });
+        });
+    </script>
+</body></html>

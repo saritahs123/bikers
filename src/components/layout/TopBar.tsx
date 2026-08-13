@@ -1,17 +1,15 @@
-export function TopBar() {
+export function TopBar({ onMenuToggle }: { onMenuToggle?: () => void }) {
   return (
-    <header className="fixed top-0 right-0 h-16 ml-64 w-[calc(100%-16rem)] bg-surface border-b border-outline-variant flex justify-between items-center px-xl z-40">
-      <div className="flex items-center gap-md w-1/3">
-        <div className="relative w-full">
-          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm">
-            search
-          </span>
-          <input
-            className="bg-[#050505] border border-outline-variant rounded-full pl-10 pr-4 py-1.5 w-full text-body-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all"
-            placeholder="Buscar órdenes, clientes o partes..."
-            type="text"
-          />
-        </div>
+    <header className="fixed top-0 right-0 h-16 ml-0 md:ml-64 w-full md:w-[calc(100%-16rem)] bg-surface border-b border-outline-variant flex justify-between items-center px-4 md:px-xl z-40">
+      <div className="flex items-center gap-md">
+        <button
+          type="button"
+          onClick={onMenuToggle}
+          className="md:hidden text-slate-300 hover:text-white p-2 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer flex items-center justify-center"
+          title="Abrir menú de navegación"
+        >
+          <span className="material-symbols-outlined text-2xl">menu</span>
+        </button>
       </div>
       <div className="flex items-center gap-lg">
         <div className="flex items-center gap-md">

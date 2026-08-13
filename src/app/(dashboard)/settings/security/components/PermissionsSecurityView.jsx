@@ -27,7 +27,7 @@ const DEFAULT_PERMISSIONS = {
   dual_control_critical: false
 };
 
-export default function PermissionsSecurityView({ onOpenSidebar }) {
+export default function PermissionsSecurityView({ onOpenSidebar = () => {} }) {
   const isDevelopment = process.env.NODE_ENV === 'development';
   const apiBase = '/api';
   const [settings, setSettings] = useState(DEFAULT_PERMISSIONS);

@@ -14,24 +14,7 @@ export async function GET(
     }
 
     const sql = `
-      SELECT 
-        actividad_id AS id,
-        actividad_id,
-        usuario_id,
-        fecha_hora AS timestamp,
-        fecha_hora,
-        modulo AS module,
-        modulo,
-        evento AS event,
-        evento,
-        descripcion AS desc,
-        descripcion,
-        resultado AS result,
-        resultado,
-        direccion_ip AS ip,
-        direccion_ip,
-        dispositivo AS device,
-        dispositivo
+      SELECT *
       FROM admin.usuario_actividad
       WHERE usuario_id = $1
       ORDER BY fecha_hora DESC
@@ -39,36 +22,34 @@ export async function GET(
 
     let rows = await query(sql, [userId]);
 
-    // If no records in database for this user, insert initial activity log entries for demonstration so user sees live activity tracking in 360
-    if (!rows || rows.length === 0) {
-      await query(`
-        INSERT INTO admin.usuario_actividad (usuario_id, fecha_hora, modulo, evento, descripcion, resultado, direccion_ip, dispositivo)
-        VALUES 
-        ($1, NOW() - INTERVAL '10 minutes', 'Seguridad', 'Inicio de Sesión', 'Autenticación exitosa desde navegador web', 'Éxito', '190.167.45.12', 'Chrome (Windows)'),
-        ($1, NOW() - INTERVAL '1 day', 'Administrar Usuarios', 'Edición de Perfil', 'Actualización de datos y permisos del usuario', 'Éxito', '190.167.45.12', 'Chrome (Windows)')
-      `, [userId]);
-
-      rows = await query(sql, [userId]);
-    }
-
     const mapped = (rows || []).map((r: any) => ({
-      id: r.id || r.actividad_id,
-      actividad_id: r.actividad_id,
+      id: r.actividad_id || r.id,
+      actividad_id: r.actividad_id || r.id,
       usuario_id: r.usuario_id,
-      timestamp: r.timestamp || r.fecha_hora || new Date().toISOString(),
-      fecha_hora: r.fecha_hora || r.timestamp || new Date().toISOString(),
-      event: r.event || r.evento || "Actividad Operativa",
-      evento: r.evento || r.event || "Actividad Operativa",
-      module: r.module || r.modulo || "Seguridad",
+      timestamp: r.fecha_hora || r.timestamp || null,
+      fecha_hora: r.fecha_hora || r.timestamp || null,
+      event: r.evento || r.event || r.tipo_accion || "Actividad Operativa",
+      evento: r.evento || r.event || r.tipo_accion || "Actividad Operativa",
+      tipo_accion: r.tipo_accion || r.evento || r.event || "Consultar",
+      module: r.modulo || r.module || "Seguridad",
       modulo: r.modulo || r.module || "Seguridad",
-      desc: r.desc || r.descripcion || "",
+      desc: r.descripcion || r.desc || "",
       descripcion: r.descripcion || r.desc || "",
-      result: r.result || r.resultado || "Éxito",
-      resultado: r.resultado || r.result || "Éxito",
-      ip: r.ip || r.direccion_ip || "127.0.0.1",
+      result: r.resultado || r.result || "Exitoso",
+      resultado: r.resultado || r.result || "Exitoso",
+      ip: r.direccion_ip || r.ip || "127.0.0.1",
       direccion_ip: r.direccion_ip || r.ip || "127.0.0.1",
-      device: r.device || r.dispositivo || "Navegador Web",
-      dispositivo: r.dispositivo || r.device || "Navegador Web"
+      device: r.dispositivo || r.device || "Navegador Web",
+      dispositivo: r.dispositivo || r.device || "Navegador Web",
+      tabla_afectada: r.tabla_afectada || null,
+      registro_afectado: r.registro_afectado || null,
+      url: r.url || null,
+      metodo_http: r.metodo_http || null,
+      duracion_ms: r.duracion_ms || r.duracion || null,
+      valor_anterior: r.valor_anterior || r.antes || null,
+      valor_nuevo: r.valor_nuevo || r.despues || null,
+      antes: r.antes || r.valor_anterior || null,
+      despues: r.despues || r.valor_nuevo || null
     }));
 
     return NextResponse.json(mapped);

@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { FullRoleData, saveRoleMatrix, MatrixRowUpdate, createRole } from "./actions";
+import SecurityConfirmDialog from "@/components/security/SecurityConfirmDialog";
 
 type MatrizRow = {
   modulo_sistema_id: number;
@@ -50,6 +51,8 @@ export default function RolesClient({ data }: { data: FullRoleData }) {
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmittingRole, setIsSubmittingRole] = useState(false);
+
+  const [pendingRoleChange, setPendingRoleChange] = useState<number | null>(null);
 
   // Initialize state from server data
   useEffect(() => {
@@ -260,7 +263,8 @@ export default function RolesClient({ data }: { data: FullRoleData }) {
                   key={role.rol_funcional_id}
                   onClick={() => {
                     if (hasChanges) {
-                      if(!confirm("Tienes cambios sin guardar. ¿Deseas descartarlos y cambiar de rol?")) return;
+                      setPendingRoleChange(role.rol_funcional_id);
+                      return;
                     }
                     setActiveRoleId(role.rol_funcional_id);
                     setHasChanges(false);
@@ -424,6 +428,22 @@ export default function RolesClient({ data }: { data: FullRoleData }) {
           </div>
         </div>
       )}
+
+      <SecurityConfirmDialog
+        isOpen={pendingRoleChange !== null}
+        onClose={() => setPendingRoleChange(null)}
+        onConfirm={() => {
+          if (pendingRoleChange !== null) {
+            setActiveRoleId(pendingRoleChange);
+            setHasChanges(false);
+            setPendingRoleChange(null);
+          }
+        }}
+        variant="warning"
+        title="Cambios sin guardar"
+        description="Tienes cambios pendientes en la matriz de permisos. ¿Deseas descartarlos y cambiar de rol?"
+        confirmLabel="Descartar y cambiar"
+      />
     </div>
   );
 }

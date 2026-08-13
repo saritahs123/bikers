@@ -1,4 +1,3 @@
-import Image from "next/image";
 import { loginAction } from "./actions";
 
 export default function LoginPage() {
@@ -53,7 +52,6 @@ export default function LoginPage() {
                     id="username"
                     type="text"
                     required
-                    defaultValue="admin@bikersfort.com"
                     placeholder="admin@bikersfort.com"
                     className="w-full h-14 pl-12 pr-4 bg-white border border-[#2d3748] focus:border-[#bfce7f] focus:outline-none focus:ring-1 focus:ring-[#bfce7f] text-black text-[16px] font-medium transition-colors rounded-none"
                   />
@@ -71,7 +69,6 @@ export default function LoginPage() {
                     id="password"
                     type="password"
                     required
-                    defaultValue="12345678"
                     placeholder="••••••••"
                     className="w-full h-14 pl-12 pr-12 bg-white border border-[#2d3748] focus:border-[#bfce7f] focus:outline-none focus:ring-1 focus:ring-[#bfce7f] text-black text-[16px] font-medium transition-colors rounded-none"
                   />
@@ -111,7 +108,7 @@ export default function LoginPage() {
       {/* Footer */}
       <footer className="w-full absolute bottom-0 left-0 right-0 py-8 px-4 md:px-10 border-t border-[#46483b]/30 z-10 flex flex-col md:flex-row justify-between items-center gap-4 text-[#c7c8b7] font-mono text-[10px] tracking-widest uppercase">
         <div className="flex items-center gap-4">
-          <span>© 2024 BIKER'S FORT CORE. TODOS LOS DERECHOS RESERVADOS.</span>
+          <span>© 2024 BIKER&apos;S FORT CORE. TODOS LOS DERECHOS RESERVADOS.</span>
           <span className="hidden md:block">|</span>
           <span>SYSTEM STATUS: <span className="text-[#bfce7f]">ONLINE</span></span>
         </div>

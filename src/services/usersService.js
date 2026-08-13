@@ -17,7 +17,8 @@ export const usersService = {
     try {
       const response = await fetch(`/api/usuarios/${id}`, { cache: 'no-store' });
       if (!response.ok) {
-        throw new Error('Error al obtener usuario por id');
+        console.warn(`usersService.getUserById: /api/usuarios/${id} returned status ${response.status}`);
+        return null;
       }
       return await response.json();
     } catch (error) {
@@ -62,14 +63,27 @@ export const usersService = {
     }
   },
 
-  getUserAuditoria: async (id) => {
+  getUserAuditoria: async (id, params = {}) => {
     try {
-      const response = await fetch(`/api/usuarios/${id}/auditoria`, { cache: 'no-store' });
-      if (!response.ok) return [];
+      const searchParams = new URLSearchParams();
+      if (params.page) searchParams.set('page', String(params.page));
+      if (params.pageSize) searchParams.set('pageSize', String(params.pageSize));
+      if (params.fechaDesde) searchParams.set('fechaDesde', params.fechaDesde);
+      if (params.fechaHasta) searchParams.set('fechaHasta', params.fechaHasta);
+      if (params.accion && params.accion !== 'Todos') searchParams.set('accion', params.accion);
+      if (params.adminId && params.adminId !== 'Todos') searchParams.set('adminId', String(params.adminId));
+      if (params.resultado && params.resultado !== 'Todos') searchParams.set('resultado', params.resultado);
+      if (params.search) searchParams.set('search', params.search);
+      if (params.all) searchParams.set('all', 'true');
+
+      const queryString = searchParams.toString();
+      const url = `/api/usuarios/${id}/auditoria${queryString ? `?${queryString}` : ''}`;
+      const response = await fetch(url, { cache: 'no-store' });
+      if (!response.ok) return { items: [], total: 0 };
       return await response.json();
     } catch (error) {
       console.error('usersService.getUserAuditoria error:', error);
-      return [];
+      return { items: [], total: 0 };
     }
   },
 
@@ -101,12 +115,12 @@ export const usersService = {
     }
   },
 
-  revokeAllUserSessions: async (userId) => {
+  revokeAllUserSessions: async (userId, keepCurrent = true) => {
     try {
       const response = await fetch(`/api/usuarios/${userId}/sesiones`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ revokeAll: true })
+        body: JSON.stringify({ revokeAll: true, keepCurrent })
       });
       return await response.json();
     } catch (error) {
@@ -123,13 +137,65 @@ export const usersService = {
         body: JSON.stringify(userData)
       });
       if (!response.ok) {
-        console.warn(`API /api/usuarios/${id} PUT returned status ${response.status}, resolving locally.`);
-        return { success: true, user: userData };
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Error ${response.status} al actualizar usuario`);
       }
       return await response.json();
     } catch (error) {
-      console.warn('usersService.updateUser network fallback:', error);
-      return { success: true, user: userData };
+      console.error('usersService.updateUser error:', error);
+      throw error;
+    }
+  },
+
+  createUser: async (userData) => {
+    try {
+      const response = await fetch('/api/usuarios', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(userData)
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || `Error ${response.status} al crear usuario`);
+      }
+      return data;
+    } catch (error) {
+      console.error('usersService.createUser error:', error);
+      throw error;
+    }
+  },
+
+  resetPassword: async (id) => {
+    try {
+      const response = await fetch(`/api/usuarios/${id}/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Error al restablecer la contraseña');
+      }
+      return data;
+    } catch (error) {
+      console.error('usersService.resetPassword error:', error);
+      throw error;
+    }
+  },
+
+  deleteUser: async (id) => {
+    try {
+      const response = await fetch(`/api/usuarios/${id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || `Error ${response.status} al eliminar usuario`);
+      }
+      return data;
+    } catch (error) {
+      console.error('usersService.deleteUser error:', error);
+      throw error;
     }
   }
 };

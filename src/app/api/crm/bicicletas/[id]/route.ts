@@ -152,40 +152,64 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
     const bicicletaId = parseInt(id, 10);
 
     if (isNaN(bicicletaId)) {
-      return NextResponse.json({ error: "ID de bicicleta inválido." }, { status: 400 });
+      return NextResponse.json({ success: false, message: "ID de bicicleta inválido." }, { status: 400 });
     }
 
-    // Get cliente_id before deleting
+    // Retrieve owner cliente_id before physical deletion
     const current = await query(`SELECT cliente_id FROM admin.bicicletas WHERE bicicleta_id = $1`, [bicicletaId]);
     const cliente_id = current && current[0] ? current[0].cliente_id : null;
 
-    const sql = `
-      UPDATE admin.bicicletas SET
-        activo = false,
-        fecha_eliminacion = NOW()
+    // 2. Perform physical DELETE exclusively
+    const deleteSql = `
+      DELETE FROM admin.bicicletas
       WHERE bicicleta_id = $1
-      RETURNING *
+      RETURNING bicicleta_id
     `;
+    const deleteResult = await query(deleteSql, [bicicletaId]);
 
-    const result = await query(sql, [bicicletaId]);
-    if (!result || result.length === 0) {
-      return NextResponse.json({ error: "Bicicleta no encontrada." }, { status: 404 });
+    // 3. If no rows returned, bicycle does not exist
+    if (!deleteResult || deleteResult.length === 0) {
+      return NextResponse.json({
+        success: false,
+        message: "Bicicleta no encontrada"
+      }, { status: 404 });
     }
 
+    // 4. Update owner customer's bike count if owner exists
     if (cliente_id) {
-      await query(`
-        UPDATE admin.clientes
-        SET cantidad_bicicletas = (
-          SELECT COUNT(*) FROM admin.bicicletas WHERE cliente_id = $1 AND fecha_eliminacion IS NULL
-        )
-        WHERE cliente_id = $1
-      `, [cliente_id]);
+      try {
+        await query(`
+          UPDATE admin.clientes
+          SET cantidad_bicicletas = (
+            SELECT COUNT(*)::integer FROM admin.bicicletas WHERE cliente_id = $1 AND fecha_eliminacion IS NULL
+          )
+          WHERE cliente_id = $1
+        `, [cliente_id]);
+      } catch (errCount) {
+        console.warn("Error updating customer bike count after delete:", errCount);
+      }
     }
 
-    return NextResponse.json({ message: "Bicicleta eliminada correctamente.", bicicleta_id: bicicletaId });
+    return NextResponse.json({
+      success: true,
+      message: "Bicicleta eliminada correctamente"
+    }, { status: 200 });
 
   } catch (error: any) {
     console.error("Error in DELETE /api/crm/bicicletas/[id]:", error);
-    return NextResponse.json({ error: error.message || "Error al eliminar bicicleta" }, { status: 500 });
+
+    // Detect exact PostgreSQL 23503 foreign key constraint violation
+    const errorCode = error?.code || error?.cause?.code;
+    if (errorCode === "23503") {
+      return NextResponse.json({
+        success: false,
+        message: "No se puede eliminar la bicicleta porque tiene registros asociados."
+      }, { status: 409 });
+    }
+
+    return NextResponse.json({
+      success: false,
+      message: "No fue posible eliminar la bicicleta. Inténtalo nuevamente."
+    }, { status: 500 });
   }
 }

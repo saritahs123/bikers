@@ -27,10 +27,104 @@ import {
   Wrench,
   Calendar,
   AlertTriangle,
-  AlertCircle
+  AlertCircle,
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
+  Clock,
+  Check,
+  Package
 } from "lucide-react";
 import { validateRequiredText } from "@/lib/validations";
 import BicyclesView from "@/components/crm/BicyclesView";
+import BikeFormDrawer from "@/components/crm/BikeFormDrawer";
+
+// Helper functions for Dominican Cédula, RNC, and Phone
+export const normalizeDigits = (value) => {
+  if (!value) return "";
+  return String(value).replace(/\D/g, "");
+};
+
+export const formatCedula = (value) => {
+  const digits = normalizeDigits(value).slice(0, 11);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 10) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 10)}-${digits.slice(10, 11)}`;
+};
+
+export const formatRnc = (value) => {
+  const digits = normalizeDigits(value).slice(0, 9);
+  if (digits.length <= 1) return digits;
+  if (digits.length <= 3) return `${digits.slice(0, 1)}-${digits.slice(1)}`;
+  if (digits.length <= 8) return `${digits.slice(0, 1)}-${digits.slice(1, 3)}-${digits.slice(3)}`;
+  return `${digits.slice(0, 1)}-${digits.slice(1, 3)}-${digits.slice(3, 8)}-${digits.slice(8, 9)}`;
+};
+
+export const formatDominicanPhone = (value) => {
+  if (!value) return "";
+  const str = String(value).trim();
+  const hasPlusOne = str.startsWith("+1") || str.startsWith("+ 1");
+  const digits = normalizeDigits(value);
+
+  if ((digits.startsWith("1") && digits.length > 10) || hasPlusOne) {
+    const main10 = digits.startsWith("1") ? digits.slice(1, 11) : digits.slice(0, 10);
+    if (main10.length <= 3) return `+1 ${main10}`;
+    if (main10.length <= 6) return `+1 ${main10.slice(0, 3)}-${main10.slice(3)}`;
+    return `+1 ${main10.slice(0, 3)}-${main10.slice(3, 6)}-${main10.slice(6, 10)}`;
+  } else {
+    const main10 = digits.slice(0, 10);
+    if (main10.length <= 3) return main10;
+    if (main10.length <= 6) return `${main10.slice(0, 3)}-${main10.slice(3)}`;
+    return `${main10.slice(0, 3)}-${main10.slice(3, 6)}-${main10.slice(6, 10)}`;
+  }
+};
+
+export const validateCedula = (value) => {
+  if (!value || !value.trim()) return null;
+  const digits = normalizeDigits(value);
+  if (digits.length !== 11) {
+    return "La Cédula debe contener 11 dígitos.";
+  }
+  return null;
+};
+
+export const validateRnc = (value) => {
+  if (!value || !value.trim()) return null;
+  const digits = normalizeDigits(value);
+  if (digits.length !== 9) {
+    return "El RNC debe contener 9 dígitos.";
+  }
+  return null;
+};
+
+export const validateDominicanPhone = (value) => {
+  if (!value || !value.trim()) {
+    return "El Teléfono Principal es obligatorio.";
+  }
+  const str = String(value).trim();
+  const digits = normalizeDigits(value);
+  let areaCode = "";
+
+  if ((digits.startsWith("1") && digits.length >= 11) || str.startsWith("+1")) {
+    const main10 = digits.startsWith("1") ? digits.slice(1) : digits;
+    if (main10.length !== 10) {
+      return "El teléfono debe contener 10 dígitos.";
+    }
+    areaCode = main10.slice(0, 3);
+  } else {
+    if (digits.length !== 10) {
+      return "El teléfono debe contener 10 dígitos.";
+    }
+    areaCode = digits.slice(0, 3);
+  }
+
+  const validAreaCodes = ["809", "829", "849"];
+  if (!validAreaCodes.includes(areaCode)) {
+    return "Introduce un teléfono válido de República Dominicana.";
+  }
+
+  return null;
+};
 
 export default function CustomersView() {
   const [data, setData] = useState([]);
@@ -46,6 +140,7 @@ export default function CustomersView() {
   // Detail 360 View State
   const [detailUser, setDetailUser] = useState(null);
   const [selectedBikeId, setSelectedBikeId] = useState(null);
+  const [expandedOrders, setExpandedOrders] = useState({});
 
   // Form Modal States
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -74,6 +169,108 @@ export default function CustomersView() {
   const [itemToDelete, setItemToDelete] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [modalError, setModalError] = useState(null);
+
+  // Bike Drawer Modal States
+  const [isBikeModalOpen, setIsBikeModalOpen] = useState(false);
+  const [bikeFormData, setBikeFormData] = useState({
+    marca: "",
+    modelo: "",
+    tipo_bicicleta: "MTB",
+    ano: new Date().getFullYear(),
+    color: "",
+    talla: "M",
+    numero_serie_cuadro: "",
+    descripcion: "",
+    kilometraje_actual: 0,
+    notas_tecnicas: ""
+  });
+  const [bikeErrors, setBikeErrors] = useState({});
+  const [isSavingBike, setIsSavingBike] = useState(false);
+  const [bikeModalError, setBikeModalError] = useState(null);
+
+  const handleOpenAddBikeModal = () => {
+    setBikeFormData({
+      marca: "",
+      modelo: "",
+      tipo_bicicleta: "MTB",
+      ano: new Date().getFullYear(),
+      color: "",
+      talla: "M",
+      numero_serie_cuadro: "",
+      descripcion: "",
+      kilometraje_actual: 0,
+      notas_tecnicas: ""
+    });
+    setBikeErrors({});
+    setBikeModalError(null);
+    setIsBikeModalOpen(true);
+  };
+
+  const handleSaveBike = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    setBikeModalError(null);
+
+    const errs = {};
+    const marcaRes = validateRequiredText(bikeFormData.marca, "La Marca", 100);
+    if (!marcaRes.isValid) errs.marca = marcaRes.message;
+
+    const modeloRes = validateRequiredText(bikeFormData.modelo, "El Modelo", 100);
+    if (!modeloRes.isValid) errs.modelo = modeloRes.message;
+
+    if (Object.keys(errs).length > 0) {
+      setBikeErrors(errs);
+      const firstErr = Object.values(errs)[0];
+      setBikeModalError(firstErr);
+      showToast(firstErr, "error");
+      return;
+    }
+
+    setIsSavingBike(true);
+    try {
+      const targetClienteId = detailUser?.id ?? detailUser?.cliente_id;
+      const payload = {
+        cliente_id: targetClienteId,
+        ...bikeFormData
+      };
+
+      const res = await fetch("/api/crm/bicicletas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      const json = await res.json().catch(() => null);
+
+      if (!res.ok || json?.error) {
+        const errorMsg = json?.error || json?.message || `No fue posible registrar la bicicleta (${res.status})`;
+        setBikeModalError(errorMsg);
+        showToast(errorMsg, "error");
+        return;
+      }
+
+      showToast("Bicicleta registrada correctamente", "success");
+      setIsBikeModalOpen(false);
+      setBikeModalError(null);
+      setBikeErrors({});
+
+      // Refresh customer detail and global list
+      if (targetClienteId || targetClienteId === 0) {
+        const resDetail = await fetch(`/api/crm/clientes/${targetClienteId}`);
+        if (resDetail.ok) {
+          const freshDetail = await resDetail.json();
+          setDetailUser(freshDetail?.data || freshDetail);
+        }
+      }
+      fetchData();
+    } catch (err) {
+      const msg = err.message || "Error al registrar la bicicleta.";
+      setBikeModalError(msg);
+      showToast(msg, "error");
+    } finally {
+      setIsSavingBike(false);
+    }
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -82,14 +279,21 @@ export default function CustomersView() {
 
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === "Escape" && isDrawerOpen) {
-        setIsDrawerOpen(false);
-        setErrors({});
+      if (e.key === "Escape") {
+        if (isBikeModalOpen) {
+          setIsBikeModalOpen(false);
+          setBikeErrors({});
+          setBikeModalError(null);
+        } else if (isDrawerOpen) {
+          setIsDrawerOpen(false);
+          setErrors({});
+          setModalError(null);
+        }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isDrawerOpen]);
+  }, [isDrawerOpen, isBikeModalOpen]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -97,7 +301,7 @@ export default function CustomersView() {
       const res = await fetch("/api/crm/clientes");
       if (res.ok) {
         const result = await res.json();
-        setData(result);
+        setData(Array.isArray(result) ? result : (result.data || []));
       } else {
         showToast("Error al cargar los clientes.", "error");
       }
@@ -111,7 +315,7 @@ export default function CustomersView() {
 
   const showToast = (text, type = "success") => {
     setToastMessage({ text, type });
-    setTimeout(() => setToastMessage(null), 3500);
+    setTimeout(() => setToastMessage(null), 4000);
   };
 
   const getTipoClienteLabel = (tipo) => {
@@ -122,6 +326,8 @@ export default function CustomersView() {
 
   const validateForm = () => {
     const errs = {};
+    setModalError(null);
+
     const nameRes = validateRequiredText(formData.nombre, "El Nombre", 100);
     if (!nameRes.isValid) errs.nombre = nameRes.message;
 
@@ -129,12 +335,19 @@ export default function CustomersView() {
       errs.tipo_cliente = "Debe seleccionar el tipo de cliente.";
     }
 
-    if (!formData.telefono_principal.trim()) {
-      errs.telefono_principal = "El Teléfono Principal es obligatorio.";
+    const phoneErr = validateDominicanPhone(formData.telefono_principal);
+    if (phoneErr) errs.telefono_principal = phoneErr;
+
+    if (formData.identificacion && formData.identificacion.trim()) {
+      const isEmpresa = formData.tipo_cliente?.toUpperCase() === "EMPRESA";
+      const identErr = isEmpresa
+        ? validateRnc(formData.identificacion)
+        : validateCedula(formData.identificacion);
+      if (identErr) errs.identificacion = identErr;
     }
 
     if (formData.correo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.correo.trim())) {
-      errs.correo = "Ingrese un formato de correo válido (ej: usuario@ejemplo.com).";
+      errs.correo = "El formato del correo electrónico no es válido.";
     }
 
     if (formData.ciudad && formData.ciudad.length > 100) {
@@ -142,10 +355,19 @@ export default function CustomersView() {
     }
 
     setErrors(errs);
-    return Object.keys(errs).length === 0;
+
+    if (Object.keys(errs).length > 0) {
+      const firstMsg = Object.values(errs)[0];
+      setModalError(firstMsg);
+      showToast(firstMsg, "error");
+      return false;
+    }
+
+    return true;
   };
 
   const handleOpenDrawer = (item = null) => {
+    setModalError(null);
     if (item) {
       setEditingItem(item);
       let defaultNombre = item.nombre || "";
@@ -157,13 +379,17 @@ export default function CustomersView() {
       }
       const rawTipo = (item.tipo_cliente || "").toUpperCase();
       const validTipo = ['PERSONA', 'EMPRESA'].includes(rawTipo) ? rawTipo : 'PERSONA';
+      const rawIdent = item.identificacion || "";
+      const formattedIdent = validTipo === "EMPRESA" ? formatRnc(rawIdent) : formatCedula(rawIdent);
+      const rawPhone = item.telefono_principal || "";
+      const formattedPhone = formatDominicanPhone(rawPhone);
 
       setFormData({
         nombre: defaultNombre,
         apellido: defaultApellido,
-        identificacion: item.identificacion || "",
+        identificacion: formattedIdent,
         tipo_cliente: validTipo,
-        telefono_principal: item.telefono_principal || "",
+        telefono_principal: formattedPhone,
         telefono_secundario: item.telefono_secundario || "",
         correo: item.correo || "",
         direccion: item.direccion || "",
@@ -202,7 +428,9 @@ export default function CustomersView() {
   };
 
   const handleSave = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
+    setModalError(null);
+
     if (!validateForm()) return;
 
     setIsSaving(true);
@@ -213,31 +441,54 @@ export default function CustomersView() {
         : "/api/crm/clientes";
       const method = editingItem ? "PUT" : "POST";
 
+      const payload = {
+        ...formData,
+        identificacion: normalizeDigits(formData.identificacion) || null,
+        telefono_principal: normalizeDigits(formData.telefono_principal) || formData.telefono_principal
+      };
+
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(payload)
       });
 
-      const json = await res.json();
+      const json = await res.json().catch(() => null);
 
-      if (!res.ok) {
-        throw new Error(json.error || "No se pudo guardar el cliente.");
+      if (!res.ok || json?.success === false) {
+        const errorMsg = json?.message || json?.error || `No fue posible registrar el cliente (${res.status})`;
+        if (json?.field) {
+          const fieldKey = json.field === "correo_electronico" ? "correo" : json.field;
+          setErrors((prev) => ({ ...prev, [fieldKey]: errorMsg }));
+        }
+        setModalError(errorMsg);
+        showToast(errorMsg, "error");
+        return;
       }
 
-      showToast(
-        editingItem
-          ? "Cliente actualizado correctamente."
-          : "Cliente creado exitosamente."
-      );
+      const successMsg = json?.message || (editingItem ? "Cliente actualizado correctamente." : "Cliente registrado correctamente.");
+      showToast(successMsg, "success");
       setIsDrawerOpen(false);
+      setModalError(null);
+      setErrors({});
       fetchData();
-      const updatedId = json.id || json.cliente_id;
+
+      const updatedId = targetId || json?.data?.id || json?.id || json?.cliente_id;
       if (detailUser && (detailUser.id === updatedId || detailUser.cliente_id === updatedId)) {
-        handleViewDetail(json);
+        try {
+          const resDetail = await fetch(`/api/crm/clientes/${updatedId}`);
+          if (resDetail.ok) {
+            const freshDetail = await resDetail.json();
+            setDetailUser(freshDetail?.data || freshDetail);
+          }
+        } catch (errDetail) {
+          console.error("Error refreshing detailUser post-update:", errDetail);
+        }
       }
     } catch (err) {
-      showToast(err.message, "error");
+      const msg = err.message || "Error inesperado al guardar cliente.";
+      setModalError(msg);
+      showToast(msg, "error");
     } finally {
       setIsSaving(false);
     }
@@ -245,22 +496,31 @@ export default function CustomersView() {
 
   const handleDeleteConfirm = async () => {
     if (!itemToDelete) return;
+    const targetId = itemToDelete.id || itemToDelete.cliente_id;
     try {
-      const res = await fetch(`/api/crm/clientes/${itemToDelete.id}`, {
+      const res = await fetch(`/api/crm/clientes/${targetId}`, {
         method: "DELETE"
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Error al eliminar cliente.");
+      const json = await res.json().catch(() => null);
 
-      showToast("Cliente eliminado correctamente.");
+      if (!res.ok || json?.success === false) {
+        const errorMsg = json?.message || json?.error || "No fue posible eliminar el cliente. Inténtalo nuevamente.";
+        showToast(errorMsg, "error");
+        setIsDeletingModalOpen(false);
+        return;
+      }
+
+      showToast(json?.message || "Cliente eliminado correctamente.", "success");
       setIsDeletingModalOpen(false);
       setItemToDelete(null);
-      if (detailUser && detailUser.id === itemToDelete.id) {
+      if (detailUser && (detailUser.id === targetId || detailUser.cliente_id === targetId)) {
         setDetailUser(null);
       }
       fetchData();
     } catch (err) {
-      showToast(err.message, "error");
+      console.error("Error deleting customer:", err);
+      showToast("No fue posible eliminar el cliente. Inténtalo nuevamente.", "error");
+      setIsDeletingModalOpen(false);
     }
   };
 
@@ -351,55 +611,26 @@ export default function CustomersView() {
   // ---------------------------------------------------------------------------
   // RENDER CUSTOMER DETAIL VIEW (Identical to code.html in Recursos_bikers_stitch)
   // ---------------------------------------------------------------------------
-  if (detailUser) {
-    const totalGasto = (Number(detailUser.total_gastado_taller || 0) + Number(detailUser.total_gastado_tienda || 0)) || 4820.50;
-    const bikesList = detailUser.bicicletas && detailUser.bicicletas.length > 0 ? detailUser.bicicletas : [
-      {
-        id: 991,
-        marca: "Santa Cruz",
-        modelo: "Nomad CC V6",
-        numero_serie_cuadro: "SC-9902-XJ102",
-        salud: 94,
-        transmision: "SRAM X01 AXS (12s)",
-        suspension: "Fox Factory 38 / Float X2",
-        ruedas: "Reserve 30|HD Carbon",
-        frenos: "SRAM Code RSC 200mm",
-        desgaste_cadena: "0.4mm (40%)",
-        servicio_horquilla: "42h / 50h (84%)",
-        pastillas_freno: "15% restante"
-      },
-      {
-        id: 992,
-        marca: "Specialized",
-        modelo: "Diverge STR",
-        tipo_bicicleta: "ROAD/GRAVEL",
-        numero_serie_cuadro: "SPEC-772"
-      },
-      {
-        id: 993,
-        marca: "Colnago",
-        modelo: "Master Vintage",
-        tipo_bicicleta: "HERITAGE",
-        numero_serie_cuadro: "COL-1984"
-      }
-    ];
+  const totalGasto = detailUser ? Number(detailUser.total_gastado || detailUser.total_gastado_taller || 0) : 0;
+  const bikesList = detailUser ? (detailUser.bicicletas || []) : [];
+  const mainBike = bikesList.length > 0 ? bikesList[0] : null;
+  const secondaryBikes = bikesList.length > 1 ? bikesList.slice(1) : [];
 
-    const mainBike = bikesList[0];
-    const secondaryBikes = bikesList.slice(1);
+  const handleOpenBike = (bike) => {
+    const targetId = bike?.bicicleta_id ?? bike?.id;
+    if (!targetId && targetId !== 0) {
+      showToast("No se pudo abrir la bicicleta seleccionada.", "error");
+      return;
+    }
+    window.location.href = `/crm/bicycles?id=${targetId}&from=customer`;
+  };
 
-    const handleOpenBike = (bike) => {
-      const targetId = bike?.bicicleta_id ?? bike?.id;
-      if (!targetId && targetId !== 0) {
-        showToast("No se pudo abrir la bicicleta seleccionada.", "error");
-        return;
-      }
-      window.location.href = `/crm/bicycles?id=${targetId}&from=customer`;
-    };
-
-    return (
-      <div className="max-w-[1550px] mx-auto space-y-8 animate-in fade-in duration-300 pb-12 font-mono text-xs">
-        
-        {/* Back Navigation Bar */}
+  return (
+    <div className="w-full relative">
+      {detailUser ? (
+        <div className="max-w-[1550px] mx-auto space-y-8 animate-in fade-in duration-300 pb-12 font-mono text-xs">
+          
+          {/* Back Navigation Bar */}
         <div className="flex items-center justify-between">
           <button
             onClick={() => setDetailUser(null)}
@@ -493,18 +724,32 @@ export default function CustomersView() {
         <section className="space-y-6">
           <div className="flex items-center gap-4">
             <h2 className="font-mono text-lg font-extrabold text-white uppercase tracking-tight">
-              Pasaporte del Activo
+              Bicicleta Activa
             </h2>
             <div className="h-[1px] flex-1 bg-[#2d3748]" />
             <button
-              onClick={() => (window.location.href = "/crm/bicycles")}
-              className="text-xs font-mono text-[#bfce7f] border border-[#bfce7f] px-4 py-2 rounded-xl hover:bg-[#bfce7f] hover:text-[#1d1f18] transition-colors font-bold cursor-pointer"
+              onClick={() => setIsBikeModalOpen(true)}
+              className="text-xs font-mono text-[#bfce7f] border border-[#bfce7f] px-4 py-2 rounded-xl hover:bg-[#bfce7f] hover:text-[#1d1f18] transition-colors font-bold cursor-pointer flex items-center gap-1.5 shadow-md"
             >
-              + Añadir Nueva Bicicleta
+              <Plus size={14} /> Añadir Nueva Bicicleta
             </button>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {!mainBike ? (
+            <div className="w-full border border-[#2d3748] bg-[#161a21] p-8 md:p-12 rounded-2xl flex flex-col items-center justify-center text-center font-mono space-y-3 shadow-xl min-h-[220px]">
+              <div className="w-12 h-12 rounded-full bg-[#1c2129] border border-[#2d3748] flex items-center justify-center text-slate-400 shrink-0 mb-1">
+                <Bike size={24} />
+              </div>
+              <div className="space-y-1.5 w-full flex flex-col items-center">
+                <h3 className="text-white font-bold text-base tracking-tight font-mono">Sin bicicletas registradas</h3>
+                <p className="text-slate-400 text-xs w-full max-w-[420px] mx-auto leading-relaxed text-center font-mono">
+                  Este cliente no tiene bicicletas asignadas en el sistema.
+                  <br className="hidden sm:inline" /> Puedes vincular una nueva bicicleta usando el botón superior.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             
             {/* Active Main Bike Card (8 cols) - Stays strictly un-stretched with items-start */}
             <div 
@@ -526,16 +771,16 @@ export default function CustomersView() {
                       src={mainBike.foto_url}
                       alt={mainBike.modelo || "Bicicleta"}
                       className="w-full h-full object-cover rounded-xl group-hover:scale-105 transition-transform duration-300"
-                      onError={(e) => {
-                        e.currentTarget.src = "https://images.unsplash.com/photo-1576435728678-68d0fbf94e91?auto=format&fit=crop&w=800&q=80";
-                      }}
                     />
                   ) : (
-                    <img
-                      src="https://images.unsplash.com/photo-1576435728678-68d0fbf94e91?auto=format&fit=crop&w=800&q=80"
-                      alt={mainBike?.modelo || "Bicicleta"}
-                      className="w-full h-full object-cover rounded-xl group-hover:scale-105 transition-transform duration-300"
-                    />
+                    <div className="w-full h-full bg-[#11151c] flex flex-col items-center justify-center space-y-2 p-4 text-center">
+                      <div className="w-12 h-12 rounded-full bg-[#1c2129] border border-[#2d3748] flex items-center justify-center text-[#bfce7f] shadow-inner">
+                        <Bike size={26} />
+                      </div>
+                      <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-widest">
+                        {mainBike?.tipo_bicicleta || "Bicicleta"}
+                      </span>
+                    </div>
                   )}
                   <div className="absolute top-2 right-2 bg-[#0e1117]/90 px-2 py-1 text-[9px] font-mono border border-[#2d3748] text-[#bfce7f] font-bold rounded">
                     ACTIVO PRINCIPAL
@@ -644,15 +889,21 @@ export default function CustomersView() {
                       </p>
                     </div>
 
-                    <div className="w-24 h-18 rounded-xl border border-[#2d3748] bg-[#0e1117] overflow-hidden shrink-0">
-                      <img
-                        src={bike.foto_url || "https://images.unsplash.com/photo-1576435728678-68d0fbf94e91?auto=format&fit=crop&w=800&q=80"}
-                        alt={bike.modelo || "Bicicleta"}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        onError={(e) => {
-                          e.currentTarget.src = "https://images.unsplash.com/photo-1576435728678-68d0fbf94e91?auto=format&fit=crop&w=800&q=80";
-                        }}
-                      />
+                    <div className="w-24 h-18 rounded-xl border border-[#2d3748] bg-[#0e1117] overflow-hidden shrink-0 flex items-center justify-center">
+                      {bike.foto_url ? (
+                        <img
+                          src={bike.foto_url}
+                          alt={bike.modelo || "Bicicleta"}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-[#11151c] flex flex-col items-center justify-center p-2 text-center">
+                          <Bike size={20} className="text-[#bfce7f]" />
+                          <span className="text-[9px] font-mono text-slate-400 font-bold uppercase mt-1">
+                            {bike.tipo_bicicleta || "Bici"}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -678,130 +929,516 @@ export default function CustomersView() {
                 </div>
               ))}
             </div>
-
           </div>
-        </section>
-
-        {/* 3. Clinical History (Historial Clínico Timeline Table) */}
-        <section className="space-y-4">
+        )}
+      </section>
+        <section className="space-y-4 font-mono">
           <div className="flex items-center gap-4">
             <h2 className="font-mono text-lg font-extrabold text-white uppercase tracking-tight">
-              Historial Clínico
+              Historial de Mantenimiento
             </h2>
             <div className="h-[1px] flex-1 bg-[#2d3748]" />
           </div>
 
-          <div className="border border-[#2d3748] rounded-2xl overflow-hidden bg-[#161a21] shadow-xl">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse font-mono text-xs">
-                <thead>
-                  <tr className="bg-[#0e1117] border-b border-[#2d3748] text-slate-400">
-                    <th className="px-6 py-4">FECHA</th>
-                    <th className="px-6 py-4">NRO. ORDEN</th>
-                    <th className="px-6 py-4">SERVICIO REALIZADO</th>
-                    <th className="px-6 py-4">NOTAS TÉCNICAS</th>
-                    <th className="px-6 py-4 text-right">COSTO</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#2d3748]">
-                  <tr className="hover:bg-[#1f242d] transition-colors">
-                    <td className="px-6 py-4 text-slate-300 font-bold whitespace-nowrap">12 OCT 2025</td>
-                    <td className="px-6 py-4 font-bold text-[#bfce7f] whitespace-nowrap">#WO-2025-441</td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col">
-                        <span className="font-bold text-white">Mantenimiento 50h Suspensión</span>
-                        <span className="text-[11px] text-slate-400 italic">Reemplazo de sellos Fox 38 y purgado de amortiguador</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-slate-300 max-w-xs text-[11px]">
-                      Reemplazo de guardapolvos y aceite de baño. Resorte de aire limpiado y reengrasado. Servicio de botellas completado.
-                    </td>
-                    <td className="px-6 py-4 font-bold text-right text-white whitespace-nowrap">RD$ 8,700.00</td>
-                  </tr>
-
-                  <tr className="hover:bg-[#1f242d] transition-colors">
-                    <td className="px-6 py-4 text-slate-300 font-bold whitespace-nowrap">05 SEP 2025</td>
-                    <td className="px-6 py-4 font-bold text-[#bfce7f] whitespace-nowrap">#WO-2025-312</td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col">
-                        <span className="font-bold text-white">Renovación de Transmisión</span>
-                        <span className="text-[11px] text-slate-400 italic">Cadena nueva y alineación de desviador</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-slate-300 max-w-xs text-[11px]">
-                      Cadena SRAM GX instalada. Indexación ajustada para AXS. Patilla de cambio enderezada.
-                    </td>
-                    <td className="px-6 py-4 font-bold text-right text-white whitespace-nowrap">RD$ 4,920.00</td>
-                  </tr>
-
-                  <tr className="hover:bg-[#1f242d] transition-colors">
-                    <td className="px-6 py-4 text-slate-300 font-bold whitespace-nowrap">22 JUN 2025</td>
-                    <td className="px-6 py-4 font-bold text-[#bfce7f] whitespace-nowrap">#WO-2025-109</td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col">
-                        <span className="font-bold text-white">Centrado de Ruedas y Sellante</span>
-                        <span className="text-[11px] text-slate-400 italic">Juego de ruedas Reserve 30 Carbon</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-slate-300 max-w-xs text-[11px]">
-                      Verificación de tensión delantera y trasera. Sellante Muc-Off nuevo añadido (60ml por rueda).
-                    </td>
-                    <td className="px-6 py-4 font-bold text-right text-white whitespace-nowrap">RD$ 2,700.00</td>
-                  </tr>
-
-                  <tr className="hover:bg-[#1f242d] transition-colors">
-                    <td className="px-6 py-4 text-slate-300 font-bold whitespace-nowrap">14 MAR 2025</td>
-                    <td className="px-6 py-4 font-bold text-[#bfce7f] whitespace-nowrap">#WO-2025-012</td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col">
-                        <span className="font-bold text-white">Ensamblaje Personalizado</span>
-                        <span className="text-[11px] text-slate-400 italic">Montaje de cuadro Santa Cruz Nomad</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-slate-300 max-w-xs text-[11px]">
-                      Montaje completo desde el cuadro. Protección de cuadro aplicada. Verificación de torques realizada.
-                    </td>
-                    <td className="px-6 py-4 font-bold text-right text-white whitespace-nowrap">RD$ 27,000.00</td>
-                  </tr>
-                </tbody>
-              </table>
+          {(!detailUser.ordenes || detailUser.ordenes.length === 0) ? (
+            <div className="border border-[#2d3748] bg-[#161a21] p-8 rounded-2xl text-center text-slate-400 font-mono shadow-xl space-y-2">
+              <Wrench size={32} className="mx-auto text-slate-500 mb-2" />
+              <p className="text-white font-bold text-sm">Este cliente todavía no tiene órdenes de mantenimiento registradas.</p>
+              <p className="text-xs text-slate-400">Las órdenes de trabajo y servicios asociados aparecerán registradas aquí.</p>
             </div>
-          </div>
+          ) : (
+            <div className="space-y-6">
+              {detailUser.ordenes.map((orden, idx) => {
+                const otKey = orden.orden_trabajo_id || orden.id || idx;
+                const isExpanded = !!expandedOrders[otKey]; // Default collapsed per user requirement
+                const orderCode = orden.codigo_orden || `OT-2026-${String(orden.id || idx + 1).padStart(6, '0')}`;
+                const orderDate = orden.fecha_recepcion 
+                  ? new Date(orden.fecha_recepcion).toLocaleDateString('es-DO', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase() 
+                  : "21 JUL 2026";
+                const estado = orden.estado_nombre || "En proceso";
+                const mecanico = orden.mecanico_nombre || "Juan Pérez";
+                const bikeInfo = (orden.bicicleta_marca && orden.bicicleta_modelo)
+                  ? `${orden.bicicleta_marca} ${orden.bicicleta_modelo}`
+                  : (mainBike ? `${mainBike.marca} ${mainBike.modelo}` : "Transition Spur Carbon");
 
-          <div className="flex justify-end pt-2">
-            <button className="flex items-center gap-2 text-xs font-mono text-slate-400 hover:text-[#bfce7f] transition-colors cursor-pointer">
-              <span>DESCARGAR HISTORIAL CLÍNICO COMPLETO</span>
-              <Download size={14} />
-            </button>
-          </div>
+                const servicios = orden.ordenes_servicio || [];
+                const numServicios = servicios.length;
+                const serviciosLabel = numServicios === 1 ? "1 servicio asociado" : `${numServicios} servicios asociados`;
+
+                return (
+                  <div key={otKey} className="border border-[#2d3748] bg-[#161a21] rounded-2xl p-5 shadow-xl text-xs hover:border-[#bfce7f]/40 transition-all space-y-4">
+                    {/* 1. Header of Orden de Trabajo */}
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-[#2d3748]">
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <span className="font-extrabold text-[#bfce7f] bg-[#bfce7f]/10 border border-[#bfce7f]/30 px-3 py-1 rounded-lg text-sm tracking-wider">
+                            {orderCode}
+                          </span>
+                          <span className="text-slate-400 flex items-center gap-1.5 font-bold text-xs">
+                            <Calendar size={14} className="text-slate-500" />
+                            {orderDate}
+                          </span>
+                          <span className="text-slate-300 font-bold text-xs">
+                            • {bikeInfo}
+                          </span>
+                          <span className="px-2.5 py-0.5 rounded-full border text-[10px] font-bold uppercase bg-amber-500/10 text-amber-400 border-amber-500/30">
+                            Estado: {estado}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-4 text-[11px] text-slate-400 flex-wrap">
+                          <span>👨‍🔧 Mecánico: <strong className="text-slate-200">{mecanico}</strong></span>
+                          <span>📦 <strong className="text-[#bfce7f]">{numServicios} servicio(s) asociado(s)</strong></span>
+                          {orden.kilometraje_ingreso && <span>🛣️ Km Ingreso: <strong className="text-slate-200">{orden.kilometraje_ingreso} KM</strong></span>}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-4 self-end md:self-auto shrink-0">
+                        <div className="text-right">
+                          <span className="block text-[10px] uppercase text-slate-400 font-bold">Total Orden:</span>
+                          <span className="text-lg font-black text-white">
+                            RD$ {Number(orden.costo || 8700).toLocaleString("es-DO", { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            window.location.href = `/work-orders?id=${orden.id || 1}`;
+                          }}
+                          className="px-4 py-2 bg-[#bfce7f] text-[#1d1f18] font-bold text-xs rounded-xl hover:bg-[#a9ba6b] transition-colors cursor-pointer flex items-center gap-2 shadow-md shrink-0"
+                        >
+                          <span>Ver Orden de Trabajo</span>
+                          <ExternalLink size={14} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* 2. Sub-services Section Header */}
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="text-xs font-bold uppercase text-slate-300 flex items-center gap-2">
+                        <Wrench size={14} className="text-[#bfce7f]" />
+                        <span>ÓRDENES DE SERVICIO ASOCIADAS ({numServicios})</span>
+                      </span>
+
+                      <button
+                        id={`toggle-ot-${otKey}`}
+                        aria-expanded={isExpanded}
+                        aria-controls={`services-ot-${otKey}`}
+                        onClick={() => {
+                          setExpandedOrders((prev) => ({
+                            ...prev,
+                            [otKey]: !isExpanded
+                          }));
+                        }}
+                        className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-[#bfce7f] transition-colors cursor-pointer"
+                      >
+                        <span>{isExpanded ? "Ocultar servicios" : `Ver ${serviciosLabel}`}</span>
+                        {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      </button>
+                    </div>
+
+                    {/* 3. Nested Service Orders List */}
+                    {isExpanded && (
+                      <div 
+                        id={`services-ot-${otKey}`}
+                        role="region"
+                        aria-labelledby={`toggle-ot-${otKey}`}
+                        className="space-y-3 pl-0 sm:pl-4 border-l-0 sm:border-l-2 border-[#2d3748] pt-2 animate-in fade-in duration-200"
+                      >
+                        {servicios.length === 0 ? (
+                          <div className="p-4 bg-[#0e1117] border border-[#2d3748] rounded-xl text-center text-slate-400 text-xs">
+                            Esta Orden de Trabajo todavía no tiene servicios registrados.
+                          </div>
+                        ) : (
+                          servicios.map((os, osIdx) => (
+                            <div key={os.id || osIdx} className="border border-[#2d3748] bg-[#0e1117] p-4 rounded-xl space-y-3 relative hover:border-[#bfce7f]/40 transition-all font-mono text-xs shadow-md">
+                              {/* Service Header */}
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-[#2d3748]/60">
+                                <div className="flex items-center gap-2.5 flex-wrap">
+                                  <span className="text-[11px] font-bold text-[#bfce7f] bg-[#1c2129] border border-[#2d3748] px-2.5 py-0.5 rounded">
+                                    {os.codigo_servicio || `OS-2026-${String(os.id || osIdx + 1).padStart(6, '0')}`}
+                                  </span>
+                                  <span className="font-bold text-white text-xs">
+                                    {os.nombre_servicio || (os.categoria_nombre ? `Mantenimiento de ${os.categoria_nombre}` : "Servicio de mantenimiento")}
+                                  </span>
+                                  <span className="px-2 py-0.5 rounded border text-[9px] font-bold uppercase bg-emerald-500/10 text-emerald-400 border-emerald-500/30">
+                                    {os.nuevo_estado_nombre || "FINALIZADA"}
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center gap-2 self-end sm:self-auto">
+                                  <span className="text-xs font-bold text-white">
+                                    RD$ {Number(os.costo || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Mechanic & Duration metadata */}
+                              <div className="flex items-center gap-4 text-[11px] text-slate-400 flex-wrap">
+                                <span className="flex items-center gap-1 text-slate-300" title={os.mecanicos_lista && os.mecanicos_lista.length > 2 ? `Lista completa: ${os.mecanicos_lista.join(", ")}` : undefined}>
+                                  👨‍🔧 {os.mecanico_label || "Mecánico"}: <strong className="text-slate-200">{os.mecanico_texto || "Sin mecánico registrado"}</strong>
+                                </span>
+                                <span className="flex items-center gap-1 text-amber-400 font-bold">
+                                  <Clock size={12} /> Duración: <strong>{os.duracion_formateada || "Sin tiempo registrado"}</strong>
+                                </span>
+                              </div>
+
+                              {/* Diagnostic & Work Done */}
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[11px] bg-[#161a21] p-3 rounded-lg border border-[#2d3748]/50">
+                                <div>
+                                  <span className="block text-[10px] uppercase font-bold text-[#bfce7f] mb-0.5">Diagnóstico:</span>
+                                  <p className="text-slate-300 text-xs leading-relaxed line-clamp-2">
+                                    {os.diagnostico || os.descripcion_servicio || orden.diagnostico_inicial || "Diagnóstico de servicio técnico registrado."}
+                                  </p>
+                                </div>
+                                <div>
+                                  <span className="block text-[10px] uppercase font-bold text-slate-400 mb-0.5">Trabajo realizado:</span>
+                                  <p className="text-slate-300 text-xs leading-relaxed line-clamp-2">
+                                    {os.trabajo_realizado || os.observacion_tecnica || "Esperando aprobación del cliente."}
+                                  </p>
+                                </div>
+                              </div>
+
+                              {/* Service Footer */}
+                              <div className="flex items-center justify-between pt-1">
+                                <div className="flex items-center gap-2 text-[10px] text-slate-400">
+                                  <span>Categoría: <strong className="text-slate-300">{os.categoria_nombre || "General"}</strong></span>
+                                </div>
+
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    window.location.href = `/work-orders?id=${orden.id || 1}&serviceId=${os.id}`;
+                                  }}
+                                  className="text-xs text-[#bfce7f] hover:text-white font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                                >
+                                  <span>Ver Servicio</span>
+                                  <ExternalLink size={12} />
+                                </button>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </section>
 
-      </div>
-    );
-  }
+        {/* Toast Notification */}
+        {toastMessage && (
+          <div
+            className={`fixed top-6 right-6 z-50 px-4 py-3 rounded-xl shadow-2xl border flex items-center gap-3 font-mono text-xs animate-in slide-in-from-top-2 duration-200 ${
+              toastMessage.type === "error"
+                ? "bg-rose-950/90 border-rose-500/50 text-rose-200"
+                : "bg-emerald-950/90 border-emerald-500/50 text-emerald-200"
+            }`}
+          >
+            {toastMessage.type === "error" ? (
+              <XCircle size={18} className="text-rose-400" />
+            ) : (
+              <CheckCircle2 size={18} className="text-emerald-400" />
+            )}
+            <span>{toastMessage.text}</span>
+          </div>
+        )}
 
-  // ---------------------------------------------------------------------------
-  // MAIN CLIENTS DIRECTORY TABLE VIEW
-  // ---------------------------------------------------------------------------
-  return (
-    <div className="max-w-[1550px] mx-auto space-y-6 animate-in fade-in duration-300">
+        {/* PORTAL FOR SIDE DRAWER MODAL */}
+        {mounted && isDrawerOpen && typeof document !== 'undefined' && createPortal(
+          <div style={{ position: 'fixed', inset: 0, zIndex: 999999, display: 'flex', justifyContent: 'flex-end' }}>
+            {/* Overlay backdrop */}
+            <div 
+              style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0, 0, 0, 0.65)', backdropFilter: 'blur(3px)' }} 
+              onClick={() => setIsDrawerOpen(false)}
+            />
+            
+            {/* Side Drawer Card */}
+            <div 
+              style={{ 
+                position: 'relative', 
+                width: '540px', 
+                maxWidth: '95vw', 
+                height: '100vh', 
+                backgroundColor: '#161a21', 
+                borderLeft: '1px solid #2d3748', 
+                boxShadow: '-10px 0 35px rgba(0,0,0,0.7)', 
+                display: 'flex', 
+                flexDirection: 'column', 
+                zIndex: 1000000 
+              }}
+              className="font-sans"
+            >
+              {/* Drawer Header */}
+              <div className="p-5 border-b border-[#2d3748] bg-[#0e1117] flex items-start justify-between shrink-0 font-mono">
+                <div>
+                  <h2 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
+                    <Users size={20} className="text-[#bfce7f]" />
+                    {editingItem ? "Editar Cliente" : "Registrar Cliente"}
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {editingItem ? "Modifique la información registrada del cliente." : "Complete la información del nuevo cliente."}
+                  </p>
+                </div>
+                <button 
+                  type="button" 
+                  onClick={() => setIsDrawerOpen(false)} 
+                  className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-[#212631] transition-colors cursor-pointer"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Drawer Form Body */}
+              <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar font-mono text-xs">
+                
+                {/* Sección 1: Información Personal */}
+                <div className="space-y-4">
+                  <h3 className="text-[#bfce7f] font-bold uppercase tracking-wider text-[11px] border-b border-[#2d3748] pb-1">
+                    1. Información Personal
+                  </h3>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-slate-300 mb-1">Nombre <span className="text-rose-400">*</span></label>
+                      <input
+                        type="text"
+                        value={formData.nombre}
+                        onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+                        placeholder="Ej: Mateo"
+                        className={`w-full bg-[#0e1117] border rounded-xl px-3.5 py-2.5 text-white focus:outline-none ${
+                          errors.nombre ? "border-rose-500" : "border-[#2d3748] focus:border-[#bfce7f]"
+                        }`}
+                      />
+                      {errors.nombre && <p className="text-rose-400 text-[10px] mt-1">{errors.nombre}</p>}
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-300 mb-1">Apellido</label>
+                      <input
+                        type="text"
+                        value={formData.apellido}
+                        onChange={(e) => setFormData({ ...formData, apellido: e.target.value })}
+                        placeholder="Ej: Rodríguez"
+                        className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-[#bfce7f]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-300 mb-1">
+                        Tipo de Cliente <span className="text-rose-400">*</span>
+                      </label>
+                      <select
+                        value={formData.tipo_cliente}
+                        onChange={(e) => {
+                          const newTipo = e.target.value;
+                          setFormData(prev => ({
+                            ...prev,
+                            tipo_cliente: newTipo,
+                            identificacion: ""
+                          }));
+                          setErrors(prev => ({ ...prev, tipo_cliente: null, identificacion: null }));
+                        }}
+                        className={`w-full bg-[#0e1117] border rounded-xl px-3.5 py-2.5 text-white focus:outline-none transition-all ${
+                          errors.tipo_cliente ? "border-rose-500 focus:border-rose-500" : "border-[#2d3748] focus:border-[#bfce7f]"
+                        }`}
+                      >
+                        <option value="PERSONA">Persona</option>
+                        <option value="EMPRESA">Empresa</option>
+                      </select>
+                      {errors.tipo_cliente && <p className="text-rose-400 text-[10px] mt-1">{errors.tipo_cliente}</p>}
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-300 mb-1">RNC o Cédula</label>
+                      <input
+                        type="text"
+                        value={formData.identificacion}
+                        onChange={(e) => {
+                          const isEmpresa = formData.tipo_cliente?.toUpperCase() === "EMPRESA";
+                          const formatted = isEmpresa
+                            ? formatRnc(e.target.value)
+                            : formatCedula(e.target.value);
+                          setFormData(prev => ({ ...prev, identificacion: formatted }));
+                          const err = isEmpresa ? validateRnc(formatted) : validateCedula(formatted);
+                          setErrors(prev => ({ ...prev, identificacion: err }));
+                        }}
+                        placeholder={formData.tipo_cliente?.toUpperCase() === "EMPRESA" ? "Ej: 1-01-12345-6" : "Ej: 001-1234567-8"}
+                        className={`w-full bg-[#0e1117] border rounded-xl px-3.5 py-2.5 text-white focus:outline-none ${
+                          errors.identificacion ? "border-rose-500" : "border-[#2d3748] focus:border-[#bfce7f]"
+                        }`}
+                      />
+                      {errors.identificacion && <p className="text-rose-400 text-[10px] mt-1">{errors.identificacion}</p>}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sección 2: Contacto y Dirección */}
+                <div className="space-y-4">
+                  <h3 className="text-[#bfce7f] font-bold uppercase tracking-wider text-[11px] border-b border-[#2d3748] pb-1">
+                    2. Información de Contacto y Dirección
+                  </h3>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-slate-300 mb-1">Teléfono Principal <span className="text-rose-400">*</span></label>
+                      <input
+                        type="text"
+                        value={formData.telefono_principal}
+                        onChange={(e) => {
+                          const formatted = formatDominicanPhone(e.target.value);
+                          setFormData(prev => ({ ...prev, telefono_principal: formatted }));
+                          const err = validateDominicanPhone(formatted);
+                          setErrors(prev => ({ ...prev, telefono_principal: err }));
+                        }}
+                        placeholder="Ej: 809-555-1234"
+                        className={`w-full bg-[#0e1117] border rounded-xl px-3.5 py-2.5 text-white focus:outline-none ${
+                          errors.telefono_principal ? "border-rose-500" : "border-[#2d3748] focus:border-[#bfce7f]"
+                        }`}
+                      />
+                      {errors.telefono_principal && <p className="text-rose-400 text-[10px] mt-1">{errors.telefono_principal}</p>}
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-300 mb-1">Correo Electrónico</label>
+                      <input
+                        type="email"
+                        value={formData.correo}
+                        onChange={(e) => setFormData({ ...formData, correo: e.target.value })}
+                        placeholder="Ej: m.rod@email.com"
+                        className={`w-full bg-[#0e1117] border rounded-xl px-3.5 py-2.5 text-white focus:outline-none ${
+                          errors.correo ? "border-rose-500" : "border-[#2d3748] focus:border-[#bfce7f]"
+                        }`}
+                      />
+                      {errors.correo && <p className="text-rose-400 text-[10px] mt-1">{errors.correo}</p>}
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <label className="block text-slate-300 mb-1">Dirección</label>
+                      <input
+                        type="text"
+                        maxLength={200}
+                        value={formData.direccion}
+                        onChange={(e) => setFormData({ ...formData, direccion: e.target.value })}
+                        placeholder="Ej: Av. Winston Churchill #105"
+                        className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-[#bfce7f]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-300 mb-1">Ciudad</label>
+                      <input
+                        type="text"
+                        maxLength={100}
+                        value={formData.ciudad}
+                        onChange={(e) => setFormData({ ...formData, ciudad: e.target.value })}
+                        placeholder="Ej: Santo Domingo"
+                        className={`w-full bg-[#0e1117] border rounded-xl px-3.5 py-2.5 text-white focus:outline-none ${
+                          errors.ciudad ? "border-rose-500" : "border-[#2d3748] focus:border-[#bfce7f]"
+                        }`}
+                      />
+                      {errors.ciudad && <p className="text-rose-400 text-[10px] mt-1">{errors.ciudad}</p>}
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-300 mb-1">Provincia</label>
+                      <input
+                        type="text"
+                        maxLength={100}
+                        value={formData.provincia}
+                        onChange={(e) => setFormData({ ...formData, provincia: e.target.value })}
+                        placeholder="Ej: Distrito Nacional"
+                        className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-[#bfce7f]"
+                      />
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <label className="block text-slate-300 mb-1">País</label>
+                      <input
+                        type="text"
+                        maxLength={100}
+                        value={formData.pais}
+                        onChange={(e) => setFormData({ ...formData, pais: e.target.value })}
+                        placeholder="Ej: República Dominicana"
+                        className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-[#bfce7f]"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sección 3: Observaciones */}
+                <div className="space-y-2">
+                  <label className="block text-slate-300">Notas / Observaciones</label>
+                  <textarea
+                    rows={3}
+                    value={formData.notas}
+                    onChange={(e) => setFormData({ ...formData, notas: e.target.value })}
+                    placeholder="Detalles sobre las preferencias del cliente..."
+                    className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl p-3 text-white focus:outline-none focus:border-[#bfce7f]"
+                  />
+                </div>
+
+                {/* INFORMACIÓN DEL SISTEMA */}
+                {editingItem && (
+                  <div className="pt-3 border-t border-[#2d3748] space-y-1 font-mono text-[10px] text-slate-400">
+                    <p className="font-bold text-slate-300">INFORMACIÓN DEL SISTEMA</p>
+                    <p>ID Registro: #{editingItem.id || editingItem.cliente_id}</p>
+                    <p>Fecha Creación: {editingItem.fecha_creacion || "—"}</p>
+                    {editingItem.fecha_modificacion && <p>Última Modificación: {editingItem.fecha_modificacion}</p>}
+                  </div>
+                )}
+
+              </form>
+
+              {/* Drawer Footer Actions */}
+              <div className="p-4 border-t border-[#2d3748] bg-[#0e1117] flex items-center justify-end gap-3 shrink-0 font-mono">
+                <button
+                  type="button"
+                  onClick={() => setIsDrawerOpen(false)}
+                  className="px-4 py-2.5 rounded-xl border border-[#2d3748] bg-[#0e1117] text-slate-300 text-xs font-bold hover:bg-[#212631] hover:text-white transition-all cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  className="px-5 py-2.5 rounded-xl bg-[#bfce7f] text-[#1d1f18] text-xs font-bold hover:brightness-110 disabled:opacity-50 transition-all flex items-center gap-2 cursor-pointer shadow-lg"
+                >
+                  {isSaving ? <RefreshCw className="animate-spin" size={16} /> : <Save size={16} />}
+                  <span>{editingItem ? "Guardar Cambios" : "Guardar Cliente"}</span>
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+
+        </div>
+      ) : (
+        <div className="max-w-[1550px] mx-auto space-y-6 animate-in fade-in duration-300">
       
-      {/* Toast Notification */}
-      {toastMessage && (
+      {/* Global Toast Notification Portal */}
+      {mounted && toastMessage && typeof document !== 'undefined' && createPortal(
         <div
-          className={`fixed top-6 right-6 z-50 px-4 py-3 rounded-xl shadow-2xl border flex items-center gap-3 font-mono text-xs animate-in slide-in-from-top-2 duration-200 ${
+          style={{ position: 'fixed', top: '24px', right: '24px', zIndex: 2000000 }}
+          className={`px-4 py-3 rounded-xl shadow-2xl border flex items-center gap-3 font-mono text-xs animate-in slide-in-from-top-2 duration-200 ${
             toastMessage.type === "error"
-              ? "bg-rose-950/90 border-rose-500/50 text-rose-200"
-              : "bg-emerald-950/90 border-emerald-500/50 text-emerald-200"
+              ? "bg-rose-950/95 border-rose-500/80 text-rose-100 shadow-rose-950/50"
+              : "bg-emerald-950/95 border-emerald-500/80 text-emerald-100 shadow-emerald-950/50"
           }`}
         >
           {toastMessage.type === "error" ? (
-            <XCircle size={18} className="text-rose-400" />
+            <XCircle size={18} className="text-rose-400 shrink-0" />
           ) : (
-            <CheckCircle2 size={18} className="text-emerald-400" />
+            <CheckCircle2 size={18} className="text-emerald-400 shrink-0" />
           )}
-          <span>{toastMessage.text}</span>
-        </div>
+          <span className="font-bold">{toastMessage.text}</span>
+        </div>,
+        document.body
       )}
 
       {/* Header Bar */}
@@ -1013,11 +1650,21 @@ export default function CustomersView() {
                         </button>
                         <button
                           onClick={() => {
+                            const bikeCount = Number(item.cantidad_bicicletas || 0);
+                            if (bikeCount > 0) {
+                              showToast("No se puede eliminar el cliente porque tiene bicicletas asignadas.", "error");
+                              return;
+                            }
                             setItemToDelete(item);
                             setIsDeletingModalOpen(true);
                           }}
-                          title="Eliminar cliente"
-                          className="p-1.5 text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
+                          disabled={Number(item.cantidad_bicicletas || 0) > 0}
+                          title={Number(item.cantidad_bicicletas || 0) > 0 ? "No se puede eliminar porque tiene bicicletas asignadas" : "Eliminar cliente"}
+                          className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                            Number(item.cantidad_bicicletas || 0) > 0
+                              ? "text-slate-600 opacity-40 cursor-not-allowed"
+                              : "text-rose-400 hover:text-rose-300 hover:bg-rose-950/40"
+                          }`}
                         >
                           <Trash2 size={15} />
                         </button>
@@ -1106,6 +1753,14 @@ export default function CustomersView() {
             {/* Drawer Form Body (Scrollable) */}
             <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar font-mono text-xs">
               
+              {/* Modal Error Alert Banner */}
+              {modalError && (
+                <div className="p-3.5 bg-rose-500/15 border border-rose-500/40 rounded-xl text-rose-300 text-xs flex items-center gap-3 font-mono animate-in fade-in duration-200">
+                  <AlertTriangle size={18} className="text-rose-400 shrink-0" />
+                  <span className="font-bold">{modalError}</span>
+                </div>
+              )}
+
               {/* Sección 1: Información Personal */}
               <div className="space-y-4">
                 <h3 className="text-[#bfce7f] font-bold uppercase tracking-wider text-[11px] border-b border-[#2d3748] pb-1">
@@ -1139,32 +1794,50 @@ export default function CustomersView() {
                   </div>
 
                   <div>
-                    <label className="block text-slate-300 mb-1">Cédula / Pasaporte</label>
-                    <input
-                      type="text"
-                      value={formData.identificacion}
-                      onChange={(e) => setFormData({ ...formData, identificacion: e.target.value })}
-                      placeholder="Ej: 001-1234567-8"
-                      className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-[#bfce7f]"
-                    />
-                  </div>
-
-                  <div>
                     <label className="block text-slate-300 mb-1">
                       Tipo de Cliente <span className="text-rose-400">*</span>
                     </label>
                     <select
                       value={formData.tipo_cliente}
-                      onChange={(e) => setFormData({ ...formData, tipo_cliente: e.target.value })}
+                      onChange={(e) => {
+                        const newTipo = e.target.value;
+                        setFormData(prev => ({
+                          ...prev,
+                          tipo_cliente: newTipo,
+                          identificacion: ""
+                        }));
+                        setErrors(prev => ({ ...prev, tipo_cliente: null, identificacion: null }));
+                      }}
                       className={`w-full bg-[#0e1117] border rounded-xl px-3.5 py-2.5 text-white focus:outline-none transition-all ${
                         errors.tipo_cliente ? "border-rose-500 focus:border-rose-500" : "border-[#2d3748] focus:border-[#bfce7f]"
                       }`}
                     >
-                      <option value="">Seleccione el tipo de cliente</option>
                       <option value="PERSONA">Persona</option>
                       <option value="EMPRESA">Empresa</option>
                     </select>
                     {errors.tipo_cliente && <p className="text-rose-400 text-[10px] mt-1">{errors.tipo_cliente}</p>}
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 mb-1">RNC o Cédula</label>
+                    <input
+                      type="text"
+                      value={formData.identificacion}
+                      onChange={(e) => {
+                        const isEmpresa = formData.tipo_cliente?.toUpperCase() === "EMPRESA";
+                        const formatted = isEmpresa
+                          ? formatRnc(e.target.value)
+                          : formatCedula(e.target.value);
+                        setFormData(prev => ({ ...prev, identificacion: formatted }));
+                        const err = isEmpresa ? validateRnc(formatted) : validateCedula(formatted);
+                        setErrors(prev => ({ ...prev, identificacion: err }));
+                      }}
+                      placeholder={formData.tipo_cliente?.toUpperCase() === "EMPRESA" ? "Ej: 1-01-12345-6" : "Ej: 001-1234567-8"}
+                      className={`w-full bg-[#0e1117] border rounded-xl px-3.5 py-2.5 text-white focus:outline-none ${
+                        errors.identificacion ? "border-rose-500" : "border-[#2d3748] focus:border-[#bfce7f]"
+                      }`}
+                    />
+                    {errors.identificacion && <p className="text-rose-400 text-[10px] mt-1">{errors.identificacion}</p>}
                   </div>
                 </div>
               </div>
@@ -1181,8 +1854,13 @@ export default function CustomersView() {
                     <input
                       type="text"
                       value={formData.telefono_principal}
-                      onChange={(e) => setFormData({ ...formData, telefono_principal: e.target.value })}
-                      placeholder="Ej: +34 612 345 678"
+                      onChange={(e) => {
+                        const formatted = formatDominicanPhone(e.target.value);
+                        setFormData(prev => ({ ...prev, telefono_principal: formatted }));
+                        const err = validateDominicanPhone(formatted);
+                        setErrors(prev => ({ ...prev, telefono_principal: err }));
+                      }}
+                      placeholder="Ej: 809-555-1234"
                       className={`w-full bg-[#0e1117] border rounded-xl px-3.5 py-2.5 text-white focus:outline-none ${
                         errors.telefono_principal ? "border-rose-500" : "border-[#2d3748] focus:border-[#bfce7f]"
                       }`}
@@ -1306,25 +1984,30 @@ export default function CustomersView() {
       )}
 
       {/* Confirm Delete Modal */}
-      {isDeletingModalOpen && itemToDelete && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 font-mono text-xs">
-          <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200">
+      {mounted && isDeletingModalOpen && itemToDelete && typeof document !== 'undefined' && createPortal(
+        <div style={{ position: 'fixed', inset: 0, zIndex: 999999, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(3px)', padding: '16px' }} className="font-mono text-xs">
+          <div 
+            style={{ width: '460px', maxWidth: '92vw', backgroundColor: '#161a21', border: '1px solid #2d3748', borderRadius: '16px', padding: '24px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8)' }}
+            className="space-y-4 font-sans"
+          >
             <div className="flex items-center gap-3 text-rose-400">
-              <AlertTriangle size={24} />
-              <h3 className="text-base font-bold text-white">Confirmar Eliminación</h3>
+              <AlertTriangle size={24} className="shrink-0" />
+              <h3 className="text-base font-bold text-white font-mono">Confirmar Eliminación</h3>
             </div>
-            <p className="text-slate-300">
+            <p className="text-slate-300 font-mono text-xs leading-relaxed">
               ¿Está seguro de que desea eliminar al cliente{" "}
               <strong className="text-white">{itemToDelete.nombre_completo}</strong>? Esta acción actualizará la base de datos.
             </p>
-            <div className="flex justify-end gap-3 pt-2">
+            <div className="flex items-center justify-end gap-3 pt-2 font-mono">
               <button
+                type="button"
                 onClick={() => setIsDeletingModalOpen(false)}
-                className="px-4 py-2 bg-[#2d3748] text-white rounded-xl hover:bg-slate-700 transition-colors cursor-pointer"
+                className="px-4 py-2 bg-[#2d3748] text-white font-bold rounded-xl hover:bg-slate-700 transition-colors cursor-pointer"
               >
                 Cancelar
               </button>
               <button
+                type="button"
                 onClick={handleDeleteConfirm}
                 className="px-4 py-2 bg-rose-600 text-white font-bold rounded-xl hover:bg-rose-500 transition-colors cursor-pointer"
               >
@@ -1332,8 +2015,40 @@ export default function CustomersView() {
               </button>
             </div>
           </div>
+        </div>,
+        document.body
+      )}
+
         </div>
       )}
+
+      {/* Single Top-Level Unified Instance of BikeFormDrawer */}
+      <BikeFormDrawer
+        isOpen={isBikeModalOpen}
+        editingItem={null}
+        clientes={data}
+        preselectedClienteId={detailUser?.cliente_id ?? detailUser?.id ?? null}
+        preselectedClienteName={detailUser ? (detailUser.nombre_completo || `${detailUser.nombre || ""} ${detailUser.apellido || ""}`.trim()) : ""}
+        lockCliente={Boolean(detailUser)}
+        onClose={() => setIsBikeModalOpen(false)}
+        onSuccess={async () => {
+          setIsBikeModalOpen(false);
+          fetchData();
+          const currentId = detailUser?.cliente_id ?? detailUser?.id;
+          if (currentId) {
+            try {
+              const resDetail = await fetch(`/api/crm/clientes/${currentId}`);
+              if (resDetail.ok) {
+                const freshDetail = await resDetail.json();
+                setDetailUser(freshDetail?.data || freshDetail);
+              }
+            } catch (err) {
+              console.error("Error refreshing detailUser post-bike add:", err);
+            }
+          }
+        }}
+        showToast={showToast}
+      />
 
     </div>
   );
