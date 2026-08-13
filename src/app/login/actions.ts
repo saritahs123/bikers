@@ -70,10 +70,12 @@ export async function loginAction(formData: FormData) {
          us.intentos_fallidos,
          us.bloqueado_hasta,
          us.intentos_fallidos_permitidos
-       FROM admin.usuario_identidad ui
-       JOIN admin.usuario u ON ui.usuario_id = u.usuario_id
+       FROM admin.usuario u
        LEFT JOIN admin.usuario_seguridad us ON u.usuario_id = us.usuario_id
-       WHERE LOWER(ui.correo_electronico) = $1
+       LEFT JOIN admin.usuario_identidad ui ON u.usuario_id = ui.usuario_id
+       WHERE LOWER(us.correo_acceso) = $1
+          OR LOWER(ui.correo_electronico) = $1
+          OR LOWER(us.identificador_principal) = $1
        LIMIT 1`,
       [email]
     );
