@@ -12,7 +12,7 @@ export async function GET() {
 
     let targetUserId: number | null = null;
 
-    // 1. Identify user from valid active session token
+    // 1. Identify user from valid active session token in DB
     if (tokenCookie) {
       const sessionCheck = await query(
         `SELECT usuario_id, fecha_expiracion, estado
@@ -39,7 +39,7 @@ export async function GET() {
       }
     }
 
-    // 3. Return 401 if no valid authenticated session
+    // 3. Return HTTP 401 if no valid authenticated session exists
     if (!targetUserId) {
       return NextResponse.json(
         { success: false, error: "UNAUTHORIZED", message: "Sesión no válida o expirada." },
@@ -47,7 +47,7 @@ export async function GET() {
       );
     }
 
-    // 4. Query authenticated user details from real joined tables
+    // 4. Query authenticated user details from real joined security tables
     const userRows = await query(
       `SELECT 
          u.usuario_id,
@@ -93,19 +93,19 @@ export async function GET() {
     } else if (email) {
       nombreCompleto = email;
     } else {
-      nombreCompleto = "Usuario";
+      nombreCompleto = "Sin nombre registrado";
     }
 
-    let iniciales = "US";
+    let iniciales = "--";
     if (nombre && apellido) {
       iniciales = `${nombre[0]}${apellido[0]}`.toUpperCase();
     } else if (nombre) {
       iniciales = nombre.substring(0, 2).toUpperCase();
-    } else if (nombreCompleto) {
+    } else if (nombreCompleto && nombreCompleto !== "Sin nombre registrado") {
       iniciales = nombreCompleto.substring(0, 2).toUpperCase();
     }
 
-    const rolNombre = row.rol_nombre || "Usuario";
+    const rolNombre = row.rol_nombre || "Sin rol asignado";
     const cargoNombre = row.cargo_nombre || rolNombre;
     const empresaNombre = row.empresa_nombre || "Biker's Fort";
 
