@@ -141,13 +141,13 @@ export const usersService = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(userData)
       });
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Error ${response.status} al actualizar usuario`);
+        const message = data.message || data.error || `Error ${response.status} al actualizar usuario`;
+        throw new Error(message);
       }
-      return await response.json();
+      return data;
     } catch (error) {
-      console.error('usersService.updateUser error:', error);
       throw error;
     }
   },
