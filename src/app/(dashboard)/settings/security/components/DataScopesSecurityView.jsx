@@ -46,13 +46,13 @@ const SIMULATED_ROWS_POOL = [
   { id: 'TX-913', agency: 'Banca La Vega Real', route: 'RUT-001', grouping: 'ZON-NORTE', territory: 'TER-DOM-01', amount: 'DOP 9,100', status: 'Aprobada' }
 ];
 
-export default function DataScopesSecurityView({ onOpenSidebar }) {
+export default function DataScopesSecurityView({ onOpenSidebar = () => {} }) {
   // Sync in-memory users
   if (typeof window !== 'undefined' && !window.usersData) {
     window.usersData = INITIAL_USERS_DATA;
   }
 
-  const [users, setUsers] = useState(() => window.usersData || INITIAL_USERS_DATA);
+  const [users, setUsers] = useState(() => (typeof window !== 'undefined' ? window.usersData : null) || INITIAL_USERS_DATA);
   const [selectedUserId, setSelectedUserId] = useState(users[0]?.id || '');
   const [searchUser, setSearchUser] = useState('');
   const [toast, setToast] = useState(null);

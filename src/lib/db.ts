@@ -1,93 +1,109 @@
-import { RDSDataClient, ExecuteStatementCommand, Field } from "@aws-sdk/client-rds-data";
+import { Pool, PoolConfig, PoolClient, QueryResultRow } from "pg";
 
-let client: RDSDataClient | null = null;
+const globalForPg = globalThis as typeof globalThis & {
+  __bikersPgPool?: Pool;
+};
 
-const getClient = () => {
-  if (!client) {
-    client = new RDSDataClient({
-      region: process.env.AWS_REGION || "us-east-1",
-      credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID || "",
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "",
-      },
+const normalizePem = (value?: string) =>
+  value?.replace(/\\n/g, "\n").trim();
+
+const createPool = (): Pool => {
+  const connectionString = process.env.DATABASE_URL;
+
+  if (!connectionString) {
+    throw new Error("La variable DATABASE_URL no está configurada.");
+  }
+
+  const configuredMax = Number.parseInt(
+    process.env.DB_POOL_MAX || "2",
+    10
+  );
+
+  const poolConfig: PoolConfig = {
+    connectionString,
+    max:
+      Number.isInteger(configuredMax) && configuredMax > 0
+        ? configuredMax
+        : 2,
+    idleTimeoutMillis: 10_000,
+    connectionTimeoutMillis: 10_000,
+    allowExitOnIdle: true,
+    application_name: "bikers-vercel",
+  };
+
+  const ca = normalizePem(process.env.DATABASE_SSL_CA);
+  const certificate = normalizePem(process.env.DATABASE_SSL_CERT);
+  const privateKey = normalizePem(process.env.DATABASE_SSL_KEY);
+
+  if (
+    process.env.NODE_ENV === "production" ||
+    ca ||
+    certificate ||
+    privateKey
+  ) {
+    poolConfig.ssl = {
+      rejectUnauthorized: true,
+      ...(ca ? { ca } : {}),
+      ...(certificate ? { cert: certificate } : {}),
+      ...(privateKey ? { key: privateKey } : {}),
+    };
+  }
+
+  const pool = new Pool(poolConfig);
+
+  pool.on("error", (error) => {
+    console.error("Unexpected PostgreSQL pool error:", {
+      code: (error as { code?: string }).code,
+      message: error.message,
     });
-  }
-  return client;
+  });
+
+  return pool;
 };
 
-const getResourceArn = () => process.env.AWS_RDS_CLUSTER_ARN!;
-const getSecretArn = () => process.env.AWS_RDS_SECRET_ARN!;
-const getDatabase = () => process.env.AWS_RDS_DATABASE!;
-
-const parseValue = (field: Field) => {
-  if (field.isNull !== undefined && field.isNull) return null;
-  if (field.stringValue !== undefined) return field.stringValue;
-  if (field.longValue !== undefined) return field.longValue;
-  if (field.doubleValue !== undefined) return field.doubleValue;
-  if (field.booleanValue !== undefined) return field.booleanValue;
-  if (field.blobValue !== undefined) return field.blobValue;
-  if (field.arrayValue !== undefined) {
-    // Basic array parsing (string/long/etc array)
-    if (field.arrayValue.stringValues) return field.arrayValue.stringValues;
-    if (field.arrayValue.longValues) return field.arrayValue.longValues;
-    if (field.arrayValue.doubleValues) return field.arrayValue.doubleValues;
-    if (field.arrayValue.booleanValues) return field.arrayValue.booleanValues;
+export const getPool = (): Pool => {
+  if (!globalForPg.__bikersPgPool) {
+    globalForPg.__bikersPgPool = createPool();
   }
-  return null;
+
+  return globalForPg.__bikersPgPool;
 };
 
-export const query = async (sql: string, parameters: any[] = []) => {
+export const query = async <T = QueryResultRow>(
+  sql: string,
+  parameters: unknown[] = []
+): Promise<T[]> => {
   try {
-    const formattedParameters = parameters.map((p, i) => {
-      let value: any = { isNull: true };
-      if (p !== null && p !== undefined) {
-        if (typeof p === "string") value = { stringValue: p };
-        else if (typeof p === "number") {
-          if (Number.isInteger(p)) value = { longValue: p };
-          else value = { doubleValue: p };
-        }
-        else if (typeof p === "boolean") value = { booleanValue: p };
-      }
-      return {
-        name: `${i + 1}`,
-        value
-      };
+    const result = await getPool().query(sql, parameters);
+    return result.rows as unknown as T[];
+  } catch (error: unknown) {
+    const databaseError = error as {
+      code?: string;
+      message?: string;
+    };
+
+    console.error("Database Query Error:", {
+      code: databaseError.code,
+      message: databaseError.message,
     });
 
-    const command = new ExecuteStatementCommand({
-      resourceArn: getResourceArn(),
-      secretArn: getSecretArn(),
-      database: getDatabase(),
-      sql: sql.replace(/\$(\d+)/g, ':$1'), // Convert $1, $2 to :1, :2 for compatibility
-      parameters: formattedParameters,
-      includeResultMetadata: true,
-    });
-
-    const response = await getClient().send(command);
-    
-    // Si se retorna formatRecordsAs: "JSON", RDS Data API (v1) devuelve formattedRecords
-    if (response.formattedRecords) {
-      return JSON.parse(response.formattedRecords);
-    }
-    
-    // Fallback si no soporta formatRecordsAs (ej. postgres < 10)
-    if (!response.records || !response.columnMetadata) {
-      return [];
-    }
-
-    const columns = response.columnMetadata.map((col) => col.name || "unknown");
-
-    const formattedRecords = response.records.map((record) => {
-      const row: any = {};
-      record.forEach((field, index) => {
-        row[columns[index]] = parseValue(field);
-      });
-      return row;
-    });
-
-    return formattedRecords;
-  } catch (error) {
-    console.error("Database Query Error:", error);
     throw error;
   }
 };
+
+export async function withTransaction<T>(
+  callback: (client: PoolClient) => Promise<T>
+): Promise<T> {
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const result = await callback(client);
+    await client.query("COMMIT");
+    return result;
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}

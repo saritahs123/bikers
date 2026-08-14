@@ -1,15 +1,22 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { authorizeUserAccess } from "@/lib/userAuth";
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const userId = parseInt(id, 10);
-    
-    if (isNaN(userId)) {
-      return NextResponse.json({ error: "ID inválido" }, { status: 400 });
+    const authResult = await authorizeUserAccess(id);
+
+    if (!authResult.success) {
+      return NextResponse.json(
+        { error: authResult.error, message: authResult.message },
+        { status: authResult.status }
+      );
     }
 
+    const requestedUserId = authResult.targetUserId;
+
+    // Query PostgreSQL user detail using exact real database columns
     const sql = `
       SELECT 
         u.usuario_id AS id,
@@ -17,64 +24,111 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         u.estado_activacion,
         u.fecha_creacion,
         u.empresa_id AS "companyId",
+        emp.nombre_comercial AS empresa_nombre,
         ui.nombre AS first_name,
         ui.apellido AS last_name,
-        ui.nombre || ' ' || ui.apellido AS full_name,
         ui.correo_electronico AS email,
         ui.telefono AS phone,
         ui.numero_documento AS document_number,
         ui.departamento_id,
+        dep.nombre AS departamento_nombre,
         ui.area_id,
+        ar.nombre AS area_nombre,
         ui.cargo_id,
+        cg.nombre AS cargo_nombre,
         r.nombre AS role,
         tu.nombre AS user_type,
         us.metodo_acceso_principal AS primary_access_type,
-        us.identificador_principal AS login_identifiers,
+        us.identificador_principal,
         us.fecha_ultimo_acceso AS last_login_at,
         us.mfa_activo AS "mfaEnabled",
         us.mfa_tipo AS mfa_method,
-        us.detalle_estado AS activation
+        us.detalle_estado AS activation,
+        us.correo_acceso,
+        us.enviar_invitacion_correo,
+        us.generar_clave_automatica,
+        us.forzar_cambio_clave,
+        us.idioma_preferido,
+        us.zona_horaria,
+        us.formato_fecha,
+        us.intentos_fallidos,
+        us.bloqueado_hasta,
+        us.estado_verificacion_correo,
+        us.canales_permitidos,
+        us.restriccion_ip,
+        us.restriccion_horaria AS horario_acceso,
+        us.expiracion_acceso,
+        us.fecha_credenciales_generada AS fecha_activacion,
+        us.fecha_expiracion_invitacion AS fecha_ultima_invitacion
       FROM admin.usuario u
       LEFT JOIN admin.usuario_identidad ui ON u.usuario_id = ui.usuario_id
       LEFT JOIN admin.usuario_seguridad us ON u.usuario_id = us.usuario_id
       LEFT JOIN admin.rol_funcional r ON u.rol_principal_id = r.rol_funcional_id
       LEFT JOIN admin.tipo_usuario tu ON u.tipo_usuario_id = tu.tipo_usuario_id
+      LEFT JOIN admin.empresa emp ON u.empresa_id = emp.empresa_id
+      LEFT JOIN admin.departamento dep ON ui.departamento_id = dep.departamento_id
+      LEFT JOIN admin.area ar ON ui.area_id = ar.area_id
+      LEFT JOIN admin.cargo cg ON ui.cargo_id = cg.cargo_id
       WHERE u.usuario_id = $1
     `;
     
-    // El query runner devuelve un arreglo; pasamos los params posicionalmente
-    const usersRes = await query(sql, [userId]);
+    const usersRes = await query(sql, [requestedUserId]);
     
     if (!usersRes || usersRes.length === 0) {
-       return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 });
+       return NextResponse.json({ error: "NOT_FOUND", message: "Usuario no encontrado." }, { status: 404 });
     }
 
     const u = usersRes[0];
+    const fullNameComputed = (u.first_name || u.last_name)
+      ? `${u.first_name || ''} ${u.last_name || ''}`.trim()
+      : null;
 
     const mappedUser = {
       id: u.id,
-      full_name: u.full_name || 'Desconocido',
-      first_name: u.first_name,
-      last_name: u.last_name,
-      email: u.email,
-      phone: u.phone,
-      document_number: u.document_number,
-      companyId: u.companyId,
-      department_id: u.departamento_id,
-      area_id: u.area_id,
-      cargo_id: u.cargo_id,
-      role: u.role || 'Sin Rol',
-      user_type: u.user_type || 'Sin Tipo',
-      primary_access_type: u.primary_access_type,
-      login_identifiers: u.login_identifiers ? [{ is_primary: true, identifier_value: u.login_identifiers }] : [],
-      last_login_at: u.last_login_at,
-      mfaEnabled: !!u.mfaEnabled,
-      mfa_method: u.mfa_method,
-      status: u.estado, 
-      estado: u.estado, 
-      estado_activacion: u.estado_activacion,
-      activation: u.activation,
-      fecha_creacion: u.fecha_creacion,
+      full_name: fullNameComputed,
+      first_name: u.first_name ?? null,
+      last_name: u.last_name ?? null,
+      email: u.email ?? null,
+      phone: u.phone ?? null,
+      document_number: u.document_number ?? null,
+      companyId: u.companyId ?? null,
+      empresa_nombre: u.empresa_nombre ?? null,
+      department_id: u.departamento_id ?? null,
+      departamento_nombre: u.departamento_nombre ?? null,
+      area_id: u.area_id ?? null,
+      area_nombre: u.area_nombre ?? null,
+      cargo_id: u.cargo_id ?? null,
+      cargo_nombre: u.cargo_nombre ?? null,
+      role: u.role ?? null,
+      user_type: u.user_type ?? null,
+      primary_access_type: u.primary_access_type ?? 'EMAIL',
+      login_identifiers: u.identificador_principal
+        ? [{ is_primary: true, identifier_value: u.identificador_principal }]
+        : [],
+      last_login_at: u.last_login_at ?? null,
+      mfaEnabled: Boolean(u.mfaEnabled),
+      mfa_method: u.mfa_method ?? null,
+      status: u.estado ?? null, 
+      estado: u.estado ?? null, 
+      estado_activacion: u.estado_activacion ?? null,
+      activation: u.activation ?? null,
+      fecha_creacion: u.fecha_creacion ?? null,
+      correo_acceso: u.correo_acceso ?? null,
+      enviar_invitacion_correo: Boolean(u.enviar_invitacion_correo),
+      generar_clave_automatica: Boolean(u.generar_clave_automatica),
+      forzar_cambio_clave: Boolean(u.forzar_cambio_clave),
+      idioma_preferido: u.idioma_preferido ?? 'es',
+      zona_horaria: u.zona_horaria ?? 'America/Santo_Domingo',
+      formato_fecha: u.formato_fecha ?? 'DD/MM/YYYY',
+      intentos_fallidos: Number(u.intentos_fallidos ?? 0),
+      bloqueado_hasta: u.bloqueado_hasta ?? null,
+      estado_verificacion_correo: u.estado_verificacion_correo ?? null,
+      canales_permitidos: u.canales_permitidos ?? null,
+      restriccion_ip: u.restriccion_ip ?? null,
+      horario_acceso: u.horario_acceso ?? null,
+      expiracion_acceso: u.expiracion_acceso ?? null,
+      fecha_activacion: u.fecha_activacion ?? null,
+      fecha_ultima_invitacion: u.fecha_ultima_invitacion ?? null,
       permissionsOverride: false,
       scope_type: 'GLOBAL'
     };
@@ -82,128 +136,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     return NextResponse.json(mappedUser);
   } catch (error: any) {
     console.error("Error in GET /api/usuarios/[id]:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-}
-
-export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  try {
-    const { id } = await params;
-    const userId = parseInt(id, 10);
-
-    if (isNaN(userId)) {
-      return NextResponse.json({ error: "ID inválido" }, { status: 400 });
-    }
-
-    const body = await req.json();
-
-    let firstName = (body.first_name || '').trim();
-    let lastName = (body.last_name || '').trim();
-
-    if ((!firstName || !lastName) && body.full_name) {
-      const parts = body.full_name.trim().split(' ');
-      if (!firstName) firstName = parts[0] || '';
-      if (!lastName) lastName = parts.slice(1).join(' ') || '';
-    }
-
-    const email = body.email || body.correo_electronico || '';
-    const phone = body.phone || body.telefono || '';
-    const docNumber = body.document_number || body.numero_documento || '';
-    const deptId = body.department_id || body.departamento_id || null;
-    const areaId = body.area_id || null;
-    const cargoId = body.cargo_id || null;
-
-    // Resolve rol_id if only role name was provided
-    let rolId = body.rol_id || body.role_id || body.rol_principal_id || null;
-    if (!rolId && body.role) {
-      try {
-        const rRes = await query(`SELECT rol_funcional_id FROM admin.rol_funcional WHERE LOWER(nombre) = LOWER($1) LIMIT 1`, [body.role]);
-        if (rRes && rRes.length > 0) {
-          rolId = rRes[0].rol_funcional_id;
-        }
-      } catch (e) {
-        console.warn("Could not resolve role by name:", e);
-      }
-    }
-
-    // 1. UPDATE or INSERT into admin.usuario_identidad
-    try {
-      const checkIdent = await query(`SELECT 1 FROM admin.usuario_identidad WHERE usuario_id = $1`, [userId]);
-      if (checkIdent && checkIdent.length > 0) {
-        await query(
-          `UPDATE admin.usuario_identidad 
-           SET nombre = $1,
-               apellido = $2,
-               correo_electronico = COALESCE(NULLIF($3, ''), correo_electronico),
-               telefono = COALESCE(NULLIF($4, ''), telefono),
-               numero_documento = COALESCE(NULLIF($5, ''), numero_documento),
-               departamento_id = COALESCE($6, departamento_id),
-               area_id = COALESCE($7, area_id),
-               cargo_id = COALESCE($8, cargo_id)
-           WHERE usuario_id = $9`,
-          [firstName, lastName, email, phone, docNumber, deptId, areaId, cargoId, userId]
-        );
-      } else {
-        await query(
-          `INSERT INTO admin.usuario_identidad (usuario_id, nombre, apellido, correo_electronico, telefono, numero_documento, departamento_id, area_id, cargo_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-          [userId, firstName, lastName, email, phone, docNumber, deptId, areaId, cargoId]
-        );
-      }
-    } catch (e) {
-      console.error("Error saving usuario_identidad:", e);
-    }
-
-    // 2. UPDATE or INSERT into admin.usuario_seguridad
-    if (email || docNumber) {
-      try {
-        const mainIdent = email || docNumber;
-        const mainType = body.primary_access_type || (email ? 'EMAIL' : 'DOCUMENT');
-        const checkSeg = await query(`SELECT 1 FROM admin.usuario_seguridad WHERE usuario_id = $1`, [userId]);
-        if (checkSeg && checkSeg.length > 0) {
-          await query(
-            `UPDATE admin.usuario_seguridad
-             SET metodo_acceso_principal = $1,
-                 identificador_principal = $2
-             WHERE usuario_id = $3`,
-            [mainType, mainIdent, userId]
-          );
-        } else {
-          await query(
-            `INSERT INTO admin.usuario_seguridad (usuario_id, metodo_acceso_principal, identificador_principal)
-             VALUES ($1, $2, $3)`,
-            [userId, mainType, mainIdent]
-          );
-        }
-      } catch (e) {
-        console.warn("Could not save usuario_seguridad:", e);
-      }
-    }
-
-    // 3. UPDATE admin.usuario
-    try {
-      await query(
-        `UPDATE admin.usuario 
-         SET empresa_id = COALESCE($1, empresa_id),
-             rol_principal_id = COALESCE($2, rol_principal_id),
-             tipo_usuario_id = COALESCE($3, tipo_usuario_id),
-             estado = COALESCE(NULLIF($4, ''), estado)
-         WHERE usuario_id = $5`,
-        [
-          body.companyId || body.empresa_id || null,
-          rolId,
-          body.tipo_usuario_id || null,
-          body.status || body.estado || null,
-          userId
-        ]
-      );
-    } catch (e) {
-      console.error("Error updating usuario table:", e);
-    }
-
-    return NextResponse.json({ success: true, message: "Usuario actualizado correctamente" });
-  } catch (error: any) {
-    console.error("Error in PUT /api/usuarios/[id]:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Detalle de Orden de Trabajo - OT-2026-00087</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800&amp;family=JetBrains+Mono:wght@600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-container": "#1f201a",
+                        "on-primary-container": "#252d00",
+                        "secondary-fixed-dim": "#c3c6d0",
+                        "secondary": "#c3c6d0",
+                        "primary": "#bfce7f",
+                        "on-secondary-fixed": "#181c23",
+                        "error": "#ffb4ab",
+                        "surface-tint": "#bfce7f",
+                        "on-tertiary-fixed-variant": "#3d4759",
+                        "tertiary-fixed": "#d9e3f9",
+                        "on-error": "#690005",
+                        "surface-container-highest": "#35352f",
+                        "tertiary-container": "#8791a5",
+                        "on-primary-fixed": "#181e00",
+                        "on-error-container": "#ffdad6",
+                        "surface-container-low": "#1b1c17",
+                        "surface-bright": "#393a33",
+                        "on-secondary-container": "#b2b5be",
+                        "surface-container-high": "#2a2a24",
+                        "inverse-surface": "#e4e3d9",
+                        "on-secondary-fixed-variant": "#43474f",
+                        "on-tertiary-fixed": "#121c2c",
+                        "secondary-fixed": "#dfe2ec",
+                        "secondary-container": "#43474f",
+                        "on-tertiary-container": "#202a3a",
+                        "on-tertiary": "#273141",
+                        "outline-variant": "#46483b",
+                        "on-secondary": "#2d3138",
+                        "surface-variant": "#35352f",
+                        "primary-fixed": "#dbea98",
+                        "tertiary": "#bdc7dc",
+                        "tertiary-fixed-dim": "#bdc7dc",
+                        "background": "#13140f",
+                        "error-container": "#93000a",
+                        "inverse-primary": "#576421",
+                        "on-primary": "#2b3400",
+                        "primary-container": "#89974f",
+                        "primary-fixed-dim": "#bfce7f",
+                        "on-surface": "#e4e3d9",
+                        "inverse-on-surface": "#30312b",
+                        "surface-dim": "#13140f",
+                        "surface": "#13140f",
+                        "on-primary-fixed-variant": "#404c0a",
+                        "on-surface-variant": "#c7c8b7",
+                        "on-background": "#e4e3d9",
+                        "outline": "#919282",
+                        "surface-container-lowest": "#0e0f0a"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "margin-mobile": "16px",
+                        "unit": "4px",
+                        "gutter": "24px",
+                        "margin-desktop": "40px",
+                        "container-max": "1440px"
+                    },
+                    "fontFamily": {
+                        "body-sm": ["Hanken Grotesk"],
+                        "headline-lg": ["Hanken Grotesk"],
+                        "body-md": ["Hanken Grotesk"],
+                        "body-lg": ["Hanken Grotesk"],
+                        "headline-md": ["Hanken Grotesk"],
+                        "label-caps": ["JetBrains Mono"],
+                        "headline-lg-mobile": ["Hanken Grotesk"],
+                        "headline-sm": ["Hanken Grotesk"]
+                    },
+                    "fontSize": {
+                        "body-sm": ["14px", { "lineHeight": "1.4", "fontWeight": "400" }],
+                        "headline-lg": ["48px", { "lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "800" }],
+                        "body-md": ["16px", { "lineHeight": "1.5", "fontWeight": "400" }],
+                        "body-lg": ["18px", { "lineHeight": "1.6", "fontWeight": "400" }],
+                        "headline-md": ["32px", { "lineHeight": "1.2", "fontWeight": "700" }],
+                        "label-caps": ["12px", { "lineHeight": "1", "letterSpacing": "0.1em", "fontWeight": "600" }],
+                        "headline-lg-mobile": ["32px", { "lineHeight": "1.2", "fontWeight": "800" }],
+                        "headline-sm": ["24px", { "lineHeight": "1.3", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .industrial-border { border: 1px solid #2d3748; }
+        .industrial-shadow { box-shadow: 4px 4px 0px rgba(0,0,0,0.5); }
+        .bg-grid-pattern { background-image: radial-gradient(#2d3748 1px, transparent 1px); background-size: 20px 20px; }
+    </style>
+</head>
+<body class="bg-background text-on-background min-h-screen flex flex-col font-body-md overflow-x-hidden relative">
+<!-- Top Nav -->
+<header class="bg-surface-container dark:bg-surface-container text-primary dark:text-primary font-body-md text-body-md border-b border-outline-variant w-full h-16 flex justify-between items-center px-margin-desktop ml-0 shrink-0 z-50 fixed top-0">
+<div class="flex items-center gap-gutter">
+<h1 class="font-headline-sm text-headline-sm font-bold text-primary dark:text-primary tracking-tight">Biker's Fort Core</h1>
+</div>
+<div class="flex items-center gap-gutter">
+<span class="material-symbols-outlined cursor-pointer active:opacity-80 hover:bg-surface-variant transition-colors p-2 rounded">notifications</span>
+<span class="material-symbols-outlined cursor-pointer active:opacity-80 hover:bg-surface-variant transition-colors p-2 rounded">settings</span>
+<img alt="Shop Manager Profile" class="w-8 h-8 rounded-full border border-outline-variant object-cover" data-alt="A small circular profile picture of a shop manager in a high-end matte dark industrial bicycle workshop. Focused expression, professional attire." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAdG0VbfuaMsla5aQB67MaKvx-7EeGCtPlkVNk3BDOByMz9RxWlyW_EidHFlLXBdS7ED0h1RrsslPTruflRrfGrFbYyIWL91HHqWE40cZm6tZWWsW68vYf5pmJnY1ePh88cvtB4Dwrozm3ppBMsmGq_QYM0da536X7GlLIQ4LfdA7hQ8caNMytsNowo5maZqDnwnghjLkJGoC4BO8_EO7snBuIevRRQlpX3X4-4egB1zJid7WhumwyR"/>
+</div>
+</header>
+<div class="flex flex-1 pt-16">
+<!-- Side Nav -->
+<nav class="bg-surface-container-low dark:bg-surface-container-low text-primary dark:text-primary font-label-caps text-label-caps border-r border-outline-variant h-[calc(100vh-64px)] w-64 fixed left-0 top-16 flex flex-col py-unit hidden md:flex shrink-0 z-40">
+<div class="px-6 py-4 border-b border-outline-variant mb-4">
+<div class="flex items-center gap-3">
+<img alt="Biker's Fort Logo" class="w-8 h-8 rounded" data-alt="A sleek, minimalist vector logo icon representing a mountain bike gear or chainlink, rendered in subtle dark matte gray and military olive green." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAyDE7E8PEn2fbRKlbyK8CybKg2tAM0VWNBWIGTVYNo_h0zZy1iYqn_jexwYd-YHDjb17CQsd7u0-I9aPyOBSi6VDTVOHg-TFvG07PKG0NnAD2qvaalj2hZk63HEIjQjvGU7UN-L5y_6VFmLphIPXVqsxQNAVI4UnlCMqhxVasPBa5nBOTFCduKtLv5ZSb7FZefd9KRUjWt430yfITxKcSf-hMLdVq7smh45Kqf34_0JbllmB1Tec0-"/>
+<div>
+<div class="font-headline-sm text-headline-sm font-black text-primary">Fort Core</div>
+<div class="text-[10px] text-on-surface-variant">V3.4 Industrial</div>
+</div>
+</div>
+<button class="mt-4 w-full bg-[#84924a] hover:bg-[#96a655] text-white py-2 px-4 rounded font-label-caps flex items-center justify-center gap-2 border-t border-[#a6b66b]">
+<span class="material-symbols-outlined text-[18px]">add</span> New Work Order
+                </button>
+</div>
+<ul class="flex-1 flex flex-col gap-1 px-2">
+<li><a class="flex items-center gap-3 px-4 py-3 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-variant transition-all ease-in-out duration-200" href="#"><span class="material-symbols-outlined">dashboard</span>Dashboard</a></li>
+<li><a class="flex items-center gap-3 px-4 py-3 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-variant transition-all ease-in-out duration-200" href="#"><span class="material-symbols-outlined">login</span>Recepción</a></li>
+<li><a class="flex items-center gap-3 px-4 py-3 rounded bg-primary-container text-on-primary-container border-l-4 border-primary transition-all ease-in-out" href="#"><span class="material-symbols-outlined">handyman</span>Work Orders</a></li>
+<li><a class="flex items-center gap-3 px-4 py-3 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-variant transition-all ease-in-out duration-200" href="#"><span class="material-symbols-outlined">inventory_2</span>Inventory</a></li>
+<li><a class="flex items-center gap-3 px-4 py-3 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-variant transition-all ease-in-out duration-200" href="#"><span class="material-symbols-outlined">group</span>Clients</a></li>
+<li><a class="flex items-center gap-3 px-4 py-3 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-variant transition-all ease-in-out duration-200" href="#"><span class="material-symbols-outlined">payments</span>Billing</a></li>
+<li><a class="flex items-center gap-3 px-4 py-3 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-variant transition-all ease-in-out duration-200" href="#"><span class="material-symbols-outlined">analytics</span>Reports</a></li>
+</ul>
+<div class="mt-auto px-2 border-t border-outline-variant pt-4">
+<a class="flex items-center gap-3 px-4 py-3 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-variant transition-all ease-in-out duration-200" href="#"><span class="material-symbols-outlined">help</span>Support</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-variant transition-all ease-in-out duration-200" href="#"><span class="material-symbols-outlined">logout</span>Sign Out</a>
+</div>
+</nav>
+<!-- Main Content Canvas -->
+<main class="flex-1 w-full max-w-[1440px] mx-auto md:ml-64 p-margin-mobile md:p-margin-desktop relative">
+<!-- Subtle background texture -->
+<div class="absolute inset-0 bg-grid-pattern opacity-5 pointer-events-none -z-10"></div>
+<!-- Header Section -->
+<div class="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
+<div>
+<div class="flex items-center gap-3 mb-2">
+<span class="font-label-caps text-label-caps text-on-surface-variant">WORK ORDER DETALLE</span>
+<span class="px-2 py-0.5 rounded-full bg-tertiary-container text-on-tertiary-container font-label-caps text-[10px] uppercase border industrial-border">En Proceso</span>
+<span class="px-2 py-0.5 rounded-full bg-error text-on-error font-label-caps text-[10px] uppercase border industrial-border">Alta Prioridad</span>
+</div>
+<h2 class="font-headline-md text-headline-md text-on-surface">OT-2026-00087</h2>
+</div>
+<div class="flex gap-2">
+<button class="px-4 py-2 bg-surface border industrial-border text-on-surface hover:border-[#4a5568] transition-colors rounded font-label-caps flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px]">print</span> IMPRIMIR
+                    </button>
+<button class="px-4 py-2 bg-[#84924a] text-white hover:bg-[#96a655] transition-colors rounded font-label-caps flex items-center gap-2 border-t border-[#a6b66b]">
+<span class="material-symbols-outlined text-[18px]">edit</span> EDITAR OT
+                    </button>
+</div>
+</div>
+<!-- Progress Pipeline -->
+<div class="bg-[#161a21] border industrial-border rounded-lg p-6 mb-8">
+<div class="flex justify-between items-center relative">
+<div class="absolute left-[5%] right-[5%] top-1/2 h-1 bg-[#2d3748] -z-0 -translate-y-1/2"></div>
+<!-- Completed -->
+<div class="flex flex-col items-center gap-2 relative z-10 w-1/6">
+<div class="w-8 h-8 rounded-full bg-[#84924a] text-white flex items-center justify-center border-2 border-[#161a21]">
+<span class="material-symbols-outlined text-sm">check</span>
+</div>
+<span class="font-label-caps text-[10px] text-on-surface">Recepción</span>
+</div>
+<!-- Completed -->
+<div class="flex flex-col items-center gap-2 relative z-10 w-1/6">
+<div class="w-8 h-8 rounded-full bg-[#84924a] text-white flex items-center justify-center border-2 border-[#161a21]">
+<span class="material-symbols-outlined text-sm">check</span>
+</div>
+<span class="font-label-caps text-[10px] text-on-surface">Diagnóstico</span>
+</div>
+<!-- Completed -->
+<div class="flex flex-col items-center gap-2 relative z-10 w-1/6">
+<div class="w-8 h-8 rounded-full bg-[#84924a] text-white flex items-center justify-center border-2 border-[#161a21]">
+<span class="material-symbols-outlined text-sm">check</span>
+</div>
+<span class="font-label-caps text-[10px] text-on-surface">Aprobación</span>
+</div>
+<!-- Active -->
+<div class="flex flex-col items-center gap-2 relative z-10 w-1/6">
+<div class="w-10 h-10 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center border-2 border-primary industrial-shadow">
+<span class="material-symbols-outlined">build</span>
+</div>
+<span class="font-label-caps text-[10px] text-primary font-bold">Reparación</span>
+</div>
+<!-- Pending -->
+<div class="flex flex-col items-center gap-2 relative z-10 w-1/6">
+<div class="w-8 h-8 rounded-full bg-[#1c2129] text-on-surface-variant flex items-center justify-center border border-[#2d3748]">
+<span class="material-symbols-outlined text-sm">fact_check</span>
+</div>
+<span class="font-label-caps text-[10px] text-on-surface-variant">QC</span>
+</div>
+<!-- Pending -->
+<div class="flex flex-col items-center gap-2 relative z-10 w-1/6">
+<div class="w-8 h-8 rounded-full bg-[#1c2129] text-on-surface-variant flex items-center justify-center border border-[#2d3748]">
+<span class="material-symbols-outlined text-sm">local_shipping</span>
+</div>
+<span class="font-label-caps text-[10px] text-on-surface-variant">Entrega</span>
+</div>
+</div>
+</div>
+<!-- Tabs -->
+<div class="border-b border-outline-variant mb-6 flex overflow-x-auto hide-scrollbar">
+<button class="px-6 py-3 font-label-caps text-primary border-b-2 border-primary whitespace-nowrap">Resumen</button>
+<button class="px-6 py-3 font-label-caps text-on-surface-variant hover:text-on-surface whitespace-nowrap">Servicios</button>
+<button class="px-6 py-3 font-label-caps text-on-surface-variant hover:text-on-surface whitespace-nowrap">Mano de Obra</button>
+<button class="px-6 py-3 font-label-caps text-on-surface-variant hover:text-on-surface whitespace-nowrap">Repuestos</button>
+<button class="px-6 py-3 font-label-caps text-on-surface-variant hover:text-on-surface whitespace-nowrap">Aprobaciones</button>
+<button class="px-6 py-3 font-label-caps text-on-surface-variant hover:text-on-surface whitespace-nowrap">Evidencias</button>
+<button class="px-6 py-3 font-label-caps text-on-surface-variant hover:text-on-surface whitespace-nowrap">Historial</button>
+</div>
+<!-- Bento Grid Content -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+<!-- Main Content (Col 1-8) -->
+<div class="lg:col-span-8 flex flex-col gap-6">
+<!-- Row 1: Context Cards -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<!-- Client Info -->
+<div class="bg-[#161a21] border industrial-border p-5 rounded-lg hover:border-[#4a5568] transition-colors">
+<div class="flex items-center justify-between mb-4 pb-2 border-b border-[#2d3748]">
+<h3 class="font-label-caps text-on-surface">CLIENTE</h3>
+<span class="material-symbols-outlined text-on-surface-variant text-sm">person</span>
+</div>
+<div class="flex items-center gap-4">
+<img class="w-12 h-12 rounded bg-[#1c2129] object-cover border industrial-border" data-alt="A portrait of a male client in outdoor gear, looking professional and ready for a ride, set against a dark matte workshop background." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB76zRQnPc1BX4dK2AIrjWCKbaLwdvwoWxLMFMR1CgOMtMdVQWiUy3AQylZxWllHJsl6bauz4lIkjsUPCnAJwEMqSYHjdf8bbsE4InKmWXq2h_76GCbiH836d1BhFSD-PO6Y2voeW63aHRMu1aoavAB8YiWOO1P-_ZZ0E8Pt-uEoJYqbwY4B90cLoZlzz6hgkPgqrHHpdgXEA2h9PnIe4KOSEm-97KMPZ1eJvvwLH-5F638gMJW3w3d"/>
+<div>
+<div class="font-bold text-on-surface text-lg">Carlos Mendoza</div>
+<div class="text-sm text-on-surface-variant">+1 (829) 555-0192</div>
+<div class="text-xs text-primary mt-1">Socio Premium</div>
+</div>
+</div>
+</div>
+<!-- Bike Info -->
+<div class="bg-[#161a21] border industrial-border p-5 rounded-lg hover:border-[#4a5568] transition-colors">
+<div class="flex items-center justify-between mb-4 pb-2 border-b border-[#2d3748]">
+<h3 class="font-label-caps text-on-surface">EQUIPO (BICICLETA)</h3>
+<span class="material-symbols-outlined text-on-surface-variant text-sm">pedal_bike</span>
+</div>
+<div class="flex items-start gap-4">
+<div class="w-12 h-12 rounded bg-[#1c2129] border industrial-border flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined">two_wheeler</span>
+</div>
+<div>
+<div class="font-bold text-on-surface text-lg">Specialized Stumpjumper</div>
+<div class="text-sm text-on-surface-variant">2022 • Talla L • Carbon/Olive</div>
+<div class="text-xs text-on-surface-variant mt-1 font-label-caps">SN: WSBC601004523N</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Row 2: Diagnosis & Progress -->
+<div class="bg-[#161a21] border industrial-border p-6 rounded-lg">
+<div class="flex items-center justify-between mb-4 pb-2 border-b border-[#2d3748]">
+<h3 class="font-label-caps text-on-surface">DIAGNÓSTICO TÉCNICO</h3>
+<span class="material-symbols-outlined text-on-surface-variant text-sm">troubleshoot</span>
+</div>
+<p class="text-sm text-on-surface-variant mb-6 leading-relaxed">
+                            Cliente reporta sonido metálico en suspensión trasera durante descensos agresivos. Revisión inicial indica desgaste severo en rodamientos del pivote principal y necesidad de mantenimiento profundo en amortiguador FOX Float X. Adicionalmente, el tensor trasero (SRAM GX) presenta desalineación leve.
+                        </p>
+<div class="flex items-center justify-between mb-2">
+<h4 class="font-label-caps text-xs text-on-surface">Progreso de Reparación</h4>
+<span class="font-label-caps text-xs text-primary">65% COMPLETADO</span>
+</div>
+<!-- Industrial Progress Bar -->
+<div class="h-4 w-full bg-[#1c2129] border border-[#2d3748] rounded overflow-hidden flex">
+<div class="h-full w-[65%] bg-primary relative border-r border-[#161a21]">
+<!-- Chain/segmented effect -->
+<div class="absolute inset-0" style="background-image: repeating-linear-gradient(to right, transparent, transparent 10px, rgba(0,0,0,0.2) 10px, rgba(0,0,0,0.2) 12px);"></div>
+</div>
+</div>
+<div class="mt-4 flex gap-4 text-sm">
+<div class="flex items-center gap-1 text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px]">schedule</span>
+<span>Horas estimadas: 4.5h</span>
+</div>
+<div class="flex items-center gap-1 text-on-surface">
+<span class="material-symbols-outlined text-[16px]">timer</span>
+<span>Horas registradas: 3.0h</span>
+</div>
+</div>
+</div>
+<!-- Row 3: Financial Summary Detailed -->
+<div class="bg-[#161a21] border industrial-border p-0 rounded-lg overflow-hidden">
+<div class="p-5 border-b border-[#2d3748] flex items-center justify-between bg-[#1c2129]">
+<h3 class="font-label-caps text-on-surface">RESUMEN FINANCIERO</h3>
+<span class="material-symbols-outlined text-on-surface-variant text-sm">request_quote</span>
+</div>
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-[#161a21] border-b border-[#2d3748]">
+<th class="py-3 px-5 font-label-caps text-xs text-on-surface-variant">ÍTEM / SERVICIO</th>
+<th class="py-3 px-5 font-label-caps text-xs text-on-surface-variant text-right">CANT</th>
+<th class="py-3 px-5 font-label-caps text-xs text-on-surface-variant text-right">PRECIO UNIT.</th>
+<th class="py-3 px-5 font-label-caps text-xs text-on-surface-variant text-right">TOTAL (RD$)</th>
+</tr>
+</thead>
+<tbody class="text-sm">
+<!-- Zebra striping -->
+<tr class="bg-[#1c2129] border-b border-[#2d3748] hover:bg-surface-variant transition-colors">
+<td class="py-3 px-5 font-medium">Mantenimiento Completo Suspensión Trasera</td>
+<td class="py-3 px-5 text-right text-on-surface-variant">1</td>
+<td class="py-3 px-5 text-right text-on-surface-variant">4,500.00</td>
+<td class="py-3 px-5 text-right font-medium">4,500.00</td>
+</tr>
+<tr class="bg-[#161a21] border-b border-[#2d3748] hover:bg-surface-variant transition-colors">
+<td class="py-3 px-5 font-medium">Kit de Rodamientos Enduro Bearings</td>
+<td class="py-3 px-5 text-right text-on-surface-variant">1</td>
+<td class="py-3 px-5 text-right text-on-surface-variant">3,200.00</td>
+<td class="py-3 px-5 text-right font-medium">3,200.00</td>
+</tr>
+<tr class="bg-[#1c2129] border-b border-[#2d3748] hover:bg-surface-variant transition-colors">
+<td class="py-3 px-5 font-medium">Alineación Uña de Tensor</td>
+<td class="py-3 px-5 text-right text-on-surface-variant">1</td>
+<td class="py-3 px-5 text-right text-on-surface-variant">800.00</td>
+<td class="py-3 px-5 text-right font-medium">800.00</td>
+</tr>
+<tr class="bg-[#161a21] border-b border-[#2d3748] hover:bg-surface-variant transition-colors">
+<td class="py-3 px-5 font-medium flex items-center gap-2">
+                                        Lubricante Cadena Muc-Off
+                                        <span class="px-1.5 py-0.5 rounded bg-surface border border-outline-variant text-[9px] font-label-caps text-on-surface-variant">INSUMO</span>
+</td>
+<td class="py-3 px-5 text-right text-on-surface-variant">1</td>
+<td class="py-3 px-5 text-right text-on-surface-variant">0.00</td>
+<td class="py-3 px-5 text-right font-medium">0.00</td>
+</tr>
+</tbody>
+</table>
+<div class="p-5 bg-[#1c2129] flex flex-col gap-2 border-t-2 border-[#2d3748]">
+<div class="flex justify-between text-sm text-on-surface-variant">
+<span>Subtotal:</span>
+<span>RD$ 8,500.00</span>
+</div>
+<div class="flex justify-between text-sm text-on-surface-variant">
+<span>Impuestos (ITBIS 18%):</span>
+<span>RD$ 1,530.00</span>
+</div>
+<div class="flex justify-between text-lg font-bold text-primary mt-2 pt-2 border-t border-[#2d3748]">
+<span>TOTAL ESTIMADO:</span>
+<span>RD$ 10,030.00</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Side Column (Col 9-12) -->
+<div class="lg:col-span-4 flex flex-col gap-6">
+<!-- Assigned Mechanic -->
+<div class="bg-[#161a21] border industrial-border p-5 rounded-lg">
+<div class="flex items-center justify-between mb-4 pb-2 border-b border-[#2d3748]">
+<h3 class="font-label-caps text-on-surface">MECÁNICO ASIGNADO</h3>
+</div>
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-surface-variant border border-outline-variant flex items-center justify-center font-bold text-sm">
+                                RM
+                            </div>
+<div>
+<div class="font-bold text-sm text-on-surface">Roberto Mejía</div>
+<div class="text-xs text-on-surface-variant">Especialista Suspensiones</div>
+</div>
+</div>
+</div>
+<!-- Alerts -->
+<div class="bg-error-container/10 border border-error/30 p-5 rounded-lg relative overflow-hidden">
+<div class="absolute top-0 left-0 w-1 h-full bg-error"></div>
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-error text-sm">warning</span>
+<h3 class="font-label-caps text-error">ALERTA DE REPUESTO</h3>
+</div>
+<p class="text-sm text-on-surface-variant">
+                            El kit de rodamientos (SKU: END-883) se extrajo del inventario mínimo. Requiere re-abastecimiento pronto.
+                        </p>
+</div>
+<!-- Next Actions -->
+<div class="bg-[#1c2129] border industrial-border p-5 rounded-lg">
+<h3 class="font-label-caps text-on-surface mb-4 pb-2 border-b border-[#2d3748]">PRÓXIMAS ACCIONES</h3>
+<div class="flex flex-col gap-3">
+<label class="flex items-start gap-3 p-3 bg-[#161a21] border border-[#2d3748] rounded cursor-pointer hover:border-[#4a5568] transition-colors">
+<input class="mt-0.5 rounded border-[#2d3748] bg-transparent text-primary focus:ring-primary focus:ring-offset-background" type="checkbox"/>
+<span class="text-sm">Finalizar purgado de amortiguador</span>
+</label>
+<label class="flex items-start gap-3 p-3 bg-[#161a21] border border-[#2d3748] rounded cursor-pointer hover:border-[#4a5568] transition-colors">
+<input class="mt-0.5 rounded border-[#2d3748] bg-transparent text-primary focus:ring-primary focus:ring-offset-background" type="checkbox"/>
+<span class="text-sm">Realizar prueba de compresión (QC)</span>
+</label>
+<label class="flex items-start gap-3 p-3 bg-[#161a21] border border-[#2d3748] rounded cursor-pointer hover:border-[#4a5568] transition-colors">
+<input class="mt-0.5 rounded border-[#2d3748] bg-transparent text-primary focus:ring-primary focus:ring-offset-background" type="checkbox"/>
+<span class="text-sm">Notificar al cliente para retiro</span>
+</label>
+</div>
+<button class="w-full mt-4 py-2 border border-outline-variant rounded font-label-caps text-on-surface hover:bg-surface-variant transition-colors flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-[16px]">add</span> AGREGAR TAREA
+                        </button>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

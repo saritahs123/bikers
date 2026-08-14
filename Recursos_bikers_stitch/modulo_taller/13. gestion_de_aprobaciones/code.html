@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Gestión de Aprobaciones - Biker's Fort Core</title>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@100..900&family=JetBrains+Mono:wght@100..900&display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Config -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-primary-container": "#252d00",
+                    "surface-container": "#1f201a",
+                    "secondary-fixed": "#dfe2ec",
+                    "primary-fixed-dim": "#bfce7f",
+                    "on-secondary-container": "#b2b5be",
+                    "on-surface-variant": "#c7c8b7",
+                    "surface-dim": "#13140f",
+                    "on-primary-fixed": "#181e00",
+                    "error": "#ffb4ab",
+                    "tertiary": "#bdc7dc",
+                    "on-background": "#e4e3d9",
+                    "surface-variant": "#35352f",
+                    "on-tertiary-fixed": "#121c2c",
+                    "outline-variant": "#46483b",
+                    "surface": "#13140f",
+                    "surface-tint": "#bfce7f",
+                    "on-tertiary": "#273141",
+                    "on-secondary-fixed": "#181c23",
+                    "primary": "#bfce7f",
+                    "secondary-container": "#43474f",
+                    "surface-bright": "#393a33",
+                    "on-error": "#690005",
+                    "inverse-on-surface": "#30312b",
+                    "surface-container-highest": "#35352f",
+                    "inverse-primary": "#576421",
+                    "on-secondary-fixed-variant": "#43474f",
+                    "on-primary": "#2b3400",
+                    "on-surface": "#e4e3d9",
+                    "outline": "#919282",
+                    "tertiary-fixed-dim": "#bdc7dc",
+                    "on-error-container": "#ffdad6",
+                    "on-tertiary-fixed-variant": "#3d4759",
+                    "surface-container-high": "#2a2a24",
+                    "secondary": "#c3c6d0",
+                    "tertiary-fixed": "#d9e3f9",
+                    "on-primary-fixed-variant": "#404c0a",
+                    "inverse-surface": "#e4e3d9",
+                    "secondary-fixed-dim": "#c3c6d0",
+                    "primary-container": "#89974f",
+                    "on-secondary": "#2d3138",
+                    "error-container": "#93000a",
+                    "background": "#13140f",
+                    "primary-fixed": "#dbea98",
+                    "surface-container-low": "#1b1c17",
+                    "tertiary-container": "#8791a5",
+                    "surface-container-lowest": "#0e0f0a",
+                    "on-tertiary-container": "#202a3a"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "spacing": {
+                    "unit": "4px",
+                    "gutter": "24px",
+                    "container-max": "1440px",
+                    "margin-mobile": "16px",
+                    "margin-desktop": "40px"
+            },
+            "fontFamily": {
+                    "headline-sm": ["Hanken Grotesk"],
+                    "headline-lg": ["Hanken Grotesk"],
+                    "headline-md": ["Hanken Grotesk"],
+                    "body-lg": ["Hanken Grotesk"],
+                    "body-sm": ["Hanken Grotesk"],
+                    "body-md": ["Hanken Grotesk"],
+                    "headline-lg-mobile": ["Hanken Grotesk"],
+                    "label-caps": ["JetBrains Mono"]
+            },
+            "fontSize": {
+                    "headline-sm": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                    "headline-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "800"}],
+                    "headline-md": ["32px", {"lineHeight": "1.2", "fontWeight": "700"}],
+                    "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                    "body-sm": ["14px", {"lineHeight": "1.4", "fontWeight": "400"}],
+                    "body-md": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                    "headline-lg-mobile": ["32px", {"lineHeight": "1.2", "fontWeight": "800"}],
+                    "label-caps": ["12px", {"lineHeight": "1", "letterSpacing": "0.1em", "fontWeight": "600"}]
+            }
+          }
+        }
+      }
+    </script>
+<style>
+        /* Custom scrollbar for industrial look */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #13140f; }
+        ::-webkit-scrollbar-thumb { background: #46483b; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #89974f; }
+        
+        /* Grid pattern overlay */
+        .bg-tech-grid {
+            background-image: radial-gradient(#46483b 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body-md min-h-screen flex antialiased">
+<!-- Shell: SideNavBar -->
+<nav class="hidden md:flex flex-col h-screen w-64 border-r border-outline-variant bg-surface-container-low py-6 px-4 flex-shrink-0">
+<!-- Brand -->
+<div class="mb-10 px-2 flex items-center gap-3">
+<div class="w-10 h-10 rounded bg-primary-container flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined text-on-primary-container">build_circle</span>
+</div>
+<div>
+<h1 class="font-headline-md text-headline-md font-bold text-primary tracking-tighter" style="font-size: 20px; line-height: 1;">Biker's Fort Core</h1>
+<p class="text-[10px] uppercase tracking-wider text-on-surface-variant font-label-caps mt-1">Workshop Management</p>
+</div>
+</div>
+<!-- Main Nav -->
+<div class="flex-1 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-caps text-label-caps">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+<span class="font-label-caps text-label-caps">Inventory</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-primary font-bold border-r-2 border-primary bg-surface-container-highest transition-all opacity-100" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">build</span>
+<span class="font-label-caps text-label-caps">Work Orders</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">calendar_today</span>
+<span class="font-label-caps text-label-caps">Schedule</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">analytics</span>
+<span class="font-label-caps text-label-caps">Reports</span>
+</a>
+</div>
+<!-- CTA & Footer Nav -->
+<div class="mt-auto space-y-4 pt-4 border-t border-outline-variant">
+<button class="w-full flex justify-center items-center gap-2 py-3 bg-primary-container text-on-primary-container rounded-DEFAULT font-label-caps text-label-caps shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] hover:bg-primary transition-colors">
+<span class="material-symbols-outlined text-sm">add</span> New Repair Ticket
+            </button>
+<div class="space-y-1">
+<a class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-label-caps text-label-caps">Settings</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">help</span>
+<span class="font-label-caps text-label-caps">Support</span>
+</a>
+</div>
+</div>
+</nav>
+<!-- Main Canvas -->
+<main class="flex-1 overflow-y-auto relative bg-background bg-tech-grid" style="background-color: rgba(19, 20, 15, 0.95); background-blend-mode: overlay;">
+<div class="max-w-[container-max] mx-auto p-margin-mobile md:p-margin-desktop">
+<!-- Context Header -->
+<div class="mb-gutter">
+<a class="inline-flex items-center gap-2 text-on-surface-variant hover:text-primary transition-colors mb-4 font-label-caps text-label-caps" href="#">
+<span class="material-symbols-outlined text-sm">arrow_back</span>
+                    Órdenes / OT-2026-00087
+                </a>
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+<div>
+<h2 class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg text-on-surface">Gestión de Aprobaciones</h2>
+<div class="flex items-center gap-3 mt-2 text-on-surface-variant">
+<span class="material-symbols-outlined">person</span>
+<span>Carlos Martínez</span>
+<span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+<span class="material-symbols-outlined">pedal_bike</span>
+<span>Trek Marlin 7</span>
+</div>
+</div>
+<div class="flex gap-3">
+<span class="px-3 py-1 bg-surface-container border border-outline-variant rounded font-label-caps text-label-caps text-on-surface flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-error"></span> Urgente
+                        </span>
+</div>
+</div>
+</div>
+<!-- Summary Dashboard -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-gutter">
+<!-- Estimado -->
+<div class="bg-surface-container border border-outline-variant p-4 rounded-lg flex flex-col justify-between hover:border-surface-variant transition-colors group">
+<span class="font-label-caps text-label-caps text-on-surface-variant mb-2 group-hover:text-primary transition-colors">Estimado Total</span>
+<span class="font-headline-sm text-headline-sm text-on-surface">RD$ 4,850.00</span>
+</div>
+<!-- Aprobado -->
+<div class="bg-surface-container border border-outline-variant p-4 rounded-lg flex flex-col justify-between border-t-2 border-t-primary">
+<span class="font-label-caps text-label-caps text-on-surface-variant mb-2">Aprobado</span>
+<span class="font-headline-sm text-headline-sm text-primary">RD$ 2,500.00</span>
+</div>
+<!-- Pendiente -->
+<div class="bg-surface-container border border-outline-variant p-4 rounded-lg flex flex-col justify-between border-t-2 border-t-secondary-fixed">
+<span class="font-label-caps text-label-caps text-on-surface-variant mb-2">Pendiente</span>
+<span class="font-headline-sm text-headline-sm text-secondary-fixed">RD$ 2,350.00</span>
+</div>
+<!-- Rechazado -->
+<div class="bg-surface-container border border-outline-variant p-4 rounded-lg flex flex-col justify-between border-t-2 border-t-error">
+<span class="font-label-caps text-label-caps text-on-surface-variant mb-2">Rechazado</span>
+<span class="font-headline-sm text-headline-sm text-error">RD$ 0.00</span>
+</div>
+</div>
+<!-- Main Split Layout -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-gutter">
+<!-- Left Column: Technical Table & Communication Actions -->
+<div class="lg:col-span-8 flex flex-col gap-gutter">
+<!-- Action Bar -->
+<div class="bg-surface-container border border-outline-variant p-4 rounded-lg flex flex-wrap items-center justify-between gap-4">
+<span class="font-headline-sm text-headline-sm text-on-surface">Servicios Propuestos</span>
+<div class="flex gap-3">
+<button class="flex items-center gap-2 px-4 py-2 bg-surface-container-lowest border border-outline-variant text-on-surface rounded-DEFAULT hover:border-primary transition-colors font-label-caps text-label-caps">
+<span class="material-symbols-outlined text-sm">mail</span> Email
+                            </button>
+<button class="flex items-center gap-2 px-4 py-2 bg-primary-container text-on-primary-container rounded-DEFAULT shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] hover:bg-primary transition-colors font-label-caps text-label-caps">
+<svg class="w-4 h-4 fill-current" viewbox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z"></path></svg>
+                                WhatsApp
+                            </button>
+</div>
+</div>
+<!-- Table Container -->
+<div class="bg-surface-container border border-outline-variant rounded-lg overflow-hidden">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-highest border-b border-outline-variant">
+<th class="p-4 font-label-caps text-label-caps text-on-surface-variant">Ítem</th>
+<th class="p-4 font-label-caps text-label-caps text-on-surface-variant">Tipo</th>
+<th class="p-4 font-label-caps text-label-caps text-on-surface-variant text-right">Monto</th>
+<th class="p-4 font-label-caps text-label-caps text-on-surface-variant text-center">Estado</th>
+</tr>
+</thead>
+<tbody class="font-body-sm">
+<!-- Row 1 -->
+<tr class="border-b border-outline-variant bg-surface-container hover:bg-surface-container-highest transition-colors">
+<td class="p-4 text-on-surface">Mantenimiento Completo (Horquilla)</td>
+<td class="p-4"><span class="text-on-surface-variant flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">build</span> Servicio</span></td>
+<td class="p-4 text-right text-on-surface font-mono">RD$ 2,500.00</td>
+<td class="p-4 text-center">
+<span class="inline-flex px-2 py-1 bg-primary-container text-on-primary-container rounded border border-primary font-label-caps text-[10px]">Aprobada</span>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="border-b border-outline-variant bg-surface-container-low hover:bg-surface-container-highest transition-colors">
+<td class="p-4 text-on-surface">Cambio Pastillas de Freno (Par)</td>
+<td class="p-4"><span class="text-on-surface-variant flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">inventory_2</span> Repuesto</span></td>
+<td class="p-4 text-right text-on-surface font-mono">RD$ 1,200.00</td>
+<td class="p-4 text-center">
+<span class="inline-flex px-2 py-1 bg-surface-variant text-on-surface-variant border border-outline-variant rounded font-label-caps text-[10px]">Pendiente</span>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="border-b border-outline-variant bg-surface-container hover:bg-surface-container-highest transition-colors">
+<td class="p-4 text-on-surface">Purga de Frenos Hidráulicos</td>
+<td class="p-4"><span class="text-on-surface-variant flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">build</span> Servicio</span></td>
+<td class="p-4 text-right text-on-surface font-mono">RD$ 850.00</td>
+<td class="p-4 text-center">
+<span class="inline-flex px-2 py-1 bg-tertiary-container text-on-tertiary-container border border-tertiary rounded font-label-caps text-[10px]">Enviada</span>
+</td>
+</tr>
+<!-- Row 4 -->
+<tr class="bg-surface-container-low hover:bg-surface-container-highest transition-colors">
+<td class="p-4 text-on-surface text-opacity-50 line-through">Ajuste de Cambios (Menor)</td>
+<td class="p-4"><span class="text-on-surface-variant flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">build</span> Servicio</span></td>
+<td class="p-4 text-right text-on-surface font-mono text-opacity-50">RD$ 300.00</td>
+<td class="p-4 text-center">
+<span class="inline-flex px-2 py-1 bg-error-container text-on-error-container border border-error rounded font-label-caps text-[10px]">Rechazada</span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Right Column: Manual Approval Panel -->
+<div class="lg:col-span-4">
+<div class="bg-surface-container border border-outline-variant rounded-lg p-6 sticky top-6">
+<div class="flex items-center justify-between mb-6 border-b border-outline-variant pb-4">
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Registro Manual</h3>
+<span class="material-symbols-outlined text-on-surface-variant">edit_document</span>
+</div>
+<form class="space-y-5">
+<!-- Select Method -->
+<div>
+<label class="block font-label-caps text-label-caps text-on-surface-variant mb-2">Método de Aprobación</label>
+<select class="w-full bg-surface-container-lowest border border-outline-variant rounded-DEFAULT text-on-surface focus:ring-1 focus:ring-primary focus:border-primary p-3 font-body-sm">
+<option>Presencial (Firma en Taller)</option>
+<option>Llamada Telefónica</option>
+<option>Confirmación WhatsApp Externa</option>
+</select>
+</div>
+<!-- Name -->
+<div>
+<label class="block font-label-caps text-label-caps text-on-surface-variant mb-2">Nombre del Aprobador</label>
+<input class="w-full bg-surface-container-lowest border border-outline-variant rounded-DEFAULT text-on-surface focus:ring-1 focus:ring-primary focus:border-primary p-3 font-body-sm" type="text" value="Carlos Martínez"/>
+</div>
+<!-- Signature Area -->
+<div>
+<label class="block font-label-caps text-label-caps text-on-surface-variant mb-2">Firma Digital</label>
+<div class="h-32 bg-surface-container-lowest border border-dashed border-outline-variant rounded-DEFAULT flex items-center justify-center relative hover:border-primary transition-colors cursor-crosshair">
+<span class="text-on-surface-variant font-body-sm opacity-50 flex flex-col items-center gap-2">
+<span class="material-symbols-outlined">draw</span>
+                                        Firmar aquí
+                                    </span>
+</div>
+</div>
+<!-- Evidence Upload -->
+<div>
+<label class="block font-label-caps text-label-caps text-on-surface-variant mb-2">Evidencias Adjuntas</label>
+<button class="w-full p-3 border border-dashed border-outline-variant rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-lowest hover:text-primary transition-colors flex items-center justify-center gap-2 font-body-sm" type="button">
+<span class="material-symbols-outlined text-[18px]">upload_file</span> Cargar Captura / Documento
+                                </button>
+<!-- Mock Uploaded File -->
+<div class="mt-3 p-2 bg-surface-container-lowest border border-outline-variant rounded flex items-center justify-between">
+<div class="flex items-center gap-2 overflow-hidden">
+<div class="w-8 h-8 bg-surface-variant rounded flex-shrink-0 bg-cover bg-center" data-alt="A macro shot of a dirty bicycle cassette and derailleur being inspected in a dark, high-end industrial workshop setting. The lighting is moody, highlighting the metallic textures and grease, emphasizing a technical maintenance environment. Colors are predominantly deep charcoals with hints of metallic silver and dark olive green." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDy_DriSZeQslkOehGTY-37XxRMpoOsWb5FJZQlxe8yW_LVhJUdukZvu6hbsfdpKeHToQS9e8qcWPKpDaXLUVFtXzKeKw5mfX8m42Oatcv9qQmJvAClvZPqphIU3SITBBa170lxlA3FhfOjaK3pJZNEqJt893dF129kz8raSqeEl6THQs6cG7T09VFbnZQWmZEP4OyI8ZWlYZ-idVDBWC7ngLXePo4EJU13pDo9eERdypIbQrglAD9d')"></div>
+<span class="text-xs text-on-surface truncate">captura_whatsapp_ok.png</span>
+</div>
+<button class="text-error hover:text-on-error-container" type="button"><span class="material-symbols-outlined text-[16px]">close</span></button>
+</div>
+</div>
+<!-- Notes -->
+<div>
+<label class="block font-label-caps text-label-caps text-on-surface-variant mb-2">Notas Internas</label>
+<textarea class="w-full bg-surface-container-lowest border border-outline-variant rounded-DEFAULT text-on-surface focus:ring-1 focus:ring-primary focus:border-primary p-3 font-body-sm" placeholder="Detalles adicionales..." rows="2"></textarea>
+</div>
+<!-- Submit -->
+<button class="w-full py-4 bg-primary text-on-primary rounded-DEFAULT font-label-caps text-label-caps shadow-[inset_0_1px_0_rgba(255,255,255,0.4)] hover:bg-primary-fixed-dim transition-colors mt-4 flex items-center justify-center gap-2" type="button">
+<span class="material-symbols-outlined text-sm">check_circle</span>
+                                Guardar Aprobación
+                            </button>
+</form>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

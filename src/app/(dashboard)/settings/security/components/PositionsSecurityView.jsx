@@ -22,6 +22,7 @@ import {
   AlertCircle
 } from "lucide-react";
 import { validateRequiredText } from "@/lib/validations";
+import SecurityConfirmDialog from "@/components/security/SecurityConfirmDialog";
 
 export default function PositionsSecurityView() {
   const [data, setData] = useState([]);
@@ -696,56 +697,22 @@ export default function PositionsSecurityView() {
         document.body
       )}
 
-      {/* PORTAL FOR CONFIRM DELETE MODAL */}
-      {mounted && isDeletingModalOpen && itemToDelete && typeof document !== 'undefined' && createPortal(
-        <div style={{ position: 'fixed', inset: 0, zIndex: 999999, display: 'flex', alignItems: 'center', justifyCenter: 'center', padding: '16px' }}>
-          <div 
-            style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(4px)' }} 
-            onClick={() => setIsDeletingModalOpen(false)}
-          />
-          <div 
-            style={{ 
-              position: 'relative', 
-              width: '420px', 
-              maxWidth: '90vw', 
-              backgroundColor: '#161a21', 
-              border: '1px solid #2d3748', 
-              borderRadius: '16px', 
-              boxShadow: '0 20px 50px rgba(0,0,0,0.7)', 
-              padding: '24px', 
-              textAlign: 'center', 
-              zIndex: 1000000,
-              margin: 'auto'
-            }}
-            className="font-sans"
-          >
-            <div className="w-14 h-14 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-400 flex items-center justify-center mx-auto mb-4">
-              <Trash2 size={28} />
-            </div>
-            <h3 className="text-lg font-bold text-white mb-2">¿Eliminar Cargo?</h3>
-            <p className="text-xs text-slate-300 mb-6 leading-relaxed">
-              ¿Está seguro que desea eliminar permanentemente el cargo <strong className="text-white">{itemToDelete?.nombre || ''}</strong>?
-            </p>
-            <div className="flex gap-3">
-              <button 
-                type="button"
-                onClick={() => setIsDeletingModalOpen(false)}
-                className="flex-1 py-2.5 bg-[#212631] text-white text-xs font-bold rounded-xl border border-[#2d3748] hover:bg-[#2d3748] transition-all cursor-pointer"
-              >
-                Cancelar
-              </button>
-              <button 
-                type="button"
-                onClick={handleDelete}
-                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-lg transition-all cursor-pointer"
-              >
-                Sí, Eliminar
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
+      {/* CONFIRM DELETE MODAL */}
+      <SecurityConfirmDialog
+        isOpen={mounted && isDeletingModalOpen && !!itemToDelete}
+        onClose={() => setIsDeletingModalOpen(false)}
+        onConfirm={handleDelete}
+        variant="danger"
+        title="¿Eliminar Cargo?"
+        description={`¿Está seguro que desea eliminar permanentemente el cargo "${itemToDelete?.nombre || itemToDelete?.cargo || ''}"? Esta acción es irreversible.`}
+        confirmLabel="Eliminar"
+        isLoading={isSaving}
+        loadingLabel="Eliminando..."
+        details={itemToDelete ? [
+          { label: 'Cargo', value: itemToDelete.nombre || itemToDelete.cargo },
+          { label: 'Código', value: itemToDelete.codigo, isCode: true }
+        ] : null}
+      />
     </div>
   );
 }

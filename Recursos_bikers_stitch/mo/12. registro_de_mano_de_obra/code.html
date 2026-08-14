@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Registro de Mano de Obra - Fort Core</title>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800&amp;family=JetBrains+Mono:wght@400;600;800&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind Config injected from design system -->
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "surface-container": "#1f201a",
+                        "on-primary-container": "#252d00",
+                        "secondary-fixed-dim": "#c3c6d0",
+                        "secondary": "#c3c6d0",
+                        "primary": "#bfce7f",
+                        "on-secondary-fixed": "#181c23",
+                        "error": "#ffb4ab",
+                        "surface-tint": "#bfce7f",
+                        "on-tertiary-fixed-variant": "#3d4759",
+                        "tertiary-fixed": "#d9e3f9",
+                        "on-error": "#690005",
+                        "surface-container-highest": "#35352f",
+                        "tertiary-container": "#8791a5",
+                        "on-primary-fixed": "#181e00",
+                        "on-error-container": "#ffdad6",
+                        "surface-container-low": "#1b1c17",
+                        "surface-bright": "#393a33",
+                        "on-secondary-container": "#b2b5be",
+                        "surface-container-high": "#2a2a24",
+                        "inverse-surface": "#e4e3d9",
+                        "on-secondary-fixed-variant": "#43474f",
+                        "on-tertiary-fixed": "#121c2c",
+                        "secondary-fixed": "#dfe2ec",
+                        "secondary-container": "#43474f",
+                        "on-tertiary-container": "#202a3a",
+                        "on-tertiary": "#273141",
+                        "outline-variant": "#46483b",
+                        "on-secondary": "#2d3138",
+                        "surface-variant": "#35352f",
+                        "primary-fixed": "#dbea98",
+                        "tertiary": "#bdc7dc",
+                        "tertiary-fixed-dim": "#bdc7dc",
+                        "background": "#13140f",
+                        "error-container": "#93000a",
+                        "inverse-primary": "#576421",
+                        "on-primary": "#2b3400",
+                        "primary-container": "#89974f",
+                        "primary-fixed-dim": "#bfce7f",
+                        "on-surface": "#e4e3d9",
+                        "inverse-on-surface": "#30312b",
+                        "surface-dim": "#13140f",
+                        "surface": "#13140f",
+                        "on-primary-fixed-variant": "#404c0a",
+                        "on-surface-variant": "#c7c8b7",
+                        "on-background": "#e4e3d9",
+                        "outline": "#919282",
+                        "surface-container-lowest": "#0e0f0a"
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    spacing: {
+                        "margin-mobile": "16px",
+                        "unit": "4px",
+                        "gutter": "24px",
+                        "margin-desktop": "40px",
+                        "container-max": "1440px"
+                    },
+                    fontFamily: {
+                        "body-sm": ["Hanken Grotesk"],
+                        "headline-lg": ["Hanken Grotesk"],
+                        "body-md": ["Hanken Grotesk"],
+                        "body-lg": ["Hanken Grotesk"],
+                        "headline-md": ["Hanken Grotesk"],
+                        "label-caps": ["JetBrains Mono"],
+                        "headline-lg-mobile": ["Hanken Grotesk"],
+                        "headline-sm": ["Hanken Grotesk"]
+                    },
+                    fontSize: {
+                        "body-sm": ["14px", { "lineHeight": "1.4", "fontWeight": "400" }],
+                        "headline-lg": ["48px", { "lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "800" }],
+                        "body-md": ["16px", { "lineHeight": "1.5", "fontWeight": "400" }],
+                        "body-lg": ["18px", { "lineHeight": "1.6", "fontWeight": "400" }],
+                        "headline-md": ["32px", { "lineHeight": "1.2", "fontWeight": "700" }],
+                        "label-caps": ["12px", { "lineHeight": "1", "letterSpacing": "0.1em", "fontWeight": "600" }],
+                        "headline-lg-mobile": ["32px", { "lineHeight": "1.2", "fontWeight": "800" }],
+                        "headline-sm": ["24px", { "lineHeight": "1.3", "fontWeight": "600" }]
+                    },
+                    backgroundImage: {
+                        'technical-grid': 'radial-gradient(circle, #46483b 1px, transparent 1px)',
+                    },
+                    backgroundSize: {
+                        'technical-grid': '20px 20px',
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        /* Custom Utilities for Industrial Theme */
+        .industrial-border { border: 1px solid #46483b; }
+        .industrial-shadow-active { box-shadow: 4px 4px 0px rgba(0,0,0,0.5); }
+        .tech-bg { background-color: #13140f; background-image: radial-gradient(circle, rgba(70,72,59,0.3) 1px, transparent 1px); background-size: 16px 16px; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .icon-fill { font-variation-settings: 'FILL' 1; }
+        
+        /* Pulse animation for active timer */
+        @keyframes pulse-tech {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .animate-pulse-tech { animation: pulse-tech 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body-md text-body-md h-screen flex overflow-hidden tech-bg">
+<!-- JSON Component: SideNavBar (Hidden on Mobile, Flex on MD) -->
+<aside class="hidden md:flex flex-col h-screen w-64 fixed left-0 top-0 bg-surface-container-low border-r border-outline-variant py-unit z-40">
+<!-- Header -->
+<div class="px-gutter py-4 mb-4 flex flex-col gap-2">
+<h1 class="font-headline-sm text-headline-sm font-black text-primary">Fort Core</h1>
+<p class="font-label-caps text-label-caps text-on-surface-variant">V3.4 Industrial</p>
+<button class="mt-4 w-full bg-primary-container text-on-primary-container font-label-caps text-label-caps py-2 px-4 rounded border-t border-primary-fixed shadow-[2px_2px_0px_rgba(0,0,0,0.5)] active:shadow-none active:translate-y-[2px] transition-all">New Work Order</button>
+</div>
+<!-- Navigation Links -->
+<nav class="flex-1 flex flex-col gap-1 px-2">
+<!-- Inactive -->
+<a class="flex items-center gap-3 px-4 py-3 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-variant duration-200 transition-all ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="font-label-caps text-label-caps">Dashboard</span>
+</a>
+<!-- Inactive -->
+<a class="flex items-center gap-3 px-4 py-3 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-variant duration-200 transition-all ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="login">login</span>
+<span class="font-label-caps text-label-caps">Reception</span>
+</a>
+<!-- Active (Mapped by intent to Mano de Obra) -->
+<a class="flex items-center gap-3 px-4 py-3 rounded bg-primary-container text-on-primary-container border-l-4 border-primary transition-all ease-in-out" href="#">
+<span class="material-symbols-outlined icon-fill" data-icon="handyman">handyman</span>
+<span class="font-label-caps text-label-caps">Work Orders</span>
+</a>
+<!-- Inactive -->
+<a class="flex items-center gap-3 px-4 py-3 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-variant duration-200 transition-all ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="inventory_2">inventory_2</span>
+<span class="font-label-caps text-label-caps">Inventory</span>
+</a>
+<!-- Inactive -->
+<a class="flex items-center gap-3 px-4 py-3 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-variant duration-200 transition-all ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="group">group</span>
+<span class="font-label-caps text-label-caps">Clients</span>
+</a>
+<!-- Inactive -->
+<a class="flex items-center gap-3 px-4 py-3 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-variant duration-200 transition-all ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="payments">payments</span>
+<span class="font-label-caps text-label-caps">Billing</span>
+</a>
+<!-- Inactive -->
+<a class="flex items-center gap-3 px-4 py-3 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-variant duration-200 transition-all ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+<span class="font-label-caps text-label-caps">Reports</span>
+</a>
+</nav>
+<!-- Footer Links -->
+<div class="mt-auto px-2 flex flex-col gap-1 border-t border-outline-variant pt-2">
+<a class="flex items-center gap-3 px-4 py-3 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-variant duration-200 transition-all ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+<span class="font-label-caps text-label-caps">Support</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded text-on-surface-variant hover:text-on-surface hover:bg-surface-variant duration-200 transition-all ease-in-out" href="#">
+<span class="material-symbols-outlined" data-icon="logout">logout</span>
+<span class="font-label-caps text-label-caps">Sign Out</span>
+</a>
+</div>
+</aside>
+<!-- Main Workspace -->
+<main class="flex-1 flex flex-col ml-0 md:ml-64 relative h-full">
+<!-- JSON Component: TopNavBar (Used here for context actions/profile) -->
+<header class="flex justify-between items-center px-margin-desktop w-full ml-0 bg-surface-container border-b border-outline-variant h-16 z-30 sticky top-0">
+<div class="flex items-center gap-4">
+<!-- Mobile Menu Trigger (Visual only for mockup) -->
+<button class="md:hidden text-on-surface-variant">
+<span class="material-symbols-outlined" data-icon="menu">menu</span>
+</button>
+<h2 class="font-headline-sm text-headline-sm font-bold text-primary tracking-tight">Registro de Mano de Obra</h2>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-on-surface-variant hover:bg-surface-variant transition-colors p-2 rounded-full cursor-pointer active:opacity-80">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="text-on-surface-variant hover:bg-surface-variant transition-colors p-2 rounded-full cursor-pointer active:opacity-80">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+</button>
+<div class="h-8 w-8 rounded-full bg-outline-variant overflow-hidden border border-outline-variant">
+<img alt="Shop Manager Profile" class="w-full h-full object-cover" data-alt="A close up, high contrast portrait of an industrial mechanic wearing a dark workshop apron, looking focused. Dim moody lighting with subtle metallic reflections. Clean corporate industrial style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBqwW9wGwK24QlxkkCruExRjn5a5xXpmdIhdIkQW1IdEEWtpcw0pfreOHlK2fG2rvyr2F-dtZ_5sof0XZdHxleJC0T5s9BmfP5Ew1tn0gRdgdxLHETmKJks_fX_C_TGe_RftPWCZ6v3fBuqRteZltK6CrO9AdUw73tPRL5nxyCx7V3MfsrkmuEZX5AGZi4CsqOm1objVCHxNYvRKIeXkcb3Gb_bSqqX5gkRWBp-9xEOxB7LVKsWk20n"/>
+</div>
+</div>
+</header>
+<!-- Scrollable Content Canvas -->
+<div class="flex-1 overflow-y-auto p-gutter md:p-margin-desktop space-y-gutter">
+<!-- Top Section: Active Timer (Bento Grid Highlight) -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-gutter">
+<!-- Primary Timer Card -->
+<div class="lg:col-span-2 bg-surface-container rounded-lg industrial-border p-6 flex flex-col md:flex-row justify-between items-center gap-6 relative overflow-hidden">
+<!-- Subtle background decoration -->
+<div class="absolute -right-10 -bottom-10 opacity-5 pointer-events-none text-[120px] font-label-caps text-primary">
+                        01
+                    </div>
+<div class="flex flex-col gap-2 z-10 w-full md:w-auto">
+<div class="flex items-center gap-2">
+<span class="h-2 w-2 rounded-full bg-primary animate-pulse-tech"></span>
+<span class="font-label-caps text-label-caps text-primary">SERVICIO ACTUAL</span>
+</div>
+<h3 class="font-headline-md text-headline-md text-on-surface">WO-2023-089: Mantenimiento Mayor Horquilla</h3>
+<p class="text-on-surface-variant font-body-sm text-body-sm flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]" data-icon="build">build</span>
+                            Actividad: Desensamble y limpieza de barras
+                        </p>
+</div>
+<div class="flex flex-col items-center md:items-end gap-4 z-10 w-full md:w-auto">
+<div class="font-label-caps text-[48px] leading-none text-on-surface tracking-widest font-black">
+                            01:24:36
+                        </div>
+<div class="flex gap-2 w-full md:w-auto">
+<button class="flex-1 md:flex-none flex justify-center items-center gap-2 bg-surface-variant text-on-surface border border-outline-variant px-4 py-2 rounded hover:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined" data-icon="pause">pause</span>
+</button>
+<button class="flex-1 md:flex-none flex justify-center items-center gap-2 bg-primary-container text-on-primary-container border-t border-primary-fixed px-6 py-2 rounded font-label-caps text-label-caps shadow-[2px_2px_0px_rgba(0,0,0,0.5)] hover:bg-primary-fixed-dim transition-all">
+<span class="material-symbols-outlined" data-icon="stop">stop</span>
+                                FINALIZAR
+                            </button>
+</div>
+</div>
+</div>
+<!-- Action / Quick Add Card -->
+<div class="bg-surface-container rounded-lg industrial-border p-6 flex flex-col justify-center items-center gap-4 text-center hover:border-outline transition-colors cursor-pointer group">
+<div class="h-12 w-12 rounded-full bg-surface-variant flex items-center justify-center text-primary group-hover:bg-primary-container group-hover:text-on-primary-container transition-colors">
+<span class="material-symbols-outlined text-[28px]" data-icon="more_time">more_time</span>
+</div>
+<div>
+<h4 class="font-label-caps text-label-caps text-on-surface mb-1">REGISTRO MANUAL</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Añadir tiempo pasado o ajustes administrativos.</p>
+</div>
+</div>
+</div>
+<!-- Metrics Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-gutter">
+<!-- Card 1 -->
+<div class="bg-surface-container border border-outline-variant rounded p-4 flex flex-col gap-2 border-t-2 border-t-tertiary">
+<span class="font-label-caps text-label-caps text-on-surface-variant">HORAS (EST VS REAL)</span>
+<div class="flex items-end gap-2">
+<span class="font-headline-md text-headline-md text-on-surface">4.5</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant pb-1">/ 6.0 h</span>
+</div>
+<div class="w-full bg-surface-variant h-1 mt-2 flex">
+<div class="bg-tertiary h-full" style="width: 75%"></div>
+</div>
+</div>
+<!-- Card 2 -->
+<div class="bg-surface-container border border-outline-variant rounded p-4 flex flex-col gap-2 border-t-2 border-t-primary">
+<span class="font-label-caps text-label-caps text-on-surface-variant">COSTO ACUMULADO</span>
+<div class="flex items-end gap-2">
+<span class="font-headline-md text-headline-md text-on-surface">RD$ 3,450</span>
+</div>
+<span class="font-body-sm text-body-sm text-primary flex items-center gap-1 mt-auto">
+<span class="material-symbols-outlined text-[14px]" data-icon="trending_up">trending_up</span> En presupuesto
+                    </span>
+</div>
+<!-- Card 3 -->
+<div class="bg-surface-container border border-outline-variant rounded p-4 flex flex-col gap-2 border-t-2 border-t-error">
+<span class="font-label-caps text-label-caps text-on-surface-variant">PRODUCTIVIDAD HOY</span>
+<div class="flex items-end gap-2">
+<span class="font-headline-md text-headline-md text-on-surface">82%</span>
+</div>
+<span class="font-body-sm text-body-sm text-error flex items-center gap-1 mt-auto">
+<span class="material-symbols-outlined text-[14px]" data-icon="warning">warning</span> -5% vs Promedio
+                    </span>
+</div>
+</div>
+<!-- Bottom Content Grid: History Table & Roster -->
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-gutter">
+<!-- Labor History Table (Zebra striped) -->
+<div class="xl:col-span-2 bg-surface-container industrial-border rounded flex flex-col overflow-hidden">
+<div class="p-4 border-b border-outline-variant flex justify-between items-center bg-surface-container-low">
+<h3 class="font-label-caps text-label-caps text-on-surface">HISTORIAL DE REGISTROS</h3>
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]" data-icon="filter_list">filter_list</span>
+</button>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low border-b border-outline-variant">
+<th class="p-3 font-label-caps text-label-caps text-on-surface-variant font-normal">MECÁNICO</th>
+<th class="p-3 font-label-caps text-label-caps text-on-surface-variant font-normal">SERVICIO</th>
+<th class="p-3 font-label-caps text-label-caps text-on-surface-variant font-normal">INICIO / FIN</th>
+<th class="p-3 font-label-caps text-label-caps text-on-surface-variant font-normal text-right">TIEMPO</th>
+</tr>
+</thead>
+<tbody class="font-body-sm text-body-sm">
+<tr class="border-b border-outline-variant hover:bg-surface-variant transition-colors bg-surface-container">
+<td class="p-3 flex items-center gap-2">
+<div class="h-6 w-6 rounded-full bg-surface-variant overflow-hidden">
+<img alt="Mechanic" class="w-full h-full object-cover" data-alt="Small avatar icon of a male mechanic wearing safety glasses." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDHM8B2CqnW0emqW4R8mTYl413dGNnDB4R8qwmE0Alo3o5y0To0K_n4kOCjGNxZ_nJoI_6_mSkuftlgvo-SSk0bK7SaOkp8nfbH_Wbt4ewFQHTaAC1SErADMHGoZAlfylOAbKDmooFqO_K_HtETkAzoXQQVvtocORGNVWEE6hNNOS73nmruZHw9Yf1nALn3f3uCTPGEubUkpNDzOjykE5oxdN0ay3eN3cK5Gh2-RUDowWU019es36-a"/>
+</div>
+                                        J. Perez
+                                    </td>
+<td class="p-3 text-on-surface">WO-2023-089 (Frenos)</td>
+<td class="p-3 text-on-surface-variant">08:00 - 09:30</td>
+<td class="p-3 text-right font-label-caps text-label-caps">1h 30m</td>
+</tr>
+<tr class="border-b border-outline-variant hover:bg-surface-variant transition-colors bg-surface-container-low">
+<td class="p-3 flex items-center gap-2">
+<div class="h-6 w-6 rounded-full bg-surface-variant overflow-hidden">
+<img alt="Mechanic" class="w-full h-full object-cover" data-alt="Small avatar icon of a female mechanic with tied back hair." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCx2eHQb9iBsaxqoQQDHglGkHJ7RpcLCvHvsGKBTRw4d0gAGOMFTsT8RKub3nMU0eEEbYnmaH9U1dQtlmqImJn3N255d_msiX3idaOwFIn3lrWb7pJEGgEDqmWzYVSZFqQCxLNYeyFr5oa84mdh1gzBB_NhuFZfGXbAMtboFs99kcD_FBrVm8YxsQ7IsrwugydhZOMg9PBtzTHJH_EFQtHL-1_m-hZc2LZ896juBR1HN7WcrZ1ph8zD"/>
+</div>
+                                        A. Gomez
+                                    </td>
+<td class="p-3 text-on-surface">WO-2023-091 (Transmisión)</td>
+<td class="p-3 text-on-surface-variant">09:15 - 11:45</td>
+<td class="p-3 text-right font-label-caps text-label-caps">2h 30m</td>
+</tr>
+<tr class="border-b border-outline-variant hover:bg-surface-variant transition-colors bg-surface-container">
+<td class="p-3 flex items-center gap-2">
+<div class="h-6 w-6 rounded-full bg-surface-variant overflow-hidden">
+<img alt="Mechanic" class="w-full h-full object-cover" data-alt="Small avatar icon of a male mechanic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDbWWvUhfBc4mJ5G_bZwvINLo9kiCv1bjk3V1-9LyHR0dpF32l8a5y3LW-02NC3cbT0j5W1KR6ztK25-lANntE3whbFC9zqZvJZvd64MWApQb9I_pu0r2e3CYUbUSwKAdF6150r_2h0iQUTX4GyCZA7KcgGOGoavYteQxm_GtVuJM5I9G3ScVc_kFQ7JZKUoitebR-Uq3W1Q0XGYF4edRWMmQJ07XiTKlv4Cr4SuNeXSiYOJ9vOaA8r"/>
+</div>
+                                        J. Perez
+                                    </td>
+<td class="p-3 text-on-surface flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+                                        Pausa (Almuerzo)
+                                    </td>
+<td class="p-3 text-on-surface-variant">12:00 - 13:00</td>
+<td class="p-3 text-right font-label-caps text-label-caps">1h 00m</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Mechanics Summary Roster -->
+<div class="bg-surface-container border border-outline-variant rounded flex flex-col h-full">
+<div class="p-4 border-b border-outline-variant bg-surface-container-low">
+<h3 class="font-label-caps text-label-caps text-on-surface">ESTADO DEL TALLER</h3>
+</div>
+<div class="p-4 flex flex-col gap-4 flex-1">
+<!-- Mechanic Item -->
+<div class="flex items-center gap-3">
+<div class="relative">
+<div class="h-10 w-10 rounded bg-surface-variant overflow-hidden border border-outline-variant">
+<img alt="J. Perez" class="w-full h-full object-cover" data-alt="Portrait photo of a young mechanic in a dark setting, looking at the camera." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB9-heRxAFWGQSPAeuQ1zUXhkDME6Wy3p1A-fuEI9GJDdLpHMmj5b0HvWZZtZEZL4AwUCttdWDL9eo6M74rSKEGtG6tzIiG9s8L5OV275fny7BywS7cYmPMP-pWK5dgKwxe5I_1VUgm1xaEpxLhZNzxJPWKSIaz_sDZOuRI9aNZtpR4s1MBikWmw7SmRVCuLgw-C9PSgZ1jfy_TzGqp3xHgAv7jdIKJF6eL09y3znw7d_YsmnUdLOTs"/>
+</div>
+<span class="absolute -bottom-1 -right-1 w-3 h-3 rounded-full bg-primary border-2 border-surface-container"></span>
+</div>
+<div class="flex-1">
+<p class="font-body-sm text-body-sm text-on-surface font-semibold">J. Perez</p>
+<p class="font-label-caps text-[10px] text-on-surface-variant">ACTIVO - WO-089</p>
+</div>
+<div class="text-right">
+<p class="font-label-caps text-label-caps text-on-surface">4.5h</p>
+</div>
+</div>
+<!-- Mechanic Item -->
+<div class="flex items-center gap-3">
+<div class="relative">
+<div class="h-10 w-10 rounded bg-surface-variant overflow-hidden border border-outline-variant">
+<img alt="A. Gomez" class="w-full h-full object-cover" data-alt="Portrait photo of a female mechanic focusing on a repair." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAx9lSwqUoOdeZ0wggY9DjWVZx-SMIobkE2yJpbSxoHN-O3kFQGeLx-HIxhpRDoMlkivrSWnwIkxYCfm597gYgzLVugGUwjJp3XPS-viGTd-lkngiHlH5nWspu2dS6Rxnb5KS2hrKWFdjx10lsOpIApkBdWn_EaSdBNuDkgcWJxHz5rZARQ1sSZroIE4CkCPbzf8gx-Rry2N9iq_Rc0Ycq2M-iOJtwcrnlf5cIt71vzxo75l6m8Xx0f"/>
+</div>
+<span class="absolute -bottom-1 -right-1 w-3 h-3 rounded-full bg-tertiary border-2 border-surface-container"></span>
+</div>
+<div class="flex-1">
+<p class="font-body-sm text-body-sm text-on-surface font-semibold">A. Gomez</p>
+<p class="font-label-caps text-[10px] text-on-surface-variant">PAUSA</p>
+</div>
+<div class="text-right">
+<p class="font-label-caps text-label-caps text-on-surface">2.5h</p>
+</div>
+</div>
+<!-- Mechanic Item -->
+<div class="flex items-center gap-3 opacity-50">
+<div class="relative">
+<div class="h-10 w-10 rounded bg-surface-variant overflow-hidden border border-outline-variant flex justify-center items-center">
+<span class="material-symbols-outlined text-outline-variant" data-icon="person">person</span>
+</div>
+<span class="absolute -bottom-1 -right-1 w-3 h-3 rounded-full bg-outline-variant border-2 border-surface-container"></span>
+</div>
+<div class="flex-1">
+<p class="font-body-sm text-body-sm text-on-surface font-semibold">M. Santos</p>
+<p class="font-label-caps text-[10px] text-on-surface-variant">INACTIVO</p>
+</div>
+<div class="text-right">
+<p class="font-label-caps text-label-caps text-on-surface">0.0h</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

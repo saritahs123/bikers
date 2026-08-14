@@ -710,33 +710,55 @@ export default function ComponentCategoriesView() {
       )}
 
       {/* Confirm Delete Modal */}
-      {isDeletingModalOpen && itemToDelete && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 font-mono text-xs">
-          <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200">
+      {mounted && isDeletingModalOpen && itemToDelete && typeof document !== 'undefined' && createPortal(
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000005, display: 'flex', itemsCenter: 'center', justifyContent: 'center', padding: '16px' }}>
+          <div 
+            style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(4px)' }} 
+            onClick={() => setIsDeletingModalOpen(false)}
+          />
+          <div 
+            style={{ 
+              position: 'relative', 
+              width: '100%', 
+              maxWidth: '440px', 
+              backgroundColor: '#161a21', 
+              border: '1px solid #2d3748', 
+              borderRadius: '16px', 
+              padding: '24px', 
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px'
+            }}
+            className="font-mono text-xs animate-in zoom-in-95 duration-200"
+          >
             <div className="flex items-center gap-3 text-rose-400">
-              <AlertCircle size={24} />
+              <AlertCircle size={24} className="shrink-0" />
               <h3 className="text-base font-bold text-white">Confirmar Eliminación</h3>
             </div>
-            <p className="text-slate-300">
+            <p className="text-slate-300 leading-relaxed">
               ¿Está seguro de que desea eliminar la categoría{" "}
-              <strong className="text-white">{itemToDelete.nombre}</strong> ({itemToDelete.codigo})? Esta acción actualizará la base de datos.
+              <strong className="text-white font-bold">{itemToDelete.nombre}</strong> ({itemToDelete.codigo})? Esta acción actualizará la base de datos.
             </p>
-            <div className="flex justify-end gap-3 pt-2">
+            <div className="flex items-center justify-end gap-3 pt-2">
               <button
+                type="button"
                 onClick={() => setIsDeletingModalOpen(false)}
-                className="px-4 py-2 bg-[#2d3748] text-white rounded-xl hover:bg-slate-700 transition-colors cursor-pointer"
+                className="px-4 py-2.5 bg-[#2d3748] hover:bg-slate-700 text-white font-bold rounded-xl transition-colors cursor-pointer"
               >
                 Cancelar
               </button>
               <button
+                type="button"
                 onClick={handleDeleteConfirm}
-                className="px-4 py-2 bg-rose-600 text-white font-bold rounded-xl hover:bg-rose-500 transition-colors cursor-pointer"
+                className="px-4 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl transition-colors cursor-pointer"
               >
                 Eliminar Categoría
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
     </div>

@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Biker's Fort - Órdenes de Trabajo</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800&amp;family=JetBrains+Mono:wght@600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "error": "#ffb4ab",
+                        "on-error-container": "#ffdad6",
+                        "secondary": "#c3c6d0",
+                        "secondary-fixed": "#dfe2ec",
+                        "surface-container-high": "#2a2a24",
+                        "surface-container-low": "#1b1c17",
+                        "surface-tint": "#bfce7f",
+                        "inverse-primary": "#576421",
+                        "outline-variant": "#46483b",
+                        "primary": "#bfce7f",
+                        "on-surface-variant": "#c7c8b7",
+                        "on-secondary": "#2d3138",
+                        "primary-fixed-dim": "#bfce7f",
+                        "background": "#13140f",
+                        "on-primary-fixed": "#181e00",
+                        "secondary-fixed-dim": "#c3c6d0",
+                        "on-secondary-fixed": "#181c23",
+                        "on-tertiary-container": "#202a3a",
+                        "surface": "#13140f",
+                        "inverse-surface": "#e4e3d9",
+                        "on-error": "#690005",
+                        "on-primary-container": "#252d00",
+                        "on-surface": "#e4e3d9",
+                        "surface-container": "#1f201a",
+                        "surface-dim": "#13140f",
+                        "tertiary-fixed-dim": "#bdc7dc",
+                        "error-container": "#93000a",
+                        "secondary-container": "#43474f",
+                        "on-secondary-fixed-variant": "#43474f",
+                        "tertiary": "#bdc7dc",
+                        "on-tertiary-fixed": "#121c2c",
+                        "outline": "#919282",
+                        "on-primary-fixed-variant": "#404c0a",
+                        "surface-container-lowest": "#0e0f0a",
+                        "surface-container-highest": "#35352f",
+                        "primary-fixed": "#dbea98",
+                        "tertiary-container": "#8791a5",
+                        "primary-container": "#89974f",
+                        "on-tertiary": "#273141",
+                        "inverse-on-surface": "#30312b",
+                        "on-tertiary-fixed-variant": "#3d4759",
+                        "surface-bright": "#393a33",
+                        "on-primary": "#2b3400",
+                        "surface-variant": "#35352f",
+                        "on-secondary-container": "#b2b5be",
+                        "on-background": "#e4e3d9",
+                        "tertiary-fixed": "#d9e3f9"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "container-max": "1440px",
+                        "unit": "4px",
+                        "margin-mobile": "16px",
+                        "margin-desktop": "40px",
+                        "gutter": "24px"
+                    },
+                    "fontFamily": {
+                        "headline-sm": ["Hanken Grotesk"],
+                        "headline-md": ["Hanken Grotesk"],
+                        "body-sm": ["Hanken Grotesk"],
+                        "headline-lg-mobile": ["Hanken Grotesk"],
+                        "label-caps": ["JetBrains Mono"],
+                        "body-lg": ["Hanken Grotesk"],
+                        "headline-lg": ["Hanken Grotesk"],
+                        "body-md": ["Hanken Grotesk"]
+                    },
+                    "fontSize": {
+                        "headline-sm": ["24px", { "lineHeight": "1.3", "fontWeight": "600" }],
+                        "headline-md": ["32px", { "lineHeight": "1.2", "fontWeight": "700" }],
+                        "body-sm": ["14px", { "lineHeight": "1.4", "fontWeight": "400" }],
+                        "headline-lg-mobile": ["32px", { "lineHeight": "1.2", "fontWeight": "800" }],
+                        "label-caps": ["12px", { "lineHeight": "1", "letterSpacing": "0.1em", "fontWeight": "600" }],
+                        "body-lg": ["18px", { "lineHeight": "1.6", "fontWeight": "400" }],
+                        "headline-lg": ["48px", { "lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "800" }],
+                        "body-md": ["16px", { "lineHeight": "1.5", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .texture-grid {
+            background-image: radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body-md text-body-md h-screen overflow-hidden flex texture-grid">
+<!-- SideNavBar (from JSON) -->
+<nav class="bg-surface-container-low dark:bg-surface-container-low text-primary dark:text-primary font-label-caps text-label-caps font-body-md text-body-md docked left-0 h-full w-64 border-r border-outline-variant flat no shadows flex flex-col h-screen fixed left-0 top-0 py-6 transition-all duration-200 ease-in-out hidden md:flex z-40">
+<div class="px-6 mb-8">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-surface flex items-center justify-center border border-outline-variant">
+<span class="material-symbols-outlined text-primary">build_circle</span>
+</div>
+<div>
+<h1 class="font-headline-md text-headline-md text-primary" style="font-size: 20px;">Biker's Fort</h1>
+<p class="font-label-caps text-label-caps text-on-surface-variant" style="font-size: 10px;">Precision Workshop</p>
+</div>
+</div>
+</div>
+<div class="flex-1 overflow-y-auto px-4 space-y-1">
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-on-surface-variant hover:text-primary hover:bg-surface-container transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span>Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-on-surface-variant hover:text-primary hover:bg-surface-container transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined">event_seat</span>
+<span>Reception</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-primary border-r-2 border-primary bg-surface-container-high transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined">build</span>
+<span>Work Orders</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-on-surface-variant hover:text-primary hover:bg-surface-container transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+<span>Inventory</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-on-surface-variant hover:text-primary hover:bg-surface-container transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined">groups</span>
+<span>CRM</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-on-surface-variant hover:text-primary hover:bg-surface-container transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined">shield</span>
+<span>Security</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-on-surface-variant hover:text-primary hover:bg-surface-container transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined">analytics</span>
+<span>Reports</span>
+</a>
+</div>
+<div class="px-4 mt-auto pt-4 border-t border-outline-variant/30 space-y-1">
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-on-surface-variant hover:text-primary hover:bg-surface-container transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined">help</span>
+<span>Support</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-on-surface-variant hover:text-primary hover:bg-surface-container transition-all duration-200 ease-in-out" href="#">
+<span class="material-symbols-outlined">logout</span>
+<span>Logout</span>
+</a>
+</div>
+</nav>
+<!-- Main Content Area -->
+<div class="flex-1 flex flex-col md:ml-64 relative min-w-0">
+<!-- TopAppBar (from JSON) -->
+<header class="bg-surface dark:bg-surface text-primary dark:text-primary font-headline-sm text-headline-sm font-body-md text-body-md docked full-width top-0 border-b border-outline-variant flat no shadows flex justify-between items-center w-full px-margin-mobile md:px-margin-desktop h-16 z-50 shrink-0 sticky">
+<div class="flex items-center gap-4">
+<button class="md:hidden text-on-surface-variant hover:text-primary p-2 rounded-lg hover:bg-surface-container-highest transition-colors active:scale-95 duration-100">
+<span class="material-symbols-outlined">menu</span>
+</button>
+<div class="hidden md:flex font-headline-sm text-headline-sm font-extrabold text-primary dark:text-primary tracking-tighter">Biker's Fort Core</div>
+</div>
+<!-- Search Bar: on_left (but pushed to center right for layout balance here) -->
+<div class="flex-1 max-w-md mx-4 relative hidden sm:block">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
+<input class="w-full bg-[#0a0c10] border border-outline-variant rounded-lg py-2 pl-10 pr-4 text-body-sm text-on-surface focus:border-primary focus:ring-1 focus:ring-primary transition-colors outline-none" placeholder="Buscar órdenes..." type="text"/>
+</div>
+<div class="flex items-center gap-2">
+<button class="p-2 rounded-lg text-on-surface-variant hover:bg-surface-container-highest transition-colors active:scale-95 duration-100 relative">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-1.5 right-1.5 w-2 h-2 bg-error rounded-full"></span>
+</button>
+<button class="p-2 rounded-lg text-on-surface-variant hover:bg-surface-container-highest transition-colors active:scale-95 duration-100">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-surface-container-highest border border-outline-variant overflow-hidden ml-2">
+<img alt="User Profile Avatar" class="w-full h-full object-cover" data-alt="A macro shot of a meticulously machined titanium bicycle cog, brightly lit against a dark charcoal background to highlight its precision engineering and metallic sheen. The lighting creates sharp highlights and deep shadows, emphasizing the industrial, high-end mechanical nature of the object." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB0zjOra6Po9H8BTDUYpD5-EYvOZnYqlVvOwzasNFYdrF5l1dZQZzyJUdkwDBGnOblXeMg35h7FeQ08yIufnuSm7nahnpXIlEpQ7JFFGcwy3UOPipOkJ-1RXu3oJp8gMuX8NnotpepLCoBe51_f02bZvMNhSl2fjdfx9tzpwUyx6R3RFcfhRxPIHCG2ocJFgt7GYloqCMWsqotsdbSrZ_Y5UZ922GYsq_coieQ0zRz_s4epQxxyvMwc"/>
+</div>
+</div>
+</header>
+<!-- Scrollable Canvas -->
+<main class="flex-1 overflow-y-auto p-margin-mobile md:p-margin-desktop space-y-8">
+<!-- Page Header -->
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+<div>
+<h2 class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg text-on-surface">Órdenes de Trabajo</h2>
+<p class="font-body-lg text-body-lg text-on-surface-variant mt-2 max-w-2xl">Administra los diagnósticos, servicios, aprobaciones y reparaciones realizadas en el taller.</p>
+</div>
+<div class="flex gap-3">
+<button class="flex items-center gap-2 px-4 py-2 border border-outline-variant rounded-lg text-on-surface-variant hover:border-outline hover:text-on-surface transition-colors font-label-caps text-label-caps bg-[#161a21]">
+<span class="material-symbols-outlined" style="font-size: 18px;">download</span>
+                        EXPORTAR
+                    </button>
+<button class="flex items-center gap-2 px-4 py-2 bg-[#84924a] text-white rounded-lg hover:brightness-110 transition-all font-label-caps text-label-caps border-t border-[#a5b467] shadow-[0_4px_0_rgba(0,0,0,0.3)] active:shadow-none active:translate-y-1">
+<span class="material-symbols-outlined" style="font-size: 18px;">add</span>
+                        NUEVA ORDEN
+                    </button>
+</div>
+</div>
+<!-- Summary Cards (Bento Grid Style) -->
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+<div class="bg-[#161a21] border border-[#2d3748] rounded-xl p-5 hover:border-[#4a5568] transition-colors relative overflow-hidden group">
+<div class="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<div class="flex justify-between items-start mb-4">
+<span class="font-label-caps text-label-caps text-on-surface-variant">ABIERTAS</span>
+<span class="material-symbols-outlined text-primary">inbox</span>
+</div>
+<div class="font-headline-md text-headline-md text-on-surface">24</div>
+<div class="text-body-sm text-primary mt-1">+3 hoy</div>
+</div>
+<div class="bg-[#161a21] border border-[#2d3748] rounded-xl p-5 hover:border-[#4a5568] transition-colors relative overflow-hidden group">
+<div class="absolute inset-0 bg-gradient-to-br from-secondary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<div class="flex justify-between items-start mb-4">
+<span class="font-label-caps text-label-caps text-on-surface-variant">APROBACIÓN</span>
+<span class="material-symbols-outlined text-secondary">pending_actions</span>
+</div>
+<div class="font-headline-md text-headline-md text-on-surface">8</div>
+<div class="text-body-sm text-secondary mt-1">Pendientes de cliente</div>
+</div>
+<div class="bg-[#161a21] border border-[#2d3748] rounded-xl p-5 hover:border-[#4a5568] transition-colors relative overflow-hidden group">
+<div class="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<div class="flex justify-between items-start mb-4">
+<span class="font-label-caps text-label-caps text-on-surface-variant">EN PROCESO</span>
+<span class="material-symbols-outlined text-primary">build</span>
+</div>
+<div class="font-headline-md text-headline-md text-on-surface">15</div>
+<div class="text-body-sm text-on-surface-variant mt-1">En taller</div>
+</div>
+<div class="bg-[#161a21] border border-error/30 rounded-xl p-5 hover:border-error/50 transition-colors relative overflow-hidden group">
+<div class="absolute inset-0 bg-gradient-to-br from-error/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<div class="flex justify-between items-start mb-4">
+<span class="font-label-caps text-label-caps text-error">ATRASADAS</span>
+<span class="material-symbols-outlined text-error" data-weight="fill">warning</span>
+</div>
+<div class="font-headline-md text-headline-md text-error">3</div>
+<div class="text-body-sm text-error/80 mt-1">Requieren atención</div>
+</div>
+</div>
+<!-- Filters & Actions -->
+<div class="flex flex-col md:flex-row gap-4 items-center justify-between bg-[#1c2129] border border-[#2d3748] p-4 rounded-xl">
+<div class="flex gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 hide-scrollbar">
+<button class="px-3 py-1.5 rounded bg-[#2d3748] text-on-surface font-label-caps text-label-caps border border-outline-variant whitespace-nowrap">Todas</button>
+<button class="px-3 py-1.5 rounded bg-transparent text-on-surface-variant hover:bg-[#2d3748]/50 font-label-caps text-label-caps border border-transparent whitespace-nowrap">Diagnóstico</button>
+<button class="px-3 py-1.5 rounded bg-transparent text-on-surface-variant hover:bg-[#2d3748]/50 font-label-caps text-label-caps border border-transparent whitespace-nowrap">Reparación</button>
+<button class="px-3 py-1.5 rounded bg-transparent text-on-surface-variant hover:bg-[#2d3748]/50 font-label-caps text-label-caps border border-transparent whitespace-nowrap">Garantía</button>
+</div>
+<div class="flex gap-3 w-full md:w-auto">
+<div class="relative flex-1 md:w-64">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" style="font-size: 20px;">filter_list</span>
+<input class="w-full bg-[#0a0c10] border border-[#2d3748] rounded-lg py-2 pl-10 pr-4 text-body-sm text-on-surface focus:border-primary focus:ring-1 focus:ring-primary outline-none" placeholder="Filtrar por mecánico, cliente..." type="text"/>
+</div>
+</div>
+</div>
+<!-- Data Table -->
+<div class="bg-[#161a21] border border-[#2d3748] rounded-xl overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-[#1c2129] border-b border-[#2d3748] font-label-caps text-label-caps text-on-surface-variant">
+<th class="p-4 whitespace-nowrap font-semibold">Orden #</th>
+<th class="p-4 whitespace-nowrap font-semibold">Fecha / Cliente</th>
+<th class="p-4 whitespace-nowrap font-semibold">Bicicleta / Mecánico</th>
+<th class="p-4 whitespace-nowrap font-semibold">Estado / Progreso</th>
+<th class="p-4 whitespace-nowrap font-semibold text-right">Total Est.</th>
+<th class="p-4 whitespace-nowrap font-semibold text-center">Acciones</th>
+</tr>
+</thead>
+<tbody class="font-body-sm text-body-sm">
+<!-- Row 1: Urgent / Overdue -->
+<tr class="border-b border-[#2d3748] hover:bg-[#1c2129] transition-colors bg-error/5">
+<td class="p-4 align-top">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-error" data-weight="fill" style="font-size: 18px;">priority_high</span>
+<span class="font-label-caps text-label-caps text-on-surface">WO-2048</span>
+</div>
+</td>
+<td class="p-4 align-top">
+<div class="text-on-surface font-semibold">Oct 24, 09:30</div>
+<div class="text-on-surface-variant mt-1">Carlos Mendoza</div>
+</td>
+<td class="p-4 align-top">
+<div class="text-on-surface font-semibold">Trek Fuel EX 8</div>
+<div class="flex items-center gap-2 mt-1">
+<div class="w-5 h-5 rounded-full bg-surface-container-highest border border-outline-variant overflow-hidden">
+<img alt="Mechanic" class="w-full h-full object-cover" data-alt="A rugged mechanic's hand, partially smeared with grease, holding a shiny silver wrench against a dark, industrial workshop background. High contrast, gritty texture." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBCZXbJAoCcLuQ-_pdot_G54AJfYBttsRqe46c4XEyu09UDfNony2uBdTzASi54VFeKEuVHYQDwOAf8Y0gSf-e5VbTBLSEhFGXnbjEa-FIr-OEUZtf-DlxMfX7KiaKVmjS3rI_IY7-AxAGN8Y_L9adySUlkJ_ZqFB9TVmVlQqFHQ25IEqL-mm7M8oHBb3kdXIbv8nu0S6yLywYMTWcBFSsBQO-J_EKUhDagJ4IC5sFJFzV-t8nbGuGe"/>
+</div>
+<span class="text-on-surface-variant">M. Rojas</span>
+</div>
+</td>
+<td class="p-4 align-top">
+<span class="inline-flex items-center px-2 py-1 rounded bg-error/20 text-error font-label-caps text-[10px] border border-error/30 mb-2">ATRASADA</span>
+<div class="w-full bg-[#0a0c10] h-1.5 rounded-full overflow-hidden border border-[#2d3748]">
+<div class="bg-error h-full rounded-full" style="width: 80%"></div>
+</div>
+<div class="text-[10px] text-on-surface-variant mt-1 text-right">80% - Suspensión</div>
+</td>
+<td class="p-4 align-top text-right">
+<div class="text-on-surface font-label-caps">RD$ 12,500</div>
+</td>
+<td class="p-4 align-top text-center">
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Row 2: Normal / In Progress -->
+<tr class="border-b border-[#2d3748] hover:bg-[#1c2129] transition-colors">
+<td class="p-4 align-top">
+<span class="font-label-caps text-label-caps text-on-surface">WO-2049</span>
+</td>
+<td class="p-4 align-top">
+<div class="text-on-surface font-semibold">Oct 25, 14:15</div>
+<div class="text-on-surface-variant mt-1">Laura Gómez</div>
+</td>
+<td class="p-4 align-top">
+<div class="text-on-surface font-semibold">Specialized Tarmac</div>
+<div class="flex items-center gap-2 mt-1">
+<div class="w-5 h-5 rounded-full bg-surface-container-highest border border-outline-variant overflow-hidden">
+<img alt="Mechanic" class="w-full h-full object-cover" data-alt="Close up of a bicycle chainring and derailleur, impeccably clean, lit with a cool, clinical light to emphasize precision mechanics." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCvKiS4RnpthhdYeoKTbbAeWD3G85k0XEvl3gPixQIiWy2VjvXtHcY5K8X3G4JnNewlqnGzsfKUugkV5-7tqxcNvpvh99vL11AqyqQByXUIaw5ZB2jdF_3_U0ace0tT9QPPHo_rRcoi-u1hRk0wewFUdEgCbm3F9C99QdbBtgox2HrniKheEX4CF1CfiaW6of9dyJFI8OoWu2dBsqS2NVrHmzha2rQjTR7x2YmJzwDCxGeHyvUsnCv0"/>
+</div>
+<span class="text-on-surface-variant">J. Pérez</span>
+</div>
+</td>
+<td class="p-4 align-top">
+<span class="inline-flex items-center px-2 py-1 rounded bg-primary/20 text-primary font-label-caps text-[10px] border border-primary/30 mb-2">EN PROCESO</span>
+<div class="w-full bg-[#0a0c10] h-1.5 rounded-full overflow-hidden border border-[#2d3748] flex gap-0.5">
+<div class="bg-primary h-full w-1/4"></div>
+<div class="bg-primary h-full w-1/4"></div>
+<div class="bg-primary/20 h-full w-1/4"></div>
+<div class="bg-primary/20 h-full w-1/4"></div>
+</div>
+<div class="text-[10px] text-on-surface-variant mt-1 text-right">50% - Purga Frenos</div>
+</td>
+<td class="p-4 align-top text-right">
+<div class="text-on-surface font-label-caps">RD$ 3,200</div>
+</td>
+<td class="p-4 align-top text-center">
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Row 3: Pending Approval -->
+<tr class="border-b border-[#2d3748] hover:bg-[#1c2129] transition-colors">
+<td class="p-4 align-top">
+<span class="font-label-caps text-label-caps text-on-surface">WO-2050</span>
+</td>
+<td class="p-4 align-top">
+<div class="text-on-surface font-semibold">Oct 26, 08:00</div>
+<div class="text-on-surface-variant mt-1">Andrés Silva</div>
+</td>
+<td class="p-4 align-top">
+<div class="text-on-surface font-semibold">Giant Trance X</div>
+<div class="flex items-center gap-2 mt-1">
+<div class="w-5 h-5 rounded-full bg-surface-container-highest border border-outline-variant flex items-center justify-center">
+<span class="material-symbols-outlined text-[12px] text-on-surface-variant">person_off</span>
+</div>
+<span class="text-on-surface-variant italic">No asignado</span>
+</div>
+</td>
+<td class="p-4 align-top">
+<span class="inline-flex items-center px-2 py-1 rounded border border-secondary text-secondary font-label-caps text-[10px] mb-2">APROBACIÓN PEND.</span>
+<div class="w-full bg-[#0a0c10] h-1.5 rounded-full overflow-hidden border border-[#2d3748]">
+<div class="bg-secondary h-full rounded-full" style="width: 20%"></div>
+</div>
+<div class="text-[10px] text-on-surface-variant mt-1 text-right">Diagnóstico listo</div>
+</td>
+<td class="p-4 align-top text-right">
+<div class="text-on-surface font-label-caps">RD$ 8,900</div>
+</td>
+<td class="p-4 align-top text-center">
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Pagination (Simple) -->
+<div class="flex justify-between items-center text-body-sm text-on-surface-variant mt-4 pb-8">
+<span>Mostrando 1-10 de 47 órdenes</span>
+<div class="flex gap-2">
+<button class="p-1 rounded hover:bg-[#2d3748] transition-colors border border-transparent hover:border-outline-variant disabled:opacity-50"><span class="material-symbols-outlined">chevron_left</span></button>
+<button class="p-1 rounded hover:bg-[#2d3748] transition-colors border border-transparent hover:border-outline-variant"><span class="material-symbols-outlined">chevron_right</span></button>
+</div>
+</div>
+</main>
+</div>
+</body></html>

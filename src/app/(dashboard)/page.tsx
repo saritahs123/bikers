@@ -1,6 +1,8 @@
 import { query } from "@/lib/db";
 import DashboardView from "@/components/dashboard/DashboardView";
 
+export const dynamic = "force-dynamic";
+
 async function getDashboardMetrics() {
   let ordenesActivas = 8;
   let ingresosDia = 34500;

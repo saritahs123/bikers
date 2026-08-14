@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Gestión de Servicios - Fort Core</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "surface-container": "#1f201a",
+                      "on-primary-container": "#252d00",
+                      "secondary-fixed-dim": "#c3c6d0",
+                      "secondary": "#c3c6d0",
+                      "primary": "#bfce7f",
+                      "on-secondary-fixed": "#181c23",
+                      "error": "#ffb4ab",
+                      "surface-tint": "#bfce7f",
+                      "on-tertiary-fixed-variant": "#3d4759",
+                      "tertiary-fixed": "#d9e3f9",
+                      "on-error": "#690005",
+                      "surface-container-highest": "#35352f",
+                      "tertiary-container": "#8791a5",
+                      "on-primary-fixed": "#181e00",
+                      "on-error-container": "#ffdad6",
+                      "surface-container-low": "#1b1c17",
+                      "surface-bright": "#393a33",
+                      "on-secondary-container": "#b2b5be",
+                      "surface-container-high": "#2a2a24",
+                      "inverse-surface": "#e4e3d9",
+                      "on-secondary-fixed-variant": "#43474f",
+                      "on-tertiary-fixed": "#121c2c",
+                      "secondary-fixed": "#dfe2ec",
+                      "secondary-container": "#43474f",
+                      "on-tertiary-container": "#202a3a",
+                      "on-tertiary": "#273141",
+                      "outline-variant": "#46483b",
+                      "on-secondary": "#2d3138",
+                      "surface-variant": "#35352f",
+                      "primary-fixed": "#dbea98",
+                      "tertiary": "#bdc7dc",
+                      "tertiary-fixed-dim": "#bdc7dc",
+                      "background": "#13140f",
+                      "error-container": "#93000a",
+                      "inverse-primary": "#576421",
+                      "on-primary": "#2b3400",
+                      "primary-container": "#89974f",
+                      "primary-fixed-dim": "#bfce7f",
+                      "on-surface": "#e4e3d9",
+                      "inverse-on-surface": "#30312b",
+                      "surface-dim": "#13140f",
+                      "surface": "#13140f",
+                      "on-primary-fixed-variant": "#404c0a",
+                      "on-surface-variant": "#c7c8b7",
+                      "on-background": "#e4e3d9",
+                      "outline": "#919282",
+                      "surface-container-lowest": "#0e0f0a"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "margin-mobile": "16px",
+                      "unit": "4px",
+                      "gutter": "24px",
+                      "margin-desktop": "40px",
+                      "container-max": "1440px"
+              },
+              "fontFamily": {
+                      "body-sm": ["Hanken Grotesk"],
+                      "headline-lg": ["Hanken Grotesk"],
+                      "body-md": ["Hanken Grotesk"],
+                      "body-lg": ["Hanken Grotesk"],
+                      "headline-md": ["Hanken Grotesk"],
+                      "label-caps": ["JetBrains Mono"],
+                      "headline-lg-mobile": ["Hanken Grotesk"],
+                      "headline-sm": ["Hanken Grotesk"]
+              },
+              "fontSize": {
+                      "body-sm": ["14px", {"lineHeight": "1.4", "fontWeight": "400"}],
+                      "headline-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "800"}],
+                      "body-md": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                      "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                      "headline-md": ["32px", {"lineHeight": "1.2", "fontWeight": "700"}],
+                      "label-caps": ["12px", {"lineHeight": "1", "letterSpacing": "0.1em", "fontWeight": "600"}],
+                      "headline-lg-mobile": ["32px", {"lineHeight": "1.2", "fontWeight": "800"}],
+                      "headline-sm": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}]
+              }
+      },
+          },
+        }
+      </script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800&amp;family=JetBrains+Mono:wght@600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .font-body-sm { font-family: 'Hanken Grotesk', sans-serif; }
+        .font-headline-lg { font-family: 'Hanken Grotesk', sans-serif; }
+        .font-body-md { font-family: 'Hanken Grotesk', sans-serif; }
+        .font-body-lg { font-family: 'Hanken Grotesk', sans-serif; }
+        .font-headline-md { font-family: 'Hanken Grotesk', sans-serif; }
+        .font-label-caps { font-family: 'JetBrains Mono', monospace; }
+        .font-headline-lg-mobile { font-family: 'Hanken Grotesk', sans-serif; }
+        .font-headline-sm { font-family: 'Hanken Grotesk', sans-serif; }
+        
+        /* Custom Scrollbar for Industrial Look */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #13140f; border-left: 1px solid #46483b; }
+        ::-webkit-scrollbar-thumb { background: #46483b; }
+        ::-webkit-scrollbar-thumb:hover { background: #89974f; }
+        
+        .industrial-border { border: 1px solid #2d3748; }
+        .industrial-border-accent { border: 1px solid #84924a; }
+        .btn-primary-industrial {
+            background-color: #84924a;
+            color: white;
+            border-top: 1px solid #a3b169;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.2);
+        }
+        .btn-primary-industrial:hover { background-color: #727e40; }
+        
+        .zebra-row:nth-child(even) { background-color: #161a21; }
+        .zebra-row:nth-child(odd) { background-color: #1c2129; }
+        
+        .blueprint-bg {
+            background-image: radial-gradient(#2d3748 1px, transparent 1px);
+            background-size: 20px 20px;
+            background-color: #0a0c10;
+        }
+        
+        .hard-shadow { box-shadow: 4px 4px 0px rgba(0,0,0,0.5); }
+    </style>
+</head>
+<body class="bg-background text-on-surface min-h-screen font-body-md overflow-x-hidden flex">
+<!-- SideNavBar -->
+<aside class="h-screen w-64 fixed left-0 top-0 flex flex-col h-full py-unit bg-surface-container-low dark:bg-surface-container-low border-r border-outline-variant z-40 hidden md:flex">
+<!-- Header -->
+<div class="px-gutter pt-gutter pb-6">
+<div class="flex items-center gap-3 mb-6">
+<div class="w-10 h-10 rounded bg-primary-container flex items-center justify-center">
+<span class="material-symbols-outlined text-on-primary-container">settings</span>
+</div>
+<div>
+<h1 class="font-headline-sm text-headline-sm font-black text-primary">Fort Core</h1>
+<p class="font-label-caps text-label-caps text-on-surface-variant">V3.4 Industrial</p>
+</div>
+</div>
+<button class="w-full py-3 btn-primary-industrial rounded flex items-center justify-center gap-2 font-label-caps text-label-caps transition-all ease-in-out hover:opacity-90">
+<span class="material-symbols-outlined text-[18px]">add</span>
+                New Work Order
+            </button>
+</div>
+<!-- Navigation Tabs -->
+<nav class="flex-1 px-unit space-y-1 overflow-y-auto">
+<a class="flex items-center gap-3 px-4 py-3 rounded font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface hover:bg-surface-variant duration-200 transition-all ease-in-out" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span>Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface hover:bg-surface-variant duration-200 transition-all ease-in-out" href="#">
+<span class="material-symbols-outlined">login</span>
+<span>Reception</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded font-label-caps text-label-caps bg-primary-container text-on-primary-container border-l-4 border-primary transition-all ease-in-out" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">handyman</span>
+<span>Work Orders</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface hover:bg-surface-variant duration-200 transition-all ease-in-out" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+<span>Inventory</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface hover:bg-surface-variant duration-200 transition-all ease-in-out" href="#">
+<span class="material-symbols-outlined">group</span>
+<span>Clients</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface hover:bg-surface-variant duration-200 transition-all ease-in-out" href="#">
+<span class="material-symbols-outlined">payments</span>
+<span>Billing</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface hover:bg-surface-variant duration-200 transition-all ease-in-out" href="#">
+<span class="material-symbols-outlined">analytics</span>
+<span>Reports</span>
+</a>
+</nav>
+<!-- Footer Tabs -->
+<div class="p-unit border-t border-outline-variant mt-auto">
+<a class="flex items-center gap-3 px-4 py-3 rounded font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface hover:bg-surface-variant duration-200 transition-all ease-in-out" href="#">
+<span class="material-symbols-outlined">help</span>
+<span>Support</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface hover:bg-surface-variant duration-200 transition-all ease-in-out" href="#">
+<span class="material-symbols-outlined">logout</span>
+<span>Sign Out</span>
+</a>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 md:ml-64 flex flex-col min-h-screen">
+<!-- TopNavBar -->
+<header class="w-full h-16 flex justify-between items-center px-margin-desktop ml-0 bg-surface-container dark:bg-surface-container border-b border-outline-variant z-30 sticky top-0">
+<div class="flex items-center gap-4">
+<button class="md:hidden text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">menu</span>
+</button>
+<div class="font-headline-sm text-headline-sm font-bold text-primary dark:text-primary tracking-tight md:hidden">Biker's Fort Core</div>
+<!-- Breadcrumbs -->
+<div class="hidden md:flex items-center gap-2 font-label-caps text-label-caps text-on-surface-variant">
+<span class="hover:text-primary cursor-pointer transition-colors">Work Orders</span>
+<span class="material-symbols-outlined text-[16px]">chevron_right</span>
+<span class="text-on-surface">OT-2026-00087</span>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<!-- Search Bar -->
+<div class="hidden md:flex items-center bg-surface-container-highest border border-outline-variant rounded px-3 py-1.5 focus-within:border-primary transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant text-[18px] mr-2">search</span>
+<input class="bg-transparent border-none text-body-sm focus:ring-0 text-on-surface w-48 placeholder-on-surface-variant" placeholder="Buscar OT, Servicio..." type="text"/>
+</div>
+<button class="text-on-surface-variant hover:bg-surface-variant transition-colors p-2 rounded-full cursor-pointer active:opacity-80 relative">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-1.5 right-1.5 w-2 h-2 bg-error rounded-full"></span>
+</button>
+<button class="text-on-surface-variant hover:bg-surface-variant transition-colors p-2 rounded-full cursor-pointer active:opacity-80">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<div class="w-8 h-8 rounded-full overflow-hidden border border-outline-variant ml-2 cursor-pointer">
+<img alt="Shop Manager Profile" class="w-full h-full object-cover" data-alt="A rugged male shop manager in his 40s wearing a dark denim apron over a grey t-shirt in a dimly lit bicycle workshop. High contrast lighting, moody atmosphere, cinematic portrait. Sharp focus on face." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA1oZnKPSxQIKK1u_iUOtD_qduGXqtfUY3adsTx4fJF5aV1OFQHNMjbh33itppjTL3xeztVDtIH-iHdFgUJIr6sh8svq-rHdcXba-qFIMA4QkGT2NFiucHpNGozMBmbRNo4gjfSxgIN4hoDhbyXNcL3AA2YoR13ul5vu2FqhncXc2hQ6HEK6r7VzaJBwTfsxJrzbGmIRRBXMmn_C1FMHPRkn2MJHIFkZ-_X05ARDrloHQnmW1OlC9VS"/>
+</div>
+</div>
+</header>
+<!-- Canvas -->
+<div class="p-margin-mobile md:p-gutter lg:p-margin-desktop blueprint-bg flex-1">
+<!-- Header Section -->
+<div class="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-4">
+<div>
+<div class="flex items-center gap-3 mb-2">
+<h2 class="font-headline-md text-headline-md text-on-surface">Gestión de Servicios</h2>
+<span class="px-2 py-1 bg-primary-container text-on-primary-container font-label-caps text-label-caps rounded industrial-border-accent">OT-2026-00087</span>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant">Bicicleta: Trek Slash 9.8 2023 | Cliente: Carlos Mendoza</p>
+</div>
+<div class="flex gap-3 w-full md:w-auto">
+<button class="flex-1 md:flex-none px-4 py-2 border border-outline-variant bg-surface-container hover:bg-surface-variant rounded font-label-caps text-label-caps text-on-surface transition-colors flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-[18px]">print</span>
+                        Imprimir OT
+                    </button>
+<button class="flex-1 md:flex-none px-4 py-2 btn-primary-industrial rounded font-label-caps text-label-caps transition-colors flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-[18px]">check_circle</span>
+                        Completar Orden
+                    </button>
+</div>
+</div>
+<!-- Dashboard Grid -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+<!-- Stat Card: Pendientes -->
+<div class="bg-surface-container border border-outline-variant rounded p-4 flex flex-col justify-between h-24 relative overflow-hidden group hover:border-surface-tint transition-colors">
+<div class="absolute right-[-10px] top-[-10px] opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-[80px]">schedule</span>
+</div>
+<span class="font-label-caps text-label-caps text-on-surface-variant">Pendientes</span>
+<div class="flex items-baseline gap-2">
+<span class="font-headline-md text-headline-md text-on-surface">3</span>
+<span class="font-label-caps text-label-caps text-error">Servicios</span>
+</div>
+</div>
+<!-- Stat Card: Aprobando -->
+<div class="bg-surface-container border border-outline-variant rounded p-4 flex flex-col justify-between h-24 relative overflow-hidden group hover:border-surface-tint transition-colors">
+<div class="absolute right-[-10px] top-[-10px] opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-[80px]">fact_check</span>
+</div>
+<span class="font-label-caps text-label-caps text-on-surface-variant">Aprobando</span>
+<div class="flex items-baseline gap-2">
+<span class="font-headline-md text-headline-md text-on-surface">1</span>
+<span class="font-label-caps text-label-caps text-tertiary">Autorización</span>
+</div>
+</div>
+<!-- Stat Card: En Proceso -->
+<div class="bg-surface-container border border-outline-variant rounded p-4 flex flex-col justify-between h-24 relative overflow-hidden group hover:border-surface-tint transition-colors">
+<div class="absolute right-[-10px] top-[-10px] opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-[80px]">build</span>
+</div>
+<span class="font-label-caps text-label-caps text-on-surface-variant">En Proceso</span>
+<div class="flex items-baseline gap-2">
+<span class="font-headline-md text-headline-md text-on-surface">2</span>
+<span class="font-label-caps text-label-caps text-primary">Activos</span>
+</div>
+</div>
+<!-- Stat Card: Completados -->
+<div class="bg-surface-container border border-outline-variant rounded p-4 flex flex-col justify-between h-24 relative overflow-hidden group hover:border-surface-tint transition-colors">
+<div class="absolute right-[-10px] top-[-10px] opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-[80px]">done_all</span>
+</div>
+<span class="font-label-caps text-label-caps text-on-surface-variant">Completados</span>
+<div class="flex items-baseline gap-2">
+<span class="font-headline-md text-headline-md text-on-surface">4</span>
+<span class="font-label-caps text-label-caps text-surface-tint">Listos</span>
+</div>
+</div>
+</div>
+<!-- Bento Layout for Main Area -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+<!-- Services Table Panel (Spans 2 columns) -->
+<div class="lg:col-span-2 bg-[#161a21] border border-[#2d3748] rounded flex flex-col h-[600px]">
+<div class="p-4 border-b border-[#2d3748] flex justify-between items-center bg-surface-container">
+<h3 class="font-label-caps text-label-caps text-on-surface">Detalle de Servicios</h3>
+<div class="flex gap-2">
+<button class="p-1.5 border border-outline-variant rounded text-on-surface-variant hover:text-primary hover:border-primary transition-colors">
+<span class="material-symbols-outlined text-[18px]">filter_list</span>
+</button>
+</div>
+</div>
+<div class="flex-1 overflow-auto">
+<table class="w-full text-left border-collapse">
+<thead class="font-label-caps text-label-caps text-on-surface-variant sticky top-0 bg-[#1c2129] border-b border-[#2d3748] z-10">
+<tr>
+<th class="p-4">Código</th>
+<th class="p-4">Tipo / Descripción</th>
+<th class="p-4">Mecánico</th>
+<th class="p-4">Estado / Aprobación</th>
+<th class="p-4">Precio (RD$)</th>
+<th class="p-4 text-right">Acción</th>
+</tr>
+</thead>
+<tbody class="font-body-sm text-body-sm">
+<!-- Row 1: En Proceso -->
+<tr class="zebra-row hover:border hover:border-[#4a5568] group cursor-pointer border-b border-[#2d3748]">
+<td class="p-4 font-label-caps text-primary">SRV-001</td>
+<td class="p-4">
+<div class="font-bold text-on-surface">Mantenimiento Completo Suspensión</div>
+<div class="text-on-surface-variant text-[12px]">RockShox Lyrik Ultimate</div>
+</td>
+<td class="p-4 text-on-surface-variant">J. Ramírez</td>
+<td class="p-4">
+<div class="flex flex-col gap-1">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-label-caps border border-primary text-primary w-max">
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+                                                EN PROCESO
+                                            </span>
+<span class="text-[11px] text-on-surface-variant">Aprobado</span>
+</div>
+</td>
+<td class="p-4 font-label-caps text-on-surface">4,500.00</td>
+<td class="p-4 text-right">
+<button class="p-2 bg-surface-container border border-outline-variant hover:border-primary rounded text-on-surface transition-colors" title="Pausar">
+<span class="material-symbols-outlined text-[18px]">pause</span>
+</button>
+<button class="p-2 ml-1 btn-primary-industrial rounded text-white transition-colors" title="Finalizar">
+<span class="material-symbols-outlined text-[18px]">done</span>
+</button>
+</td>
+</tr>
+<!-- Row 2: Pendiente pero Bloqueado (Falta Aprobación) -->
+<tr class="zebra-row border-l-2 border-l-error bg-[#1c2129] opacity-80 border-b border-[#2d3748]">
+<td class="p-4 font-label-caps text-on-surface-variant">SRV-002</td>
+<td class="p-4">
+<div class="font-bold text-on-surface flex items-center gap-2">
+                                            Reemplazo Aro Trasero
+                                            <span class="material-symbols-outlined text-error text-[16px]" title="Bloqueado por aprobación">lock</span>
+</div>
+<div class="text-on-surface-variant text-[12px]">Bontrager Line Elite 30</div>
+</td>
+<td class="p-4 text-on-surface-variant">Sin asignar</td>
+<td class="p-4">
+<div class="flex flex-col gap-1">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-label-caps border border-outline-variant text-on-surface-variant w-max">
+                                                PENDIENTE
+                                            </span>
+<span class="inline-flex items-center gap-1 text-[11px] text-error font-bold">
+<span class="material-symbols-outlined text-[12px]">pending_actions</span>
+                                                Pendiente Autorización
+                                            </span>
+</div>
+</td>
+<td class="p-4 font-label-caps text-on-surface">12,000.00</td>
+<td class="p-4 text-right">
+<button class="px-3 py-1.5 border border-error text-error hover:bg-[#690005] hover:text-[#ffdad6] rounded font-label-caps text-[10px] transition-colors" title="Solicitar">
+                                            SOLICITAR
+                                        </button>
+</td>
+</tr>
+<!-- Row 3: Completado -->
+<tr class="zebra-row border-b border-[#2d3748] opacity-60">
+<td class="p-4 font-label-caps text-on-surface-variant">SRV-003</td>
+<td class="p-4">
+<div class="font-bold text-on-surface line-through decoration-surface-variant">Ajuste de Cambios (SRAM GX)</div>
+</td>
+<td class="p-4 text-on-surface-variant">A. Pérez</td>
+<td class="p-4">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-label-caps bg-surface-variant text-on-surface-variant w-max">
+<span class="material-symbols-outlined text-[12px]">check</span>
+                                            COMPLETADO
+                                        </span>
+</td>
+<td class="p-4 font-label-caps text-on-surface">800.00</td>
+<td class="p-4 text-right">
+<span class="font-label-caps text-[10px] text-on-surface-variant">15 min</span>
+</td>
+</tr>
+<!-- Row 4: Pendiente -->
+<tr class="zebra-row hover:border hover:border-[#4a5568] group cursor-pointer border-b border-[#2d3748]">
+<td class="p-4 font-label-caps text-on-surface">SRV-004</td>
+<td class="p-4">
+<div class="font-bold text-on-surface">Sangrado Frenos (Ambos)</div>
+<div class="text-on-surface-variant text-[12px]">SRAM Code RSC</div>
+</td>
+<td class="p-4 text-on-surface-variant">M. Santos</td>
+<td class="p-4">
+<div class="flex flex-col gap-1">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-label-caps border border-outline-variant text-on-surface w-max">
+                                                PENDIENTE
+                                            </span>
+<span class="text-[11px] text-primary">Aprobado</span>
+</div>
+</td>
+<td class="p-4 font-label-caps text-on-surface">2,200.00</td>
+<td class="p-4 text-right">
+<button class="px-3 py-1.5 bg-surface-container border border-primary text-primary hover:bg-primary-container hover:text-on-primary-container rounded font-label-caps text-[10px] transition-colors flex items-center gap-1 ml-auto">
+<span class="material-symbols-outlined text-[14px]">play_arrow</span>
+                                            INICIAR
+                                        </button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="p-4 border-t border-[#2d3748] bg-surface-container flex justify-between items-center">
+<span class="font-body-sm text-on-surface-variant">Mostrando 4 de 4 servicios</span>
+<div class="font-label-caps text-label-caps text-on-surface">
+                            TOTAL OT: <span class="text-primary text-headline-sm ml-2">RD$ 19,500.00</span>
+</div>
+</div>
+</div>
+<!-- Side Panel (Service Details / Action context) -->
+<div class="bg-[#1c2129] border border-[#2d3748] rounded flex flex-col h-[600px] hard-shadow">
+<div class="p-4 border-b border-[#2d3748] flex justify-between items-center">
+<h3 class="font-label-caps text-label-caps text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[18px]">build_circle</span>
+                            Detalle del Servicio Activo
+                        </h3>
+</div>
+<div class="p-4 flex-1 overflow-y-auto">
+<!-- Context: SRV-001 (En proceso) -->
+<div class="mb-6">
+<div class="font-label-caps text-primary mb-1">SRV-001</div>
+<h4 class="font-headline-sm text-headline-sm text-on-surface mb-2">Mantenimiento Completo Suspensión</h4>
+<p class="font-body-sm text-on-surface-variant mb-4">Revisión profunda, cambio de retenes y aceite. Cliente reportó pérdida de sensibilidad inicial en descensos técnicos.</p>
+<!-- Timer visual -->
+<div class="bg-surface-container p-3 rounded border border-outline-variant flex justify-between items-center mb-6">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-on-surface-variant animate-spin" style="animation-duration: 3s;">settings</span>
+<span class="font-label-caps text-label-caps text-on-surface">Tiempo Activo</span>
+</div>
+<div class="font-label-caps text-headline-sm text-primary">01:45:22</div>
+</div>
+<!-- Parts needed list -->
+<h5 class="font-label-caps text-label-caps text-on-surface-variant mb-2 border-b border-[#2d3748] pb-1">Repuestos Asociados</h5>
+<ul class="space-y-2 font-body-sm mb-6">
+<li class="flex justify-between items-center bg-[#161a21] p-2 rounded border border-[#2d3748]">
+<span class="text-on-surface">Kit Retenes RockShox 35mm</span>
+<span class="material-symbols-outlined text-primary text-[16px]">check_box</span>
+</li>
+<li class="flex justify-between items-center bg-[#161a21] p-2 rounded border border-[#2d3748]">
+<span class="text-on-surface">Aceite Maxima Plush 0W-30</span>
+<span class="material-symbols-outlined text-primary text-[16px]">check_box</span>
+</li>
+</ul>
+<!-- Progress segmented bar -->
+<h5 class="font-label-caps text-label-caps text-on-surface-variant mb-2">Progreso Estimado (80%)</h5>
+<div class="flex gap-1 h-2 mb-2 w-full">
+<div class="flex-1 bg-primary rounded-sm"></div>
+<div class="flex-1 bg-primary rounded-sm"></div>
+<div class="flex-1 bg-primary rounded-sm"></div>
+<div class="flex-1 bg-primary rounded-sm"></div>
+<div class="flex-1 bg-surface-container-highest rounded-sm"></div>
+</div>
+</div>
+</div>
+<!-- Panel Actions -->
+<div class="p-4 border-t border-[#2d3748] bg-surface-container gap-3 flex flex-col">
+<button class="w-full py-2 bg-surface-container border border-outline-variant hover:bg-surface-variant rounded font-label-caps text-label-caps text-on-surface transition-colors flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-[16px]">pause</span>
+                            Pausar Trabajo
+                        </button>
+<button class="w-full py-3 btn-primary-industrial rounded font-label-caps text-label-caps flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-[18px]">done_all</span>
+                            Finalizar Servicio
+                        </button>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

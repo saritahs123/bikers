@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useMemo, useEffect } from 'react';
+import SecurityConfirmDialog from '@/components/security/SecurityConfirmDialog';
 import { createPortal } from 'react-dom';
 import { 
   Shield, Key, CheckSquare, Square, Save, RotateCw, Search, 
@@ -23,7 +24,7 @@ const ALL_ACTIONS = [
 
 const apiBase = '/api';
 
-export default function RolesSecurityView({ onOpenSidebar }) {
+export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
   const [activeRole, setActiveRole] = useState('');
   const [matrixState, setMatrixState] = useState({});
   const [initialMatrixState, setInitialMatrixState] = useState({});
@@ -726,70 +727,31 @@ export default function RolesSecurityView({ onOpenSidebar }) {
       </div>
 
       {/* Save Confirmation Modal */}
-      {showSaveConfirmModal && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
-          <div className="bg-surface-container-low border-outline-variant rounded-2xl shadow-xl w-[400px] overflow-hidden">
-            <div className="p-6 text-center">
-              <div className="w-16 h-16 bg-primary/10 text-primary rounded-full flex items-center justify-center mx-auto mb-5">
-                <Save size={28} className="stroke-[2]" />
-              </div>
-              <h3 className="text-lg font-bold text-on-surface mb-2">¿Confirmar Guardado?</h3>
-              <p className="text-[13px] text-on-surface-variant font-medium leading-relaxed px-2">
-                ¿Desea guardar los cambios realizados en las políticas de seguridad?
-              </p>
-            </div>
-            <div className="p-5 pt-0 flex items-center justify-center gap-3">
-              <button 
-                onClick={() => setShowSaveConfirmModal(false)}
-                className="flex-1 bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface font-bold py-2.5 rounded-xl transition-colors text-sm"
-              >
-                Cancelar
-              </button>
-              <button 
-                onClick={handleExecuteSave}
-                className="flex-1 bg-primary text-on-primary hover:bg-primary-fixed font-bold py-2.5 rounded-xl shadow-sm hover:shadow transition-all text-sm"
-              >
-                Confirmar
-              </button>
-            </div>
-          </div>
-        </div>
-      , document.body)}
+      <SecurityConfirmDialog
+        isOpen={showSaveConfirmModal}
+        onClose={() => setShowSaveConfirmModal(false)}
+        onConfirm={handleExecuteSave}
+        variant="default"
+        title="¿Confirmar guardado?"
+        description="¿Desea guardar los cambios realizados en las políticas de seguridad?"
+        confirmLabel="Guardar cambios"
+      />
 
       {/* Delete Confirmation Modal */}
-      {deleteContext && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
-          <div className="bg-surface-container-low border-outline-variant rounded-2xl shadow-xl w-[400px] overflow-hidden">
-            <div className="p-6 text-center">
-              <div className="w-16 h-16 bg-primary/10 text-primary rounded-full flex items-center justify-center mx-auto mb-5">
-                <Trash2 size={28} className="stroke-[2]" />
-              </div>
-              <h3 className="text-lg font-bold text-on-surface mb-2">
-                ¿Eliminar {deleteContext.type === 'role' ? 'Rol' : 'Módulo'}?
-              </h3>
-              <p className="text-[13px] text-on-surface-variant font-medium leading-relaxed px-2">
-                Estás a punto de eliminar el {deleteContext.type === 'role' ? 'rol' : 'módulo'} <strong>"{deleteContext.type === 'role' ? deleteContext.item.nombre : deleteContext.item.label}"</strong>. Esta acción no se puede deshacer y borrará todos los permisos asociados.
-              </p>
-            </div>
-            <div className="p-5 pt-0 flex items-center justify-center gap-3">
-              <button 
-                onClick={() => setDeleteContext(null)}
-                disabled={deleting}
-                className="flex-1 bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface font-bold py-2.5 rounded-xl transition-colors text-sm disabled:opacity-50"
-              >
-                Cancelar
-              </button>
-              <button 
-                onClick={confirmDelete}
-                disabled={deleting}
-                className="flex-1 bg-primary text-on-primary hover:bg-primary-fixed text-on-primary font-bold py-2.5 rounded-xl shadow-sm hover:shadow transition-all text-sm flex justify-center items-center gap-2 disabled:opacity-50"
-              >
-                {deleting ? <Loader2 size={16} className="animate-spin" /> : 'Eliminar'}
-              </button>
-            </div>
-          </div>
-        </div>
-      , document.body)}
+      <SecurityConfirmDialog
+        isOpen={!!deleteContext}
+        onClose={() => setDeleteContext(null)}
+        onConfirm={confirmDelete}
+        variant="danger"
+        title={`¿Eliminar ${deleteContext?.type === 'role' ? 'Rol' : 'Módulo'}?`}
+        description={`Estás a punto de eliminar el ${deleteContext?.type === 'role' ? 'rol' : 'módulo'} "${deleteContext?.type === 'role' ? deleteContext?.item?.nombre : deleteContext?.item?.label}". Esta acción es irreversible.`}
+        confirmLabel="Eliminar"
+        isLoading={deleting}
+        loadingLabel="Eliminando..."
+        details={deleteContext ? [
+          { label: 'Nombre', value: deleteContext.type === 'role' ? deleteContext.item.nombre : deleteContext.item.label }
+        ] : null}
+      />
 
       {/* Delete Success Modal */}
       {showDeleteSuccessModal && typeof document !== 'undefined' && createPortal(

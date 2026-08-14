@@ -1,6 +1,16 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 
+const cleanFecha = (val: any) => {
+  if (!val) return null;
+  try {
+    const d = new Date(val);
+    return isNaN(d.getTime()) ? null : d.toISOString();
+  } catch {
+    return null;
+  }
+};
+
 // GET /api/crm/bicicletas/[id]/components
 export async function GET(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
@@ -89,7 +99,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
     const modelo = (body.modelo || '').trim();
     const numero_serie = (body.numero_serie || '').trim();
     const descripcion = (body.descripcion || '').trim();
-    const fecha_instalacion = body.fecha_instalacion || new Date().toISOString();
+    const fecha_instalacion = cleanFecha(body.fecha_instalacion) || new Date().toISOString();
     const kilometraje_instalacion = body.kilometraje_instalacion ? parseInt(body.kilometraje_instalacion, 10) : 0;
     const observaciones = (body.observaciones || '').trim();
 
@@ -105,7 +115,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
       ) VALUES (
         (SELECT COALESCE(MAX(bicicleta_componente_id), 0) + 1 FROM admin.bicicleta_componentes),
         $1, $2, $3,
-        $4, $5, $6, $7, $8,
+        $4, $5, $6, $7, $8::timestamptz,
         $9, true, $10, true, NOW()
       )
       RETURNING *
@@ -128,6 +138,78 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
 
   } catch (error: any) {
     console.error("Error in POST /api/crm/bicicletas/[id]/components:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+// PUT /api/crm/bicicletas/[id]/components
+export async function PUT(req: Request, context: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await context.params;
+    const bicicletaId = parseInt(id, 10);
+
+    if (isNaN(bicicletaId)) {
+      return NextResponse.json({ error: "ID de bicicleta inválido." }, { status: 400 });
+    }
+
+    const body = await req.json();
+    const componentId = parseInt(body.bicicleta_componente_id || body.id, 10);
+
+    if (isNaN(componentId)) {
+      return NextResponse.json({ error: "ID de componente inválido." }, { status: 400 });
+    }
+
+    const categoria_componente_id = parseInt(body.categoria_componente_id, 10);
+    const estado_componente_id = parseInt(body.estado_componente_id || 1, 10);
+    const marca = (body.marca || '').trim();
+    const modelo = (body.modelo || '').trim();
+    const numero_serie = (body.numero_serie || '').trim();
+    const descripcion = (body.descripcion || '').trim();
+    const fecha_instalacion = cleanFecha(body.fecha_instalacion);
+    const kilometraje_instalacion = body.kilometraje_instalacion ? parseInt(body.kilometraje_instalacion, 10) : 0;
+    const observaciones = (body.observaciones || '').trim();
+
+    if (isNaN(categoria_componente_id)) {
+      return NextResponse.json({ error: "Debe seleccionar una categoría de componente." }, { status: 400 });
+    }
+
+    const sql = `
+      UPDATE admin.bicicleta_componentes
+      SET categoria_componente_id = $1,
+          estado_componente_id = $2,
+          marca = $3,
+          modelo = $4,
+          numero_serie = $5,
+          descripcion = $6,
+          fecha_instalacion = $7::timestamptz,
+          kilometraje_instalacion = $8,
+          observaciones = $9
+      WHERE bicicleta_componente_id = $10 AND bicicleta_id = $11
+      RETURNING *
+    `;
+
+    const result = await query(sql, [
+      categoria_componente_id,
+      estado_componente_id,
+      marca || null,
+      modelo || null,
+      numero_serie || null,
+      descripcion || null,
+      fecha_instalacion,
+      kilometraje_instalacion,
+      observaciones || null,
+      componentId,
+      bicicletaId
+    ]);
+
+    if (!result || result.length === 0) {
+      return NextResponse.json({ error: "No se encontró el componente a actualizar." }, { status: 404 });
+    }
+
+    return NextResponse.json(result[0]);
+
+  } catch (error: any) {
+    console.error("Error in PUT /api/crm/bicicletas/[id]/components:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
