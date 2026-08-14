@@ -25,21 +25,25 @@ export interface ModulePermissions {
 }
 
 export async function getWorkshopSession(): Promise<WorkshopSession | null> {
+  const isProduction = process.env.NODE_ENV === "production";
+
   try {
     const cookieStore = await cookies();
     const userIdCookie = cookieStore.get("session_user_id")?.value;
     const tokenCookie = cookieStore.get("session_token")?.value;
 
-    let userId = userIdCookie ? parseInt(userIdCookie, 10) : 1;
-    if (isNaN(userId)) userId = 1;
+    let userId = userIdCookie ? parseInt(userIdCookie, 10) : (isProduction ? 0 : 1);
+    if (isNaN(userId)) userId = isProduction ? 0 : 1;
 
     // Check active session in DB if token exists
-    if (tokenCookie) {
+    if (tokenCookie && userId > 0) {
       const sessions = await query(
         `SELECT s.sesion_id, s.usuario_id, s.estado, s.fecha_expiracion,
-                u.empresa_id, u.rol_principal_id, u.nombre, u.apellido, u.email
+                u.empresa_id, u.rol_principal_id,
+                ui.nombre AS nombre, ui.apellido AS apellido, ui.correo_electronico AS email
          FROM admin.usuario_sesion s
          JOIN admin.usuario u ON u.usuario_id = s.usuario_id
+         LEFT JOIN admin.usuario_identidad ui ON ui.usuario_id = u.usuario_id
          WHERE s.token_identificador = $1 AND s.usuario_id = $2
          LIMIT 1`,
         [tokenCookie, userId]
@@ -60,11 +64,18 @@ export async function getWorkshopSession(): Promise<WorkshopSession | null> {
       }
     }
 
+    // In production, if token/session is missing or invalid, return null to trigger 401 response
+    if (isProduction) {
+      return null;
+    }
+
     // Fallback for dev mode / default active user when session cookie is not set
     const userRows = await query(
-      `SELECT usuario_id, empresa_id, rol_principal_id, nombre, apellido, email
-       FROM admin.usuario
-       WHERE usuario_id = $1 AND (activo = true OR activo IS NULL)
+      `SELECT u.usuario_id, u.empresa_id, u.rol_principal_id,
+              ui.nombre AS nombre, ui.apellido AS apellido, ui.correo_electronico AS email
+       FROM admin.usuario u
+       LEFT JOIN admin.usuario_identidad ui ON ui.usuario_id = u.usuario_id
+       WHERE u.usuario_id = $1 AND (u.estado = 'ACTIVO' OR u.estado IS NULL)
        LIMIT 1`,
       [userId]
     );
@@ -80,7 +91,7 @@ export async function getWorkshopSession(): Promise<WorkshopSession | null> {
       };
     }
 
-    // Absolute fallback
+    // Absolute fallback for dev mode
     return {
       usuario_id: 1,
       empresa_id: 1,
@@ -91,6 +102,9 @@ export async function getWorkshopSession(): Promise<WorkshopSession | null> {
 
   } catch (err) {
     console.error("Error in getWorkshopSession:", err);
+    if (isProduction) {
+      return null;
+    }
     return {
       usuario_id: 1,
       empresa_id: 1,
