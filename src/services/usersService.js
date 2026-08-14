@@ -3,12 +3,11 @@ export const usersService = {
     try {
       const response = await fetch('/api/usuarios', { cache: 'no-store' });
       if (!response.ok) {
-        throw new Error('Error al obtener usuarios');
+        return [];
       }
       const data = await response.json();
-      return data;
+      return Array.isArray(data) ? data : (data?.data || []);
     } catch (error) {
-      console.error('usersService.getAllUsers error:', error);
       return [];
     }
   },
