@@ -17,13 +17,18 @@ export const usersService = {
     try {
       const response = await fetch(`/api/usuarios/${id}`, { cache: 'no-store' });
       if (!response.ok) {
-        console.warn(`usersService.getUserById: /api/usuarios/${id} returned status ${response.status}`);
-        return null;
+        throw new Error(`HTTP ${response.status}`);
       }
-      return await response.json();
+      const payload = await response.json();
+      const user = payload?.data ?? payload?.user ?? payload;
+
+      if (!user || typeof user !== 'object' || !(user.id || user.usuario_id)) {
+        throw new Error('INVALID_USER_DETAIL_RESPONSE');
+      }
+
+      return user;
     } catch (error) {
-      console.error('usersService.getUserById error:', error);
-      return null;
+      throw error;
     }
   },
 

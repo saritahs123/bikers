@@ -12,7 +12,7 @@ if (!connectionString) {
   const envPath = path.join(__dirname, "../../../../../../.env.local");
   if (fs.existsSync(envPath)) {
     const envContent = fs.readFileSync(envPath, "utf8");
-    const match = envContent.match(/DATABASE_URL="?([^"\r\n]+)"?/);
+    const match = envContent.match(/^\s*DATABASE_URL="?([^"\r\n]+)"?/m);
     if (match) connectionString = match[1];
   }
 }

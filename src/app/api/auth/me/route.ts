@@ -7,47 +7,56 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     const cookieStore = await cookies();
-    const userIdCookie = cookieStore.get("session_user_id")?.value;
     const tokenCookie = cookieStore.get("session_token")?.value;
+    const userIdCookie = cookieStore.get("session_user_id")?.value;
 
-    let targetUserId: number | null = null;
-
-    // 1. Identify user from valid active session token in DB
-    if (tokenCookie) {
-      const sessionCheck = await query(
-        `SELECT usuario_id, fecha_expiracion, estado
-         FROM admin.usuario_sesion
-         WHERE token_identificador = $1
-         LIMIT 1`,
-        [tokenCookie]
-      );
-
-      if (sessionCheck && sessionCheck.length > 0) {
-        const s = sessionCheck[0];
-        const isExpired = s.fecha_expiracion && new Date(s.fecha_expiracion) < new Date();
-        if (s.estado !== "REVOCADA" && s.estado !== "CERRADA" && s.estado !== "EXPIRADA" && !isExpired) {
-          targetUserId = s.usuario_id;
-        }
-      }
-    }
-
-    // 2. Fallback to session_user_id cookie if token check did not yield user
-    if (!targetUserId && userIdCookie) {
-      const parsedId = parseInt(userIdCookie, 10);
-      if (!isNaN(parsedId) && parsedId > 0) {
-        targetUserId = parsedId;
-      }
-    }
-
-    // 3. Return HTTP 401 if no valid authenticated session exists
-    if (!targetUserId) {
+    if (!tokenCookie || !tokenCookie.trim()) {
       return NextResponse.json(
-        { success: false, error: "UNAUTHORIZED", message: "Sesión no válida o expirada." },
+        { success: false, error: "UNAUTHORIZED", message: "Sesión no válida o expirada. Token no proporcionado." },
         { status: 401 }
       );
     }
 
-    // 4. Query authenticated user details from real joined security tables
+    const sessionCheck = await query(
+      `SELECT usuario_id, fecha_expiracion, estado
+       FROM admin.usuario_sesion
+       WHERE token_identificador = $1 AND estado = 'ACTIVA'
+       LIMIT 1`,
+      [tokenCookie]
+    );
+
+    if (!sessionCheck || sessionCheck.length === 0) {
+      return NextResponse.json(
+        { success: false, error: "UNAUTHORIZED", message: "Sesión no registrada o inactiva." },
+        { status: 401 }
+      );
+    }
+
+    const session = sessionCheck[0];
+    const isExpired = session.fecha_expiracion && new Date(session.fecha_expiracion) < new Date();
+
+    if (isExpired || session.estado !== "ACTIVA") {
+      return NextResponse.json(
+        { success: false, error: "UNAUTHORIZED", message: "La sesión ha expirado." },
+        { status: 401 }
+      );
+    }
+
+    const targetUserId = session.usuario_id;
+    if (!targetUserId || isNaN(Number(targetUserId))) {
+      return NextResponse.json(
+        { success: false, error: "UNAUTHORIZED", message: "Usuario de sesión no válido." },
+        { status: 401 }
+      );
+    }
+
+    if (userIdCookie) {
+      const cookieParsedId = parseInt(userIdCookie, 10);
+      if (!isNaN(cookieParsedId) && cookieParsedId !== targetUserId) {
+        console.warn(`[SECURITY WARNING] Mismatch between session_user_id cookie (${cookieParsedId}) and DB session user_id (${targetUserId}). DB session prevails.`);
+      }
+    }
+
     const userRows = await query(
       `SELECT 
          u.usuario_id,
@@ -81,7 +90,6 @@ export async function GET() {
     const row = userRows[0];
     const nombre = (row.nombre || "").trim();
     const apellido = (row.apellido || "").trim();
-    const email = row.correo_acceso || row.correo_electronico || row.identificador_principal || "";
 
     let nombreCompleto = "";
     if (nombre && apellido) {
@@ -90,8 +98,8 @@ export async function GET() {
       nombreCompleto = nombre;
     } else if (apellido) {
       nombreCompleto = apellido;
-    } else if (email) {
-      nombreCompleto = email;
+    } else if (row.identificador_principal) {
+      nombreCompleto = row.identificador_principal;
     } else {
       nombreCompleto = "Sin nombre registrado";
     }
@@ -114,7 +122,9 @@ export async function GET() {
       nombre,
       apellido,
       nombre_completo: nombreCompleto,
-      correo: email,
+      identificador_principal: row.identificador_principal || "",
+      correo_acceso: row.correo_acceso || "",
+      correo_electronico: row.correo_electronico || "",
       rol: rolNombre,
       rol_nombre: rolNombre,
       cargo_nombre: cargoNombre,

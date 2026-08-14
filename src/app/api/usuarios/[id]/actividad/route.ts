@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { authorizeUserAccess } from "@/lib/userAuth";
 
 export async function GET(
   req: Request,
@@ -7,11 +8,16 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const userId = parseInt(id.replace(/\D/g, ""), 10);
+    const authResult = await authorizeUserAccess(id);
 
-    if (!userId || isNaN(userId)) {
-      return NextResponse.json([]);
+    if (!authResult.success) {
+      return NextResponse.json(
+        { error: authResult.error, message: authResult.message },
+        { status: authResult.status }
+      );
     }
+
+    const userId = authResult.targetUserId;
 
     const sql = `
       SELECT *
@@ -65,12 +71,17 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const userId = parseInt(id.replace(/\D/g, ""), 10);
-    const body = await req.json();
+    const authResult = await authorizeUserAccess(id);
 
-    if (!userId || isNaN(userId)) {
-      return NextResponse.json({ success: false, error: "ID inválido" }, { status: 400 });
+    if (!authResult.success) {
+      return NextResponse.json(
+        { success: false, error: authResult.error, message: authResult.message },
+        { status: authResult.status }
+      );
     }
+
+    const userId = authResult.targetUserId;
+    const body = await req.json();
 
     const { modulo = 'Seguridad', evento = 'Actividad', descripcion = '', resultado = 'Éxito', direccion_ip = '127.0.0.1', dispositivo = 'Navegador Web' } = body;
 

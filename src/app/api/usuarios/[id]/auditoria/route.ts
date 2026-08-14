@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { authorizeUserAccess } from "@/lib/userAuth";
 
 export async function GET(
   req: Request,
@@ -7,30 +8,16 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const userId = parseInt(id.replace(/\D/g, ""), 10);
+    const authResult = await authorizeUserAccess(id);
 
-    if (!userId || isNaN(userId)) {
-      return NextResponse.json({
-        items: [],
-        total: 0,
-        page: 1,
-        pageSize: 10,
-        totalPages: 0,
-        summaryStats: {
-          total_eventos: 0,
-          creaciones: 0,
-          actualizaciones: 0,
-          permisos_modificados: 0,
-          reseteos_password: 0,
-          revocaciones_sesion: 0,
-          cambios_roles: 0,
-          bloqueos: 0,
-          desbloqueos: 0
-        },
-        availableActions: [],
-        availableAdmins: []
-      });
+    if (!authResult.success) {
+      return NextResponse.json(
+        { error: authResult.error, message: authResult.message },
+        { status: authResult.status }
+      );
     }
+
+    const userId = authResult.targetUserId;
 
     const { searchParams } = new URL(req.url);
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
@@ -228,7 +215,7 @@ export async function GET(
     });
   } catch (error: any) {
     console.error("Error fetching usuario_auditoria Detailed:", error);
-    return NextResponse.json({ error: error.message || String(error), stack: error.stack }, { status: 500 });
+    return NextResponse.json({ error: error.message || String(error) }, { status: 500 });
   }
 }
 
@@ -238,15 +225,20 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const userId = parseInt(id.replace(/\D/g, ""), 10);
-    const body = await req.json();
+    const authResult = await authorizeUserAccess(id);
 
-    if (!userId || isNaN(userId)) {
-      return NextResponse.json({ success: false, error: "ID inválido" }, { status: 400 });
+    if (!authResult.success) {
+      return NextResponse.json(
+        { success: false, error: authResult.error, message: authResult.message },
+        { status: authResult.status }
+      );
     }
 
+    const userId = authResult.targetUserId;
+    const adminId = authResult.authUserId;
+    const body = await req.json();
+
     const { 
-      admin_id = 1, 
       accion = 'Modificación de Perfil', 
       valor_anterior = '—', 
       valor_nuevo = '—', 
@@ -260,7 +252,7 @@ export async function POST(
       INSERT INTO admin.usuario_auditoria 
       (auditoria_id, usuario_id, admin_id, fecha_hora, accion, valor_anterior, valor_nuevo, motivo, resultado, direccion_ip, dispositivo)
       VALUES ((SELECT COALESCE(MAX(auditoria_id), 0) + 1 FROM admin.usuario_auditoria), $1, $2, NOW(), $3, $4, $5, $6, $7, $8, $9)
-    `, [userId, admin_id, accion, valor_anterior, valor_nuevo, motivo, resultado, direccion_ip, dispositivo]);
+    `, [userId, adminId, accion, valor_anterior, valor_nuevo, motivo, resultado, direccion_ip, dispositivo]);
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
