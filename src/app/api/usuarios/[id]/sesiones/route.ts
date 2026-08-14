@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies, headers } from "next/headers";
 import { query } from "@/lib/db";
+import { authorizeUserAccess } from "@/lib/userAuth";
 
 const SESSION_STALE_MINUTES = 30;
 
@@ -23,12 +24,16 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const userId = parseInt(id.replace(/\D/g, ""), 10);
+    const authResult = await authorizeUserAccess(id);
 
-    if (!userId || isNaN(userId)) {
-      return NextResponse.json([]);
+    if (!authResult.success) {
+      return NextResponse.json(
+        { error: authResult.error, message: authResult.message },
+        { status: authResult.status }
+      );
     }
 
+    const userId = authResult.targetUserId;
     const cookieStore = await cookies();
     const callerSessionToken = cookieStore.get("session_token")?.value || "";
 
@@ -59,7 +64,6 @@ export async function GET(
       }
 
       const isCurrent = Boolean(callerSessionToken && r.token_identificador === callerSessionToken);
-
       const endMsForDuration = (derivedState === 'ACTIVA' || derivedState === 'POSIBLEMENTE COLGADA') ? nowMs : lastActMs;
       const durationFormatted = formatDuration(startMs, endMsForDuration);
 
@@ -104,15 +108,20 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const userId = parseInt(id.replace(/\D/g, ""), 10);
-    const body = await req.json();
+    const authResult = await authorizeUserAccess(id);
 
-    if (!userId || isNaN(userId)) {
-      return NextResponse.json({ success: false, error: "ID inválido" }, { status: 400 });
+    if (!authResult.success) {
+      return NextResponse.json(
+        { success: false, error: authResult.error, message: authResult.message },
+        { status: authResult.status }
+      );
     }
 
+    const userId = authResult.targetUserId;
+    const callerUserId = authResult.authUserId;
+    const body = await req.json();
+
     const cookieStore = await cookies();
-    const callerUserId = parseInt(cookieStore.get("session_user_id")?.value || "1", 10);
     const callerSessionToken = cookieStore.get("session_token")?.value || "";
 
     const reqHeaders = await headers();

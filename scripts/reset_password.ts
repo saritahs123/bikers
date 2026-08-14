@@ -51,15 +51,13 @@ async function resetPassword() {
   }
 
   try {
-    // 1. Locate user by usuario_seguridad.correo_acceso (or correo_electronico / identificador_principal)
+    // 1. Locate user exclusively by admin.usuario_seguridad.correo_acceso (Recovery Email)
     const users = await query(
       `SELECT u.usuario_id, ui.nombre, ui.apellido, u.estado 
        FROM admin.usuario u
-       LEFT JOIN admin.usuario_seguridad us ON u.usuario_id = us.usuario_id
+       JOIN admin.usuario_seguridad us ON u.usuario_id = us.usuario_id
        LEFT JOIN admin.usuario_identidad ui ON u.usuario_id = ui.usuario_id
-       WHERE LOWER(us.correo_acceso) = $1
-          OR LOWER(ui.correo_electronico) = $1
-          OR LOWER(us.identificador_principal) = $1
+       WHERE LOWER(us.correo_acceso) = LOWER($1)
        LIMIT 1`,
       [targetEmail]
     );

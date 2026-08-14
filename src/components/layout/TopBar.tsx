@@ -1,15 +1,17 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
-interface AuthenticatedUser {
+export interface AuthenticatedUser {
   usuario_id: number;
   nombre_completo: string;
   nombre: string;
   apellido: string;
-  correo: string;
+  identificador_principal: string;
+  correo_acceso: string;
+  correo_electronico: string;
   rol_nombre: string;
   cargo_nombre: string;
   empresa_nombre: string;
@@ -17,59 +19,17 @@ interface AuthenticatedUser {
   foto_url: string | null;
 }
 
-export function TopBar({ onMenuToggle }: { onMenuToggle?: () => void }) {
+export function TopBar({
+  user,
+  onMenuToggle,
+}: {
+  user: AuthenticatedUser;
+  onMenuToggle?: () => void;
+}) {
   const router = useRouter();
-  const [user, setUser] = useState<AuthenticatedUser | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [errorState, setErrorState] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    let isMounted = true;
-    const fetchMe = async () => {
-      try {
-        const res = await fetch("/api/auth/me");
-        if (res.status === 401) {
-          if (isMounted) {
-            setUser(null);
-            setLoading(false);
-          }
-          router.push("/login");
-          return;
-        }
-
-        if (!res.ok) {
-          if (isMounted) {
-            setErrorState(true);
-            setLoading(false);
-          }
-          return;
-        }
-
-        const resData = await res.json();
-        const userData = resData?.data || resData?.user;
-
-        if (resData?.success && userData && isMounted) {
-          setUser(userData);
-          setErrorState(false);
-        } else if (isMounted) {
-          setErrorState(true);
-        }
-      } catch (err) {
-        console.error("Error al obtener el perfil autenticado:", err);
-        if (isMounted) setErrorState(true);
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    };
-
-    fetchMe();
-    return () => {
-      isMounted = false;
-    };
-  }, [router]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -88,13 +48,14 @@ export function TopBar({ onMenuToggle }: { onMenuToggle?: () => void }) {
     try {
       setLoggingOut(true);
       await fetch("/api/auth/logout", { method: "POST" });
-      setUser(null);
       router.push("/login");
     } catch (err) {
       console.error("Error durante el cierre de sesión:", err);
       router.push("/login");
     }
   };
+
+  const accessLabel = user.identificador_principal || user.correo_electronico || "Sin identificador";
 
   return (
     <header className="fixed top-0 right-0 h-16 ml-0 md:ml-64 w-full md:w-[calc(100%-16rem)] bg-surface border-b border-outline-variant flex justify-between items-center px-4 md:px-xl z-40">
@@ -115,7 +76,11 @@ export function TopBar({ onMenuToggle }: { onMenuToggle?: () => void }) {
             <span className="material-symbols-outlined">notifications</span>
             <span className="absolute top-0 right-0 w-2 h-2 bg-error rounded-full border border-surface"></span>
           </button>
-          <Link href="/settings/security/users" className="text-on-surface-variant hover:text-primary transition-colors cursor-pointer">
+          <Link
+            href="/security/my-profile"
+            aria-label="Mi perfil y seguridad"
+            className="text-on-surface-variant hover:text-primary transition-colors cursor-pointer flex items-center justify-center"
+          >
             <span className="material-symbols-outlined">settings</span>
           </Link>
         </div>
@@ -124,47 +89,28 @@ export function TopBar({ onMenuToggle }: { onMenuToggle?: () => void }) {
 
         {/* Authenticated User Banner & Profile Menu */}
         <div className="relative" ref={dropdownRef}>
-          {loading ? (
-            <div className="flex items-center gap-3">
-              <div className="text-right hidden lg:block space-y-1">
-                <div className="h-3 w-28 bg-slate-800 rounded animate-pulse"></div>
-                <div className="h-2.5 w-20 bg-slate-900 rounded animate-pulse"></div>
-              </div>
-              <div className="w-10 h-10 rounded-full bg-slate-800 animate-pulse border border-slate-700"></div>
+          <button
+            onClick={() => setDropdownOpen(!dropdownOpen)}
+            className="flex items-center gap-3 hover:opacity-90 transition-all cursor-pointer focus:outline-none"
+            title="Ver perfil de usuario"
+          >
+            <div className="text-right hidden lg:block font-sans">
+              <p className="text-[13px] font-bold text-slate-100 leading-tight">
+                {user.nombre_completo}
+              </p>
+              <p className="text-[11px] text-slate-400 leading-tight font-mono mt-0.5">
+                {user.cargo_nombre || user.rol_nombre}
+              </p>
             </div>
-          ) : errorState || !user ? (
-            <div className="flex items-center gap-3">
-              <div className="text-right hidden lg:block font-sans">
-                <p className="text-[12px] font-bold text-slate-400 leading-tight">Perfil no disponible</p>
-              </div>
-              <div className="w-10 h-10 rounded-full border border-slate-700 bg-slate-800 text-slate-500 flex items-center justify-center font-mono font-bold text-xs">
-                --
-              </div>
-            </div>
-          ) : (
-            <button
-              onClick={() => setDropdownOpen(!dropdownOpen)}
-              className="flex items-center gap-3 hover:opacity-90 transition-all cursor-pointer focus:outline-none"
-              title="Ver perfil de usuario"
-            >
-              <div className="text-right hidden lg:block font-sans">
-                <p className="text-[13px] font-bold text-slate-100 leading-tight">
-                  {user.nombre_completo}
-                </p>
-                <p className="text-[11px] text-slate-400 leading-tight font-mono mt-0.5">
-                  {user.cargo_nombre || user.rol_nombre}
-                </p>
-              </div>
 
-              <div className="w-10 h-10 rounded-full border border-[#bfce7f]/40 bg-[#84924a]/20 text-[#bfce7f] flex items-center justify-center font-mono font-bold text-xs shadow-md overflow-hidden shrink-0">
-                {user.foto_url ? (
-                  <img src={user.foto_url} alt={user.nombre_completo} className="w-full h-full object-cover" />
-                ) : (
-                  <span>{user.iniciales}</span>
-                )}
-              </div>
-            </button>
-          )}
+            <div className="w-10 h-10 rounded-full border border-[#bfce7f]/40 bg-[#84924a]/20 text-[#bfce7f] flex items-center justify-center font-mono font-bold text-xs shadow-md overflow-hidden shrink-0">
+              {user.foto_url ? (
+                <img src={user.foto_url} alt={user.nombre_completo} className="w-full h-full object-cover" />
+              ) : (
+                <span>{user.iniciales}</span>
+              )}
+            </div>
+          </button>
 
           {/* Profile Dropdown Menu */}
           {dropdownOpen && user && (
@@ -179,7 +125,9 @@ export function TopBar({ onMenuToggle }: { onMenuToggle?: () => void }) {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-bold text-slate-100 truncate">{user.nombre_completo}</p>
-                  <p className="text-xs text-slate-400 font-mono truncate">{user.correo}</p>
+                  <p className="text-xs text-slate-400 font-mono truncate" title={`Identificador de acceso: ${accessLabel}`}>
+                    Acceso: {accessLabel}
+                  </p>
                   <span className="inline-block mt-1 px-2 py-0.5 bg-[#84924a]/20 text-[#bfce7f] border border-[#bfce7f]/30 rounded text-[10px] font-mono font-bold">
                     {user.empresa_nombre}
                   </span>
@@ -199,12 +147,12 @@ export function TopBar({ onMenuToggle }: { onMenuToggle?: () => void }) {
                 </div>
 
                 <Link
-                  href="/settings/security/users"
+                  href="/security/my-profile"
                   onClick={() => setDropdownOpen(false)}
-                  className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-mono text-slate-200 hover:bg-[#252c37] hover:text-[#bfce7f] transition-all"
+                  className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-mono text-slate-200 hover:bg-[#252c37] hover:text-[#bfce7f] transition-all text-left cursor-pointer"
                 >
                   <span className="material-symbols-outlined text-base">manage_accounts</span>
-                  <span>Mi Perfil y Seguridad</span>
+                  <span>Mi Perfil</span>
                 </Link>
 
                 <button

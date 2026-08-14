@@ -31,9 +31,64 @@ const ALL_ACTIONS = [
   { id: 'eliminar', label: 'Eliminar' }
 ];
 
-export default function UsersSecurityView({ onOpenSidebar = () => {} }) {
+export function mapUserDetail(detail, authUser) {
+  const src = {
+    ...(authUser || {}),
+    ...(detail || {})
+  };
+
+  const firstName = detail?.first_name ?? authUser?.nombre ?? null;
+  const lastName = detail?.last_name ?? authUser?.apellido ?? null;
+  const computedFullName = (firstName || lastName)
+    ? `${firstName || ''} ${lastName || ''}`.trim()
+    : (detail?.full_name ?? authUser?.nombre_completo ?? null);
+
+  return {
+    ...src,
+    id: detail?.id ?? detail?.usuario_id ?? authUser?.usuario_id ?? null,
+    full_name: computedFullName,
+    first_name: firstName,
+    last_name: lastName,
+    email: detail?.email ?? detail?.correo_electronico ?? null,
+    correo_acceso: detail?.correo_acceso ?? null,
+    primary_access_type:
+      detail?.primary_access_type ??
+      detail?.metodo_acceso_principal ??
+      'EMAIL',
+    login_identifiers:
+      Array.isArray(detail?.login_identifiers) && detail.login_identifiers.length > 0
+        ? detail.login_identifiers
+        : detail?.identificador_principal
+          ? [{
+              is_primary: true,
+              identifier_value: detail.identificador_principal
+            }]
+          : [],
+    department_id: detail?.department_id ?? detail?.departamento_id ?? null,
+    departamento_nombre: detail?.departamento_nombre ?? null,
+    area_id: detail?.area_id ?? null,
+    area_nombre: detail?.area_nombre ?? null,
+    cargo_id: detail?.cargo_id ?? null,
+    cargo_nombre:
+      detail?.cargo_nombre ?? authUser?.cargo_nombre ?? null,
+    companyId: detail?.companyId ?? detail?.empresa_id ?? null,
+    empresa_nombre:
+      detail?.empresa_nombre ?? authUser?.empresa_nombre ?? null,
+    role: detail?.role ?? authUser?.rol_nombre ?? null,
+    user_type: detail?.user_type ?? null,
+    mfaEnabled:
+      detail?.mfaEnabled ?? (detail?.mfa_activo != null ? Boolean(detail.mfa_activo) : false),
+    mfa_method: detail?.mfa_method ?? detail?.mfa_tipo ?? null,
+    last_login_at:
+      detail?.last_login_at ?? detail?.fecha_ultimo_acceso ?? null
+  };
+}
+
+export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode = false, selfUserId = null }) {
+  const router = useRouter();
   const [data, setData] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [profileLoadError, setProfileLoadError] = useState(null);
   const [activities, setActivities] = useState(() => (typeof window !== 'undefined' ? window.activitiesData : null) || INITIAL_ACTIVITY_DATA);
   const [audits, setAudits] = useState(() => (typeof window !== 'undefined' ? window.auditData : null) || INITIAL_AUDIT_DATA);
   const [companies, setCompanies] = useState([]);
@@ -75,6 +130,61 @@ export default function UsersSecurityView({ onOpenSidebar = () => {} }) {
       setIsLoading(false);
     }
   };
+
+  const loadSelfProfile = async () => {
+    setIsLoading(true);
+    setProfileLoadError(null);
+    setDetailUser(null);
+    try {
+      const authRes = await fetch('/api/auth/me', { cache: 'no-store' });
+      if (authRes.status === 401) {
+        router.push('/login');
+        return;
+      }
+      if (!authRes.ok) {
+        setProfileLoadError('No fue posible cargar la información del perfil.');
+        return;
+      }
+      const authData = await authRes.json();
+      const authUser = authData?.data || authData?.user;
+
+      if (!authUser || !authUser.usuario_id) {
+        setProfileLoadError('No fue posible cargar la información del perfil.');
+        return;
+      }
+
+      try {
+        const detailUserRaw = await usersService.getUserById(authUser.usuario_id);
+        if (!detailUserRaw) {
+          setDetailUser(null);
+          setProfileLoadError('No fue posible cargar la información del perfil.');
+          return;
+        }
+        const mapped = mapUserDetail(detailUserRaw, authUser);
+        setDetailUser(mapped);
+      } catch (detailErr) {
+        if (detailErr?.message?.includes('401')) {
+          router.push('/login');
+          return;
+        }
+        setDetailUser(null);
+        setProfileLoadError('No fue posible cargar la información del perfil.');
+      }
+    } catch (err) {
+      setDetailUser(null);
+      setProfileLoadError('No fue posible cargar la información del perfil.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isSelfMode) {
+      loadSelfProfile();
+    } else {
+      fetchUsers();
+    }
+  }, [isSelfMode]);
 
   const fetchAreasForDepartamento = async (deptId) => {
     if (!deptId) {
@@ -473,7 +583,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {} }) {
   const [firstLoginFilter, setFirstLoginFilter] = useState('Todos');
   
   // Next.js Navigation hooks mapped to react-router-dom style API for compatibility
-  const router = useRouter();
   const pathname = usePathname();
   const nextSearchParams = useNextSearchParams();
   const searchParamsString = nextSearchParams?.toString() || "";
@@ -3072,6 +3181,32 @@ export default function UsersSecurityView({ onOpenSidebar = () => {} }) {
   };
 
   function renderUserDetail() {
+    if (isLoading && isSelfMode) {
+      return (
+        <div className="p-12 text-center text-slate-400 font-mono">
+          <RotateCw className="w-8 h-8 animate-spin mx-auto mb-3 text-[#bfce7f]" />
+          <span>Cargando perfil...</span>
+        </div>
+      );
+    }
+
+    if (profileLoadError && isSelfMode) {
+      return (
+        <div className="p-8 text-center bg-[#161a21] border border-rose-500/30 rounded-2xl my-8 font-mono shadow-xl max-w-xl mx-auto">
+          <AlertTriangle className="w-12 h-12 text-rose-400 mx-auto mb-4" />
+          <h3 className="text-lg font-bold text-white mb-2">Error de Carga</h3>
+          <p className="text-sm text-slate-300 mb-6">{profileLoadError}</p>
+          <button
+            type="button"
+            onClick={loadSelfProfile}
+            className="px-6 py-2.5 bg-[#bfce7f] text-[#2b3400] font-bold rounded-xl hover:bg-[#dbea98] transition-all shadow-lg cursor-pointer"
+          >
+            Reintentar
+          </button>
+        </div>
+      );
+    }
+
     if (!detailUser) return null;
     return (
       <div className="max-w-[1550px] mx-auto space-y-6 animate-in fade-in duration-300 p-6 font-mono text-xs w-full">
@@ -3097,14 +3232,16 @@ export default function UsersSecurityView({ onOpenSidebar = () => {} }) {
         <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-6 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 font-mono">
           
           <div className="flex items-center gap-4">
-            <button 
-              type="button"
-              onClick={handleGoBack}
-              className="p-2 rounded-xl bg-[#0e1117] border border-[#2d3748] text-slate-400 hover:text-white hover:border-[#bfce7f] transition-all shadow-lg shrink-0 cursor-pointer"
-              title="Volver al listado"
-            >
-              <ChevronLeft size={18} />
-            </button>
+            {!isSelfMode && (
+              <button 
+                type="button"
+                onClick={handleGoBack}
+                className="p-2 rounded-xl bg-[#0e1117] border border-[#2d3748] text-slate-400 hover:text-white hover:border-[#bfce7f] transition-all shadow-lg shrink-0 cursor-pointer"
+                title="Volver al listado"
+              >
+                <ChevronLeft size={18} />
+              </button>
+            )}
             <div className="w-12 h-12 rounded-xl bg-[#2d3748] text-[#bfce7f] border border-[#3b475a] flex items-center justify-center font-bold text-sm shrink-0 shadow-lg font-mono">
               {detailUser.full_name.split(' ').filter(Boolean).map(n => n[0]).join('').replace(/\./g, '').substring(0, 2).toUpperCase()}
             </div>
@@ -5240,7 +5377,20 @@ export default function UsersSecurityView({ onOpenSidebar = () => {} }) {
       )}
 
       {!detailUser ? (
-        searchParams.get('userId') ? (
+        (profileLoadError && isSelfMode) ? (
+          <div className="w-full max-w-2xl mx-auto my-12 p-8 text-center bg-[#161a21] border border-rose-500/30 rounded-2xl font-mono shadow-2xl animate-in fade-in duration-200">
+            <AlertTriangle className="w-12 h-12 text-rose-400 mx-auto mb-4" />
+            <h3 className="text-xl font-bold text-white mb-2">Error de Carga</h3>
+            <p className="text-sm text-slate-300 mb-6">{profileLoadError}</p>
+            <button
+              type="button"
+              onClick={loadSelfProfile}
+              className="px-6 py-2.5 bg-[#bfce7f] text-[#2b3400] font-bold rounded-xl hover:bg-[#dbea98] transition-all shadow-lg cursor-pointer font-mono"
+            >
+              Reintentar
+            </button>
+          </div>
+        ) : (searchParams.get('userId') || isSelfMode) ? (
           <div className="flex-1 flex flex-col items-center justify-center min-h-[400px]">
             <div className="w-10 h-10 border-4 border-[#2d3748] border-t-[#bfce7f] rounded-full animate-spin shadow-sm"></div>
             <p className="mt-4 text-xs font-bold text-slate-400 animate-pulse font-mono">Cargando perfil del usuario...</p>
