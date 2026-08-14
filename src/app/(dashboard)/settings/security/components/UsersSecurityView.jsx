@@ -114,6 +114,18 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
   const [isLoadingDepartamentos, setIsLoadingDepartamentos] = useState(false);
   const [isLoadingAreas, setIsLoadingAreas] = useState(false);
 
+  // Custom Toast Notification State ({ type: 'success' | 'error', title: string, description: string })
+  const [toastNotification, setToastNotification] = useState(null);
+
+  useEffect(() => {
+    if (!toastNotification) return;
+    const duration = toastNotification.type === 'success' ? 4000 : 6000;
+    const timer = setTimeout(() => {
+      setToastNotification(null);
+    }, duration);
+    return () => clearTimeout(timer);
+  }, [toastNotification]);
+
   const [empresasError, setEmpresasError] = useState(null);
   const [cargosError, setCargosError] = useState(null);
   const [departamentosError, setDepartamentosError] = useState(null);
@@ -527,38 +539,74 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     try {
       setIsSaving(true);
       const fullName = `${(targetData.first_name || '').trim()} ${(targetData.last_name || '').trim()}`.trim() || targetData.full_name;
-      const updatedUser = {
-        ...targetData,
-        full_name: fullName,
-        updatedAt: new Date().toISOString(),
-        updatedBy: 'Admin'
-      };
-
-      if (updatedUser.rol_id) {
-        const rObj = roles.find(r => r.id == updatedUser.rol_id);
-        if (rObj) updatedUser.role = rObj.name;
+      let payload;
+      if (isSelfMode) {
+        payload = {
+          id: targetData.id,
+          first_name: targetData.first_name,
+          nombre: targetData.first_name,
+          last_name: targetData.last_name,
+          apellido: targetData.last_name,
+          phone: targetData.phone,
+          telefono: targetData.phone,
+          document_number: targetData.document_number,
+          numero_documento: targetData.document_number,
+          department_id: targetData.department_id,
+          departamento_id: targetData.department_id,
+          area_id: targetData.area_id,
+          cargo_id: targetData.cargo_id,
+          idioma_preferido: targetData.idioma_preferido,
+          zona_horaria: targetData.zona_horaria,
+          formato_fecha: targetData.formato_fecha
+        };
+      } else {
+        payload = {
+          ...targetData,
+          full_name: fullName,
+          updatedAt: new Date().toISOString(),
+          updatedBy: 'Admin'
+        };
+        if (payload.rol_id) {
+          const rObj = roles.find(r => r.id == payload.rol_id);
+          if (rObj) payload.role = rObj.name;
+        }
       }
 
-      await usersService.updateUser(updatedUser.id, updatedUser);
+      const response = await usersService.updateUser(targetData.id, payload);
+      const updatedUser = response?.data;
 
-      // Refresh list and detail from DB
-      await fetchUsers();
-      try {
-        const fresh = await usersService.getUserById(updatedUser.id);
-        if (fresh) setDetailUser(fresh);
-        else setDetailUser(updatedUser);
-      } catch (e) {
-        setDetailUser(updatedUser);
+      if (!response?.success || !updatedUser) {
+        throw new Error('INVALID_UPDATE_RESPONSE');
       }
+
+      setDetailUser(previous => previous ? ({
+        ...previous,
+        ...updatedUser
+      }) : updatedUser);
+
+      setData(prevUsers =>
+        Array.isArray(prevUsers)
+          ? prevUsers.map(u => (u.id === updatedUser.id ? { ...u, ...updatedUser } : u))
+          : prevUsers
+      );
+
       setIsEditing360(false);
       setWizardData(null);
-      
+
       addAuditLog(updatedUser.id, 'Modificación de Usuario', 'users', 'Perfil anterior', 'Perfil actualizado', 'Cambios guardados por administrador desde Editar Usuario');
       addActivityLog(updatedUser.id, 'Cuenta Actualizada', 'Información del perfil de usuario modificada correctamente.');
-      showToast('Cambios guardados con éxito.');
+
+      setToastNotification({
+        type: 'success',
+        title: 'Cambios guardados',
+        description: 'La información del usuario se actualizó correctamente.'
+      });
     } catch (err) {
-      console.error("Error saving user:", err);
-      showToast('Error al guardar cambios del usuario.', 'error');
+      setToastNotification({
+        type: 'error',
+        title: 'No pudimos guardar los cambios',
+        description: 'Inténtalo nuevamente. Si el problema continúa, recarga la página.'
+      });
     } finally {
       setIsSaving(false);
     }
@@ -8064,6 +8112,52 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                 Cerrar
               </button>
             </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Custom Bikers' Fort Toast Notification */}
+      {toastNotification && typeof window !== 'undefined' && createPortal(
+        <div
+          role={toastNotification.type === 'error' ? 'alert' : 'status'}
+          aria-live={toastNotification.type === 'error' ? 'assertive' : 'polite'}
+          className={`fixed top-16 right-6 z-[9999] w-[380px] max-w-[calc(100vw-32px)] p-4 rounded-xl border shadow-2xl transition-all duration-300 animate-in fade-in slide-in-from-top-4 ${
+            toastNotification.type === 'success'
+              ? 'bg-[#182212] border-[#bfce7f] text-white'
+              : 'bg-[#281316] border-[#ef4444] text-white'
+          }`}
+        >
+          <div className="flex items-start gap-3">
+            <div className="shrink-0 mt-0.5">
+              {toastNotification.type === 'success' ? (
+                <CheckCircle2 className="w-5 h-5 text-[#bfce7f]" />
+              ) : (
+                <AlertTriangle className="w-5 h-5 text-[#f87171]" />
+              )}
+            </div>
+            <div className="flex-1 min-w-0 pr-2">
+              <h4 className="text-sm font-semibold text-white leading-tight">
+                {toastNotification.title}
+              </h4>
+              <p className={`text-xs mt-1 leading-relaxed whitespace-normal break-words ${
+                toastNotification.type === 'success' ? 'text-[#d8e5a3]' : 'text-[#fca5a5]'
+              }`}>
+                {toastNotification.description}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setToastNotification(null)}
+              className={`shrink-0 p-1 rounded-lg transition-colors cursor-pointer ${
+                toastNotification.type === 'success'
+                  ? 'text-[#bfce7f]/70 hover:text-[#bfce7f] hover:bg-[#bfce7f]/10'
+                  : 'text-[#f87171]/70 hover:text-[#f87171] hover:bg-[#f87171]/10'
+              }`}
+              aria-label="Cerrar notificación"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
         </div>,
         document.body
