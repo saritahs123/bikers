@@ -57,6 +57,7 @@ export async function GET(
     }
 
     // 4. Comprobar existencia en admin.ordenes_trabajo y obtener empresa vía usuario
+    // 4. Comprobar existencia en admin.ordenes_trabajo y obtener empresa vía usuario de registro
     const existenceCheckSql = `
       SELECT
         ot.orden_trabajo_id,
@@ -64,11 +65,9 @@ export async function GET(
         ot.usuario_registro,
         ot.estado_orden_id,
         ot.activo,
-        COALESCE(u_ot.empresa_id, u_rec.empresa_id) AS order_empresa_id
+        u_ot.empresa_id AS order_empresa_id
       FROM admin.ordenes_trabajo ot
-      LEFT JOIN admin.recepciones r ON ot.recepcion_id = r.recepcion_id
-      LEFT JOIN admin.usuario u_ot ON ot.usuario_registro = u_ot.usuario_id
-      LEFT JOIN admin.usuario u_rec ON r.usuario_creacion = u_rec.usuario_id
+      JOIN admin.usuario u_ot ON u_ot.usuario_id = ot.usuario_registro
       WHERE ot.orden_trabajo_id = $1 AND ot.activo = true
     `;
     const existenceRes = await query<any>(existenceCheckSql, [ordenId]);
@@ -81,15 +80,16 @@ export async function GET(
 
     const otCheck = existenceRes[0];
 
-    // 5. Resolver empresa asignada y validar alcance empresarial estricto
+    // 5. Resolver empresa asignada y validar alcance empresarial estricto sin fallback
     const orderEmpresaId = otCheck.order_empresa_id ?? null;
     if (
+      otCheck.usuario_registro == null ||
       session.empresa_id == null ||
       orderEmpresaId == null ||
       Number(session.empresa_id) !== Number(orderEmpresaId)
     ) {
       return NextResponse.json(
-        { error: "FORBIDDEN_COMPANY", message: "No tienes acceso a las órdenes de esta empresa." },
+        { error: "FORBIDDEN_COMPANY", message: "No fue posible determinar la empresa de la orden." },
         { status: 403 }
       );
     }
@@ -140,11 +140,10 @@ export async function GET(
           ORDER BY os.orden_servicio_id ASC
           LIMIT 1
         ) AS mecanico_usuario_id,
-        COALESCE(u_ot.empresa_id, u_rec.empresa_id) AS empresa_id
+        u_ot.empresa_id AS empresa_id
       FROM admin.ordenes_trabajo ot
       LEFT JOIN admin.recepciones r ON ot.recepcion_id = r.recepcion_id
-      LEFT JOIN admin.usuario u_ot ON ot.usuario_registro = u_ot.usuario_id
-      LEFT JOIN admin.usuario u_rec ON r.usuario_creacion = u_rec.usuario_id
+      JOIN admin.usuario u_ot ON u_ot.usuario_id = ot.usuario_registro
       LEFT JOIN admin.clientes cliente_ot ON cliente_ot.cliente_id = ot.cliente_id
       LEFT JOIN admin.clientes cliente_recepcion ON cliente_recepcion.cliente_id = r.cliente_id
       LEFT JOIN admin.bicicletas bicicleta_ot ON bicicleta_ot.bicicleta_id = ot.bicicleta_id
@@ -515,6 +514,7 @@ export async function PUT(
   try {
     const body = await req.json();
     const {
+      accion,
       estado_orden_id,
       prioridad_id,
       prioridad_orden_id,
@@ -528,6 +528,7 @@ export async function PUT(
 
     await client.query("BEGIN");
 
+    // Lock Order Row & join usuarios for empresa_id safely
     const orderRes = await client.query(`
       SELECT 
         ot.orden_trabajo_id, 
@@ -536,9 +537,10 @@ export async function PUT(
         ot.fecha_entrega_estimada, 
         ot.diagnostico_inicial, 
         ot.observacion_interna,
-        r.empresa_id AS empresa_id
+        ot.usuario_registro,
+        u_ot.empresa_id AS empresa_id
       FROM admin.ordenes_trabajo ot
-      LEFT JOIN admin.recepciones r ON ot.recepcion_id = r.recepcion_id
+      JOIN admin.usuario u_ot ON u_ot.usuario_id = ot.usuario_registro
       WHERE ot.orden_trabajo_id = $1 AND ot.activo = true
       FOR UPDATE OF ot
     `, [ordenId]);
@@ -555,6 +557,7 @@ export async function PUT(
     const currentStateId = currentOrder.estado_orden_id;
 
     if (
+      currentOrder.usuario_registro == null ||
       session.empresa_id == null ||
       currentOrder.empresa_id == null ||
       Number(session.empresa_id) !== Number(currentOrder.empresa_id)
@@ -564,13 +567,33 @@ export async function PUT(
         {
           error: "FORBIDDEN_COMPANY",
           title: "No puedes editar esta orden",
-          message: "La orden pertenece a otra empresa."
+          message: "No fue posible determinar la empresa de la orden."
         },
         { status: 403 }
       );
     }
 
-    if (currentStateId === 8) {
+    // Resolve Status Catalog from admin.estado_orden_trabajo
+    const catalogRes = await client.query(`
+      SELECT estado_orden_id, UPPER(codigo) AS codigo, nombre
+      FROM admin.estado_orden_trabajo
+      WHERE (activo IS DISTINCT FROM false)
+    `);
+
+    const codeToIdMap = new Map<string, number>();
+    const idToCodeMap = new Map<number, { id: number; codigo: string; nombre: string }>();
+
+    for (const row of catalogRes.rows || []) {
+      codeToIdMap.set(row.codigo, row.estado_orden_id);
+      idToCodeMap.set(row.estado_orden_id, { id: row.estado_orden_id, codigo: row.codigo, nombre: row.nombre });
+    }
+
+    const estadoRecibidaId = codeToIdMap.get("RECIBIDA") || 1;
+    const estadoReparacionId = codeToIdMap.get("REPARACION") || 5;
+    const estadoListaEntregaId = codeToIdMap.get("LISTA_ENTREGA") || 7;
+    const estadoEntregadaId = codeToIdMap.get("ENTREGADA") || 8;
+
+    if (currentStateId === estadoEntregadaId) {
       await client.query("ROLLBACK");
       return NextResponse.json(
         {
@@ -582,8 +605,17 @@ export async function PUT(
       );
     }
 
-    const isStateChangeRequested = estado_orden_id !== undefined && parseInt(estado_orden_id, 10) !== currentStateId;
+    // Resolve requested target state ID
+    let requestedStateId: number | undefined = undefined;
+    if (accion === "MARCAR_LISTA_ENTREGA") {
+      requestedStateId = estadoListaEntregaId;
+    } else if (estado_orden_id !== undefined && estado_orden_id !== null && estado_orden_id !== "") {
+      requestedStateId = parseInt(String(estado_orden_id), 10);
+    }
 
+    const isStateChangeRequested = requestedStateId !== undefined && requestedStateId !== currentStateId;
+
+    // Case A: No State Change Requested (updating priority or notes only)
     if (!isStateChangeRequested) {
       if (!perms.puede_editar) {
         await client.query("ROLLBACK");
@@ -591,7 +623,7 @@ export async function PUT(
           {
             error: "FORBIDDEN",
             title: "No tienes permiso para editar esta orden",
-            message: "Solicita acceso al módulo de Taller a un administrador."
+            message: "No tienes permiso para cambiar la configuración de esta orden."
           },
           { status: 403 }
         );
@@ -623,13 +655,14 @@ export async function PUT(
       }, { status: 200 });
     }
 
-    const targetStateId = parseInt(estado_orden_id, 10);
+    const targetStateId = requestedStateId!;
 
+    // State Machine allowed transitions
     const ALLOWED_TRANSITIONS: Record<number, number[]> = {
-      1: [5],     // RECIBIDA -> REPARACION
-      5: [7],     // REPARACION -> LISTA_ENTREGA
-      7: [5, 8],  // LISTA_ENTREGA -> REPARACION (devolución) o ENTREGADA (entrega)
-      8: []       // Read-only
+      [estadoRecibidaId]: [estadoReparacionId],
+      [estadoReparacionId]: [estadoListaEntregaId],
+      [estadoListaEntregaId]: [estadoReparacionId, estadoEntregadaId],
+      [estadoEntregadaId]: []
     };
 
     if (!ALLOWED_TRANSITIONS[currentStateId]?.includes(targetStateId)) {
@@ -638,32 +671,128 @@ export async function PUT(
         {
           error: "TRANSITION_NOT_ALLOWED",
           title: "No se puede cambiar el estado",
-          message: `Transición de estado no permitida: del estado ${currentStateId} al estado ${targetStateId}.`
+          message: "El cambio de estado solicitado no está permitido."
         },
         { status: 409 }
       );
     }
 
-    if (currentStateId === 7 && targetStateId === 5) {
+    // Permission Checks for transition
+    if (targetStateId === estadoListaEntregaId) {
+      if (!perms.puede_mover && !perms.puede_editar) {
+        await client.query("ROLLBACK");
+        return NextResponse.json(
+          {
+            error: "FORBIDDEN",
+            message: "No tienes permiso para cambiar el estado de esta orden."
+          },
+          { status: 403 }
+        );
+      }
+
+      // Requirement 4 & 5: Service Completion Validation for LISTA_ENTREGA
+      const servAggRes = await client.query(`
+        SELECT 
+          COUNT(*)::int AS total_aplicables,
+          COUNT(*) FILTER (WHERE eos.codigo = 'COMPLETADO')::int AS completados,
+          COUNT(*) FILTER (WHERE eos.codigo = 'PENDIENTE')::int AS pendientes,
+          COUNT(*) FILTER (WHERE eos.codigo = 'EN_PROCESO')::int AS en_proceso,
+          COUNT(*) FILTER (WHERE eos.codigo IN ('PAUSADO', 'SUSPENDIDO'))::int AS pausados
+        FROM admin.orden_servicios os
+        JOIN admin.estado_orden_servicio eos ON os.estado_orden_servicio_id = eos.estado_orden_servicio_id
+        WHERE os.orden_trabajo_id = $1 
+          AND (os.activo IS DISTINCT FROM false)
+          AND eos.codigo NOT IN ('CANCELADO', 'ANULADO', 'INACTIVO')
+      `, [ordenId]);
+
+      const openTimerRes = await client.query(`
+        SELECT COUNT(*)::int AS sesiones_abiertas
+        FROM admin.orden_servicio_mano_obra mo
+        JOIN admin.orden_servicios os ON mo.orden_servicio_id = os.orden_servicio_id
+        WHERE os.orden_trabajo_id = $1
+          AND (mo.detalle_mano_obra IS NULL OR BTRIM(mo.detalle_mano_obra) = '')
+          AND (mo.observacion IS NULL OR BTRIM(mo.observacion) = '')
+          AND mo.fecha_inicio IS NOT NULL
+          AND mo.fecha_finalizacion IS NULL
+          AND (mo.activo IS DISTINCT FROM false)
+      `, [ordenId]);
+
+      const stats = servAggRes.rows[0] || {};
+      const totalAplicables = Number(stats.total_aplicables || 0);
+      const completados = Number(stats.completados || 0);
+      const pendientes = Number(stats.pendientes || 0);
+      const enProceso = Number(stats.en_proceso || 0);
+      const pausados = Number(stats.pausados || 0);
+      const sesionesAbiertas = Number(openTimerRes.rows[0]?.sesiones_abiertas || 0);
+
+      const isReadyForDelivery = (
+        totalAplicables > 0 &&
+        completados === totalAplicables &&
+        pendientes === 0 &&
+        enProceso === 0 &&
+        pausados === 0 &&
+        sesionesAbiertas === 0
+      );
+
+      if (!isReadyForDelivery) {
+        await client.query("ROLLBACK");
+        return NextResponse.json(
+          {
+            error: "ORDER_NOT_READY_FOR_DELIVERY",
+            message: "Completa todos los servicios antes de marcar la orden como lista para entrega.",
+            details: {
+              total_aplicables: totalAplicables,
+              completados,
+              pendientes,
+              en_proceso: enProceso,
+              pausados,
+              sesiones_abiertas: sesionesAbiertas
+            }
+          },
+          { status: 409 }
+        );
+      }
+    } else if (currentStateId === estadoListaEntregaId && targetStateId === estadoReparacionId) {
+      if (accion !== "REABRIR_ORDEN") {
+        await client.query("ROLLBACK");
+        return NextResponse.json(
+          {
+            error: "REOPEN_ACTION_REQUIRED",
+            message: "La reapertura de la orden debe realizarse explícitamente con la acción de reabrir."
+          },
+          { status: 400 }
+        );
+      }
+
       if (!perms.puede_reabrir) {
         await client.query("ROLLBACK");
         return NextResponse.json(
           {
             error: "FORBIDDEN",
-            title: "No tienes permiso para realizar esta acción",
-            message: "Solicita acceso al módulo de Taller a un administrador."
+            message: "No tienes permiso para reabrir la reparación de esta orden."
           },
           { status: 403 }
         );
       }
-    } else if (targetStateId === 8) {
-      if (!perms.puede_cerrar) {
+
+      const reopenReason = (body.motivo_reapertura || observacion_cambio_estado || observacion_interna || "").trim();
+      if (!reopenReason) {
+        await client.query("ROLLBACK");
+        return NextResponse.json(
+          {
+            error: "REOPEN_REASON_REQUIRED",
+            message: "Debes proporcionar un motivo obligatorio para reabrir la reparación."
+          },
+          { status: 400 }
+        );
+      }
+    } else if (targetStateId === estadoEntregadaId) {
+      if (!perms.puede_cerrar && !perms.puede_editar) {
         await client.query("ROLLBACK");
         return NextResponse.json(
           {
             error: "FORBIDDEN",
-            title: "No tienes permiso para realizar esta acción",
-            message: "Solicita acceso al módulo de Taller a un administrador."
+            message: "No tienes permiso para entregar esta orden."
           },
           { status: 403 }
         );
@@ -674,36 +803,40 @@ export async function PUT(
         return NextResponse.json(
           {
             error: "FORBIDDEN",
-            title: "No tienes permiso para realizar esta acción",
-            message: "Solicita acceso al módulo de Taller a un administrador."
+            message: "No tienes permiso para cambiar el estado de esta orden."
           },
           { status: 403 }
         );
       }
     }
 
+    // Execute Order State Update
     await client.query(`
       UPDATE admin.ordenes_trabajo
       SET 
-        estado_orden_id = $1,
-        prioridad_orden_id = COALESCE($2, prioridad_orden_id),
+        estado_orden_id = $1::integer,
+        prioridad_orden_id = COALESCE($2::integer, prioridad_orden_id),
         observacion_interna = COALESCE($3, observacion_interna),
-        fecha_inicio_trabajo = CASE WHEN $1 = 5 AND fecha_inicio_trabajo IS NULL THEN NOW() ELSE fecha_inicio_trabajo END,
-        fecha_finalizacion = CASE WHEN $1 = 7 THEN NOW() WHEN $1 = 5 THEN NULL ELSE fecha_finalizacion END,
-        fecha_entrega_real = CASE WHEN $1 = 8 THEN NOW() ELSE fecha_entrega_real END,
-        observacion_entrega = CASE WHEN $1 = 8 THEN COALESCE($4, observacion_entrega) ELSE observacion_entrega END,
+        fecha_inicio_trabajo = CASE WHEN $1::integer = $7::integer AND fecha_inicio_trabajo IS NULL THEN NOW() ELSE fecha_inicio_trabajo END,
+        fecha_finalizacion = CASE WHEN $1::integer = $8::integer THEN NOW() WHEN $1::integer = $7::integer THEN NULL ELSE fecha_finalizacion END,
+        fecha_entrega_real = CASE WHEN $1::integer = $9::integer THEN NOW() ELSE fecha_entrega_real END,
+        observacion_entrega = CASE WHEN $1::integer = $9::integer THEN COALESCE($4, observacion_entrega) ELSE observacion_entrega END,
         fecha_actualizacion = NOW(),
-        usuario_actualizacion = $5
-      WHERE orden_trabajo_id = $6
+        usuario_actualizacion = $5::integer
+      WHERE orden_trabajo_id = $6::integer
     `, [
       targetStateId,
       targetPrioridadId ? parseInt(targetPrioridadId, 10) : null,
       observacion_interna !== undefined ? observacion_interna : null,
       observacion_cambio_estado !== undefined ? observacion_cambio_estado : null,
       session.usuario_id,
-      ordenId
+      ordenId,
+      estadoReparacionId,
+      estadoListaEntregaId,
+      estadoEntregadaId
     ]);
 
+    // Insert Single History Record
     await client.query(`
       INSERT INTO admin.orden_historial_estado (
         orden_historial_estado_id, orden_trabajo_id, estado_anterior_id, estado_nuevo_id,
@@ -717,22 +850,44 @@ export async function PUT(
       currentStateId,
       targetStateId,
       session.usuario_id,
-      observacion_cambio_estado || observacion_interna || "Cambio de estado de la orden"
+      body.motivo_reapertura || observacion_cambio_estado || observacion_interna || (accion === "MARCAR_LISTA_ENTREGA" ? "Orden marcada como lista para entrega" : "Cambio de estado de la orden")
     ]);
 
     await client.query("COMMIT");
+
+    const estadoAnteriorObj = idToCodeMap.get(currentStateId) || { id: currentStateId, codigo: "DESCONOCIDO", nombre: "Desconocido" };
+    const estadoNuevoObj = idToCodeMap.get(targetStateId) || { id: targetStateId, codigo: "DESCONOCIDO", nombre: "Desconocido" };
+
     return NextResponse.json({
       success: true,
-      message: "Estado de la orden actualizado correctamente."
+      message: targetStateId === estadoListaEntregaId ? "La orden fue marcada como lista para entrega." : "Estado de la orden actualizado correctamente.",
+      data: {
+        orden_id: ordenId,
+        estado_anterior: estadoAnteriorObj,
+        estado_actual: estadoNuevoObj
+      }
     }, { status: 200 });
 
   } catch (err: any) {
     await client.query("ROLLBACK").catch(() => {});
+    console.error("PUT /api/taller/ordenes/[id] exception:", err);
+
+    const isDev = process.env.NODE_ENV !== "production";
+
     return NextResponse.json(
       {
+        success: false,
         error: "SERVER_ERROR",
         title: "No pudimos guardar los cambios",
-        message: "Inténtalo nuevamente en unos momentos."
+        message: isDev ? (err.message || "Error interno al actualizar la orden.") : "Inténtalo nuevamente en unos momentos.",
+        ...(isDev ? {
+          debug: {
+            phase: "UPDATE_ORDER",
+            pgCode: err.code,
+            pgMessage: err.message,
+            stack: err.stack
+          }
+        } : {})
       },
       { status: 500 }
     );

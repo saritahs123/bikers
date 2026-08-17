@@ -30,15 +30,19 @@ async function resetPassword() {
   console.log("=== SCRIPT CONTROLADO DE RESTABLECIMIENTO DE CONTRASEÑA ===");
   console.log("ADVERTENCIA: No ejecutar contra bases de datos reales sin autorización explícita.\n");
 
-  const targetEmail = (
+  const targetInput = (
+    process.env.RESET_USER_INPUT ||
     process.env.RESET_USER_EMAIL ||
-    (await askQuestion("Ingrese el correo electrónico del usuario a restablecer: "))
-  ).trim().toLowerCase();
+    (await askQuestion("Ingrese el ID de usuario o correo electrónico a restablecer: "))
+  ).trim();
 
-  if (!targetEmail || !targetEmail.includes("@")) {
-    console.error("Error: Debe proporcionar un correo electrónico válido.");
+  if (!targetInput) {
+    console.error("Error: Debe proporcionar un ID de usuario o correo electrónico válido.");
     process.exit(1);
   }
+
+  const isNumericId = /^\d+$/.test(targetInput);
+  const targetIdNum = isNumericId ? parseInt(targetInput, 10) : -1;
 
   const newPassword = (
     process.env.NEW_PASSWORD ||
@@ -51,19 +55,22 @@ async function resetPassword() {
   }
 
   try {
-    // 1. Locate user exclusively by admin.usuario_seguridad.correo_acceso (Recovery Email)
+    // 1. Locate user by usuario_id, identificador_principal, correo_acceso or correo_electronico
     const users = await query(
-      `SELECT u.usuario_id, ui.nombre, ui.apellido, u.estado 
+      `SELECT u.usuario_id, ui.nombre, ui.apellido, u.estado, us.identificador_principal, us.correo_acceso 
        FROM admin.usuario u
        JOIN admin.usuario_seguridad us ON u.usuario_id = us.usuario_id
        LEFT JOIN admin.usuario_identidad ui ON u.usuario_id = ui.usuario_id
-       WHERE LOWER(us.correo_acceso) = LOWER($1)
+       WHERE u.usuario_id = $1
+          OR LOWER(us.identificador_principal) = LOWER($2)
+          OR LOWER(us.correo_acceso) = LOWER($2)
+          OR LOWER(ui.correo_electronico) = LOWER($2)
        LIMIT 1`,
-      [targetEmail]
+      [targetIdNum, targetInput]
     );
 
     if (!users || users.length === 0) {
-      console.error(`Error: No se encontró ningún usuario registrado con el correo: ${targetEmail}`);
+      console.error(`Error: No se encontró ningún usuario registrado con ID/correo: ${targetInput}`);
       process.exit(1);
     }
 
@@ -87,6 +94,9 @@ async function resetPassword() {
            intentos_fallidos = 0,
            bloqueado_hasta = NULL,
            motivo_bloqueo = NULL,
+           forzar_cambio_clave = false,
+           requiere_cambio_clave = false,
+           correo_acceso = COALESCE(identificador_principal, correo_acceso),
            fecha_ultimo_cambio_password = CURRENT_TIMESTAMP
          WHERE usuario_id = $2`,
         [passwordHash, userId]
@@ -112,7 +122,7 @@ async function resetPassword() {
       [userId]
     ).catch(() => {});
 
-    console.log(`\n[ÉXITO] La contraseña del usuario '${targetEmail}' (ID: ${userId}) ha sido restablecida correctamente.`);
+    console.log(`\n[ÉXITO] La contraseña del usuario '${targetInput}' (ID: ${userId}) ha sido restablecida correctamente.`);
     console.log("Nota de Seguridad: La nueva contraseña y su hash NO han sido impresos en pantalla.");
   } catch (error: any) {
     console.error("Error durante el restablecimiento de contraseña:", error.message || error);
