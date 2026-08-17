@@ -29,7 +29,7 @@ import {
 } from "lucide-react";
 import { getServiceStateRules } from "@/lib/workshop-state-machine";
 
-export default function WorkOrderServicesView({ ordenId, services = [], onRefresh, order, backUrl }) {
+export default function WorkOrderServicesView({ ordenId, services = [], onRefresh, order, backUrl, onStartRepair = null }) {
   const [tiposServicio, setTiposServicio] = useState([]);
   const [productosList, setProductosList] = useState([]);
   const [mecanicosCatalog, setMecanicosCatalog] = useState([]);
@@ -158,55 +158,48 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
 
   const activeSelectedService = services.find(s => getServId(s) === Number(selectedServiceId)) || services[0] || null;
 
-  // Live Timer Counter (HH:MM:SS) for active open session (Item 2)
-  const [liveTimeString, setLiveTimeString] = useState("00:00:00");
+  // Live Timer Counter (HH:MM:SS) reading cronometro contract
+  const [liveSeconds, setLiveSeconds] = useState(0);
+
+  const formatSecondsToHHMMSS = (totalSec) => {
+    const s = Math.max(0, Math.floor(Number(totalSec) || 0));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+  };
 
   useEffect(() => {
-    if (!activeSelectedService) {
-      setLiveTimeString("00:00:00");
+    const cron = activeSelectedService?.cronometro;
+    if (!cron) {
+      setLiveSeconds(0);
       return;
     }
 
-    const closedLabor = activeSelectedService.mano_obra
-      ? activeSelectedService.mano_obra.filter((m) => m.fecha_finalizacion !== null && m.fecha_finalizacion !== undefined)
-      : [];
-    const closedMinutes = closedLabor.reduce((acc, m) => acc + (Number(m.minutos_trabajados) || 0), 0);
-    const closedSeconds = Math.round(closedMinutes * 60);
+    const segundosAcumulados = Number(cron.segundos_acumulados || 0);
 
-    const openLabor = activeSelectedService.mano_obra
-      ? activeSelectedService.mano_obra.find((m) => !m.fecha_finalizacion || m.es_abierta)
-      : null;
-
-    if (!openLabor || !openLabor.fecha_inicio) {
-      const h = Math.floor(closedSeconds / 3600);
-      const m = Math.floor((closedSeconds % 3600) / 60);
-      const s = Math.floor(closedSeconds % 60);
-      setLiveTimeString(
-        `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
-      );
+    if (!cron.activo || !cron.fecha_inicio_sesion) {
+      setLiveSeconds(segundosAcumulados);
       return;
     }
 
-    const startTimeMs = new Date(openLabor.fecha_inicio).getTime();
+    const startMs = new Date(cron.fecha_inicio_sesion).getTime();
 
     const updateTimer = () => {
-      const nowMs = Date.now();
-      const elapsedOpenSec = Math.max(0, Math.floor((nowMs - startTimeMs) / 1000));
-      const totalSec = closedSeconds + elapsedOpenSec;
-
-      const h = Math.floor(totalSec / 3600);
-      const m = Math.floor((totalSec % 3600) / 60);
-      const s = Math.floor(totalSec % 60);
-      setLiveTimeString(
-        `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
-      );
+      const elapsedSec = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+      setLiveSeconds(segundosAcumulados + elapsedSec);
     };
 
     updateTimer();
     const intervalId = setInterval(updateTimer, 1000);
 
     return () => clearInterval(intervalId);
-  }, [activeSelectedService]);
+  }, [
+    activeSelectedService?.servicio_id,
+    activeSelectedService?.cronometro?.activo,
+    activeSelectedService?.cronometro?.fecha_inicio_sesion,
+    activeSelectedService?.cronometro?.segundos_acumulados
+  ]);
 
   // Calculate KPIs
   const kpiPendientes = services.filter(s => s.estado_servicio_id === 1 || s.estado_servicio_codigo === "PENDIENTE").length;
@@ -224,9 +217,14 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
 
   // Helper to format worked time string
   const getWorkedTimeString = (manoObraList = []) => {
-    const totalHours = manoObraList.reduce((sum, m) => sum + Number(m.horas_trabajadas || 1), 0);
-    const hours = Math.floor(totalHours);
-    const minutes = Math.round((totalHours - hours) * 60);
+    const totalMinutes = manoObraList.reduce((sum, m) => {
+      if (m.minutos_trabajados !== undefined && m.minutos_trabajados !== null) {
+        return sum + Number(m.minutos_trabajados);
+      }
+      return sum + Math.round((Number(m.horas_trabajadas) || 0) * 60);
+    }, 0);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = Math.round(totalMinutes % 60);
     const hStr = String(hours).padStart(2, "0");
     const mStr = String(minutes).padStart(2, "0");
     return `${hStr}:${mStr}:00`;
@@ -395,28 +393,71 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
     }
   };
 
-  // Handler to Stop Active Timer / Open Session while keeping Service EN_PROCESO
-  const handleStopTimer = async (svc) => {
+  // Single Unified Handler for Service Operational Actions
+  const handleExecuteServiceAction = async (svc, actionName, extraPayload = {}) => {
     if (!svc) return;
-    const sId = getServId(svc);
+    const sId = getServId(svc) || selectedServiceId;
+    if (!sId) return;
+
+    const currentOrderState = Number(order?.estado_orden_id || order?.estado_id || 0);
+    if (currentOrderState === 1) {
+      showErrorToast("Primero debes iniciar la reparación de la orden.");
+      return;
+    }
+
     setSubmitting(true);
     setProcessingServiceId(sId);
+
+    let targetStateId = null;
+    if (actionName === "INICIAR_SERVICIO" || actionName === "REANUDAR_SERVICIO") targetStateId = 2;
+    else if (actionName === "PAUSAR_SERVICIO") targetStateId = 5;
+    else if (actionName === "FINALIZAR_SERVICIO") targetStateId = 3;
+
     try {
       const res = await fetch(`/api/taller/ordenes/${ordenId}/servicios/${sId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          accion: "DETENER_CRONOMETRO"
+          accion: actionName,
+          estado_orden_servicio_id: targetStateId,
+          estado_servicio_id: targetStateId,
+          ...extraPayload
         })
       });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.message || data.error || "Error al detener el cronómetro.");
+        if (res.status === 401) {
+          if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+            window.location.replace("/login");
+          }
+          return;
+        }
+        if (res.status === 403) {
+          showErrorToast("No tienes permiso para realizar esta acción.");
+          return;
+        }
+        if (res.status === 409) {
+          showErrorToast(data.message || "Transición de estado no permitida.");
+          return;
+        }
+        if (res.status === 422) {
+          showErrorToast(data.message || "Asigna un mecánico antes de iniciar el servicio.");
+          return;
+        }
+        showErrorToast(data.message || data.error || "Error al actualizar el servicio.");
+        return;
       }
-      showSuccessToast("Cronómetro detenido. El servicio permanece En Proceso.");
-      onRefresh();
+
+      let successMsg = "Estado del servicio actualizado.";
+      if (actionName === "INICIAR_SERVICIO") successMsg = "Servicio iniciado correctamente.";
+      else if (actionName === "PAUSAR_SERVICIO") successMsg = "Trabajo pausado y tiempo acumulado.";
+      else if (actionName === "REANUDAR_SERVICIO") successMsg = "Trabajo reanudado correctamente.";
+      else if (actionName === "FINALIZAR_SERVICIO") successMsg = "Servicio finalizado exitosamente.";
+
+      showSuccessToast(successMsg);
+      if (onRefresh) onRefresh();
     } catch (err) {
-      showErrorToast(err.message);
+      showErrorToast(err.message || "Error al actualizar el servicio.");
     } finally {
       setSubmitting(false);
       setProcessingServiceId(null);
@@ -444,16 +485,6 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
       return;
     }
 
-    // Check if open time session exists
-    const hasOpenSession = Boolean(
-      svc.en_proceso_cronometro ||
-      (svc.mano_obra && svc.mano_obra.some((m) => m.es_abierta || !m.fecha_finalizacion))
-    );
-    if (hasOpenSession) {
-      showErrorToast("Debes pausar o cerrar la sesión de trabajo antes de finalizar el servicio.");
-      return;
-    }
-
     // Check if labor/time exists
     const laborCount = svc.mano_obra ? svc.mano_obra.length : 0;
     if (laborCount === 0) {
@@ -474,32 +505,10 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
   };
 
   const executeFinishService = async (sId, extraPayload = {}) => {
-    setSubmitting(true);
-    setProcessingServiceId(sId);
-    try {
-      const res = await fetch(`/api/taller/ordenes/${ordenId}/servicios/${sId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          estado_orden_servicio_id: 3,
-          estado_servicio_id: 3,
-          ...extraPayload
-        })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.message || data.error || "Error al finalizar el servicio.");
-      }
-      setFinishNoLaborModalOpen(false);
-      setFinishNoLaborService(null);
-      showSuccessToast("Servicio completado exitosamente.");
-      onRefresh();
-    } catch (err) {
-      showErrorToast(err.message);
-    } finally {
-      setSubmitting(false);
-      setProcessingServiceId(null);
-    }
+    const targetService = services.find(s => getServId(s) === Number(sId)) || activeSelectedService;
+    await handleExecuteServiceAction(targetService, "FINALIZAR_SERVICIO", extraPayload);
+    setFinishNoLaborModalOpen(false);
+    setFinishNoLaborService(null);
   };
 
   const handleFinishNoLaborSubmit = (e) => {
@@ -706,7 +715,7 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
   // Add Labor Handler
   const handleAddLabor = async (e) => {
     e.preventDefault();
-    if (!selectedServiceId || !laborDesc) return;
+    if (!selectedServiceId || !laborDesc.trim()) return;
     setSubmitting(true);
     setModalError(null);
     try {
@@ -714,14 +723,15 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          descripcion: laborDesc,
+          detalle_mano_obra: laborDesc.trim(),
+          descripcion: laborDesc.trim(),
           horas_estimadas: laborHorasEst,
           horas_reales: laborHorasReal,
           costo_hora: laborCostoHora
         })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Error al agregar mano de obra.");
+      if (!res.ok) throw new Error(data.error || data.message || "Error al agregar mano de obra.");
       setAddLaborModalOpen(false);
       setLaborDesc("");
       setLaborHorasEst("1");
@@ -729,7 +739,7 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
       setLaborCostoHora("0");
       setModalError(null);
       showToast("Mano de obra registrada exitosamente.");
-      onRefresh();
+      if (onRefresh) onRefresh();
     } catch (err) {
       setModalError(err.message);
     } finally {
@@ -740,9 +750,9 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
   // Edit Labor Handler
   const openEditLaborModal = (servicioId, laborItem) => {
     setSelectedServiceId(servicioId);
-    setEditLaborId(laborItem.orden_servicio_mano_obra_id);
-    setEditLaborDesc(laborItem.descripcion || laborItem.observacion || "");
-    setEditLaborHoras(String(laborItem.horas_trabajadas || 1));
+    setEditLaborId(laborItem.orden_servicio_mano_obra_id || laborItem.mano_obra_id || laborItem.id);
+    setEditLaborDesc(laborItem.detalle_mano_obra || laborItem.descripcion || laborItem.observacion || "");
+    setEditLaborHoras(String(laborItem.horas_reales || laborItem.horas_trabajadas || 1));
     setEditLaborCostoHora(String(laborItem.costo_hora || 0));
     setModalError(null);
     setEditLaborModalOpen(true);
@@ -750,7 +760,7 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
 
   const handleUpdateLabor = async (e) => {
     e.preventDefault();
-    if (!editLaborDesc) {
+    if (!editLaborDesc.trim()) {
       setModalError("La descripción del trabajo es requerida.");
       return;
     }
@@ -762,17 +772,18 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mano_obra_id: editLaborId,
-          descripcion: editLaborDesc,
+          detalle_mano_obra: editLaborDesc.trim(),
+          descripcion: editLaborDesc.trim(),
           horas_reales: parseFloat(editLaborHoras),
           costo_hora: parseFloat(editLaborCostoHora)
         })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Error al actualizar mano de obra.");
+      if (!res.ok) throw new Error(data.error || data.message || "Error al actualizar mano de obra.");
 
       setEditLaborModalOpen(false);
       showToast("Mano de obra actualizada.");
-      onRefresh();
+      if (onRefresh) onRefresh();
     } catch (err) {
       setModalError(err.message);
     } finally {
@@ -985,12 +996,23 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
 
       {/* RECIBIDA Warning Banner */}
       {Number(order?.estado_orden_id || order?.estado_id || 0) === 1 && (
-        <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center gap-3 text-amber-300 font-sans text-xs shadow-md">
-          <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
-          <div className="flex-1">
-            <strong className="block font-bold text-amber-200 text-sm font-mono mb-0.5">Orden en Recibida</strong>
-            <span>Primero debes iniciar la reparación de la orden desde el encabezado o panel del detalle de la OT para poder iniciar el trabajo en sus servicios.</span>
+        <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-300 font-sans text-xs shadow-md">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
+            <div>
+              <strong className="block font-bold text-amber-200 text-sm font-mono mb-0.5">Orden en Recibida</strong>
+              <span>Primero debes iniciar la reparación de la orden para poder iniciar el trabajo en sus servicios.</span>
+            </div>
           </div>
+          {onStartRepair && (
+            <button
+              onClick={onStartRepair}
+              className="px-4 py-2 bg-[#bfce7f] hover:bg-[#a6b66b] text-slate-950 font-mono font-bold text-xs rounded-xl flex items-center gap-2 transition-colors shrink-0 shadow-lg cursor-pointer font-extrabold uppercase tracking-wider"
+            >
+              <Wrench className="w-4 h-4" />
+              INICIAR REPARACIÓN AHORA
+            </button>
+          )}
         </div>
       )}
 
@@ -1144,148 +1166,25 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
 
                           {/* Actions */}
                           <td className="p-3.5 pr-4 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                            {(() => {
-                              const rules = getServiceStateRules(svc.estado_servicio_id, svc.mecanico_usuario_id || svc.usuario_id, Number(order?.estado_orden_id || order?.estado_id || 5));
-                              const hasOpenSession = Boolean(
-                                svc.en_proceso_cronometro ||
-                                (svc.mano_obra && svc.mano_obra.some((m) => m.es_abierta || !m.fecha_finalizacion))
-                              );
+                            <div className="flex items-center justify-center gap-1.5">
+                              {/* Edit Service Modal button */}
+                              <button
+                                onClick={() => openEditServiceModal(svc)}
+                                className="p-1.5 text-slate-400 hover:text-slate-200 bg-[#1c2129] hover:bg-[#252c37] border border-[#2d3748] rounded-lg transition-colors"
+                                title="Editar servicio"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
 
-                              return (
-                                <div className="flex items-center justify-center gap-1.5">
-                                  {rules.canStart && (
-                                    <button
-                                      onClick={() => handleServiceStatusChange(sId, 2)}
-                                      className="p-1.5 rounded-lg border bg-[#84924a]/20 text-[#bfce7f] border-[#bfce7f]/40 hover:bg-[#84924a]/30 transition-all"
-                                      title="Iniciar trabajo"
-                                    >
-                                      <Play className="w-3.5 h-3.5" />
-                                    </button>
-                                  )}
-                                  {Number(order?.estado_orden_id || order?.estado_id || 0) === 1 && (
-                                    <button
-                                      disabled
-                                      className="p-1.5 rounded-lg border bg-slate-800/40 text-slate-600 border-slate-700/50 cursor-not-allowed opacity-60"
-                                      title="Primero debes iniciar la reparación de la orden."
-                                    >
-                                      <Play className="w-3.5 h-3.5" />
-                                    </button>
-                                  )}
-                                  {Number(order?.estado_orden_id || order?.estado_id || 0) !== 1 && rules.requiresMechanicToStart && (
-                                    <button
-                                      disabled
-                                      className="p-1.5 rounded-lg border bg-slate-800/40 text-slate-600 border-slate-700/50 cursor-not-allowed opacity-60"
-                                      title="Asigna un mecánico antes de iniciar el servicio."
-                                    >
-                                      <Play className="w-3.5 h-3.5" />
-                                    </button>
-                                  )}
-
-                                  {/* Iniciar Cronómetro button when EN_PROCESO without open session */}
-                                  {Number(svc.estado_servicio_id) === 2 && !hasOpenSession && (
-                                    <button
-                                      onClick={() => handleStartTimer(svc)}
-                                      disabled={submitting || processingServiceId === sId}
-                                      className="p-1.5 rounded-lg border bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30 transition-all"
-                                      title="Iniciar cronómetro"
-                                    >
-                                      {processingServiceId === sId ? (
-                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                      ) : (
-                                        <Clock className="w-3.5 h-3.5 text-emerald-400" />
-                                      )}
-                                    </button>
-                                  )}
-
-                                  {/* Detener Cronómetro button when EN_PROCESO with open session */}
-                                  {Number(svc.estado_servicio_id) === 2 && hasOpenSession && (
-                                    <button
-                                      onClick={() => handleStopTimer(svc)}
-                                      disabled={submitting || processingServiceId === sId}
-                                      className="p-1.5 rounded-lg border bg-rose-500/20 text-rose-300 border-rose-500/40 hover:bg-rose-500/30 transition-all"
-                                      title="Detener cronómetro"
-                                    >
-                                      {processingServiceId === sId ? (
-                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                      ) : (
-                                        <Clock className="w-3.5 h-3.5 text-rose-400" />
-                                      )}
-                                    </button>
-                                  )}
-
-                                  {rules.canPause && (
-                                    <button
-                                      onClick={() => handleServiceStatusChange(sId, 5)}
-                                      className="p-1.5 rounded-lg border bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30 transition-all"
-                                      title="Pausar servicio"
-                                    >
-                                      <Pause className="w-3.5 h-3.5" />
-                                    </button>
-                                  )}
-                                  {rules.canResume && (
-                                    <button
-                                      onClick={() => handleServiceStatusChange(sId, 2)}
-                                      className="p-1.5 rounded-lg border bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30 transition-all"
-                                      title="Reanudar trabajo"
-                                    >
-                                      <Play className="w-3.5 h-3.5" />
-                                    </button>
-                                  )}
-                                  {/* Finalizar servicio: ENABLED if no open session; DISABLED if open session */}
-                                  {rules.canComplete && (
-                                    hasOpenSession ? (
-                                      <button
-                                        disabled
-                                        className="p-1.5 rounded-lg border bg-slate-800/40 text-slate-600 border-slate-700/50 cursor-not-allowed opacity-60"
-                                        title="Debes detener el cronómetro antes de finalizar el servicio."
-                                      >
-                                        <CheckCircle2 className="w-3.5 h-3.5" />
-                                      </button>
-                                    ) : (
-                                      <button
-                                        onClick={() => handleFinishServiceClick(svc)}
-                                        disabled={submitting || processingServiceId === sId}
-                                        className="p-1.5 rounded-lg border bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30 transition-all disabled:opacity-50"
-                                        title="Finalizar servicio"
-                                      >
-                                        {processingServiceId === sId ? (
-                                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                        ) : (
-                                          <CheckCircle2 className="w-3.5 h-3.5" />
-                                        )}
-                                      </button>
-                                    )
-                                  )}
-                                  {rules.canReopen && (
-                                    <button
-                                      onClick={() => openReopenServiceModal(svc)}
-                                      className="p-1.5 rounded-lg border bg-indigo-500/20 text-indigo-300 border-indigo-500/40 hover:bg-indigo-500/30 transition-all"
-                                      title="Reabrir servicio"
-                                    >
-                                      <RotateCcw className="w-3.5 h-3.5" />
-                                    </button>
-                                  )}
-
-                                  {/* Edit Service Modal button */}
-                                  <button
-                                    onClick={() => openEditServiceModal(svc)}
-                                    className="p-1.5 text-slate-400 hover:text-slate-200 bg-[#1c2129] hover:bg-[#252c37] border border-[#2d3748] rounded-lg transition-colors"
-                                    title="Editar servicio"
-                                  >
-                                    <Pencil className="w-3.5 h-3.5" />
-                                  </button>
-
-                                  {/* Delete button */}
-                                  <button
-                                    onClick={() => handleDeleteService(sId, svc.tipo_servicio_nombre)}
-                                    className="p-1.5 text-slate-400 hover:text-rose-400 bg-[#1c2129] hover:bg-rose-500/10 border border-[#2d3748] hover:border-rose-500/30 rounded-lg transition-colors"
-                                    title="Eliminar servicio"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              );
-                            })()}
+                              {/* Delete button */}
+                              <button
+                                onClick={() => handleDeleteService(sId, svc.tipo_servicio_nombre)}
+                                className="p-1.5 text-slate-400 hover:text-rose-400 bg-[#1c2129] hover:bg-rose-500/10 border border-[#2d3748] hover:border-rose-500/30 rounded-lg transition-colors"
+                                title="Eliminar servicio"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -1302,8 +1201,8 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
               </span>
               <div className="flex items-center gap-2">
                 <span className="text-slate-400 uppercase font-bold">TOTAL GENERAL OT:</span>
-                <span className="text-base font-black text-[#bfce7f]">
-                  RD$ {totalOrdenCalculado.toLocaleString("es-DO", { minimumFractionDigits: 2 })}
+                <span className="text-[#bfce7f] font-black text-base">
+                  RD$ {(Number(order?.total_orden ?? totalOrdenCalculado)).toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
             </div>
@@ -1333,8 +1232,7 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
                 Number(order?.estado_orden_id || order?.estado_id || 5)
               );
               const actHasOpenSession = Boolean(
-                activeSelectedService.en_proceso_cronometro ||
-                (activeSelectedService.mano_obra && activeSelectedService.mano_obra.some((m) => m.es_abierta || !m.fecha_finalizacion))
+                activeSelectedService.cronometro?.activo ?? activeSelectedService.en_proceso_cronometro
               );
 
               return (
@@ -1364,7 +1262,7 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
                             {actHasOpenSession ? "Cronómetro activo" : "Tiempo trabajado"}
                           </span>
                           <span className="text-xl font-black font-mono text-slate-100 tracking-wider">
-                            {liveTimeString}
+                            {formatSecondsToHHMMSS(liveSeconds)}
                           </span>
                         </div>
                       </div>
@@ -1373,41 +1271,11 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
                           {actHasOpenSession ? "Tiempo de la sesión actual" : "Tiempo acumulado"}
                         </span>
                         <span className="text-xs font-semibold text-slate-300">
-                          {getWorkedTimeString(activeSelectedService.mano_obra || [])}
+                          {formatSecondsToHHMMSS(activeSelectedService.cronometro?.segundos_acumulados || 0)}
                         </span>
                       </div>
                     </div>
 
-                    {/* Cronómetro Control Buttons */}
-                    {Number(activeSelectedService.estado_servicio_id) === 2 && !actHasOpenSession && (
-                      <button
-                        onClick={() => handleStartTimer(activeSelectedService)}
-                        disabled={submitting || processingServiceId === actId}
-                        className="w-full py-2.5 bg-emerald-600/90 hover:bg-emerald-500 text-white font-bold rounded-xl font-mono text-xs transition-all flex items-center justify-center gap-2 border-t border-emerald-400"
-                      >
-                        {processingServiceId === actId ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Clock className="w-4 h-4 text-emerald-200" />
-                        )}
-                        Iniciar Cronómetro
-                      </button>
-                    )}
-
-                    {Number(activeSelectedService.estado_servicio_id) === 2 && actHasOpenSession && (
-                      <button
-                        onClick={() => handleStopTimer(activeSelectedService)}
-                        disabled={submitting || processingServiceId === actId}
-                        className="w-full py-2.5 bg-rose-500/20 text-rose-300 border border-rose-500/40 rounded-xl font-mono text-xs font-bold hover:bg-rose-500/30 transition-all flex items-center justify-center gap-2"
-                      >
-                        {processingServiceId === actId ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Clock className="w-4 h-4 text-rose-400" />
-                        )}
-                        Detener Cronómetro
-                      </button>
-                    )}
                   </div>
 
                   {/* Mano de Obra Registrada Section */}
@@ -1451,10 +1319,10 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
                                 <Wrench className="w-3.5 h-3.5 text-[#bfce7f] shrink-0" />
                                 <div className="truncate">
                                   <span className="truncate text-slate-200 block font-semibold">
-                                    {m.descripcion || m.observacion || "Registro de mano de obra"}
+                                    {m.detalle_mano_obra?.trim()}
                                   </span>
                                   <span className="text-[10px] text-slate-400 block">
-                                    {m.horas_trabajadas || (m.minutos_trabajados ? (m.minutos_trabajados / 60).toFixed(1) : 1)} hr(s)
+                                    {m.horas_trabajadas || m.horas_reales || (m.minutos_trabajados ? (m.minutos_trabajados / 60).toFixed(1) : 1)} hr(s)
                                   </span>
                                 </div>
                               </div>
@@ -1472,7 +1340,7 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
                                       <Pencil className="w-3.5 h-3.5" />
                                     </button>
                                     <button
-                                      onClick={() => handleDeleteLabor(actId, mId, m.descripcion || m.observacion)}
+                                      onClick={() => handleDeleteLabor(actId, mId, m.detalle_mano_obra || m.descripcion || m.observacion)}
                                       className="text-slate-500 hover:text-rose-400 transition-colors p-1"
                                       title="Eliminar mano de obra"
                                     >
@@ -1552,73 +1420,52 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
 
                   {/* Quick Action Buttons */}
                   <div className="pt-3 border-t border-[#2d3748] space-y-2">
-                    {activeRules.canStart && (
-                      <button
-                        onClick={() => handleServiceStatusChange(actId, 2)}
-                        className="w-full py-2.5 bg-[#84924a] hover:brightness-110 text-white font-bold rounded-xl font-mono text-xs transition-all flex items-center justify-center gap-2 border-t border-[#a6b66b]"
-                      >
-                        <Play className="w-4 h-4" /> Iniciar Trabajo
-                      </button>
-                    )}
-                    {activeRules.requiresMechanicToStart && (
-                      <div className="space-y-1">
-                        <button
-                          disabled
-                          className="w-full py-2.5 bg-slate-800 text-slate-500 border border-slate-700 rounded-xl font-mono text-xs font-bold cursor-not-allowed flex items-center justify-center gap-2"
-                        >
-                          <Play className="w-4 h-4" /> Iniciar Trabajo
-                        </button>
-                        <p className="text-[11px] font-mono text-amber-400 text-center">
-                          Asigna un mecánico antes de iniciar el servicio.
-                        </p>
-                      </div>
-                    )}
-                    {/* Detener Cronómetro button when EN_PROCESO with open session */}
-                    {Number(activeSelectedService.estado_servicio_id) === 2 && actHasOpenSession && (
-                      <button
-                        onClick={() => handleStopTimer(activeSelectedService)}
-                        disabled={submitting || processingServiceId === actId}
-                        className="w-full py-2.5 bg-rose-500/20 text-rose-300 border border-rose-500/40 rounded-xl font-mono text-xs font-bold hover:bg-rose-500/30 transition-all flex items-center justify-center gap-2"
-                      >
-                        {processingServiceId === actId ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Clock className="w-4 h-4 text-rose-400" />
-                        )}
-                        Detener Cronómetro
-                      </button>
-                    )}
-                    {activeRules.canPause && (
-                      <button
-                        onClick={() => handleServiceStatusChange(actId, 5)}
-                        className="w-full py-2.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-xl font-mono text-xs font-bold hover:bg-amber-500/30 transition-all flex items-center justify-center gap-2"
-                      >
-                        <Pause className="w-4 h-4" /> Pausar Trabajo
-                      </button>
-                    )}
-                    {activeRules.canResume && (
-                      <button
-                        onClick={() => handleServiceStatusChange(actId, 2)}
-                        className="w-full py-2.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-xl font-mono text-xs font-bold hover:bg-amber-500/30 transition-all flex items-center justify-center gap-2"
-                      >
-                        <Play className="w-4 h-4 text-amber-300" /> Reanudar Trabajo
-                      </button>
-                    )}
-                    {/* Finalizar Servicio: ENABLED when no open session; DISABLED with clear notice when session is open */}
-                    {activeRules.canComplete && (
-                      actHasOpenSession ? (
+                    {/* PENDIENTE (1) -> INICIAR_SERVICIO */}
+                    {Number(activeSelectedService.estado_servicio_id) === 1 && (
+                      activeRules.requiresMechanicToStart ? (
                         <div className="space-y-1">
                           <button
                             disabled
-                            className="w-full py-2.5 bg-slate-800 text-slate-500 border border-slate-700 rounded-xl font-mono text-xs font-bold cursor-not-allowed flex items-center justify-center gap-2 opacity-60"
+                            className="w-full py-2.5 bg-slate-800 text-slate-500 border border-slate-700 rounded-xl font-mono text-xs font-bold cursor-not-allowed flex items-center justify-center gap-2"
                           >
-                            <CheckCircle2 className="w-4 h-4" /> Finalizar Servicio
+                            <Play className="w-4 h-4" /> Iniciar Servicio
                           </button>
                           <p className="text-[11px] font-mono text-amber-400 text-center">
-                            Debes detener el cronómetro antes de finalizar el servicio.
+                            Asigna un mecánico antes de iniciar el servicio.
                           </p>
                         </div>
                       ) : (
+                        <button
+                          onClick={() => handleExecuteServiceAction(activeSelectedService, "INICIAR_SERVICIO")}
+                          disabled={submitting || processingServiceId === actId}
+                          className="w-full py-2.5 bg-[#84924a] hover:brightness-110 text-white font-bold rounded-xl font-mono text-xs transition-all flex items-center justify-center gap-2 border-t border-[#a6b66b]"
+                        >
+                          {processingServiceId === actId ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Play className="w-4 h-4" />
+                          )}
+                          Iniciar Servicio
+                        </button>
+                      )
+                    )}
+
+                    {/* EN_PROCESO (2) -> PAUSAR_SERVICIO or FINALIZAR_SERVICIO */}
+                    {Number(activeSelectedService.estado_servicio_id) === 2 && (
+                      <>
+                        <button
+                          onClick={() => handleExecuteServiceAction(activeSelectedService, "PAUSAR_SERVICIO")}
+                          disabled={submitting || processingServiceId === actId}
+                          className="w-full py-2.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-xl font-mono text-xs font-bold hover:bg-amber-500/30 transition-all flex items-center justify-center gap-2"
+                        >
+                          {processingServiceId === actId ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Pause className="w-4 h-4" />
+                          )}
+                          Pausar Trabajo
+                        </button>
+
                         <button
                           onClick={() => handleFinishServiceClick(activeSelectedService)}
                           disabled={submitting || processingServiceId === actId}
@@ -1631,9 +1478,27 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
                           )}
                           Finalizar Servicio
                         </button>
-                      )
+                      </>
                     )}
-                    {activeRules.canReopen && (
+
+                    {/* PAUSADO (5 or 4) -> REANUDAR_SERVICIO */}
+                    {(Number(activeSelectedService.estado_servicio_id) === 5 || Number(activeSelectedService.estado_servicio_id) === 4) && (
+                      <button
+                        onClick={() => handleExecuteServiceAction(activeSelectedService, "REANUDAR_SERVICIO")}
+                        disabled={submitting || processingServiceId === actId}
+                        className="w-full py-2.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-xl font-mono text-xs font-bold hover:bg-amber-500/30 transition-all flex items-center justify-center gap-2"
+                      >
+                        {processingServiceId === actId ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Play className="w-4 h-4 text-amber-300" />
+                        )}
+                        Reanudar Trabajo
+                      </button>
+                    )}
+
+                    {/* COMPLETADO (3) -> Reabrir (if canReopen) */}
+                    {Number(activeSelectedService.estado_servicio_id) === 3 && activeRules.canReopen && (
                       <button
                         onClick={() => openReopenServiceModal(activeSelectedService)}
                         className="w-full py-2.5 bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 hover:bg-indigo-500/30 rounded-xl font-mono text-xs font-bold transition-all flex items-center justify-center gap-2"

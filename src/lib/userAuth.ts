@@ -55,7 +55,7 @@ export async function authorizeUserAccess(paramId: string): Promise<AuthResult> 
     `SELECT s.usuario_id, u.empresa_id
      FROM admin.usuario_sesion s
      JOIN admin.usuario u ON s.usuario_id = u.usuario_id
-     WHERE s.token_identificador = $1 AND s.estado = 'ACTIVA' AND (s.fecha_expiracion IS NULL OR s.fecha_expiracion > NOW())
+     WHERE s.token_identificador = $1 AND s.estado = 'ACTIVA'
      LIMIT 1`,
     [sessionToken]
   );
@@ -174,7 +174,7 @@ export async function authorizeUserUpdate(paramId: string): Promise<AuthUpdateRe
     `SELECT s.usuario_id, u.empresa_id
      FROM admin.usuario_sesion s
      JOIN admin.usuario u ON s.usuario_id = u.usuario_id
-     WHERE s.token_identificador = $1 AND s.estado = 'ACTIVA' AND (s.fecha_expiracion IS NULL OR s.fecha_expiracion > NOW())
+     WHERE s.token_identificador = $1 AND s.estado = 'ACTIVA'
      LIMIT 1`,
     [sessionToken]
   );

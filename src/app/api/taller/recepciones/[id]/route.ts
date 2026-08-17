@@ -13,7 +13,7 @@ export async function GET(
       return NextResponse.json({ error: "NO_SESSION", message: "No hay sesión activa." }, { status: 401 });
     }
 
-    const perms = await getModulePermissions(5, session.rol_principal_id);
+    const perms = await getModulePermissions("TALLER", session.usuario_id);
     if (!perms.puede_ver) {
       return NextResponse.json({ error: "FORBIDDEN", message: "No posee permiso de lectura para el Módulo de Recepción." }, { status: 403 });
     }
@@ -167,7 +167,7 @@ export async function PATCH(
       return NextResponse.json({ error: "NO_SESSION", message: "No hay sesión activa." }, { status: 401 });
     }
 
-    const perms = await getModulePermissions(5, session.rol_principal_id);
+    const perms = await getModulePermissions("TALLER", session.usuario_id);
     if (!perms.puede_editar) {
       return NextResponse.json({ error: "FORBIDDEN", message: "No posee permiso de edición para el Módulo de Recepción." }, { status: 403 });
     }
@@ -277,7 +277,7 @@ export async function DELETE(
       return NextResponse.json({ error: "NO_SESSION", message: "No hay sesión activa." }, { status: 401 });
     }
 
-    const perms = await getModulePermissions(5, session.rol_principal_id);
+    const perms = await getModulePermissions("TALLER", session.usuario_id);
     if (!perms.puede_inactivar) {
       return NextResponse.json({ error: "FORBIDDEN", message: "No posee permiso para inactivar recepciones." }, { status: 403 });
     }

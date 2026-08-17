@@ -10,8 +10,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "NO_SESSION", message: "No hay sesión activa." }, { status: 401 });
     }
 
-    // Check IAM permission for Módulo 6 (Órdenes de Trabajo)
-    const perms = await getModulePermissions(6, session.rol_principal_id);
+    // Check IAM permission for Módulo TALLER
+    const perms = await getModulePermissions("TALLER", session.usuario_id);
     if (!perms.puede_ver) {
       return NextResponse.json({ error: "FORBIDDEN", message: "No posee permiso de lectura para acceder a las órdenes de trabajo." }, { status: 403 });
     }
@@ -159,25 +159,23 @@ export async function GET(req: NextRequest) {
 
 // POST /api/taller/ordenes
 export async function POST(req: NextRequest) {
+  // 1. Authenticate user from session strictly
+  const session = await getWorkshopSession();
+  if (!session || !session.usuario_id) {
+    return NextResponse.json({ error: "NO_SESSION", message: "Sesión no válida o expirada. Por favor inicie sesión." }, { status: 401 });
+  }
+  const sessionUserId = session.usuario_id;
+
+  // 2. Check IAM Permission for Módulo TALLER
+  const perms = await getModulePermissions("TALLER", session.usuario_id);
+  if (!perms.puede_crear) {
+    return NextResponse.json({ error: "FORBIDDEN", message: "No posee el permiso necesario para crear órdenes de trabajo." }, { status: 403 });
+  }
+
   const pool = getPool();
   const client = await pool.connect();
 
   try {
-    // 1. Authenticate user from session strictly
-    const session = await getWorkshopSession();
-    if (!session || !session.usuario_id) {
-      client.release();
-      return NextResponse.json({ error: "NO_SESSION", message: "Sesión no válida o expirada. Por favor inicie sesión." }, { status: 401 });
-    }
-    const sessionUserId = session.usuario_id;
-
-    // 2. Check IAM Permission for Módulo 6 (Órdenes de Trabajo)
-    const perms = await getModulePermissions(6, session.rol_principal_id);
-    if (!perms.puede_crear) {
-      client.release();
-      return NextResponse.json({ error: "FORBIDDEN", message: "No posee el permiso necesario para crear órdenes de trabajo." }, { status: 403 });
-    }
-
     const body = await req.json();
     const {
       recepcion_id,
@@ -190,7 +188,6 @@ export async function POST(req: NextRequest) {
     } = body;
 
     if (!recepcion_id || !prioridad_id) {
-      client.release();
       return NextResponse.json({ error: "La recepción y la prioridad son campos obligatorios." }, { status: 400 });
     }
 

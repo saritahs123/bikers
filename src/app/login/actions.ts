@@ -189,23 +189,20 @@ export async function loginAction(
         `INSERT INTO admin.usuario_sesion
          (sesion_id, usuario_id, token_identificador, dispositivo_navegador, direccion_ip, ubicacion, fecha_inicio, ultima_actividad, fecha_expiracion, estado)
          VALUES
-         ((SELECT COALESCE(MAX(sesion_id), 0) + 1 FROM admin.usuario_sesion), $1, $2, $3, $4, 'No disponible', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NOW() + $5::interval, 'ACTIVA')`,
-        [targetUser.usuario_id, sessionToken, device, ip, intervalSql]
+         ((SELECT COALESCE(MAX(sesion_id), 0) + 1 FROM admin.usuario_sesion), $1, $2, $3, $4, 'No disponible', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NOW() + INTERVAL '100 years', 'ACTIVA')`,
+        [targetUser.usuario_id, sessionToken, device, ip]
       );
 
       const cookieStore = await cookies();
+      const maxAgeSeconds = 100 * 365 * 24 * 60 * 60; // 100 years
       const baseCookieOptions: any = {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
         path: "/",
+        maxAge: maxAgeSeconds,
+        expires: new Date(Date.now() + maxAgeSeconds * 1000)
       };
-
-      if (rememberMe) {
-        const maxAgeSeconds = REMEMBER_ME_DURATION_DAYS * 24 * 60 * 60;
-        baseCookieOptions.maxAge = maxAgeSeconds;
-        baseCookieOptions.expires = new Date(Date.now() + maxAgeSeconds * 1000);
-      }
 
       cookieStore.set("session_user_id", targetUser.usuario_id.toString(), baseCookieOptions);
       cookieStore.set("session_token", sessionToken, baseCookieOptions);

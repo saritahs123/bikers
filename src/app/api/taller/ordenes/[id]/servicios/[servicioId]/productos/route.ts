@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
+import { recalculateWorkOrderTotals } from "@/lib/workshop/recalculateWorkOrderTotals";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
 
 // POST /api/taller/ordenes/[id]/servicios/[servicioId]/productos
@@ -7,31 +8,29 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; servicioId: string }> }
 ) {
-  const { id, servicioId: servIdStr } = await params;
+  const { id, servicioId } = await params;
+
+  if (!id || !servicioId || !/^\d+$/.test(id.trim()) || !/^\d+$/.test(servicioId.trim())) {
+    return NextResponse.json({ error: "INVALID_ID", message: "IDs no válidos." }, { status: 400 });
+  }
+  const ordenId = Number(id.trim());
+  const servId = Number(servicioId.trim());
+
+  const session = await getWorkshopSession();
+  if (!session || !session.usuario_id) {
+    return NextResponse.json({ error: "NO_SESSION", message: "Sesión no válida o expirada." }, { status: 401 });
+  }
+  const sessionUserId = session.usuario_id;
+
+  const perms = await getModulePermissions("TALLER", session.usuario_id);
+  if (!perms.puede_editar) {
+    return NextResponse.json({ error: "FORBIDDEN", message: "No posee permiso para modificar repuestos." }, { status: 403 });
+  }
+
   const pool = getPool();
   const client = await pool.connect();
 
   try {
-    const session = await getWorkshopSession();
-    if (!session || !session.usuario_id) {
-      client.release();
-      return NextResponse.json({ error: "NO_SESSION", message: "Sesión no válida o expirada." }, { status: 401 });
-    }
-    const sessionUserId = session.usuario_id;
-    const ordenId = parseInt(id, 10);
-    const servicioId = parseInt(servIdStr, 10);
-
-    if (isNaN(ordenId) || isNaN(servicioId)) {
-      client.release();
-      return NextResponse.json({ error: "IDs no válidos." }, { status: 400 });
-    }
-
-    const perms = await getModulePermissions(6, session.rol_principal_id);
-    if (!perms.puede_editar) {
-      client.release();
-      return NextResponse.json({ error: "FORBIDDEN", message: "No posee permiso para modificar repuestos." }, { status: 403 });
-    }
-
     const body = await req.json();
     const { producto_id, cantidad, precio_unitario, porcentaje_descuento } = body;
 
@@ -119,23 +118,7 @@ export async function POST(
     ]);
 
     // Recalculate Order Financial Totals
-    await client.query(`
-      UPDATE admin.ordenes_trabajo ot
-      SET 
-        subtotal_servicios = COALESCE((SELECT SUM(subtotal) FROM admin.orden_servicios WHERE orden_trabajo_id = $1 AND (activo IS DISTINCT FROM false)), 0),
-        subtotal_productos = COALESCE((SELECT SUM(subtotal) FROM admin.orden_productos WHERE orden_trabajo_id = $1), 0),
-        descuento_servicios = COALESCE((SELECT SUM(valor_descuento) FROM admin.orden_servicios WHERE orden_trabajo_id = $1 AND (activo IS DISTINCT FROM false)), 0),
-        descuento_productos = COALESCE((SELECT SUM(valor_descuento) FROM admin.orden_productos WHERE orden_trabajo_id = $1), 0),
-        subtotal_general = COALESCE((SELECT SUM(subtotal) FROM admin.orden_servicios WHERE orden_trabajo_id = $1 AND (activo IS DISTINCT FROM false)), 0) + 
-                           COALESCE((SELECT SUM(subtotal) FROM admin.orden_productos WHERE orden_trabajo_id = $1), 0),
-        total_orden = GREATEST(0, ROUND(
-          (COALESCE((SELECT SUM(subtotal) FROM admin.orden_servicios WHERE orden_trabajo_id = $1 AND (activo IS DISTINCT FROM false)), 0) + 
-           COALESCE((SELECT SUM(subtotal) FROM admin.orden_productos WHERE orden_trabajo_id = $1), 0)) + COALESCE(ot.impuesto, 0), 2
-        )),
-        fecha_actualizacion = NOW(),
-        usuario_actualizacion = $2
-      WHERE ot.orden_trabajo_id = $1
-    `, [ordenId, sessionUserId]);
+    await recalculateWorkOrderTotals(client, ordenId);
 
     await client.query("COMMIT");
 
@@ -158,35 +141,37 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; servicioId: string }> }
 ) {
-  const { id, servicioId: servIdStr } = await params;
+  const { id, servicioId } = await params;
+
+  if (!id || !servicioId || !/^\d+$/.test(id.trim()) || !/^\d+$/.test(servicioId.trim())) {
+    return NextResponse.json({ error: "INVALID_ID", message: "IDs no válidos." }, { status: 400 });
+  }
+  const ordenId = Number(id.trim());
+  const servId = Number(servicioId.trim());
+
+  const { searchParams } = new URL(req.url);
+  const ordenProductoId = parseInt(searchParams.get("orden_producto_id") || "0", 10);
+  const motivoAnulacion = searchParams.get("motivo") || "Anulación de repuesto";
+
+  if (isNaN(ordenProductoId) || ordenProductoId <= 0) {
+    return NextResponse.json({ error: "Parámetros no válidos." }, { status: 400 });
+  }
+
+  const session = await getWorkshopSession();
+  if (!session || !session.usuario_id) {
+    return NextResponse.json({ error: "NO_SESSION", message: "Sesión no válida o expirada." }, { status: 401 });
+  }
+  const sessionUserId = session.usuario_id;
+
+  const perms = await getModulePermissions("TALLER", session.usuario_id);
+  if (!perms.puede_editar) {
+    return NextResponse.json({ error: "FORBIDDEN", message: "No posee permiso para anular repuestos." }, { status: 403 });
+  }
+
   const pool = getPool();
   const client = await pool.connect();
 
   try {
-    const session = await getWorkshopSession();
-    if (!session || !session.usuario_id) {
-      client.release();
-      return NextResponse.json({ error: "NO_SESSION", message: "Sesión no válida o expirada." }, { status: 401 });
-    }
-    const sessionUserId = session.usuario_id;
-    const ordenId = parseInt(id, 10);
-    const servicioId = parseInt(servIdStr, 10);
-
-    const { searchParams } = new URL(req.url);
-    const ordenProductoId = parseInt(searchParams.get("orden_producto_id") || "0", 10);
-    const motivoAnulacion = searchParams.get("motivo") || "Anulación de repuesto";
-
-    if (isNaN(ordenId) || isNaN(servicioId) || isNaN(ordenProductoId) || ordenProductoId <= 0) {
-      client.release();
-      return NextResponse.json({ error: "Parámetros no válidos." }, { status: 400 });
-    }
-
-    const perms = await getModulePermissions(6, session.rol_principal_id);
-    if (!perms.puede_editar) {
-      client.release();
-      return NextResponse.json({ error: "FORBIDDEN", message: "No posee permiso para anular repuestos." }, { status: 403 });
-    }
-
     await client.query("BEGIN");
 
     // Lock Order Row Exclusively
@@ -227,23 +212,7 @@ export async function DELETE(
     `, [ordenProductoId]);
 
     // Recalculate Order Financial Totals
-    await client.query(`
-      UPDATE admin.ordenes_trabajo ot
-      SET 
-        subtotal_servicios = COALESCE((SELECT SUM(subtotal) FROM admin.orden_servicios WHERE orden_trabajo_id = $1 AND (activo IS DISTINCT FROM false)), 0),
-        subtotal_productos = COALESCE((SELECT SUM(subtotal) FROM admin.orden_productos WHERE orden_trabajo_id = $1), 0),
-        descuento_servicios = COALESCE((SELECT SUM(valor_descuento) FROM admin.orden_servicios WHERE orden_trabajo_id = $1 AND (activo IS DISTINCT FROM false)), 0),
-        descuento_productos = COALESCE((SELECT SUM(valor_descuento) FROM admin.orden_productos WHERE orden_trabajo_id = $1), 0),
-        subtotal_general = COALESCE((SELECT SUM(subtotal) FROM admin.orden_servicios WHERE orden_trabajo_id = $1 AND (activo IS DISTINCT FROM false)), 0) + 
-                           COALESCE((SELECT SUM(subtotal) FROM admin.orden_productos WHERE orden_trabajo_id = $1), 0),
-        total_orden = GREATEST(0, ROUND(
-          (COALESCE((SELECT SUM(subtotal) FROM admin.orden_servicios WHERE orden_trabajo_id = $1 AND (activo IS DISTINCT FROM false)), 0) + 
-           COALESCE((SELECT SUM(subtotal) FROM admin.orden_productos WHERE orden_trabajo_id = $1), 0)) + COALESCE(ot.impuesto, 0), 2
-        )),
-        fecha_actualizacion = NOW(),
-        usuario_actualizacion = $2
-      WHERE ot.orden_trabajo_id = $1
-    `, [ordenId, sessionUserId]);
+    await recalculateWorkOrderTotals(client, ordenId);
 
     // History Record
     await client.query(`

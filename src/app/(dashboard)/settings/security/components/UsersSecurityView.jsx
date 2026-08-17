@@ -160,18 +160,15 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       const authData = await authRes.json();
       const authUser = authData?.data || authData?.user;
 
-      if (!authUser || !authUser.usuario_id) {
+      if (!authUser || !(authUser.usuario_id || authUser.id)) {
         setProfileLoadError('No fue posible cargar la información del perfil.');
         return;
       }
 
+      const targetId = authUser.usuario_id || authUser.id;
+
       try {
-        const detailUserRaw = await usersService.getUserById(authUser.usuario_id);
-        if (!detailUserRaw) {
-          setDetailUser(null);
-          setProfileLoadError('No fue posible cargar la información del perfil.');
-          return;
-        }
+        const detailUserRaw = await usersService.getUserById(targetId);
         const mapped = mapUserDetail(detailUserRaw, authUser);
         setDetailUser(mapped);
       } catch (detailErr) {
@@ -179,8 +176,9 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
           router.push('/login');
           return;
         }
-        setDetailUser(null);
-        setProfileLoadError('No fue posible cargar la información del perfil.');
+        // Fall back to authUser profile instead of blocking the page
+        const mapped = mapUserDetail(null, authUser);
+        setDetailUser(mapped);
       }
     } catch (err) {
       setDetailUser(null);
