@@ -239,24 +239,6 @@ export async function PUT(
       targetServStateId = compRes.rows[0]?.estado_orden_servicio_id || 3;
     }
 
-    // Check open session conflict for INICIAR_SERVICIO and REANUDAR_SERVICIO
-    if (body.accion === "INICIAR_SERVICIO" || body.accion === "REANUDAR_SERVICIO" || (targetServStateId === 2 && currentServStateId === 2)) {
-      const openCheck = await client.query(`
-        SELECT COUNT(*)::int AS count
-        FROM admin.orden_servicio_mano_obra
-        WHERE orden_servicio_id = $1 AND fecha_finalizacion IS NULL AND (activo IS DISTINCT FROM false)
-      `, [servId]);
-
-      if (openCheck.rows[0]?.count > 0) {
-        await client.query("ROLLBACK");
-        return NextResponse.json({
-          error: "OPEN_SESSION_EXISTS",
-          code: "OPEN_SESSION_EXISTS",
-          message: "Ya existe una sesión de trabajo abierta para este servicio."
-        }, { status: 409 });
-      }
-    }
-
     // Enforce order state MUST be REPARACIÓN (5) for service actions (start, pause, resume, finish)
     if (estadoOrdenId === 1 && (body.accion || targetServStateId !== undefined)) {
       await client.query("ROLLBACK");
@@ -276,11 +258,16 @@ export async function PUT(
       : null;
 
     if (hasMecProp && newMecId !== currentMecId) {
-      // Verify open sessions before reassigning
+      // Verify open technical sessions before reassigning
       const openSessCheck = await client.query(`
         SELECT COUNT(*)::int AS count
         FROM admin.orden_servicio_mano_obra
-        WHERE orden_servicio_id = $1 AND fecha_finalizacion IS NULL AND (activo IS DISTINCT FROM false)
+        WHERE orden_servicio_id = $1
+          AND (detalle_mano_obra IS NULL OR BTRIM(detalle_mano_obra) = '')
+          AND (observacion IS NULL OR BTRIM(observacion) = '')
+          AND fecha_inicio IS NOT NULL
+          AND fecha_finalizacion IS NULL
+          AND (activo IS DISTINCT FROM false)
       `, [servId]);
 
       if (openSessCheck.rows[0]?.count > 0) {
@@ -357,19 +344,83 @@ export async function PUT(
 
       // Action 1: Iniciar o Reanudar (1 -> 2 o 5 -> 2)
       if (targetServStateId === 2) {
-        const openCheck = await client.query(`
-          SELECT COUNT(*)::int AS count
+        const openSessionsRes = await client.query(`
+          SELECT orden_servicio_mano_obra_id, fecha_inicio, costo_hora
           FROM admin.orden_servicio_mano_obra
-          WHERE orden_servicio_id = $1 AND fecha_finalizacion IS NULL AND (activo IS DISTINCT FROM false)
+          WHERE orden_servicio_id = $1
+            AND (detalle_mano_obra IS NULL OR BTRIM(detalle_mano_obra) = '')
+            AND (observacion IS NULL OR BTRIM(observacion) = '')
+            AND fecha_inicio IS NOT NULL
+            AND fecha_finalizacion IS NULL
+            AND (activo IS DISTINCT FROM false)
+          ORDER BY orden_servicio_mano_obra_id DESC
+          FOR UPDATE
         `, [servId]);
 
-        if (openCheck.rows[0]?.count > 0) {
+        const openCount = openSessionsRes.rows.length;
+
+        if (openCount > 1) {
           await client.query("ROLLBACK");
           return NextResponse.json({
-            error: "OPEN_SESSION_EXISTS",
-            code: "OPEN_SESSION_EXISTS",
-            message: "Ya existe una sesión de trabajo abierta para este servicio."
+            error: "MULTIPLE_OPEN_TIMER_SESSIONS",
+            code: "MULTIPLE_OPEN_TIMER_SESSIONS",
+            message: "Se encontraron múltiples sesiones de trabajo abiertas de forma inconsistente."
           }, { status: 409 });
+        }
+
+        if (openCount === 1) {
+          const openSess = openSessionsRes.rows[0];
+
+          if (currentServStateId === 5) {
+            // Reconcile orphaned session if service is in state PAUSADO (5)
+            const histPauseRes = await client.query(`
+              SELECT COALESCE(fecha_cambio, fecha_registro) AS fecha_pausa
+              FROM admin.orden_historial_estado
+              WHERE orden_trabajo_id = $1
+                AND (comentario LIKE '%cambiado de 2 a 5%' OR comentario LIKE '%Pausado%' OR comentario LIKE '%pausado%')
+              ORDER BY orden_historial_estado_id DESC
+              LIMIT 1
+            `, [ordenId]);
+
+            let fechaPausa = histPauseRes.rows[0]?.fecha_pausa ? new Date(histPauseRes.rows[0].fecha_pausa) : null;
+            const fechaInicio = new Date(openSess.fecha_inicio);
+
+            if (!fechaPausa || isNaN(fechaPausa.getTime()) || fechaPausa.getTime() <= fechaInicio.getTime()) {
+              fechaPausa = new Date();
+            }
+
+            await client.query(`
+              UPDATE admin.orden_servicio_mano_obra
+              SET 
+                fecha_finalizacion = $1,
+                minutos_trabajados = ROUND(EXTRACT(EPOCH FROM ($1 - fecha_inicio))/60.0),
+                minutos_facturables = ROUND(EXTRACT(EPOCH FROM ($1 - fecha_inicio))/60.0),
+                costo_total = ROUND((EXTRACT(EPOCH FROM ($1 - fecha_inicio))/3600.0) * costo_hora, 2),
+                usuario_actualizacion = $2
+              WHERE orden_servicio_mano_obra_id = $3
+            `, [fechaPausa, sessionUserId, openSess.orden_servicio_mano_obra_id]);
+
+            await client.query(`
+              INSERT INTO admin.orden_historial_estado (
+                orden_historial_estado_id, orden_trabajo_id, estado_anterior_id, estado_nuevo_id, usuario_cambio, comentario, fecha_cambio, activo, fecha_registro
+              ) VALUES (
+                (SELECT COALESCE(MAX(orden_historial_estado_id), 0) + 1 FROM admin.orden_historial_estado),
+                $1, $2, $2, $3, $4, NOW(), true, NOW()
+              )
+            `, [
+              ordenId,
+              estadoOrdenId,
+              sessionUserId,
+              `Sesión técnica reconciliada al reanudar servicio #${servId} (Cerrada en ${fechaPausa.toISOString()})`
+            ]);
+          } else {
+            await client.query("ROLLBACK");
+            return NextResponse.json({
+              error: "OPEN_SESSION_EXISTS",
+              code: "OPEN_SESSION_EXISTS",
+              message: "Ya existe una sesión de trabajo abierta para este servicio."
+            }, { status: 409 });
+          }
         }
 
         let rate = 0.00;
@@ -412,7 +463,7 @@ export async function PUT(
 
       // Action 2: Pausar (2 -> 5)
       if (currentServStateId === 2 && targetServStateId === 5) {
-        await client.query(`
+        const pauseRes = await client.query(`
           WITH latest_session AS (
             SELECT orden_servicio_mano_obra_id
             FROM admin.orden_servicio_mano_obra
@@ -424,16 +475,26 @@ export async function PUT(
               AND (activo IS DISTINCT FROM false)
             ORDER BY orden_servicio_mano_obra_id DESC
             LIMIT 1
+            FOR UPDATE
           )
           UPDATE admin.orden_servicio_mano_obra
           SET 
             fecha_finalizacion = NOW(),
-            minutos_trabajados = GREATEST(1, ROUND(EXTRACT(EPOCH FROM (NOW() - fecha_inicio))/60)),
-            minutos_facturables = GREATEST(1, ROUND(EXTRACT(EPOCH FROM (NOW() - fecha_inicio))/60)),
-            costo_total = ROUND((GREATEST(1, ROUND(EXTRACT(EPOCH FROM (NOW() - fecha_inicio))/60))/60.0) * costo_hora, 2),
+            minutos_trabajados = ROUND(EXTRACT(EPOCH FROM (NOW() - fecha_inicio))/60.0),
+            minutos_facturables = ROUND(EXTRACT(EPOCH FROM (NOW() - fecha_inicio))/60.0),
+            costo_total = ROUND((EXTRACT(EPOCH FROM (NOW() - fecha_inicio))/3600.0) * costo_hora, 2),
             usuario_actualizacion = $2
           WHERE orden_servicio_mano_obra_id IN (SELECT orden_servicio_mano_obra_id FROM latest_session)
+          RETURNING orden_servicio_mano_obra_id;
         `, [servId, sessionUserId]);
+
+        if (pauseRes.rowCount !== 1) {
+          await client.query("ROLLBACK");
+          return NextResponse.json({
+            error: "TIMER_SESSION_INCONSISTENT",
+            message: "No fue posible pausar el servicio porque la sesión de trabajo no es válida."
+          }, { status: 409 });
+        }
       }
 
       // Action 3: Completar / Finalizar Servicio (targetServStateId === 3)
