@@ -17,6 +17,7 @@ import {
   ClipboardList,
   Printer,
   Edit,
+  RotateCcw,
   Check,
   Truck,
   ShieldCheck,
@@ -187,28 +188,45 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
     };
   }, [ordenId, fetchOrderDetail]);
 
+  const [toast, setToast] = useState(null);
+  const showToast = (msg, type = "success") => {
+    if (typeof msg === "object" && msg !== null && msg.text) {
+      setToast(msg);
+    } else {
+      setToast({ text: String(msg || ""), type });
+    }
+    setTimeout(() => setToast(null), 4500);
+  };
+  const showErrorToast = (msg) => showToast(msg, "error");
+  const showSuccessToast = (msg) => showToast(msg, "success");
+
   const [loadingStateChange, setLoadingStateChange] = useState(false);
 
   const handleTransitionState = async (targetStateId, notes = "") => {
+    if (loadingStateChange) return;
     setLoadingStateChange(true);
     setModalError(null);
     try {
+      const payload = targetStateId === 7 
+        ? { accion: "MARCAR_LISTA_ENTREGA", estado_orden_id: 7, observacion_cambio_estado: notes }
+        : { estado_orden_id: targetStateId, observacion_cambio_estado: notes };
+
       const res = await fetch(`/api/taller/ordenes/${ordenId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          estado_orden_id: targetStateId,
-          observacion_cambio_estado: notes
-        })
+        body: JSON.stringify(payload)
       });
       const data = await res.json();
       if (!res.ok) {
         const msg = data.message || data.title || "No se pudo cambiar el estado de la orden.";
+        showErrorToast(msg);
         setModalError({ title: "No se pudo cambiar el estado", description: msg });
         return;
       }
+      showSuccessToast(data.message || "Estado de la orden actualizado.");
       await fetchOrderDetail(true);
     } catch (err) {
+      showErrorToast("Error al conectar con el servidor.");
       setModalError({ title: "Error de conexión", description: "Error al cambiar el estado de la orden." });
     } finally {
       setLoadingStateChange(false);
@@ -217,11 +235,15 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
 
   const handleUpdateOrderState = async (e) => {
     e.preventDefault();
+    if (updatingStatus) return;
     setUpdatingStatus(true);
     setModalError(null);
     try {
+      const isReopening = Number(order.estado_orden_id) === 7 && parsedStatus === 5;
       const payload = {
-        estado_orden_id: newStatusId ? parseInt(newStatusId, 10) : undefined,
+        accion: parsedStatus === 7 ? "MARCAR_LISTA_ENTREGA" : (isReopening ? "REABRIR_ORDEN" : undefined),
+        motivo_reapertura: isReopening ? (changeNotes || undefined) : undefined,
+        estado_orden_id: parsedStatus,
         prioridad_id: newPrioridadId ? parseInt(newPrioridadId, 10) : null,
         prioridad_orden_id: newPrioridadId ? parseInt(newPrioridadId, 10) : null,
         observacion_interna: changeNotes || undefined,
@@ -238,25 +260,18 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
       const data = await res.json();
 
       if (!res.ok) {
-        let errTitle = "No pudimos guardar los cambios";
-        let errDesc = "Inténtalo nuevamente en unos momentos.";
+        let errTitle = data.title || "No pudimos guardar los cambios";
+        let errDesc = data.message || "Inténtalo nuevamente en unos momentos.";
 
         if (res.status === 401) {
           errTitle = "Tu sesión ha expirado";
           errDesc = "Inicia sesión nuevamente para continuar.";
         } else if (res.status === 403) {
-          if (data.error === "FORBIDDEN_COMPANY") {
-            errTitle = "No puedes editar esta orden";
-            errDesc = "La orden pertenece a otra empresa.";
-          } else {
-            errTitle = "No tienes permiso para editar esta orden";
-            errDesc = "Solicita acceso al módulo de Taller a un administrador.";
-          }
+          errTitle = "Acceso denegado";
+          errDesc = data.message || "No tienes permiso para editar esta orden.";
         } else if (res.status === 409) {
-          errTitle = "No se puede cambiar el estado";
+          errTitle = "Transición no permitida";
           errDesc = data.message || "Transición de estado no permitida.";
-        } else {
-          errDesc = data.message || data.error || errDesc;
         }
 
         setModalError({ title: errTitle, description: errDesc });
@@ -266,6 +281,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
       setStatusModalOpen(false);
       setChangeNotes("");
       setModalError(null);
+      showSuccessToast(data.message || "Orden de trabajo actualizada.");
       refreshSilently();
     } catch (err) {
       setModalError({
@@ -442,6 +458,23 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
   const impuesto = Number(order.impuesto || 0);
   const totalEstimado = Number(order.total_orden ?? (subtotalNeto + impuesto));
 
+  const formatDuration = (totalSeconds) => {
+    const seconds = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const remainingSeconds = seconds % 60;
+
+    if (hours > 0) {
+      return `${hours} h ${minutes} min ${remainingSeconds} s`;
+    }
+
+    if (minutes > 0) {
+      return `${minutes} min ${remainingSeconds} s`;
+    }
+
+    return `${remainingSeconds} s`;
+  };
+
   // Dynamic Metrics reading order.progreso contract
   const repairProgressPercent = Math.min(
     100,
@@ -456,19 +489,54 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
     order.progreso?.segundos_trabajados ?? order.segundos_trabajados ?? 0
   );
 
-  const minTrabajados = Math.floor((segundosTrabajadosVal % 3600) / 60);
-  const secTrabajados = segundosTrabajadosVal % 60;
-  const detailedTimeStr = segundosTrabajadosVal > 0 
-    ? `${horasRegistradasVal.toFixed(1)} h (${minTrabajados} min ${secTrabajados} s)`
+  const horasRegistradasText = segundosTrabajadosVal > 0
+    ? `${horasRegistradasVal.toFixed(1)} h (${formatDuration(segundosTrabajadosVal)})`
     : `${horasRegistradasVal.toFixed(1)} h`;
 
-  const horasRegistradasText = detailedTimeStr;
   const horasEstimadasText = order.horas_estimadas !== undefined && order.horas_estimadas !== null
     ? `${Number(order.horas_estimadas).toFixed(1)} h`
     : "N/A";
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
+      {toast && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '24px',
+            right: '24px',
+            zIndex: 99999,
+            width: 'min(380px, calc(100vw - 32px))',
+            minWidth: '280px',
+            whiteSpace: 'normal',
+            wordBreak: 'normal',
+            overflowWrap: 'break-word'
+          }}
+          className={`p-4 rounded-xl shadow-2xl font-mono text-xs flex items-start gap-3 border backdrop-blur-md transition-all animate-in fade-in slide-in-from-top-3 ${
+            toast.type === "error"
+              ? "bg-rose-950/95 border-rose-500 text-rose-100 shadow-rose-950/50"
+              : "bg-emerald-950/95 border-emerald-500 text-emerald-100 shadow-emerald-950/50"
+          }`}
+        >
+          {toast.type === "error" ? (
+            <AlertTriangle className="w-5 h-5 shrink-0 text-rose-400 mt-0.5" />
+          ) : (
+            <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-400 mt-0.5" />
+          )}
+          <div className="flex-1 min-w-0">
+            <span className="font-bold block text-xs uppercase tracking-wider mb-0.5 font-mono">
+              {toast.type === "error" ? "Error u Operación" : "Confirmación"}
+            </span>
+            <span className="leading-relaxed font-sans text-xs block text-slate-200">{toast.text}</span>
+          </div>
+          <button
+            onClick={() => setToast(null)}
+            className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors ml-1 shrink-0"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
       {/* Top Header Banner */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
@@ -524,18 +592,34 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
             </button>
           )}
           {Number(order.estado_orden_id) === 7 && (
-            <button
-              onClick={() => handleTransitionState(8)}
-              disabled={loadingStateChange}
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white hover:bg-emerald-600 rounded-xl transition-all font-mono text-xs font-extrabold uppercase tracking-wider shadow-lg shadow-emerald-500/20 disabled:opacity-50 cursor-pointer"
-            >
-              {loadingStateChange ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <ShieldCheck className="w-4 h-4" />
-              )}
-              ENTREGAR A CLIENTE
-            </button>
+            <>
+              <button
+                onClick={() => {
+                  setNewStatusId("5");
+                  setNewPrioridadId(order.prioridad_id ? String(order.prioridad_id) : "2");
+                  setChangeNotes("");
+                  setModalError(null);
+                  setStatusModalOpen(true);
+                }}
+                disabled={loadingStateChange}
+                className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-slate-950 hover:bg-amber-600 rounded-xl transition-all font-mono text-xs font-extrabold uppercase tracking-wider shadow-lg shadow-amber-500/20 disabled:opacity-50 cursor-pointer"
+              >
+                <RotateCcw className="w-4 h-4" />
+                REABRIR REPARACIÓN
+              </button>
+              <button
+                onClick={() => handleTransitionState(8)}
+                disabled={loadingStateChange}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white hover:bg-emerald-600 rounded-xl transition-all font-mono text-xs font-extrabold uppercase tracking-wider shadow-lg shadow-emerald-500/20 disabled:opacity-50 cursor-pointer"
+              >
+                {loadingStateChange ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <ShieldCheck className="w-4 h-4" />
+                )}
+                ENTREGAR A CLIENTE
+              </button>
+            </>
           )}
           {Number(order.estado_orden_id) === 8 && (
             <span className="px-3 py-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono text-xs rounded-xl font-bold uppercase tracking-wider flex items-center gap-1.5">
@@ -1148,7 +1232,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                     className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-[#bfce7f] font-mono text-xs disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <option value="1">1 - Recibida</option>
-                    <option value="5">5 - En Reparación</option>
+                    {Number(order.estado_orden_id) !== 7 && <option value="5">5 - En Reparación</option>}
                     <option value="7">7 - Lista para Entrega</option>
                     <option value="8">8 - Entregada</option>
                   </select>
@@ -1192,9 +1276,9 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                           className="w-full p-2 bg-[#0a0c10] border border-[#2d3748] rounded-lg text-slate-200 text-xs focus:outline-none focus:border-[#bfce7f]"
                         >
                           <option value="">-- Selecciona el servicio a reabrir --</option>
-                          {(order.servicios || []).map((s) => (
-                            <option key={s.orden_servicio_id} value={String(s.orden_servicio_id)}>
-                              #{s.orden_servicio_id} - {s.tipo_servicio_nombre} ({s.mecanico_nombre})
+                          {(order.servicios || []).map((s, idx) => (
+                            <option key={s.orden_servicio_id || s.id || `srv-reopen-opt-${idx}`} value={String(s.orden_servicio_id || s.id || idx)}>
+                              #{s.orden_servicio_id || s.id} - {s.tipo_servicio_nombre || "Servicio"} ({s.mecanico_nombre || "Sin mecánico"})
                             </option>
                           ))}
                         </select>
