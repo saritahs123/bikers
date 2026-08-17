@@ -9,8 +9,8 @@ export async function GET() {
       return NextResponse.json({ error: "NO_SESSION", message: "No hay sesión activa." }, { status: 401 });
     }
 
-    // Check Módulo 5 (RECEPCIÓN) puede_ver permission
-    const perms = await getModulePermissions(5, session.rol_principal_id);
+    // Check Módulo TALLER puede_ver permission
+    const perms = await getModulePermissions("TALLER", session.usuario_id);
     if (!perms.puede_ver) {
       return NextResponse.json({ error: "FORBIDDEN", message: "No posee permiso de lectura para acceder a los catálogos de recepción." }, { status: 403 });
     }

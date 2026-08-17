@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   ArrowLeft,
   Wrench,
@@ -51,17 +51,65 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
   const [newTaskInput, setNewTaskInput] = useState("");
   const [showAddTaskInput, setShowAddTaskInput] = useState(false);
 
-  const fetchOrderDetail = async (isSilent = false) => {
+  const abortControllerRef = useRef(null);
+
+  const fetchOrderDetail = useCallback(async (isSilent = false) => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     if (!isSilent && !order) {
       setLoading(true);
     }
     setError(null);
     try {
-      const res = await fetch(`/api/taller/ordenes/${ordenId}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Error al cargar la orden de trabajo.");
+      const res = await fetch(`/api/taller/ordenes/${ordenId}`, { signal: controller.signal });
+      const payload = await res.json();
+      if (!res.ok) {
+        if (res.status === 401) {
+          if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+            window.location.replace("/login");
+          }
+          return;
+        }
 
-      const orderData = data.data;
+        let title = "No pudimos cargar la orden";
+        let message = payload.message || payload.error || "No se pudo cargar la orden de trabajo.";
+        if (res.status === 400) {
+          title = "Identificador de orden inválido";
+          message = payload.message || "Identificador de orden inválido.";
+        } else if (res.status === 403) {
+          title = "No tienes permiso para consultar esta orden";
+          message = payload.message || "No tienes permiso para consultar esta orden.";
+        } else if (res.status === 404) {
+          title = "La orden solicitada no existe";
+          message = payload.message || "La orden solicitada no existe.";
+        } else if (res.status === 500) {
+          title = "No pudimos cargar la orden";
+          message = payload.message || "No pudimos cargar la orden. Inténtalo nuevamente.";
+        }
+
+        setError({
+          status: res.status,
+          title,
+          message
+        });
+        return;
+      }
+
+      const orderData = payload?.data ?? payload?.order ?? payload;
+
+      if (!orderData || typeof orderData !== "object" || !orderData.orden_id) {
+        setError({
+          status: 500,
+          title: "No pudimos cargar la orden",
+          message: "La respuesta del servidor no contiene los datos esperados."
+        });
+        return;
+      }
+
       setOrder(orderData);
       setNewStatusId(String(orderData.estado_orden_id));
       let mecId = orderData.mecanico_usuario_id ? String(orderData.mecanico_usuario_id) : "";
@@ -90,7 +138,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
       }
 
       // Fetch catalogs strictly from /api/taller/catalogos
-      const catRes = await fetch("/api/taller/catalogos");
+      const catRes = await fetch("/api/taller/catalogos", { signal: controller.signal });
       if (catRes.ok) {
         const catData = await catRes.json();
         setCatalogs({
@@ -110,48 +158,109 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
         });
       }
     } catch (err) {
+      if (err.name === "AbortError") return;
       console.error("fetchOrderDetail Error:", err);
-      if (!isSilent) setError(err.message || "Orden no encontrada.");
+      if (!isSilent) {
+        setError({
+          status: 500,
+          title: "Error de conexión",
+          message: err.message || "No pudimos cargar la orden. Inténtalo nuevamente."
+        });
+      }
     } finally {
-      if (!isSilent) setLoading(false);
+      if (!isSilent) {
+        setLoading(false);
+      }
     }
-  };
+  }, [ordenId]);
 
   const refreshSilently = () => fetchOrderDetail(true);
 
   useEffect(() => {
     if (ordenId) {
-      fetchOrderDetail();
+      fetchOrderDetail(false);
     }
-  }, [ordenId]);
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [ordenId, fetchOrderDetail]);
 
-  const handleUpdateOrderState = async (e) => {
-    e.preventDefault();
-    setUpdatingStatus(true);
+  const [loadingStateChange, setLoadingStateChange] = useState(false);
+
+  const handleTransitionState = async (targetStateId, notes = "") => {
+    setLoadingStateChange(true);
     setModalError(null);
     try {
       const res = await fetch(`/api/taller/ordenes/${ordenId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          estado_orden_id: parseInt(newStatusId, 10),
-          mecanico_usuario_id: newMecanicoId ? parseInt(newMecanicoId, 10) : null,
-          prioridad_id: newPrioridadId ? parseInt(newPrioridadId, 10) : null,
-          observacion_cambio_estado: changeNotes || "Actualización desde Detalle",
-          servicio_id_reabrir: selectedServiceToReopen ? parseInt(selectedServiceToReopen, 10) : null,
-          persona_recibe: personaRecibeInput || null,
-          confirmar_entrega: confirmarEntregaCheck
+          estado_orden_id: targetStateId,
+          observacion_cambio_estado: notes
         })
       });
       const data = await res.json();
       if (!res.ok) {
-        if (data.blockers && data.blockers.length > 0) {
-          const blockerMsg = data.blockers
-            .map((b) => `• ${b.tipo_servicio_nombre}: ${b.motivos.map(m => m === 'SERVICIO_PENDIENTE' ? 'estado Pendiente' : 'sin mano de obra').join(' y ')}.`)
-            .join('\n');
-          throw new Error(`${data.message || data.error}\n\nServicios que requieren atención:\n${blockerMsg}`);
+        const msg = data.message || data.title || "No se pudo cambiar el estado de la orden.";
+        setModalError({ title: "No se pudo cambiar el estado", description: msg });
+        return;
+      }
+      await fetchOrderDetail(true);
+    } catch (err) {
+      setModalError({ title: "Error de conexión", description: "Error al cambiar el estado de la orden." });
+    } finally {
+      setLoadingStateChange(false);
+    }
+  };
+
+  const handleUpdateOrderState = async (e) => {
+    e.preventDefault();
+    setUpdatingStatus(true);
+    setModalError(null);
+    try {
+      const payload = {
+        estado_orden_id: newStatusId ? parseInt(newStatusId, 10) : undefined,
+        prioridad_id: newPrioridadId ? parseInt(newPrioridadId, 10) : null,
+        prioridad_orden_id: newPrioridadId ? parseInt(newPrioridadId, 10) : null,
+        observacion_interna: changeNotes || undefined,
+        observacion_cambio_estado: changeNotes || undefined,
+        servicio_id_reabrir: selectedServiceToReopen || undefined
+      };
+
+      const res = await fetch(`/api/taller/ordenes/${ordenId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        let errTitle = "No pudimos guardar los cambios";
+        let errDesc = "Inténtalo nuevamente en unos momentos.";
+
+        if (res.status === 401) {
+          errTitle = "Tu sesión ha expirado";
+          errDesc = "Inicia sesión nuevamente para continuar.";
+        } else if (res.status === 403) {
+          if (data.error === "FORBIDDEN_COMPANY") {
+            errTitle = "No puedes editar esta orden";
+            errDesc = "La orden pertenece a otra empresa.";
+          } else {
+            errTitle = "No tienes permiso para editar esta orden";
+            errDesc = "Solicita acceso al módulo de Taller a un administrador.";
+          }
+        } else if (res.status === 409) {
+          errTitle = "No se puede cambiar el estado";
+          errDesc = data.message || "Transición de estado no permitida.";
+        } else {
+          errDesc = data.message || data.error || errDesc;
         }
-        throw new Error(data.error || data.message || "Error al actualizar la orden.");
+
+        setModalError({ title: errTitle, description: errDesc });
+        return;
       }
 
       setStatusModalOpen(false);
@@ -159,7 +268,10 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
       setModalError(null);
       refreshSilently();
     } catch (err) {
-      setModalError(err.message);
+      setModalError({
+        title: "No pudimos guardar los cambios",
+        description: "Inténtalo nuevamente en unos momentos."
+      });
     } finally {
       setUpdatingStatus(false);
     }
@@ -188,7 +300,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
     }
   };
 
-  if (loading) {
+  if (loading || (!order && !error)) {
     return (
       <div className="p-12 flex flex-col items-center justify-center bg-[#161a21] border border-[#2d3748] rounded-xl text-slate-400 gap-3 font-mono">
         <Loader2 className="w-8 h-8 animate-spin text-[#bfce7f]" />
@@ -197,23 +309,53 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
     );
   }
 
-  if (error || !order) {
+  if (error) {
+    const errorTitle = (error && typeof error === 'object') ? (error.title || "No pudimos cargar la orden") : "No pudimos cargar la orden";
+    const errorMessage = (error && typeof error === 'object') ? (error.message || "No se pudo recuperar la orden solicitada.") : (typeof error === 'string' ? error : "No se pudo recuperar la orden solicitada.");
+    const isRetryable = error && typeof error === 'object' && error.status === 500;
+
+    const handleBackToList = () => {
+      if (onBack) {
+        onBack();
+      } else if (typeof window !== "undefined") {
+        window.location.href = "/workshop?view=work_orders";
+      }
+    };
+
     return (
       <div className="p-6 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-400 text-xs flex flex-col gap-3 font-mono">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <AlertCircle className="w-5 h-5 shrink-0" />
+            <AlertCircle className="w-5 h-5 shrink-0 text-rose-400" />
             <div>
-              <span className="font-bold text-sm block font-sans">Orden no encontrada</span>
-              <span>{error || "No se pudo recuperar la orden solicitada."}</span>
+              <span className="font-bold text-sm block font-sans text-rose-200">{errorTitle}</span>
+              <span className="text-rose-300 text-xs font-sans">{errorMessage}</span>
             </div>
           </div>
-          <button
-            onClick={onBack}
-            className="px-4 py-2 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 rounded-xl font-bold uppercase transition-colors"
-          >
-            Volver al Listado
-          </button>
+          <div className="flex items-center gap-2">
+            {isRetryable && (
+              <button
+                onClick={() => fetchOrderDetail()}
+                disabled={loading}
+                className="px-4 py-2 bg-[#bfce7f] hover:bg-[#a6b66b] text-slate-950 rounded-xl font-bold uppercase transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+                    <span>Cargando...</span>
+                  </>
+                ) : (
+                  "Reintentar"
+                )}
+              </button>
+            )}
+            <button
+              onClick={handleBackToList}
+              className="px-4 py-2 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 rounded-xl font-bold uppercase transition-colors"
+            >
+              Volver al Listado
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -228,54 +370,102 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
     { id: 8, key: "ENTREGADA", label: "Entregada", icon: ShieldCheck }
   ];
 
-  // Financial Items List (services + products) from live backend API
+  // Extract services, labor items, and products from live backend API or order object
+  const servicesList = order.resumen_financiero?.servicios ||
+    (order.servicios || []).map((s) => ({
+      servicio_id: s.servicio_id,
+      descripcion: s.tipo_servicio_nombre || s.descripcion_servicio || "Servicio",
+      mecanico_nombre: s.mecanico_nombre || "Sin asignar",
+      estado_nombre: s.estado_servicio_nombre || "Pendiente",
+      cantidad: Number(s.cantidad || 1),
+      precio_unitario: Number(s.precio_unitario || s.precio_acordado || 0),
+      descuento: Number(s.valor_descuento || 0),
+      subtotal: Number(s.subtotal || s.precio_acordado || 0)
+    }));
+
+  const rawLabor = order.resumen_financiero?.mano_obra ||
+    (order.servicios || []).flatMap((s) => (s.mano_obra || []));
+
+  const laborList = rawLabor
+    .filter((m) => Boolean(m.detalle_mano_obra && String(m.detalle_mano_obra).trim() !== ""))
+    .map((m) => ({
+      mano_obra_id: m.mano_obra_id || m.id,
+      servicio_id: m.orden_servicio_id,
+      detalle_mano_obra: String(m.detalle_mano_obra).trim(),
+      horas_reales: Number(m.horas_reales || m.horas_trabajadas || 1),
+      costo_hora: Number(m.costo_hora || 0),
+      subtotal: Number(m.subtotal || m.costo_total || (Number(m.horas_trabajadas || 1) * Number(m.costo_hora || 0)))
+    }));
+
+  const productsList = order.resumen_financiero?.productos ||
+    [
+      ...(order.productos || order.repuestos || []),
+      ...(order.servicios || []).flatMap((s) => s.productos || [])
+    ].filter((p, idx, self) => self.findIndex(x => (x.orden_producto_id || x.id) === (p.orden_producto_id || p.id)) === idx)
+    .map((p) => ({
+      orden_producto_id: p.orden_producto_id || p.id,
+      producto_nombre: p.producto_nombre || p.nombre || "Producto / Repuesto",
+      cantidad: Number(p.cantidad || 1),
+      precio_unitario: Number(p.precio_unitario || 0),
+      descuento: Number(p.valor_descuento || 0),
+      subtotal: Number(p.subtotal || 0)
+    }));
+
   const financialItems = [
-    ...(order.servicios || []).map((s) => {
-      const cant = Number(s.cantidad || 1);
-      const precioUnit = Number(s.precio_unitario || s.precio || 0);
-      const sub = Number(s.subtotal || 0);
-      const totalItem = sub > 0 ? sub : (cant * precioUnit);
-
-      return {
-        nombre: s.tipo_servicio_nombre || "Servicio de Mantenimiento",
-        cantidad: cant,
-        precio: precioUnit,
-        total: totalItem,
-        tipo: "SERVICIO"
-      };
-    }),
-    ...(order.repuestos || order.productos || []).map((p) => {
-      const cant = Number(p.cantidad || 1);
-      const precioUnit = Number(p.precio_unitario || 0);
-      const sub = Number(p.subtotal || 0);
-      const totalItem = sub > 0 ? sub : (cant * precioUnit);
-
-      return {
-        nombre: p.producto_nombre || "Producto / Repuesto",
-        cantidad: cant,
-        precio: precioUnit,
-        total: totalItem,
-        tipo: "REPUESTO"
-      };
-    })
+    ...servicesList.map((s) => ({
+      nombre: s.descripcion || s.tipo_servicio_nombre || "Servicio",
+      cantidad: Number(s.cantidad || 1),
+      precio: Number(s.precio_unitario || 0),
+      total: Number(s.subtotal || 0)
+    })),
+    ...laborList.map((m) => ({
+      nombre: `Mano de Obra: ${m.detalle_mano_obra || m.descripcion || "Mano de Obra"}`,
+      cantidad: Number(m.horas_reales || m.horas_trabajadas || 1),
+      precio: Number(m.costo_hora || 0),
+      total: Number(m.subtotal || 0)
+    })),
+    ...productsList.map((p) => ({
+      nombre: p.producto_nombre || p.nombre || "Producto / Repuesto",
+      cantidad: Number(p.cantidad || 1),
+      precio: Number(p.precio_unitario || 0),
+      total: Number(p.subtotal || 0)
+    }))
   ];
 
-  // Calculated totals directly from order object or computed financial items
-  const subtotalServicios = financialItems
-    .filter((i) => i.tipo === "SERVICIO")
-    .reduce((acc, item) => acc + item.total, 0);
+  const subtotalServicios = Number(order.subtotal_servicios ?? servicesList.reduce((acc, s) => acc + Number(s.subtotal || 0), 0));
+  const subtotalManoObra = Number(order.subtotal_mano_obra ?? laborList.reduce((acc, m) => acc + Number(m.subtotal || 0), 0));
+  const subtotalProductos = Number(order.subtotal_productos ?? order.subtotal_repuestos ?? productsList.reduce((acc, p) => acc + Number(p.subtotal || 0), 0));
 
-  const subtotalProductos = financialItems
-    .filter((i) => i.tipo === "REPUESTO")
-    .reduce((acc, item) => acc + item.total, 0);
+  const totalDescuentos = Number(order.descuento_servicios || 0) + Number(order.descuento_productos || 0) + Number(order.otros_descuentos || 0);
+  const subtotalBruto = Number(order.subtotal_bruto ?? (subtotalServicios + subtotalManoObra + subtotalProductos));
+  const subtotalNeto = Number(order.subtotal_neto ?? (subtotalBruto - totalDescuentos));
+  const impuesto = Number(order.impuesto || 0);
+  const totalEstimado = Number(order.total_orden ?? (subtotalNeto + impuesto));
 
-  const computedSum = subtotalServicios + subtotalProductos;
-  const totalEstimado = Number(order.total_orden || 0) > 0 ? Number(order.total_orden) : computedSum;
+  // Dynamic Metrics reading order.progreso contract
+  const repairProgressPercent = Math.min(
+    100,
+    Math.max(0, Number(order.progreso?.porcentaje ?? order.progreso_porcentaje ?? 0))
+  );
 
-  // Dynamic Metrics
-  const repairProgressPercent = order.progreso_porcentaje ?? 0;
-  const horasEstimadasText = order.horas_estimadas !== undefined ? `${order.horas_estimadas}h` : "N/A";
-  const horasRegistradasText = order.horas_registradas !== undefined ? `${order.horas_registradas}h` : "0.0h";
+  const horasRegistradasVal = Number(
+    order.progreso?.horas_registradas ?? order.horas_registradas ?? 0
+  );
+
+  const segundosTrabajadosVal = Number(
+    order.progreso?.segundos_trabajados ?? order.segundos_trabajados ?? 0
+  );
+
+  const minTrabajados = Math.floor((segundosTrabajadosVal % 3600) / 60);
+  const secTrabajados = segundosTrabajadosVal % 60;
+  const detailedTimeStr = segundosTrabajadosVal > 0 
+    ? `${horasRegistradasVal.toFixed(1)} h (${minTrabajados} min ${secTrabajados} s)`
+    : `${horasRegistradasVal.toFixed(1)} h`;
+
+  const horasRegistradasText = detailedTimeStr;
+  const horasEstimadasText = order.horas_estimadas !== undefined && order.horas_estimadas !== null
+    ? `${Number(order.horas_estimadas).toFixed(1)} h`
+    : "N/A";
 
   return (
     <div className="space-y-6">
@@ -304,7 +494,56 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
           </h1>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          {Number(order.estado_orden_id) === 1 && (
+            <button
+              onClick={() => handleTransitionState(5)}
+              disabled={loadingStateChange}
+              className="flex items-center gap-2 px-4 py-2 bg-[#bfce7f] text-slate-950 hover:bg-[#a6b66b] rounded-xl transition-all font-mono text-xs font-extrabold uppercase tracking-wider border-t border-[#d8e899] shadow-lg shadow-[#bfce7f]/20 disabled:opacity-50 cursor-pointer"
+            >
+              {loadingStateChange ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Wrench className="w-4 h-4" />
+              )}
+              INICIAR REPARACIÓN
+            </button>
+          )}
+          {Number(order.estado_orden_id) === 5 && (
+            <button
+              onClick={() => handleTransitionState(7)}
+              disabled={loadingStateChange}
+              className="flex items-center gap-2 px-4 py-2 bg-sky-500 text-white hover:bg-sky-600 rounded-xl transition-all font-mono text-xs font-extrabold uppercase tracking-wider shadow-lg shadow-sky-500/20 disabled:opacity-50 cursor-pointer"
+            >
+              {loadingStateChange ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Truck className="w-4 h-4" />
+              )}
+              MARCAR LISTA PARA ENTREGA
+            </button>
+          )}
+          {Number(order.estado_orden_id) === 7 && (
+            <button
+              onClick={() => handleTransitionState(8)}
+              disabled={loadingStateChange}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white hover:bg-emerald-600 rounded-xl transition-all font-mono text-xs font-extrabold uppercase tracking-wider shadow-lg shadow-emerald-500/20 disabled:opacity-50 cursor-pointer"
+            >
+              {loadingStateChange ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <ShieldCheck className="w-4 h-4" />
+              )}
+              ENTREGAR A CLIENTE
+            </button>
+          )}
+          {Number(order.estado_orden_id) === 8 && (
+            <span className="px-3 py-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono text-xs rounded-xl font-bold uppercase tracking-wider flex items-center gap-1.5">
+              <ShieldCheck className="w-4 h-4" />
+              ORDEN ENTREGADA
+            </span>
+          )}
+
           <button
             onClick={handlePrint}
             className="flex items-center gap-2 px-4 py-2 bg-[#161a21] border border-[#2d3748] text-slate-200 rounded-xl hover:border-slate-500 transition-colors font-mono text-xs font-semibold uppercase tracking-wider shadow-sm"
@@ -482,7 +721,9 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
               <div className="space-y-2 pt-2">
                 <div className="flex items-center justify-between text-xs font-mono">
                   <span className="text-slate-300 font-semibold uppercase">Progreso de Reparación</span>
-                  <span className="text-[#bfce7f] font-bold">{repairProgressPercent}% COMPLETADO</span>
+                  <span className="text-[#bfce7f] font-bold">
+                    {repairProgressPercent % 1 === 0 ? Math.round(repairProgressPercent) : repairProgressPercent.toFixed(1)}% COMPLETADO
+                  </span>
                 </div>
                 {/* Segmented Progress Bar */}
                 <div className="h-4 w-full bg-[#1c2129] border border-[#2d3748] rounded overflow-hidden relative">
@@ -525,43 +766,159 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
               <table className="w-full text-left border-collapse font-mono text-xs">
                 <thead>
                   <tr className="bg-[#161a21] border-b border-[#2d3748] text-slate-400 font-semibold uppercase">
-                    <th className="py-3 px-5">ÍTEM / SERVICIO</th>
+                    <th className="py-3 px-5">CONCEPTO / DETALLE</th>
                     <th className="py-3 px-5 text-right">CANT</th>
                     <th className="py-3 px-5 text-right">PRECIO UNIT.</th>
                     <th className="py-3 px-5 text-right">TOTAL (RD$)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#2d3748]">
-                  {financialItems.length === 0 ? (
+                  {servicesList.length === 0 && laborList.length === 0 && productsList.length === 0 ? (
                     <tr className="bg-[#1c2129]">
                       <td colSpan={4} className="py-6 text-center text-slate-500 font-mono">
-                        No hay servicios ni repuestos registrados en esta orden.
+                        No hay servicios, mano de obra ni repuestos registrados en esta orden.
                       </td>
                     </tr>
                   ) : (
-                    financialItems.map((item, idx) => (
-                      <tr key={idx} className={idx % 2 === 0 ? "bg-[#1c2129]" : "bg-[#161a21]"}>
-                        <td className="py-3 px-5 font-semibold text-slate-200">
-                          {item.nombre}
-                        </td>
-                        <td className="py-3 px-5 text-right text-slate-400">{item.cantidad}</td>
-                        <td className="py-3 px-5 text-right text-slate-400">
-                          {item.precio.toLocaleString("es-DO", { minimumFractionDigits: 2 })}
-                        </td>
-                        <td className="py-3 px-5 text-right font-bold text-slate-100">
-                          {item.total.toLocaleString("es-DO", { minimumFractionDigits: 2 })}
+                    <>
+                      {/* GROUP 1: SERVICIOS */}
+                      <tr className="bg-[#1c2129]/80 border-t border-[#2d3748]">
+                        <td colSpan={4} className="py-2.5 px-5 font-bold text-[#bfce7f] text-[11px] uppercase tracking-wider">
+                          SERVICIOS
                         </td>
                       </tr>
-                    ))
+                      {servicesList.length === 0 ? (
+                        <tr className="bg-[#161a21]">
+                          <td colSpan={4} className="py-2 px-5 text-slate-500 italic">
+                            Sin servicios registrados
+                          </td>
+                        </tr>
+                      ) : (
+                        servicesList.map((s, idx) => (
+                          <tr key={`s-${idx}`} className="bg-[#161a21]">
+                            <td className="py-2.5 px-5 font-medium text-slate-200 pl-7">
+                              {s.descripcion || s.tipo_servicio_nombre || "Servicio de Taller"}
+                            </td>
+                            <td className="py-2.5 px-5 text-right text-slate-400">{s.cantidad}</td>
+                            <td className="py-2.5 px-5 text-right text-slate-400">
+                              RD$ {(Number(s.precio_unitario) || 0).toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                            <td className="py-2.5 px-5 text-right font-semibold text-slate-200">
+                              RD$ {(Number(s.subtotal) || 0).toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                      <tr className="bg-[#1c2129] font-bold border-b border-[#2d3748]">
+                        <td colSpan={3} className="py-2.5 px-5 text-slate-300 text-right uppercase text-[11px]">
+                          Subtotal servicios:
+                        </td>
+                        <td className="py-2.5 px-5 text-right text-[#bfce7f]">
+                          RD$ {subtotalServicios.toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+
+                      {/* GROUP 2: MANO DE OBRA */}
+                      <tr className="bg-[#1c2129]/80 border-t border-[#2d3748]">
+                        <td colSpan={4} className="py-2.5 px-5 font-bold text-[#bfce7f] text-[11px] uppercase tracking-wider">
+                          MANO DE OBRA
+                        </td>
+                      </tr>
+                      {laborList.length === 0 ? (
+                        <tr className="bg-[#161a21]">
+                          <td colSpan={4} className="py-2 px-5 text-slate-500 italic">
+                            Sin mano de obra registrada
+                          </td>
+                        </tr>
+                      ) : (
+                        laborList.map((m, idx) => (
+                          <tr key={`m-${idx}`} className="bg-[#161a21]">
+                            <td className="py-2.5 px-5 font-medium text-slate-200 pl-7">
+                              {m.detalle_mano_obra || m.descripcion || m.observacion || "Mano de Obra"}
+                            </td>
+                            <td className="py-2.5 px-5 text-right text-slate-400">
+                              {m.horas_reales || m.horas_trabajadas || 1} h
+                            </td>
+                            <td className="py-2.5 px-5 text-right text-slate-400">
+                              RD$ {(Number(m.costo_hora) || 0).toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                            <td className="py-2.5 px-5 text-right font-semibold text-slate-200">
+                              RD$ {(Number(m.subtotal) || 0).toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                      <tr className="bg-[#1c2129] font-bold border-b border-[#2d3748]">
+                        <td colSpan={3} className="py-2.5 px-5 text-slate-300 text-right uppercase text-[11px]">
+                          Subtotal mano de obra:
+                        </td>
+                        <td className="py-2.5 px-5 text-right text-[#bfce7f]">
+                          RD$ {subtotalManoObra.toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+
+                      {/* GROUP 3: PRODUCTOS / REPUESTOS */}
+                      <tr className="bg-[#1c2129]/80 border-t border-[#2d3748]">
+                        <td colSpan={4} className="py-2.5 px-5 font-bold text-[#bfce7f] text-[11px] uppercase tracking-wider">
+                          PRODUCTOS / REPUESTOS
+                        </td>
+                      </tr>
+                      {productsList.length === 0 ? (
+                        <tr className="bg-[#161a21]">
+                          <td colSpan={4} className="py-2 px-5 text-slate-500 italic">
+                            Sin repuestos registrados
+                          </td>
+                        </tr>
+                      ) : (
+                        productsList.map((p, idx) => (
+                          <tr key={`p-${idx}`} className="bg-[#161a21]">
+                            <td className="py-2.5 px-5 font-medium text-slate-200 pl-7">
+                              {p.producto_nombre || p.nombre || "Producto / Repuesto"}
+                            </td>
+                            <td className="py-2.5 px-5 text-right text-slate-400">{p.cantidad}</td>
+                            <td className="py-2.5 px-5 text-right text-slate-400">
+                              RD$ {(Number(p.precio_unitario) || 0).toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                            <td className="py-2.5 px-5 text-right font-semibold text-slate-200">
+                              RD$ {(Number(p.subtotal) || 0).toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                      <tr className="bg-[#1c2129] font-bold border-b border-[#2d3748]">
+                        <td colSpan={3} className="py-2.5 px-5 text-slate-300 text-right uppercase text-[11px]">
+                          Subtotal productos:
+                        </td>
+                        <td className="py-2.5 px-5 text-right text-[#bfce7f]">
+                          RD$ {subtotalProductos.toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    </>
                   )}
                 </tbody>
               </table>
 
-              <div className="p-5 bg-[#1c2129] border-t-2 border-[#2d3748] flex justify-between items-center font-mono">
-                <span className="text-base font-bold text-[#bfce7f] uppercase tracking-wider">TOTAL ESTIMADO:</span>
-                <span className="text-xl font-extrabold text-[#bfce7f]">
-                  RD$ {totalEstimado.toLocaleString("es-DO", { minimumFractionDigits: 2 })}
-                </span>
+              <div className="p-5 bg-[#1c2129] border-t-2 border-[#2d3748] space-y-2 font-mono text-xs">
+                <div className="flex justify-between items-center text-slate-300">
+                  <span className="uppercase font-semibold">Subtotal bruto:</span>
+                  <span className="font-bold">
+                    RD$ {subtotalBruto.toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+                {totalDescuentos > 0 && (
+                  <div className="flex justify-between items-center text-rose-400">
+                    <span className="uppercase font-semibold">Descuentos:</span>
+                    <span className="font-bold">
+                      - RD$ {totalDescuentos.toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                )}
+                <div className="pt-3 border-t border-[#2d3748] flex justify-between items-center">
+                  <span className="text-base font-bold text-[#bfce7f] uppercase tracking-wider">TOTAL GENERAL:</span>
+                  <span className="text-xl font-extrabold text-[#bfce7f]">
+                    RD$ {totalEstimado.toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -767,92 +1124,60 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
             </div>
 
             {modalError && (
-              <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs font-sans flex items-start gap-2.5">
-                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold block">No se pudo actualizar</span>
-                  <span>{modalError}</span>
+              <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 text-xs font-sans flex items-start gap-2.5">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
+                <div className="space-y-0.5">
+                  <span className="font-bold text-rose-200 block text-sm">
+                    {typeof modalError === 'object' ? modalError.title : 'No se pudo actualizar'}
+                  </span>
+                  <span className="text-rose-300 text-xs block leading-relaxed whitespace-normal break-words">
+                    {typeof modalError === 'object' ? modalError.description : String(modalError)}
+                  </span>
                 </div>
               </div>
             )}
 
             <form onSubmit={handleUpdateOrderState} className="space-y-4 text-xs font-sans">
-              {(() => {
-                const currentVt = order.validacion_transiciones?.find(v => String(v.estado_destino_id) === String(newStatusId));
-                const isChangingState = String(newStatusId) !== String(order.estado_orden_id);
-                const isBlocked = isChangingState && currentVt && !currentVt.permitida;
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-slate-300 mb-1 font-semibold">Estado de la Orden</label>
+                  <select
+                    value={newStatusId}
+                    onChange={(e) => setNewStatusId(e.target.value)}
+                    disabled={Number(order.estado_orden_id) === 8}
+                    className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-[#bfce7f] font-mono text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <option value="1">1 - Recibida</option>
+                    <option value="5">5 - En Reparación</option>
+                    <option value="7">7 - Lista para Entrega</option>
+                    <option value="8">8 - Entregada</option>
+                  </select>
+                </div>
 
-                return (
-                  <>
-                    {isBlocked && (
-                      <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 space-y-1">
-                        <div className="font-bold flex items-center gap-1.5">
-                          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-                          Transición bloqueada hacia {currentVt.nombre}
-                        </div>
-                        {currentVt.motivos_globales?.includes("SIN_SERVICIOS") && (
-                          <p className="text-[11px] font-mono text-amber-200/90">• La orden no tiene servicios activos registrados.</p>
-                        )}
-                        {currentVt.blockers?.map((b) => (
-                          <p key={b.orden_servicio_id} className="text-[11px] font-mono text-amber-200/90">
-                            • Servicio #{b.orden_servicio_id} ({b.tipo_servicio_nombre}): {b.motivos.join(", ")}
-                          </p>
-                        ))}
-                        {!currentVt.transicion_permitida && (
-                          <p className="text-[11px] font-mono text-amber-200/90">• Transición no permitida en la matriz desde {order.estado_nombre}.</p>
-                        )}
-                      </div>
+                <div>
+                  <label className="block text-slate-300 mb-1 font-semibold">Prioridad</label>
+                  <select
+                    value={newPrioridadId}
+                    onChange={(e) => setNewPrioridadId(e.target.value)}
+                    className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-[#bfce7f]"
+                  >
+                    {catalogs.prioridades?.length > 0 ? (
+                      catalogs.prioridades.map((p) => (
+                        <option key={p.prioridad_id} value={String(p.prioridad_id)}>
+                          {p.nombre}
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="1">Baja</option>
+                        <option value="2">Normal</option>
+                        <option value="3">Alta</option>
+                        <option value="4">Urgente</option>
+                      </>
                     )}
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-slate-300 mb-1 font-semibold">Estado de la Orden</label>
-                        <select
-                          value={newStatusId}
-                          onChange={(e) => setNewStatusId(e.target.value)}
-                          className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-[#bfce7f]"
-                        >
-                          {catalogs.estados?.map((e) => {
-                            const vt = order.validacion_transiciones?.find(v => String(v.estado_destino_id) === String(e.estado_orden_id));
-                            const isCurrent = String(e.estado_orden_id) === String(order.estado_orden_id);
-                            const isDisabled = !isCurrent && vt && !vt.permitida;
-                            let suffix = "";
-                            if (!isCurrent) {
-                              if (vt && !vt.transicion_permitida) suffix = " ❌ (No permitido)";
-                              else if (vt && !vt.permitida) suffix = " ⚠️ (Bloqueado)";
-                            }
-                            return (
-                              <option key={e.estado_orden_id} value={String(e.estado_orden_id)} disabled={isDisabled}>
-                                {e.nombre}{suffix}
-                              </option>
-                            );
-                          })}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-slate-300 mb-1 font-semibold">Prioridad</label>
-                        <select
-                          value={newPrioridadId}
-                          onChange={(e) => setNewPrioridadId(e.target.value)}
-                          className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-[#bfce7f]"
-                        >
-                          {catalogs.prioridades?.length > 0 ? (
-                            catalogs.prioridades.map((p) => (
-                              <option key={p.prioridad_id} value={String(p.prioridad_id)}>
-                                {p.nombre}
-                              </option>
-                            ))
-                          ) : (
-                            <>
-                              <option value="1">Alta Prioridad</option>
-                              <option value="2">Normal</option>
-                              <option value="3">Baja Prioridad</option>
-                            </>
-                          )}
-                        </select>
-                      </div>
-                    </div>
+                  </select>
+                </div>
+              </div>
 
                     {/* Return to repair conditional field: Select service to reopen */}
                     {String(order.estado_orden_id) === "7" && String(newStatusId) === "5" && (
@@ -904,46 +1229,42 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                     )}
 
                     <div>
-                      <label className="block text-slate-300 mb-1 font-semibold">
-                        {String(newStatusId) === "5" && String(order.estado_orden_id) === "7" ? "* Motivo obligatorio de devolución a reparación:" : "Observación / Notas del Cambio"}
-                      </label>
+                      <label className="block text-slate-300 mb-1 font-semibold">Observaciones / Notas del Cambio</label>
                       <textarea
                         rows={3}
                         value={changeNotes}
                         onChange={(e) => setChangeNotes(e.target.value)}
-                        placeholder={String(newStatusId) === "5" && String(order.estado_orden_id) === "7" ? "Indica obligatoriamente el motivo para devolver la orden a reparación..." : "Justificación o notas del cambio..."}
-                        required={String(newStatusId) === "5" && String(order.estado_orden_id) === "7"}
-                        className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-[#bfce7f] leading-relaxed"
+                        placeholder="Escribe observaciones o notas internas relativas a los cambios..."
+                        className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-[#bfce7f] text-xs resize-none"
                       />
                     </div>
 
-                    <div className="flex justify-end items-center gap-3 pt-4 border-t border-[#2d3748]">
+                    <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#2d3748]">
                       <button
                         type="button"
                         onClick={() => {
                           setStatusModalOpen(false);
                           setModalError(null);
                         }}
-                        className="px-4 py-2.5 text-slate-400 hover:text-slate-200 transition-colors font-mono text-xs"
+                        className="px-4 py-2 bg-[#1c2129] border border-[#2d3748] text-slate-300 rounded-xl hover:bg-[#252b36] transition-colors font-mono text-xs"
                       >
                         Cancelar
                       </button>
                       <button
                         type="submit"
-                        disabled={updatingStatus || isBlocked}
-                        className={`px-5 py-2.5 font-bold rounded-xl transition-all flex items-center gap-2 border-t font-mono text-xs ${
-                          isBlocked
-                            ? "bg-slate-700 text-slate-400 border-slate-600 cursor-not-allowed"
-                            : "bg-[#84924a] text-white hover:brightness-110 border-[#a6b66b]"
-                        }`}
+                        disabled={updatingStatus}
+                        className="px-5 py-2 bg-[#84924a] text-white font-bold rounded-xl hover:brightness-110 transition-all font-mono text-xs flex items-center gap-2 border-t border-[#a6b66b] disabled:opacity-50"
                       >
-                        {updatingStatus && <Loader2 className="w-4 h-4 animate-spin text-white" />}
-                        {updatingStatus ? "Guardando..." : "Guardar Cambios"}
+                        {updatingStatus ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Guardando...
+                          </>
+                        ) : (
+                          "Guardar cambios"
+                        )}
                       </button>
                     </div>
-                  </>
-                );
-              })()}
             </form>
           </div>
         </div>
@@ -1001,28 +1322,61 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
 
         {/* Services Table */}
         <div className="mb-6">
-          <h2 className="font-bold font-mono text-slate-900 mb-2 uppercase tracking-wider text-[11px]">SERVICIOS ASOCIADOS</h2>
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="font-bold font-mono text-slate-900 uppercase tracking-wider text-[11px]">1. SERVICIOS</h2>
+            <span className="text-xs font-mono font-bold text-slate-700">Subtotal servicios: RD$ {subtotalServicios.toLocaleString("es-DO", { minimumFractionDigits: 2 })}</span>
+          </div>
           <table className="w-full text-left border-collapse border border-slate-300">
             <thead>
               <tr className="bg-slate-100 border-b border-slate-300 font-mono text-[11px] uppercase">
                 <th className="p-2 border-r border-slate-300">Servicio</th>
                 <th className="p-2 border-r border-slate-300">Mecánico Responsable</th>
                 <th className="p-2 border-r border-slate-300 text-center">Estado</th>
-                <th className="p-2 border-r border-slate-300 text-right">Tiempo Est.</th>
-                <th className="p-2 text-right">Precio Acordado (RD$)</th>
+                <th className="p-2 text-right">Subtotal (RD$)</th>
               </tr>
             </thead>
             <tbody>
-              {(!order.servicios || order.servicios.length === 0) ? (
-                <tr><td colSpan={5} className="p-3 text-center text-slate-500">No hay servicios registrados en esta orden.</td></tr>
+              {servicesList.length === 0 ? (
+                <tr><td colSpan={4} className="p-3 text-center text-slate-500 font-mono text-xs">No hay servicios registrados en esta orden.</td></tr>
               ) : (
-                order.servicios.map((svc, idx) => (
+                servicesList.map((svc, idx) => (
                   <tr key={idx} className="border-b border-slate-200">
-                    <td className="p-2 border-r border-slate-200 font-medium">{svc.tipo_servicio_nombre}</td>
+                    <td className="p-2 border-r border-slate-200 font-medium">{svc.descripcion}</td>
                     <td className="p-2 border-r border-slate-200">{svc.mecanico_nombre || "Sin asignar"}</td>
-                    <td className="p-2 border-r border-slate-200 text-center uppercase text-[10px]">{svc.estado_servicio_nombre || "Pendiente"}</td>
-                    <td className="p-2 border-r border-slate-200 text-right font-mono">{svc.tiempo_estimado_minutos ? `${(svc.tiempo_estimado_minutos/60).toFixed(1)}h` : "N/A"}</td>
-                    <td className="p-2 text-right font-mono font-bold">RD$ {Number(svc.precio_acordado || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })}</td>
+                    <td className="p-2 border-r border-slate-200 text-center uppercase text-[10px]">{svc.estado_nombre || "Pendiente"}</td>
+                    <td className="p-2 text-right font-mono font-bold">RD$ {Number(svc.subtotal || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Labor Table */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="font-bold font-mono text-slate-900 uppercase tracking-wider text-[11px]">2. MANO DE OBRA</h2>
+            <span className="text-xs font-mono font-bold text-slate-700">Subtotal mano de obra: RD$ {subtotalManoObra.toLocaleString("es-DO", { minimumFractionDigits: 2 })}</span>
+          </div>
+          <table className="w-full text-left border-collapse border border-slate-300">
+            <thead>
+              <tr className="bg-slate-100 border-b border-slate-300 font-mono text-[11px] uppercase">
+                <th className="p-2 border-r border-slate-300">Detalle de Mano de Obra</th>
+                <th className="p-2 border-r border-slate-300 text-right">Horas Reales</th>
+                <th className="p-2 border-r border-slate-300 text-right">Costo / Hora (RD$)</th>
+                <th className="p-2 text-right">Subtotal (RD$)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {laborList.length === 0 ? (
+                <tr><td colSpan={4} className="p-3 text-center text-slate-500 font-mono text-xs">No hay mano de obra registrada en esta orden.</td></tr>
+              ) : (
+                laborList.map((m, idx) => (
+                  <tr key={idx} className="border-b border-slate-200">
+                    <td className="p-2 border-r border-slate-200 font-medium">{m.detalle_mano_obra}</td>
+                    <td className="p-2 border-r border-slate-200 text-right font-mono">{m.horas_reales} hr(s)</td>
+                    <td className="p-2 border-r border-slate-200 text-right font-mono">RD$ {Number(m.costo_hora || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })}</td>
+                    <td className="p-2 text-right font-mono font-bold">RD$ {Number(m.subtotal || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })}</td>
                   </tr>
                 ))
               )}
@@ -1032,7 +1386,10 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
 
         {/* Products Table */}
         <div className="mb-6">
-          <h2 className="font-bold font-mono text-slate-900 mb-2 uppercase tracking-wider text-[11px]">PRODUCTOS Y REPUESTOS</h2>
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="font-bold font-mono text-slate-900 uppercase tracking-wider text-[11px]">3. PRODUCTOS / REPUESTOS</h2>
+            <span className="text-xs font-mono font-bold text-slate-700">Subtotal productos: RD$ {subtotalProductos.toLocaleString("es-DO", { minimumFractionDigits: 2 })}</span>
+          </div>
           <table className="w-full text-left border-collapse border border-slate-300">
             <thead>
               <tr className="bg-slate-100 border-b border-slate-300 font-mono text-[11px] uppercase">
@@ -1043,15 +1400,15 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
               </tr>
             </thead>
             <tbody>
-              {financialItems.filter(i => i.tipo === 'REPUESTO').length === 0 ? (
-                <tr><td colSpan={4} className="p-3 text-center text-slate-500">No hay repuestos registrados en esta orden.</td></tr>
+              {productsList.length === 0 ? (
+                <tr><td colSpan={4} className="p-3 text-center text-slate-500 font-mono text-xs">No hay repuestos registrados en esta orden.</td></tr>
               ) : (
-                financialItems.filter(i => i.tipo === 'REPUESTO').map((item, idx) => (
+                productsList.map((item, idx) => (
                   <tr key={idx} className="border-b border-slate-200">
-                    <td className="p-2 border-r border-slate-200 font-medium">{item.nombre}</td>
+                    <td className="p-2 border-r border-slate-200 font-medium">{item.producto_nombre}</td>
                     <td className="p-2 border-r border-slate-200 text-right font-mono">{item.cantidad}</td>
-                    <td className="p-2 border-r border-slate-200 text-right font-mono">RD$ {item.precio.toLocaleString("es-DO", { minimumFractionDigits: 2 })}</td>
-                    <td className="p-2 text-right font-mono font-bold">RD$ {item.total.toLocaleString("es-DO", { minimumFractionDigits: 2 })}</td>
+                    <td className="p-2 border-r border-slate-200 text-right font-mono">RD$ {Number(item.precio_unitario || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })}</td>
+                    <td className="p-2 text-right font-mono font-bold">RD$ {Number(item.subtotal || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })}</td>
                   </tr>
                 ))
               )}
@@ -1061,18 +1418,35 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
 
         {/* Financial Summary */}
         <div className="flex justify-end mb-8">
-          <div className="w-72 border border-slate-300 p-3 rounded-lg bg-slate-50 space-y-1.5 font-mono">
+          <div className="w-80 border border-slate-300 p-4 rounded-lg bg-slate-50 space-y-2 font-mono text-xs">
+            <h3 className="font-bold text-slate-900 border-b border-slate-200 pb-1 uppercase tracking-wider text-[11px]">RESUMEN FINANCIERO</h3>
             <div className="flex justify-between text-slate-600">
               <span>Subtotal Servicios:</span>
               <span>RD$ {subtotalServicios.toLocaleString("es-DO", { minimumFractionDigits: 2 })}</span>
             </div>
             <div className="flex justify-between text-slate-600">
+              <span>Subtotal Mano de Obra:</span>
+              <span>RD$ {subtotalManoObra.toLocaleString("es-DO", { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="flex justify-between text-slate-600">
               <span>Subtotal Repuestos:</span>
               <span>RD$ {subtotalProductos.toLocaleString("es-DO", { minimumFractionDigits: 2 })}</span>
             </div>
+            <div className="flex justify-between text-slate-800 font-semibold border-t border-slate-200 pt-1.5">
+              <span>Subtotal Bruto:</span>
+              <span>RD$ {subtotalBruto.toLocaleString("es-DO", { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="flex justify-between text-slate-600">
+              <span>Descuentos:</span>
+              <span>RD$ {totalDescuentos.toLocaleString("es-DO", { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="flex justify-between text-slate-600">
+              <span>Impuestos:</span>
+              <span>RD$ {impuesto.toLocaleString("es-DO", { minimumFractionDigits: 2 })}</span>
+            </div>
 
-            <div className="flex justify-between text-slate-900 font-bold border-t border-slate-300 pt-1.5 text-sm">
-              <span>TOTAL ESTIMADO:</span>
+            <div className="flex justify-between text-slate-900 font-black border-t-2 border-slate-400 pt-2 text-sm">
+              <span>TOTAL GENERAL:</span>
               <span>RD$ {totalEstimado.toLocaleString("es-DO", { minimumFractionDigits: 2 })}</span>
             </div>
           </div>

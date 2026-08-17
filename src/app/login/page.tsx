@@ -27,8 +27,7 @@ async function isSessionValid() {
     }
 
     const session = sessionCheck[0];
-    const isExpired = session.fecha_expiracion && new Date(session.fecha_expiracion) < new Date();
-    if (isExpired || session.estado !== "ACTIVA") {
+    if (session.estado !== "ACTIVA") {
       return false;
     }
 

@@ -1,39 +1,110 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
+import { recalculateWorkOrderTotals } from "@/lib/workshop/recalculateWorkOrderTotals";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+
+// GET /api/taller/ordenes/[id]/servicios/[servicioId]/mano-obra
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string; servicioId: string }> }
+) {
+  const { id, servicioId } = await params;
+
+  if (!id || !servicioId || !/^\d+$/.test(id.trim()) || !/^\d+$/.test(servicioId.trim())) {
+    return NextResponse.json({ error: "INVALID_ID", message: "IDs no válidos." }, { status: 400 });
+  }
+  const servId = Number(servicioId.trim());
+
+  const session = await getWorkshopSession();
+  if (!session || !session.usuario_id) {
+    return NextResponse.json({ error: "NO_SESSION", message: "Sesión no válida o expirada." }, { status: 401 });
+  }
+
+  const perms = await getModulePermissions("TALLER", session.usuario_id);
+  if (!perms.puede_ver) {
+    return NextResponse.json({ error: "FORBIDDEN", message: "No posee permiso para ver mano de obra." }, { status: 403 });
+  }
+
+  const pool = getPool();
+  try {
+    const res = await pool.query(`
+      SELECT 
+        mo.orden_servicio_mano_obra_id AS mano_obra_id,
+        mo.orden_servicio_mano_obra_id AS id,
+        mo.orden_servicio_id,
+        mo.usuario_id AS mecanico_usuario_id,
+        mo.usuario_id,
+        COALESCE(NULLIF(TRIM(CONCAT_WS(' ', ui.nombre, ui.apellido)), ''), ui.correo_electronico, u.usuario_id::text) AS mecanico_nombre,
+        mo.fecha_inicio,
+        mo.fecha_finalizacion,
+        mo.minutos_trabajados,
+        ROUND(mo.minutos_trabajados / 60.0, 2) AS horas_trabajadas,
+        ROUND(mo.minutos_trabajados / 60.0, 2) AS horas_reales,
+        mo.costo_hora,
+        mo.costo_total AS subtotal,
+        COALESCE(mo.detalle_mano_obra, mo.observacion) AS detalle_mano_obra,
+        mo.observacion AS descripcion,
+        mo.observacion AS observaciones,
+        (mo.fecha_finalizacion IS NULL) AS es_abierta
+      FROM admin.orden_servicio_mano_obra mo
+      LEFT JOIN admin.usuario u ON mo.usuario_id = u.usuario_id
+      LEFT JOIN admin.usuario_identidad ui ON u.usuario_id = ui.usuario_id
+      WHERE mo.orden_servicio_id = $1 
+        AND (mo.activo IS DISTINCT FROM false)
+        AND mo.detalle_mano_obra IS NOT NULL
+        AND BTRIM(mo.detalle_mano_obra) <> ''
+      ORDER BY mo.orden_servicio_mano_obra_id ASC
+    `, [servId]);
+
+    return NextResponse.json({
+      success: true,
+      data: res.rows || []
+    });
+  } catch (err: any) {
+    console.error("GET /api/taller/ordenes/[id]/servicios/[servicioId]/mano-obra Error:", err);
+    return NextResponse.json({ error: "Error al consultar mano de obra.", details: err.message }, { status: 500 });
+  }
+}
 
 // POST /api/taller/ordenes/[id]/servicios/[servicioId]/mano-obra
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; servicioId: string }> }
 ) {
-  const { id, servicioId: servIdStr } = await params;
+  const { id, servicioId } = await params;
+
+  if (!id || !servicioId || !/^\d+$/.test(id.trim()) || !/^\d+$/.test(servicioId.trim())) {
+    return NextResponse.json({ error: "INVALID_ID", message: "IDs no válidos." }, { status: 400 });
+  }
+  const ordenId = Number(id.trim());
+  const servId = Number(servicioId.trim());
+
+  const session = await getWorkshopSession();
+  if (!session || !session.usuario_id) {
+    return NextResponse.json({ error: "NO_SESSION", message: "Sesión no válida o expirada." }, { status: 401 });
+  }
+  const sessionUserId = session.usuario_id;
+
+  const perms = await getModulePermissions("TALLER", session.usuario_id);
+  if (!perms.puede_editar) {
+    return NextResponse.json({ error: "FORBIDDEN", message: "No posee permiso para modificar la mano de obra." }, { status: 403 });
+  }
+
   const pool = getPool();
   const client = await pool.connect();
 
   try {
-    const session = await getWorkshopSession();
-    if (!session || !session.usuario_id) {
-      client.release();
-      return NextResponse.json({ error: "NO_SESSION", message: "Sesión no válida o expirada." }, { status: 401 });
-    }
-    const sessionUserId = session.usuario_id;
-    const ordenId = parseInt(id, 10);
-    const servicioId = parseInt(servIdStr, 10);
-
-    if (isNaN(ordenId) || isNaN(servicioId)) {
-      client.release();
-      return NextResponse.json({ error: "IDs no válidos." }, { status: 400 });
-    }
-
-    const perms = await getModulePermissions(6, session.rol_principal_id);
-    if (!perms.puede_editar) {
-      client.release();
-      return NextResponse.json({ error: "FORBIDDEN", message: "No posee permiso para modificar la mano de obra." }, { status: 403 });
-    }
-
     const body = await req.json();
-    const { mecanico_usuario_id, minutos_trabajados, costo_hora_personalizado, motivo_gratuito, horas_reales, costo_hora } = body;
+    const { mecanico_usuario_id, minutos_trabajados, costo_hora_personalizado, horas_reales, costo_hora } = body;
+    const rawDetail = body.detalle_mano_obra ?? body.descripcion ?? body.observacion;
+    const detailText = typeof rawDetail === "string" ? rawDetail.trim() : "";
+
+    if (!detailText) {
+      return NextResponse.json({
+        error: "LABOR_DETAIL_REQUIRED",
+        message: "Describe el trabajo realizado."
+      }, { status: 400 });
+    }
 
     await client.query("BEGIN");
 
@@ -81,18 +152,7 @@ export async function POST(
     const customRate = costo_hora_personalizado ?? costo_hora;
     if (customRate !== undefined && customRate !== null && customRate !== "") {
       const parsedRate = parseFloat(customRate);
-      if (parsedRate === 0) {
-        if (!motivo_gratuito || !motivo_gratuito.trim()) {
-          await client.query("ROLLBACK");
-          return NextResponse.json({
-            error: "WARRANTY_REASON_REQUIRED",
-            message: "Para registrar mano de obra a costo 0.00 (garantía/trabajo gratuito), se requiere un motivo obligatorio."
-          }, { status: 400 });
-        }
-        rate = 0.00;
-      } else {
-        rate = Math.max(0, parsedRate);
-      }
+      rate = isNaN(parsedRate) || parsedRate <= 0 ? 0.00 : parsedRate;
     } else {
       const tsRes = await client.query(`SELECT precio_base, duracion_estimada_horas FROM admin.tipo_servicio WHERE tipo_servicio_id = $1`, [serv.tipo_servicio_id]);
       if (tsRes.rows.length > 0) {
@@ -104,7 +164,7 @@ export async function POST(
 
     const costoTotal = Math.round(((mins / 60.0) * rate) * 100) / 100;
 
-    // Insert Manual Closed Labor Session
+    // Insert Manual Closed Labor Session with detalle_mano_obra AND observacion
     const insertLaborSql = `
       INSERT INTO admin.orden_servicio_mano_obra (
         orden_servicio_mano_obra_id,
@@ -116,14 +176,28 @@ export async function POST(
         minutos_facturables,
         costo_hora,
         costo_total,
+        observacion,
+        detalle_mano_obra,
         activo,
         fecha_registro,
         usuario_registro
       ) VALUES (
         (SELECT COALESCE(MAX(orden_servicio_mano_obra_id), 0) + 1 FROM admin.orden_servicio_mano_obra),
-        $1, $2, NOW() - ($3::integer || ' minutes')::interval, NOW(), $3::integer, $3::integer, $4, $5, true, NOW(), $6
+        $1, $2, NOW() - ($3::integer || ' minutes')::interval, NOW(), $3::integer, $3::integer, $4, $5, $7::text, $8::text, true, NOW(), $6
       )
-      RETURNING orden_servicio_mano_obra_id AS mano_obra_id
+      RETURNING 
+        orden_servicio_mano_obra_id AS mano_obra_id,
+        orden_servicio_mano_obra_id AS id,
+        orden_servicio_id,
+        usuario_id AS mecanico_usuario_id,
+        minutos_trabajados,
+        ROUND(minutos_trabajados / 60.0, 2) AS horas_trabajadas,
+        ROUND(minutos_trabajados / 60.0, 2) AS horas_reales,
+        costo_hora,
+        costo_total AS subtotal,
+        COALESCE(detalle_mano_obra, observacion) AS detalle_mano_obra,
+        observacion AS descripcion,
+        observacion
     `;
 
     const laborRes = await client.query(insertLaborSql, [
@@ -132,14 +206,17 @@ export async function POST(
       mins,
       rate,
       costoTotal,
-      sessionUserId
+      sessionUserId,
+      detailText || null,
+      detailText || null
     ]);
 
+    await recalculateWorkOrderTotals(client, ordenId);
     await client.query("COMMIT");
 
     return NextResponse.json({
       success: true,
-      data: { mano_obra_id: laborRes.rows[0].mano_obra_id },
+      data: laborRes.rows[0],
       message: "Registro de mano de obra añadido exitosamente."
     });
   } catch (err: any) {
@@ -151,39 +228,166 @@ export async function POST(
   }
 }
 
+// PUT /api/taller/ordenes/[id]/servicios/[servicioId]/mano-obra
+export async function PUT(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string; servicioId: string }> }
+) {
+  const { id, servicioId } = await params;
+
+  if (!id || !servicioId || !/^\d+$/.test(id.trim()) || !/^\d+$/.test(servicioId.trim())) {
+    return NextResponse.json({ error: "INVALID_ID", message: "IDs no válidos." }, { status: 400 });
+  }
+  const ordenId = Number(id.trim());
+  const servId = Number(servicioId.trim());
+
+  const session = await getWorkshopSession();
+  if (!session || !session.usuario_id) {
+    return NextResponse.json({ error: "NO_SESSION", message: "Sesión no válida o expirada." }, { status: 401 });
+  }
+  const sessionUserId = session.usuario_id;
+
+  const perms = await getModulePermissions("TALLER", session.usuario_id);
+  if (!perms.puede_editar) {
+    return NextResponse.json({ error: "FORBIDDEN", message: "No posee permiso para modificar la mano de obra." }, { status: 403 });
+  }
+
+  const pool = getPool();
+  const client = await pool.connect();
+
+  try {
+    const body = await req.json();
+    const manoObraId = Number(body.mano_obra_id || body.orden_servicio_mano_obra_id || body.id);
+    if (!Number.isInteger(manoObraId) || manoObraId <= 0) {
+      return NextResponse.json({ error: "INVALID_MANO_OBRA_ID", message: "ID de mano de obra no válido." }, { status: 400 });
+    }
+
+    const detailText = (body.detalle_mano_obra || body.descripcion || body.observacion || "").trim();
+    const rawHours = body.horas_reales ?? body.horas_trabajadas;
+    const mins = (rawHours !== undefined && rawHours !== null && rawHours !== "" && !isNaN(parseFloat(rawHours)))
+      ? Math.max(1, Math.round(parseFloat(rawHours) * 60))
+      : 60;
+    const rate = (body.costo_hora !== undefined && body.costo_hora !== null && !isNaN(parseFloat(body.costo_hora)))
+      ? Math.max(0, parseFloat(body.costo_hora))
+      : 0.00;
+    const costoTotal = Math.round(((mins / 60.0) * rate) * 100) / 100;
+
+    await client.query("BEGIN");
+
+    // Lock Order Row Exclusively
+    const orderRes = await client.query(`
+      SELECT orden_trabajo_id, estado_orden_id
+      FROM admin.ordenes_trabajo
+      WHERE orden_trabajo_id = $1 AND activo = true
+      FOR UPDATE OF ordenes_trabajo
+    `, [ordenId]);
+
+    if (orderRes.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return NextResponse.json({ error: "Orden de trabajo no encontrada." }, { status: 404 });
+    }
+
+    const estadoOrdenId = orderRes.rows[0].estado_orden_id;
+    if (estadoOrdenId === 8 || estadoOrdenId === 7) {
+      await client.query("ROLLBACK");
+      return NextResponse.json({ error: "ORDER_LOCKED", message: "No se puede modificar mano de obra en el estado actual de la orden." }, { status: 409 });
+    }
+
+    const updateLaborSql = `
+      UPDATE admin.orden_servicio_mano_obra
+      SET 
+        detalle_mano_obra = $1::text,
+        observacion = $2::text,
+        minutos_trabajados = $3,
+        minutos_facturables = $3,
+        costo_hora = $4,
+        costo_total = $5,
+        fecha_actualizacion = NOW(),
+        usuario_actualizacion = $6
+      WHERE orden_servicio_mano_obra_id = $7 AND orden_servicio_id = $8
+      RETURNING 
+        orden_servicio_mano_obra_id AS mano_obra_id,
+        orden_servicio_mano_obra_id AS id,
+        orden_servicio_id,
+        usuario_id AS mecanico_usuario_id,
+        minutos_trabajados,
+        ROUND(minutos_trabajados / 60.0, 2) AS horas_trabajadas,
+        ROUND(minutos_trabajados / 60.0, 2) AS horas_reales,
+        costo_hora,
+        costo_total AS subtotal,
+        COALESCE(detalle_mano_obra, observacion) AS detalle_mano_obra,
+        observacion AS descripcion,
+        observacion
+    `;
+
+    const laborRes = await client.query(updateLaborSql, [
+      detailText || null,
+      detailText || null,
+      mins,
+      rate,
+      costoTotal,
+      sessionUserId,
+      manoObraId,
+      servId
+    ]);
+
+    if (laborRes.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return NextResponse.json({ error: "Registro de mano de obra no encontrado." }, { status: 404 });
+    }
+
+    await recalculateWorkOrderTotals(client, ordenId);
+    await client.query("COMMIT");
+
+    return NextResponse.json({
+      success: true,
+      data: laborRes.rows[0],
+      message: "Mano de obra actualizada correctamente."
+    });
+  } catch (err: any) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error("PUT /api/taller/ordenes/[id]/servicios/[servicioId]/mano-obra Error:", err);
+    return NextResponse.json({ error: "Error al actualizar mano de obra.", details: err.message }, { status: 500 });
+  } finally {
+    client.release();
+  }
+}
+
 // DELETE /api/taller/ordenes/[id]/servicios/[servicioId]/mano-obra
 export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; servicioId: string }> }
 ) {
-  const { id, servicioId: servIdStr } = await params;
+  const { id, servicioId } = await params;
+
+  if (!id || !servicioId || !/^\d+$/.test(id.trim()) || !/^\d+$/.test(servicioId.trim())) {
+    return NextResponse.json({ error: "INVALID_ID", message: "IDs no válidos." }, { status: 400 });
+  }
+  const ordenId = Number(id.trim());
+  const servId = Number(servicioId.trim());
+
+  const { searchParams } = new URL(req.url);
+  const rawManoObraId = searchParams.get("mano_obra_id") || searchParams.get("orden_servicio_mano_obra_id");
+  const manoObraId = parseInt(rawManoObraId || "0", 10);
+
+  if (isNaN(manoObraId) || manoObraId <= 0) {
+    return NextResponse.json({ error: "Parámetros no válidos." }, { status: 400 });
+  }
+
+  const session = await getWorkshopSession();
+  if (!session || !session.usuario_id) {
+    return NextResponse.json({ error: "NO_SESSION", message: "Sesión no válida o expirada." }, { status: 401 });
+  }
+
+  const perms = await getModulePermissions("TALLER", session.usuario_id);
+  if (!perms.puede_editar) {
+    return NextResponse.json({ error: "FORBIDDEN", message: "No posee permiso para eliminar mano de obra." }, { status: 403 });
+  }
+
   const pool = getPool();
   const client = await pool.connect();
 
   try {
-    const session = await getWorkshopSession();
-    if (!session || !session.usuario_id) {
-      client.release();
-      return NextResponse.json({ error: "NO_SESSION", message: "Sesión no válida o expirada." }, { status: 401 });
-    }
-    const ordenId = parseInt(id, 10);
-    const servicioId = parseInt(servIdStr, 10);
-
-    const { searchParams } = new URL(req.url);
-    const rawManoObraId = searchParams.get("mano_obra_id") || searchParams.get("orden_servicio_mano_obra_id");
-    const manoObraId = parseInt(rawManoObraId || "0", 10);
-
-    if (isNaN(ordenId) || isNaN(servicioId) || isNaN(manoObraId) || manoObraId <= 0) {
-      client.release();
-      return NextResponse.json({ error: "Parámetros no válidos." }, { status: 400 });
-    }
-
-    const perms = await getModulePermissions(6, session.rol_principal_id);
-    if (!perms.puede_editar) {
-      client.release();
-      return NextResponse.json({ error: "FORBIDDEN", message: "No posee permiso para eliminar mano de obra." }, { status: 403 });
-    }
-
     await client.query("BEGIN");
 
     // Lock Order Row Exclusively
@@ -216,6 +420,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Registro de mano de obra no encontrado." }, { status: 404 });
     }
 
+    await recalculateWorkOrderTotals(client, ordenId);
     await client.query("COMMIT");
 
     return NextResponse.json({

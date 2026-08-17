@@ -11,7 +11,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "NO_SESSION", message: "No hay sesión activa." }, { status: 401 });
     }
 
-    const perms = await getModulePermissions(5, session.rol_principal_id);
+    const perms = await getModulePermissions("TALLER", session.usuario_id);
     if (!perms.puede_crear && !perms.puede_editar) {
       return NextResponse.json({ error: "FORBIDDEN", message: "No posee permisos para cargar evidencias de recepción." }, { status: 403 });
     }

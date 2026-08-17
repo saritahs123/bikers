@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { authorizeUserAccess, authorizeUserUpdate } from "@/lib/userAuth";
+import { getModulePermissions } from "@/lib/workshop-session";
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -157,7 +158,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       );
     }
 
-    const { targetUserId, isSelf, authUserCompanyId } = authResult;
+    const { authUserId, targetUserId, isSelf, authUserCompanyId } = authResult;
 
     let body: any;
     try {
@@ -176,7 +177,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       );
     }
 
-    // 1. Fetch current user data before processing updates
+    // 1. Fetch current user data
     const currentRows = await query(
       `SELECT
          u.usuario_id,
@@ -212,8 +213,12 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
     const current = currentRows[0];
 
-    // 3. Strict Whitelist & Administrative Change Guard for Self Profile
-    if (isSelf) {
+    // Check if caller has administrative edit permissions on module SEGURIDAD
+    const segPerms = await getModulePermissions("SEGURIDAD", authUserId);
+    const hasAdminEditPerm = segPerms.puede_editar;
+
+    // Self Profile Guard: Only block admin changes if caller does NOT have SEGURIDAD edit permissions
+    if (isSelf && !hasAdminEditPerm) {
       const isParamChanged = (newVal: any, oldVal: any) =>
         newVal !== undefined && newVal !== null && String(newVal).trim() !== String(oldVal ?? '').trim();
 
@@ -243,35 +248,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       }
     }
 
-    // 5. Strict Whitelist for Administrative Mode
-    const ADMIN_ALLOWED_FIELDS = new Set([
-      'first_name', 'nombre', 'last_name', 'apellido', 'phone', 'telefono',
-      'document_number', 'numero_documento', 'department_id', 'departamento_id',
-      'area_id', 'cargo_id', 'companyId', 'empresa_id', 'roleId', 'rol_id',
-      'rol_principal_id', 'user_type_id', 'tipo_usuario_id', 'status', 'estado',
-      'estado_activacion', 'idioma_preferido', 'zona_horaria', 'formato_fecha',
-      'enviar_invitacion_correo', 'generar_clave_automatica', 'forzar_cambio_clave',
-      'restriccion_ip', 'id', 'usuario_id'
-    ]);
-
-    if (!isSelf) {
-      const forbiddenAdminFields = Object.keys(body).filter(
-        (field) => !ADMIN_ALLOWED_FIELDS.has(field)
-      );
-
-      if (forbiddenAdminFields.length > 0) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "VALIDATION_ERROR",
-            message: `Propiedad no permitida en la solicitud: ${forbiddenAdminFields.join(', ')}.`
-          },
-          { status: 400 }
-        );
-      }
-    }
-
-    // 2. Preserve current values for missing/unsent properties
+    // 2. Resolve field values with current fallbacks
     const updatedFirstName =
       body.first_name !== undefined ? body.first_name : (body.nombre !== undefined ? body.nombre : current.nombre);
 
@@ -322,44 +299,88 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       }
     }
 
-    // Admin mode update for admin.usuario
-    if (!isSelf) {
-      const newCompanyId = body.companyId ?? body.empresa_id ?? current.empresa_id;
-      const newRolId = body.roleId ?? body.rol_id ?? body.rol_principal_id ?? current.rol_principal_id;
-      const newTipoUsuarioId = body.user_type_id ?? body.tipo_usuario_id ?? current.tipo_usuario_id;
-      const newEstado = body.status ?? body.estado ?? current.estado;
-      const newEstadoActivacion = body.estado_activacion ?? current.estado_activacion;
-
-      if (authUserCompanyId && newCompanyId && Number(newCompanyId) !== Number(authUserCompanyId)) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "FORBIDDEN",
-            message: "No posee permisos para asignar el usuario a otra empresa."
-          },
-          { status: 403 }
-        );
+    // Resolve administrative fields
+    let newCompanyId: number | null = null;
+    const rawComp = body.companyId ?? body.empresa_id;
+    if (rawComp !== undefined && rawComp !== null && rawComp !== '') {
+      if (typeof rawComp === 'number' || /^\d+$/.test(String(rawComp))) {
+        newCompanyId = Number(rawComp);
+      } else {
+        const cRes = await query(`SELECT empresa_id FROM admin.empresa WHERE UPPER(nombre_comercial) = UPPER($1) OR UPPER(razon_social) = UPPER($1) LIMIT 1`, [String(rawComp).trim()]);
+        if (cRes && cRes.length > 0) newCompanyId = cRes[0].empresa_id;
       }
+    }
+    if (newCompanyId === null && body.empresa_nombre && typeof body.empresa_nombre === 'string') {
+      const cRes = await query(`SELECT empresa_id FROM admin.empresa WHERE UPPER(nombre_comercial) = UPPER($1) OR UPPER(razon_social) = UPPER($1) LIMIT 1`, [body.empresa_nombre.trim()]);
+      if (cRes && cRes.length > 0) newCompanyId = cRes[0].empresa_id;
+    }
+    if (newCompanyId === null) newCompanyId = current.empresa_id;
 
-      await query(
-        `UPDATE admin.usuario
-         SET empresa_id = $1,
-             rol_principal_id = $2,
-             tipo_usuario_id = $3,
-             estado = $4,
-             estado_activacion = $5,
-             fecha_actualizacion = NOW()
-         WHERE usuario_id = $6`,
-        [
-          newCompanyId ? Number(newCompanyId) : null,
-          newRolId ? Number(newRolId) : null,
-          newTipoUsuarioId ? Number(newTipoUsuarioId) : null,
-          newEstado ? String(newEstado) : null,
-          newEstadoActivacion ? String(newEstadoActivacion) : null,
-          targetUserId
-        ]
+    let newRolId: number | null = null;
+    const rawRol = body.roleId ?? body.rol_id ?? body.rol_principal_id;
+    if (rawRol !== undefined && rawRol !== null && rawRol !== '') {
+      if (typeof rawRol === 'number' || /^\d+$/.test(String(rawRol))) {
+        newRolId = Number(rawRol);
+      } else {
+        const rRes = await query(`SELECT rol_funcional_id FROM admin.rol_funcional WHERE UPPER(nombre) = UPPER($1) LIMIT 1`, [String(rawRol).trim()]);
+        if (rRes && rRes.length > 0) newRolId = rRes[0].rol_funcional_id;
+      }
+    }
+    if (newRolId === null && body.role && typeof body.role === 'string') {
+      const rRes = await query(`SELECT rol_funcional_id FROM admin.rol_funcional WHERE UPPER(nombre) = UPPER($1) LIMIT 1`, [body.role.trim()]);
+      if (rRes && rRes.length > 0) newRolId = rRes[0].rol_funcional_id;
+    }
+    if (newRolId === null) newRolId = current.rol_principal_id;
+
+    let newTipoUsuarioId: number | null = null;
+    const rawTu = body.user_type_id ?? body.tipo_usuario_id;
+    if (rawTu !== undefined && rawTu !== null && rawTu !== '') {
+      if (typeof rawTu === 'number' || /^\d+$/.test(String(rawTu))) {
+        newTipoUsuarioId = Number(rawTu);
+      } else {
+        const tuRes = await query(`SELECT tipo_usuario_id FROM admin.tipo_usuario WHERE UPPER(nombre) = UPPER($1) LIMIT 1`, [String(rawTu).trim()]);
+        if (tuRes && tuRes.length > 0) newTipoUsuarioId = tuRes[0].tipo_usuario_id;
+      }
+    }
+    if (newTipoUsuarioId === null && body.user_type && typeof body.user_type === 'string') {
+      const tuRes = await query(`SELECT tipo_usuario_id FROM admin.tipo_usuario WHERE UPPER(nombre) = UPPER($1) LIMIT 1`, [body.user_type.trim()]);
+      if (tuRes && tuRes.length > 0) newTipoUsuarioId = tuRes[0].tipo_usuario_id;
+    }
+    if (newTipoUsuarioId === null) newTipoUsuarioId = current.tipo_usuario_id;
+
+    const newEstado = body.status ?? body.estado ?? current.estado;
+    const newEstadoActivacion = body.estado_activacion ?? body.activation ?? current.estado_activacion;
+
+    if (authUserCompanyId && newCompanyId && Number(newCompanyId) !== Number(authUserCompanyId)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "FORBIDDEN",
+          message: "No posee permisos para asignar el usuario a otra empresa."
+        },
+        { status: 403 }
       );
     }
+
+    // Update admin.usuario
+    await query(
+      `UPDATE admin.usuario
+       SET empresa_id = $1,
+           rol_principal_id = $2,
+           tipo_usuario_id = $3,
+           estado = $4,
+           estado_activacion = $5,
+           fecha_actualizacion = NOW()
+       WHERE usuario_id = $6`,
+      [
+        newCompanyId ? Number(newCompanyId) : null,
+        newRolId ? Number(newRolId) : null,
+        newTipoUsuarioId ? Number(newTipoUsuarioId) : null,
+        newEstado ? String(newEstado) : null,
+        newEstadoActivacion ? String(newEstadoActivacion) : null,
+        targetUserId
+      ]
+    );
 
     // Update admin.usuario_identidad
     const finalFirstName = updatedFirstName !== null && updatedFirstName !== undefined ? String(updatedFirstName).trim() : null;
@@ -412,7 +433,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       );
     }
 
-    // 8. Re-query updated real data and construct usuarioActualizado
+    // Re-query updated real data and construct usuarioActualizado
     const fetchUpdatedSql = `
       SELECT 
         u.usuario_id AS id,
