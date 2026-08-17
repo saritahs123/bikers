@@ -42,7 +42,7 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
 
   const [orders, setOrders] = useState([]);
   const [catalogs, setCatalogs] = useState({ estados: [], prioridades: [], mecanicos: [] });
-  const [metrics, setMetrics] = useState({ abiertas: 0, aprobacion: 0, en_proceso: 0, atrasadas: 0 });
+  const [metrics, setMetrics] = useState({ abiertas: 0, recibidas: 0, en_proceso: 0, listas_entrega: 0, entregadas: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -107,12 +107,14 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
       const recibidasCount = fetchedOrders.filter(o => o.estado_orden_id === 1).length;
       const enReparacionCount = fetchedOrders.filter(o => o.estado_orden_id === 5).length;
       const listasEntregaCount = fetchedOrders.filter(o => o.estado_orden_id === 7).length;
+      const entregadasCount = fetchedOrders.filter(o => o.estado_orden_id === 8).length;
 
       setMetrics({
-        abiertas: abiertasCount || fetchedOrders.length,
+        abiertas: abiertasCount,
         recibidas: recibidasCount,
         en_proceso: enReparacionCount,
-        listas_entrega: listasEntregaCount
+        listas_entrega: listasEntregaCount,
+        entregadas: entregadasCount
       });
     } catch (err) {
       console.error("fetchOrders Error:", err);
@@ -224,9 +226,12 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
       </div>
 
       {/* Summary Bento Cards Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-4">
         {/* Card 1: ABIERTAS */}
-        <div className="bg-[#161a21] border border-[#2d3748] rounded-xl p-5 hover:border-[#4a5568] transition-all relative overflow-hidden group">
+        <div
+          onClick={() => updateUrlParams({ estado_id: null })}
+          className="bg-[#161a21] border border-[#2d3748] rounded-xl p-5 hover:border-[#4a5568] transition-all relative overflow-hidden group cursor-pointer"
+        >
           <div className="flex justify-between items-start mb-3">
             <span className="font-mono text-xs font-bold text-slate-400 tracking-wider uppercase">ABIERTAS</span>
             <Inbox className="w-5 h-5 text-[#bfce7f]" />
@@ -236,7 +241,10 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
         </div>
 
         {/* Card 2: RECIBIDAS */}
-        <div className="bg-[#161a21] border border-[#2d3748] rounded-xl p-5 hover:border-[#4a5568] transition-all relative overflow-hidden group">
+        <div
+          onClick={() => updateUrlParams({ estado_id: "1" })}
+          className="bg-[#161a21] border border-[#2d3748] rounded-xl p-5 hover:border-[#4a5568] transition-all relative overflow-hidden group cursor-pointer"
+        >
           <div className="flex justify-between items-start mb-3">
             <span className="font-mono text-xs font-bold text-slate-400 tracking-wider uppercase">RECIBIDAS</span>
             <Clock className="w-5 h-5 text-slate-400" />
@@ -246,7 +254,10 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
         </div>
 
         {/* Card 3: EN REPARACIÓN */}
-        <div className="bg-[#161a21] border border-[#2d3748] rounded-xl p-5 hover:border-[#4a5568] transition-all relative overflow-hidden group">
+        <div
+          onClick={() => updateUrlParams({ estado_id: "5" })}
+          className="bg-[#161a21] border border-[#2d3748] rounded-xl p-5 hover:border-[#4a5568] transition-all relative overflow-hidden group cursor-pointer"
+        >
           <div className="flex justify-between items-start mb-3">
             <span className="font-mono text-xs font-bold text-slate-400 tracking-wider uppercase">EN REPARACIÓN</span>
             <Wrench className="w-5 h-5 text-[#bfce7f]" />
@@ -256,13 +267,29 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
         </div>
 
         {/* Card 4: LISTAS PARA ENTREGA */}
-        <div className="bg-[#161a21] border border-amber-500/30 rounded-xl p-5 hover:border-amber-500/50 transition-all relative overflow-hidden group">
+        <div
+          onClick={() => updateUrlParams({ estado_id: "7" })}
+          className="bg-[#161a21] border border-amber-500/30 rounded-xl p-5 hover:border-amber-500/50 transition-all relative overflow-hidden group cursor-pointer"
+        >
           <div className="flex justify-between items-start mb-3">
             <span className="font-mono text-xs font-bold text-amber-400 tracking-wider uppercase">LISTAS PARA ENTREGA</span>
             <ClipboardList className="w-5 h-5 text-amber-400" />
           </div>
           <div className="text-3xl font-extrabold text-amber-400 font-mono">{metrics.listas_entrega || 0}</div>
           <div className="text-xs text-amber-400/80 mt-1 font-medium">Listas para cliente</div>
+        </div>
+
+        {/* Card 5: ENTREGADAS */}
+        <div
+          onClick={() => updateUrlParams({ estado_id: "8" })}
+          className="bg-[#161a21] border border-emerald-500/30 rounded-xl p-5 hover:border-emerald-500/50 transition-all relative overflow-hidden group cursor-pointer"
+        >
+          <div className="flex justify-between items-start mb-3">
+            <span className="font-mono text-xs font-bold text-emerald-400 tracking-wider uppercase">ENTREGADAS</span>
+            <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+          </div>
+          <div className="text-3xl font-extrabold text-emerald-400 font-mono">{metrics.entregadas || 0}</div>
+          <div className="text-xs text-emerald-400/80 mt-1 font-medium">Completadas / entregadas</div>
         </div>
       </div>
 

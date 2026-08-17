@@ -887,14 +887,18 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
   };
 
   // Save or Update Photo Handler
-  const saveOrUpdatePhoto = async (bikeId) => {
-    if (!bikeId) return;
+  const saveOrUpdatePhoto = async (rawBikeId) => {
+    const targetBikeId = Number(rawBikeId || detailBike?.bicicleta_id || detailBike?.id);
+    if (!targetBikeId || isNaN(targetBikeId) || targetBikeId <= 0) {
+      showToast("Error: No se pudo identificar el ID de la bicicleta para la fotografía.", "error");
+      return;
+    }
 
     // Case 1: Editing existing photo (PUT)
     if (editingPhoto) {
       setIsUploading(true);
       try {
-        const res = await fetch(`/api/crm/bicicletas/${bikeId}/photos`, {
+        const res = await fetch(`/api/crm/bicicletas/${targetBikeId}/photos`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -911,7 +915,7 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
 
         showToast("Fotografía actualizada exitosamente.");
         handleCancelPhotoEdit();
-        fetchPhotos(bikeId);
+        fetchPhotos(targetBikeId);
       } catch (err) {
         showToast(err.message, "error");
       } finally {
@@ -926,16 +930,71 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
       return;
     }
 
+    if (selectedPhotoFile) {
+      const allowedMimes = ["image/jpeg", "image/png", "image/webp"];
+      if (!allowedMimes.includes(selectedPhotoFile.type)) {
+        showToast("Solo se permiten imágenes en formato JPG, PNG o WEBP.", "error");
+        return;
+      }
+      if (selectedPhotoFile.size > 10 * 1024 * 1024) {
+        showToast("El archivo de imagen excede el límite máximo de 10 MB.", "error");
+        return;
+      }
+    }
+
     setIsUploading(true);
     try {
-      const filename = selectedPhotoFile ? selectedPhotoFile.name : `foto_${Date.now()}.png`;
-      const photoPayloadUrl = selectedPhotoDataUrl || `/storage/bicicletas/${bikeId}/${filename}`;
+      let objectKey = null;
+      let uploadToken = null;
+      let filename = selectedPhotoFile ? selectedPhotoFile.name : `foto_${Date.now()}.png`;
 
-      const res = await fetch(`/api/crm/bicicletas/${bikeId}/photos`, {
+      if (selectedPhotoFile) {
+        // 1. Request presigned upload URL from S3 API
+        const presignRes = await fetch("/api/storage/presign-upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fileName: selectedPhotoFile.name,
+            contentType: selectedPhotoFile.type || "image/jpeg",
+            size: selectedPhotoFile.size,
+            module: "crm",
+            entityType: "bicicletas",
+            entityId: targetBikeId
+          })
+        });
+
+        const presignData = await presignRes.json();
+        if (!presignRes.ok) {
+          throw new Error(
+            presignData.message ||
+            presignData.error ||
+            "No se pudo generar la URL firmada de subida."
+          );
+        }
+
+        // 2. Direct PUT to S3
+        const s3PutRes = await fetch(presignData.uploadUrl, {
+          method: "PUT",
+          headers: { "Content-Type": selectedPhotoFile.type || "image/jpeg" },
+          body: selectedPhotoFile
+        });
+
+        if (!s3PutRes.ok) {
+          throw new Error("No se pudo transferir la imagen al almacenamiento S3.");
+        }
+
+        objectKey = presignData.objectKey;
+        uploadToken = presignData.uploadToken;
+      }
+
+      // 3. Persist photo metadata in PostgreSQL
+      const res = await fetch(`/api/crm/bicicletas/${targetBikeId}/photos`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          url_archivo: photoPayloadUrl,
+          objectKey,
+          uploadToken,
+          url_archivo: null,
           nombre_archivo: filename,
           tipo_foto: newPhotoType,
           descripcion: newPhotoDesc || filename,
@@ -947,9 +1006,9 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Error al guardar fotografía.");
 
-      showToast("Fotografía guardada exitosamente.");
+      showToast("Fotografía guardada exitosamente en S3.");
       handleCancelPhotoEdit();
-      fetchPhotos(bikeId);
+      fetchPhotos(targetBikeId);
     } catch (err) {
       showToast(err.message, "error");
     } finally {
@@ -2385,7 +2444,7 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
                         <button
                           type="button"
                           disabled={isUploading || (!editingPhoto && !selectedPhotoFile && !selectedPhotoDataUrl)}
-                          onClick={() => saveOrUpdatePhoto(detailBike.id)}
+                          onClick={() => saveOrUpdatePhoto(detailBike?.bicicleta_id || detailBike?.id)}
                           className="px-6 py-2 bg-[#bfce7f] hover:bg-[#a9ba6b] text-[#1d1f18] font-bold rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 cursor-pointer shadow-lg shrink-0 ml-4"
                         >
                           {isUploading ? (

@@ -8,8 +8,12 @@ export default function ReceptionChecklistModal({
   itemsCatalog = [],
   estadosCatalog = [],
   checklistState = [],
-  onChangeChecklist
+  onChangeChecklist,
+  recepcionId = null,
+  recepcion_id = null
 }) {
+  const currentRecepcionId = recepcionId || recepcion_id || null;
+
   const [activeCategory, setActiveCategory] = useState("CUADRO");
   const [uploadingItem, setUploadingItem] = useState(null);
   const [validationError, setValidationError] = useState(null);
@@ -73,38 +77,59 @@ export default function ReceptionChecklistModal({
     if (!file) return;
 
     if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-      alert("Solo se permiten imágenes en formato JPG, PNG o WEBP.");
+      setValidationError("Solo se permiten imágenes en formato JPG, PNG o WEBP.");
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      alert("La imagen excede el límite máximo de 5 MB.");
+      setValidationError("La imagen excede el límite máximo de 5 MB.");
       return;
     }
 
     setUploadingItem(itemId);
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
+    setValidationError(null);
 
-      const res = await fetch("/api/taller/evidencias", {
+    try {
+      // 1. Obtain presigned upload URL from S3 API
+      const presignRes = await fetch("/api/storage/presign-upload", {
         method: "POST",
-        body: formData
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileName: file.name,
+          contentType: file.type || "image/jpeg",
+          size: file.size,
+          module: "taller",
+          entityType: "evidencias",
+          entityId: currentRecepcionId ? currentRecepcionId : null
+        })
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.message || data.error || "Error al subir evidencia.");
+      const presignData = await presignRes.json();
+      if (!presignRes.ok) {
+        throw new Error(presignData.message || presignData.error || "Error al solicitar URL de carga S3.");
+      }
+
+      // 2. Upload file directly to S3 via PUT
+      const s3Res = await fetch(presignData.uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": file.type || "image/jpeg" },
+        body: file
+      });
+
+      if (!s3Res.ok) {
+        throw new Error("No se pudo transferir la evidencia al almacenamiento S3.");
       }
 
       updateItem(itemId, {
-        upload_token: data.upload_token,
+        object_key: presignData.objectKey,
+        upload_token: presignData.uploadToken,
         preview_url: URL.createObjectURL(file),
         filename: file.name
       });
 
     } catch (err) {
-      alert(err.message || "No se pudo subir la imagen de evidencia.");
+      console.error("Error al cargar evidencia S3:", err?.message || err);
+      setValidationError(err.message || "No se pudo subir la imagen de evidencia a S3.");
     } finally {
       setUploadingItem(null);
     }
