@@ -1016,57 +1016,6 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
         </div>
       )}
 
-      {/* KPI Cards Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* KPI 1: Pendientes */}
-        <div className="bg-[#161a21] border border-[#2d3748] p-4 rounded-xl flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-bold block mb-1">
-              Pendientes
-            </span>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl font-black font-mono text-amber-400">{kpiPendientes}</span>
-              <span className="text-xs font-mono text-slate-400">Servicios</span>
-            </div>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-            <Clock className="w-5 h-5" />
-          </div>
-        </div>
-
-        {/* KPI 2: En Proceso */}
-        <div className="bg-[#161a21] border border-[#2d3748] p-4 rounded-xl flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-bold block mb-1">
-              En Proceso
-            </span>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl font-black font-mono text-[#bfce7f]">{kpiEnProceso}</span>
-              <span className="text-xs font-mono text-slate-400">Activos</span>
-            </div>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-[#84924a]/20 border border-[#bfce7f]/30 flex items-center justify-center text-[#bfce7f]">
-            <Wrench className="w-5 h-5" />
-          </div>
-        </div>
-
-        {/* KPI 3: Completados */}
-        <div className="bg-[#161a21] border border-[#2d3748] p-4 rounded-xl flex items-center justify-between">
-          <div>
-            <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-bold block mb-1">
-              Completados
-            </span>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl font-black font-mono text-emerald-400">{kpiCompletados}</span>
-              <span className="text-xs font-mono text-slate-400">Listos</span>
-            </div>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
-            <CheckCircle2 className="w-5 h-5" />
-          </div>
-        </div>
-      </div>
-
       {/* Main Two-Column Master-Detail Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column: Detalle de Servicios Table (2/3) */}

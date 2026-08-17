@@ -1,7 +1,15 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
-import { isS3Configured } from "@/lib/s3";
+import {
+  isS3Configured,
+  getMissingS3EnvVars,
+  getPresignedDownloadUrl,
+  checkS3ObjectExists,
+  isS3ObjectKey
+} from "@/lib/storage/s3";
+
+export const runtime = "nodejs";
 
 // GET /api/taller/evidencias/[recepcion_checklist_id]
 export async function GET(
@@ -25,9 +33,10 @@ export async function GET(
       return NextResponse.json({ error: "ID de checklist inválido." }, { status: 400 });
     }
 
-    // Multitenant Check
+    // Query recepcion_checklist & multitenant company check
     const rows = await query(
-      `SELECT rc.recepcion_checklist_id, rc.ruta_archivo, rc.nombre_archivo, rc.evidencia_foto
+      `SELECT rc.recepcion_checklist_id, rc.ruta_archivo, rc.url_archivo, rc.nombre_archivo, rc.evidencia_foto,
+              r.recepcion_id, u.empresa_id as recepcion_empresa_id
        FROM admin.recepcion_checklist rc
        JOIN admin.recepciones r ON rc.recepcion_id = r.recepcion_id
        LEFT JOIN admin.usuario u ON r.recibido_por_usuario_id = u.usuario_id
@@ -41,20 +50,56 @@ export async function GET(
     }
 
     const r = rows[0];
+    const keyCandidate = (r.ruta_archivo || r.url_archivo || "").trim();
 
-    if (!isS3Configured()) {
-      return NextResponse.json({
-        error: "S3_NOT_CONFIGURED",
-        message: "Almacenamiento de archivos S3 no configurado en variables de entorno. La evidencia física no está disponible."
-      }, { status: 503 });
+    if (!keyCandidate) {
+      return NextResponse.json({ error: "NOT_FOUND", message: "El registro no contiene una clave o ruta de archivo asociada." }, { status: 404 });
+    }
+
+    let downloadUrl: string | null = null;
+    let expiresIn = 300;
+
+    if (isS3ObjectKey(keyCandidate) || (!keyCandidate.startsWith("http") && !keyCandidate.startsWith("/storage") && keyCandidate.includes("/"))) {
+      // S3 Storage path -> Check S3 configuration first
+      if (!isS3Configured()) {
+        const missing = getMissingS3EnvVars();
+        console.warn("S3 no configurado. Variables ausentes:", missing);
+        return NextResponse.json({
+          error: "S3_NOT_CONFIGURED",
+          message: `Almacenamiento S3 no configurado en el servidor. Variables ausentes: ${missing.join(", ")}`
+        }, { status: 503 });
+      }
+
+      // Check physical S3 object existence
+      const exists = await checkS3ObjectExists(keyCandidate);
+      if (!exists) {
+        return NextResponse.json({
+          error: "S3_OBJECT_NOT_FOUND",
+          message: "El archivo físico de la evidencia no fue encontrado en el bucket S3."
+        }, { status: 404 });
+      }
+
+      const presigned = await getPresignedDownloadUrl({ key: keyCandidate });
+      downloadUrl = presigned.downloadUrl;
+      expiresIn = presigned.expiresIn;
+
+    } else if (keyCandidate.startsWith("http://") || keyCandidate.startsWith("https://") || keyCandidate.startsWith("/storage/")) {
+      // Legacy URL / path compatibility
+      downloadUrl = keyCandidate;
+    } else {
+      return NextResponse.json({ error: "INVALID_KEY_FORMAT", message: "El formato de la clave de archivo no es válido." }, { status: 400 });
     }
 
     return NextResponse.json({
       success: true,
+      downloadUrl,
+      expiresIn,
       data: {
         recepcion_checklist_id: r.recepcion_checklist_id,
         nombre_archivo: r.nombre_archivo || "evidencia.jpg",
-        key_referencia: r.ruta_archivo || null
+        key_referencia: r.ruta_archivo || null,
+        downloadUrl,
+        url_evidencia: downloadUrl
       }
     });
 

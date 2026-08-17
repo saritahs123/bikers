@@ -20,6 +20,134 @@ import {
   AlertTriangle
 } from "lucide-react";
 
+function EvidenceImageCard({ item, compact = false }) {
+  const [evidenceUrl, setEvidenceUrl] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadEvidence() {
+      try {
+        setLoading(true);
+        setError(null);
+        const res = await fetch(`/api/taller/evidencias/${item.recepcion_checklist_id}`);
+        const json = await res.json();
+        if (!res.ok) {
+          throw new Error(json.message || json.error || `Error HTTP ${res.status}`);
+        }
+        if (isMounted) {
+          const url = json.downloadUrl || json.url_evidencia || json.data?.downloadUrl || json.data?.url_evidencia;
+          setEvidenceUrl(url);
+        }
+      } catch (err) {
+        if (isMounted) {
+          setError(err.message || "No se pudo cargar la evidencia.");
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    }
+    loadEvidence();
+    return () => { isMounted = false; };
+  }, [item.recepcion_checklist_id]);
+
+  if (compact) {
+    return (
+      <div className="p-2 bg-slate-950/80 border border-slate-800 rounded-lg space-y-1 text-[11px] overflow-hidden">
+        <div className="flex justify-between items-center gap-1">
+          <span className="font-semibold text-slate-200 truncate text-[11px]">
+            {item.item_nombre || "Inspección"}
+          </span>
+        </div>
+
+        {loading ? (
+          <div className="h-20 bg-slate-900 border border-slate-800 rounded flex flex-col items-center justify-center space-y-1">
+            <Loader2 className="w-4 h-4 text-emerald-400 animate-spin" />
+            <span className="text-[9px] text-slate-500">Cargando...</span>
+          </div>
+        ) : error ? (
+          <div className="p-1.5 bg-amber-500/10 border border-amber-500/20 rounded text-amber-400 text-[10px] truncate">
+            {error}
+          </div>
+        ) : evidenceUrl ? (
+          <div className="relative group overflow-hidden rounded border border-slate-800 bg-slate-900">
+            <img
+              src={evidenceUrl}
+              alt={item.nombre_archivo || "Evidencia"}
+              className="w-full h-20 object-cover group-hover:scale-105 transition-transform duration-300"
+            />
+            <a
+              href={evidenceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[10px] font-medium transition-opacity"
+            >
+              Ver Foto
+            </a>
+          </div>
+        ) : (
+          <div className="p-2 bg-slate-900 border border-slate-800 rounded text-center text-slate-500 text-[10px]">
+            Sin imagen
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-3.5 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2 text-xs">
+      <div className="flex justify-between items-start">
+        <span className="font-semibold text-slate-200">
+          {item.item_nombre || "Ítem de Inspección"}
+        </span>
+        <span className="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-mono">
+          #{item.recepcion_checklist_id}
+        </span>
+      </div>
+      <p className="text-[11px] text-slate-400 font-mono truncate">
+        Archivo: {item.nombre_archivo || "Sin nombre de archivo"}
+      </p>
+
+      {loading ? (
+        <div className="h-44 bg-slate-900 border border-slate-800 rounded-lg flex flex-col items-center justify-center space-y-2">
+          <Loader2 className="w-5 h-5 text-emerald-400 animate-spin" />
+          <span className="text-[11px] text-slate-500">Cargando imagen S3...</span>
+        </div>
+      ) : error ? (
+        <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-400 text-[11px] space-y-1">
+          <p className="font-semibold flex items-center gap-1.5">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> Error al cargar evidencia
+          </p>
+          <p className="text-[10px] text-amber-300/80">{error}</p>
+        </div>
+      ) : evidenceUrl ? (
+        <div className="relative group overflow-hidden rounded-lg border border-slate-800 bg-slate-900">
+          <img
+            src={evidenceUrl}
+            alt={item.nombre_archivo || "Evidencia"}
+            className="w-full h-44 object-cover group-hover:scale-105 transition-transform duration-300"
+          />
+          <a
+            href={evidenceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-medium transition-opacity"
+          >
+            Ver Imagen Completa
+          </a>
+        </div>
+      ) : (
+        <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg text-center text-slate-500 text-[11px]">
+          Imagen no disponible
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ReceptionDetailView({ recepcionId, onBack }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -249,9 +377,9 @@ export default function ReceptionDetailView({ recepcionId, onBack }) {
 
       {/* TAB 1: RESUMEN (Bento Grid) */}
       {activeTab === "resumen" && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Left Column (8 Cols) */}
-          <div className="lg:col-span-8 space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+          {/* Main Left Column (8 Cols) */}
+          <main className="lg:col-span-8 min-w-0 space-y-5">
             {/* Card 1: Motivo de Ingreso & Notas */}
             <div className="p-5 bg-slate-900/60 border border-slate-800 rounded-2xl space-y-3">
               <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
@@ -334,7 +462,7 @@ export default function ReceptionDetailView({ recepcionId, onBack }) {
                   </div>
                 </div>
 
-                {/* Row 3: Nº de Serie / Cuadro (b.numero_serie_cuadro) */}
+                {/* Row 3: Nº de Serie / Cuadro */}
                 <div className="flex flex-col sm:flex-row">
                   <div className="sm:w-1/3 p-3.5 bg-slate-950/40 text-slate-400 font-medium">
                     Nº de Serie / Cuadro
@@ -388,33 +516,84 @@ export default function ReceptionDetailView({ recepcionId, onBack }) {
               </div>
             </div>
 
-            {/* Card 3: Presupuesto Preliminar Estimado */}
-            <div className="p-5 bg-slate-900/60 border border-slate-800 rounded-2xl">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="space-y-1 flex-1 min-w-0">
-                  <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                    <DollarSign className="w-4 h-4 text-emerald-400" />
-                    Presupuesto Preliminar Estimado
-                  </h4>
-                  <p className="text-xs text-slate-300 leading-relaxed">
-                    Este valor fue aprobado por el cliente durante la recepción. Sujeto a cambios tras desarme profundo en taller.
-                  </p>
-                </div>
+            {/* Card 3: Sub-Grid de Evidencias (50%) & Firma Digital (50%) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
+              {/* Evidencias Registradas */}
+              <section className="min-w-0 h-full">
+                <div className="p-4 bg-slate-900/60 border border-slate-800 rounded-2xl h-full flex flex-col justify-between space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-2.5 min-h-[32px]">
+                    <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                      <Camera className="w-4 h-4 text-emerald-400" />
+                      Evidencias Registradas ({fotosEvidencia.length})
+                    </h4>
 
-                <div className="bg-slate-950 border border-emerald-500/30 px-5 py-3 rounded-xl flex flex-col items-start md:items-end shrink-0 shadow-md">
-                  <span className="text-[10px] font-mono font-semibold text-emerald-400 uppercase tracking-widest">
-                    Monto Aproximado
-                  </span>
-                  <span className="text-2xl font-mono font-bold text-slate-100">
-                    RD$ {Number(data.presupuesto_estimado || 0).toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </span>
+                    {fotosEvidencia.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab("fotografias")}
+                        className="text-[11px] text-emerald-400 hover:underline cursor-pointer font-medium"
+                      >
+                        Ver detalle
+                      </button>
+                    )}
+                  </div>
+
+                  {fotosEvidencia.length === 0 ? (
+                    <div className="p-4 bg-slate-950/60 border border-slate-800 rounded-xl text-center space-y-1 my-auto">
+                      <ImageOff className="w-5 h-5 text-slate-600 mx-auto" />
+                      <p className="text-xs text-slate-400">
+                        No hay evidencias fotográficas registradas
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {fotosEvidencia.slice(0, 2).map((item) => (
+                        <EvidenceImageCard key={item.recepcion_checklist_id} item={item} compact={true} />
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </div>
+              </section>
+
+              {/* Firma Digital del Cliente */}
+              <section className="min-w-0 h-full">
+                <div className="p-4 bg-slate-900/60 border border-slate-800 rounded-2xl h-full flex flex-col justify-between space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-2.5 min-h-[32px]">
+                    <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                      Firma Digital del Cliente
+                    </h4>
+                  </div>
+
+                  {data.firma?.firma_digital ? (
+                    <div className="space-y-2 my-auto">
+                      <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-center max-w-full overflow-hidden h-24">
+                        <img
+                          src={data.firma.firma_digital}
+                          alt="Firma del Cliente"
+                          className="max-h-20 max-w-full object-contain"
+                        />
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] text-slate-400 gap-2">
+                        <span className="text-emerald-400 font-medium truncate">Términos Aceptados</span>
+                        <span className="truncate shrink-0 font-mono text-[10px]">{formatDate(data.firma.fecha_firma)}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-slate-950/60 border border-slate-800 rounded-xl text-center space-y-1 my-auto">
+                      <ShieldCheck className="w-5 h-5 text-slate-600 mx-auto" />
+                      <p className="text-xs text-slate-400">
+                        Sin firma digital registrada.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </section>
             </div>
-          </div>
+          </main>
 
-          {/* Right Column (4 Cols) */}
-          <div className="lg:col-span-4 space-y-6">
+          {/* Aside Right Column (4 Cols) */}
+          <aside className="lg:col-span-4 min-w-0 space-y-5">
             {/* Card 1: Estado de Ingreso */}
             <div className="p-5 bg-slate-900/60 border border-slate-800 rounded-2xl space-y-4">
               <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2 border-b border-slate-800 pb-3">
@@ -521,75 +700,28 @@ export default function ReceptionDetailView({ recepcionId, onBack }) {
                   Sin Acción de Bloque 2
                 </button>
               )}
-            </div>
 
-            {/* Card 3: Evidencias Fotográficas (Disabled 'Ver todas' when count = 0) */}
-            <div className="p-5 bg-slate-900/60 border border-slate-800 rounded-2xl space-y-3">
-              <div className="flex items-center justify-between">
-                <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                  <Camera className="w-4 h-4 text-emerald-400" />
-                  Evidencias Registradas ({fotosEvidencia.length})
-                </h4>
+              {/* Seccion Compacta de Presupuesto Preliminar Aprobado */}
+              <div className="border-t border-slate-800/80 pt-3 mt-3">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">
+                      Presupuesto preliminar aprobado
+                    </p>
+                    <p className="text-[11px] text-slate-400 truncate">
+                      Sujeto a cambios después del diagnóstico en taller
+                    </p>
+                  </div>
 
-                {fotosEvidencia.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab("fotografias")}
-                    className="text-[11px] text-emerald-400 hover:underline cursor-pointer font-medium"
-                  >
-                    Ver detalle
-                  </button>
-                )}
+                  <div className="shrink-0 text-right">
+                    <p className="text-lg font-mono font-bold text-emerald-400">
+                      RD$ {Number(data.presupuesto_estimado || 0).toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                </div>
               </div>
-
-              {fotosEvidencia.length === 0 ? (
-                <div className="p-4 bg-slate-950/60 border border-slate-800 rounded-xl text-center space-y-1.5">
-                  <ImageOff className="w-6 h-6 text-slate-600 mx-auto" />
-                  <p className="text-xs text-slate-400">
-                    Esta recepción no posee evidencias fotográficas disponibles.
-                  </p>
-                </div>
-              ) : (
-                <div className="p-4 bg-slate-950/60 border border-slate-800 rounded-xl text-center space-y-1.5">
-                  <Camera className="w-6 h-6 text-amber-400 mx-auto" />
-                  <p className="text-xs text-slate-300">
-                    Almacenamiento S3 no configurado (HTTP 503). Las evidencias fotográficas no están disponibles en este momento.
-                  </p>
-                </div>
-              )}
             </div>
-
-            {/* Card 4: Firma Digital del Cliente */}
-            <div className="p-5 bg-slate-900/60 border border-slate-800 rounded-2xl space-y-3">
-              <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                Firma Digital del Cliente
-              </h4>
-
-              {data.firma?.firma_digital ? (
-                <div className="space-y-2">
-                  <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-center">
-                    <img
-                      src={data.firma.firma_digital}
-                      alt="Firma del Cliente"
-                      className="max-h-28 object-contain"
-                    />
-                  </div>
-                  <div className="flex items-center justify-between text-[11px] text-slate-400">
-                    <span className="text-emerald-400 font-medium">Términos Aceptados</span>
-                    <span>{formatDate(data.firma.fecha_firma)}</span>
-                  </div>
-                </div>
-              ) : (
-                <div className="p-4 bg-slate-950/60 border border-slate-800 rounded-xl text-center space-y-1">
-                  <ShieldCheck className="w-6 h-6 text-slate-600 mx-auto" />
-                  <p className="text-xs text-slate-400">
-                    Sin firma digital registrada.
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
+          </aside>
         </div>
       )}
 
@@ -659,40 +791,10 @@ export default function ReceptionDetailView({ recepcionId, onBack }) {
               </p>
             </div>
           ) : (
-            <div className="space-y-3">
-              <div className="p-3.5 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center gap-3 text-xs text-amber-400">
-                <AlertTriangle className="w-5 h-5 shrink-0" />
-                <div>
-                  <span className="font-semibold block">Almacenamiento S3 No Configurado (HTTP 503)</span>
-                  <span className="text-[11px] text-amber-300/80">
-                    Se registran {fotosEvidencia.length} indicadores de evidencias en base de datos. Los binarios físicos no están disponibles en este servidor local.
-                  </span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                {fotosEvidencia.map((item) => (
-                  <div
-                    key={item.recepcion_checklist_id}
-                    className="p-3.5 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2 text-xs"
-                  >
-                    <div className="flex justify-between items-start">
-                      <span className="font-semibold text-slate-200">
-                        {item.item_nombre || "Ítem de Inspección"}
-                      </span>
-                      <span className="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-mono">
-                        #{item.recepcion_checklist_id}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-400 font-mono truncate">
-                      Archivo: {item.nombre_archivo || "Sin nombre de archivo"}
-                    </p>
-                    <div className="p-2 bg-slate-900 border border-slate-800/80 rounded text-center text-[10px] text-slate-500 font-mono">
-                      HTTP 503 • /api/taller/evidencias/{item.recepcion_checklist_id}
-                    </div>
-                  </div>
-                ))}
-              </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              {fotosEvidencia.map((item) => (
+                <EvidenceImageCard key={item.recepcion_checklist_id} item={item} />
+              ))}
             </div>
           )}
         </div>
