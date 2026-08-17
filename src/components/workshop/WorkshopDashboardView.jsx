@@ -33,12 +33,18 @@ export default function WorkshopDashboardView({ onNavigateList, onNavigateWorkOr
       const res = await fetch("/api/taller/dashboard");
       const json = await res.json();
       if (!res.ok) {
-        throw new Error(json.message || json.error || "Error al cargar el Panel Operativo.");
+        if (res.status === 401) {
+          if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+            window.location.replace("/login");
+          }
+          return;
+        }
+        setError(json.message || json.error || "Error al cargar el Panel Operativo.");
+        return;
       }
       setDashboardData(json.data);
     } catch (err) {
-      console.error("fetchDashboard Error:", err);
-      setError(err.message || "No se pudieron obtener las métricas del taller.");
+      setError("No se pudieron obtener las métricas del taller.");
     } finally {
       setLoading(false);
     }

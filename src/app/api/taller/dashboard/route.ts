@@ -9,8 +9,8 @@ export async function GET() {
       return NextResponse.json({ error: "NO_SESSION", message: "No hay sesión activa." }, { status: 401 });
     }
 
-    // Check Módulo 7 (TALLER) puede_ver permission
-    const perms = await getModulePermissions(7, session.rol_principal_id);
+    // Check Módulo TALLER puede_ver permission
+    const perms = await getModulePermissions("TALLER", session.usuario_id);
     if (!perms.puede_ver) {
       return NextResponse.json({ error: "FORBIDDEN", message: "No posee permisos para ver el Panel Operativo de Taller." }, { status: 403 });
     }

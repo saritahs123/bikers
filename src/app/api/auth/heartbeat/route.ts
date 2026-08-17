@@ -34,16 +34,14 @@ export async function POST() {
     }
 
     const session = rows[0];
-    const isExpired = session.fecha_expiracion && new Date(session.fecha_expiracion) < new Date();
-
-    if (session.estado === "REVOCADA" || session.estado === "CERRADA" || session.estado === "EXPIRADA" || isExpired) {
+    if (session.estado === "REVOCADA" || session.estado === "CERRADA" || session.estado === "EXPIRADA") {
       // Session revoked or closed
       cookieStore.delete("session_user_id");
       cookieStore.delete("session_token");
       return NextResponse.json(
         { 
           error: "SESSION_REVOKED", 
-          message: "Su sesión fue revocada o ha expirado. Por favor, vuelva a iniciar sesión." 
+          message: "Su sesión fue revocada. Por favor, vuelva a iniciar sesión." 
         },
         { status: 401 }
       );

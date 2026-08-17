@@ -33,11 +33,9 @@ export async function GET() {
     }
 
     const session = sessionCheck[0];
-    const isExpired = session.fecha_expiracion && new Date(session.fecha_expiracion) < new Date();
-
-    if (isExpired || session.estado !== "ACTIVA") {
+    if (session.estado !== "ACTIVA") {
       return NextResponse.json(
-        { success: false, error: "UNAUTHORIZED", message: "La sesión ha expirado." },
+        { success: false, error: "UNAUTHORIZED", message: "Sesión inactiva." },
         { status: 401 }
       );
     }

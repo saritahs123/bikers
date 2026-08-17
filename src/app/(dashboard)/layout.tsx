@@ -17,7 +17,7 @@ async function getAuthenticatedUser() {
   const sessionCheck = await query<{ usuario_id: number; fecha_expiracion: string | Date | null; estado: string }>(
     `SELECT usuario_id, fecha_expiracion, estado
      FROM admin.usuario_sesion
-     WHERE token_identificador = $1 AND estado = 'ACTIVA'
+     WHERE token_identificador = $1 AND estado = 'ACTIVA' AND (fecha_expiracion IS NULL OR fecha_expiracion > NOW())
      LIMIT 1`,
     [tokenCookie]
   );
@@ -27,8 +27,7 @@ async function getAuthenticatedUser() {
   }
 
   const session = sessionCheck[0];
-  const isExpired = session.fecha_expiracion && new Date(session.fecha_expiracion) < new Date();
-  if (isExpired || session.estado !== "ACTIVA") {
+  if (session.estado !== "ACTIVA") {
     return null;
   }
 
