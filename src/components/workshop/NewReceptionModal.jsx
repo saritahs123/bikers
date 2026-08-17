@@ -110,7 +110,10 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
           estado_checklist_id: c.estado_checklist_id,
           observacion: c.observacion,
           requiere_trabajo: c.requiere_trabajo,
-          upload_token: c.upload_token
+          object_key: c.object_key || c.s3_key || null,
+          upload_token: c.upload_token || null,
+          filename: c.filename || null,
+          evidencia_foto: Boolean(c.object_key || c.upload_token || c.s3_key)
         })),
         firma: {
           firma_digital: signatureData.firma_digital,

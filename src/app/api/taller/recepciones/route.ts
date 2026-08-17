@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
-import { verifyUploadToken } from "@/lib/s3";
+import { verifyUploadToken, isS3ObjectKey } from "@/lib/s3";
+import { verifyS3ObjectMetadata } from "@/lib/storage/s3";
 
 // GET /api/taller/recepciones
 export async function GET(req: Request) {
@@ -266,20 +267,102 @@ export async function POST(req: Request) {
       const estado_checklist_id = parseInt(item.estado_checklist_id, 10);
       const observacion = (item.observacion || "").trim();
       const requiere_trabajo = Boolean(item.requiere_trabajo);
-      const upload_token = (item.upload_token || "").trim();
+      const objectKey = String(item.object_key || item.s3_key || item.ruta_archivo || "").trim();
+      const uploadToken = String(item.upload_token || item.uploadToken || "").trim();
 
-      let ruta_archivo = null;
-      let nombre_archivo = null;
+      const hasEvidence =
+        item.evidencia_foto === true ||
+        Boolean(objectKey) ||
+        Boolean(uploadToken);
+
+      let ruta_archivo: string | null = null;
+      let nombre_archivo: string | null = (item.filename || item.nombre_archivo || "").trim() || null;
       let evidencia_foto = false;
 
-      if (upload_token) {
-        const tokenPayload = verifyUploadToken(upload_token);
-        if (!tokenPayload) {
-          return NextResponse.json({ error: "El token de la imagen de evidencia es inválido o ha expirado." }, { status: 400 });
+      if (!hasEvidence) {
+        // 1. Item has no evidence attached -> Save NULLs cleanly
+        evidencia_foto = false;
+        ruta_archivo = null;
+        nombre_archivo = null;
+      } else {
+        // 2. Item declares/attaches evidence -> Enforce strict S3 token & objectKey checks
+        if (!objectKey || objectKey.startsWith("http://") || objectKey.startsWith("https://") || objectKey.startsWith("/storage/") || objectKey.startsWith("blob:") || !isS3ObjectKey(objectKey)) {
+          return NextResponse.json({
+            error: "LEGACY_UPLOAD_NOT_ALLOWED",
+            message: "No se permite la subida en formato legacy. Todas las evidencias nuevas deben utilizar almacenamiento S3 con token firmado."
+          }, { status: 400 });
         }
-        ruta_archivo = tokenPayload.s3_key;
-        nombre_archivo = tokenPayload.original_name;
+
+        if (!uploadToken) {
+          return NextResponse.json({
+            error: "UPLOAD_TOKEN_REQUIRED",
+            message: "Se requiere un token de evidencia firmado y válido para asociar un objeto S3."
+          }, { status: 400 });
+        }
+
+        const tokenPayload = verifyUploadToken(uploadToken);
+        if (!tokenPayload) {
+          return NextResponse.json({
+            error: "INVALID_OR_EXPIRED_UPLOAD_TOKEN",
+            message: "El token de la imagen de evidencia es inválido o ha expirado."
+          }, { status: 400 });
+        }
+
+        const cleanMod = String(tokenPayload.module || "").toLowerCase();
+        const cleanEnt = String(tokenPayload.entityType || "").toLowerCase();
+        if (cleanMod !== "taller" || (cleanEnt !== "evidencias" && cleanEnt !== "checklist")) {
+          return NextResponse.json({
+            error: "INVALID_TOKEN_SCOPE",
+            message: "El token de evidencia no corresponde al módulo o tipo de entidad requeridos (taller/evidencias)."
+          }, { status: 403 });
+        }
+
+        if (tokenPayload.s3_key !== objectKey) {
+          return NextResponse.json({
+            error: "FORBIDDEN",
+            message: "El token de evidencia no corresponde a la clave del objeto enviada."
+          }, { status: 403 });
+        }
+
+        if (Number(tokenPayload.empresa_id) !== Number(session.empresa_id)) {
+          return NextResponse.json({
+            error: "FORBIDDEN_COMPANY",
+            message: "El token de evidencia pertenece a otra empresa."
+          }, { status: 403 });
+        }
+
+        if (Number(tokenPayload.usuario_id) !== Number(session.usuario_id)) {
+          return NextResponse.json({
+            error: "FORBIDDEN_USER",
+            message: "El token de evidencia pertenece a otro usuario."
+          }, { status: 403 });
+        }
+
+        const meta = await verifyS3ObjectMetadata(objectKey);
+        if (!meta.valid) {
+          return NextResponse.json({
+            error: "EVIDENCE_S3_VERIFICATION_FAILED",
+            message: `Verificación HeadObject fallida para evidencia: ${meta.error}`
+          }, { status: 400 });
+        }
+
+        if (!tokenPayload.file_size || typeof tokenPayload.file_size !== "number" || tokenPayload.file_size <= 0 || meta.contentLength !== tokenPayload.file_size) {
+          return NextResponse.json({
+            error: "SIZE_MISMATCH",
+            message: `El tamaño real en S3 (${meta.contentLength} B) no coincide con el firmado (${tokenPayload.file_size} B).`
+          }, { status: 400 });
+        }
+
+        if (!tokenPayload.mime_type || typeof tokenPayload.mime_type !== "string" || meta.contentType.toLowerCase() !== tokenPayload.mime_type.toLowerCase()) {
+          return NextResponse.json({
+            error: "MIME_MISMATCH",
+            message: `El tipo MIME real en S3 (${meta.contentType}) no coincide con el firmado (${tokenPayload.mime_type}).`
+          }, { status: 400 });
+        }
+
         evidencia_foto = true;
+        ruta_archivo = objectKey;
+        nombre_archivo = tokenPayload.original_name || nombre_archivo || "evidencia.jpg";
       }
 
       const nextChkRows = await query(`SELECT COALESCE(MAX(recepcion_checklist_id), 0) + 1 as next_id FROM admin.recepcion_checklist`);
@@ -288,11 +371,11 @@ export async function POST(req: Request) {
       await query(
         `INSERT INTO admin.recepcion_checklist (
           recepcion_checklist_id, recepcion_id, item_checklist_id, estado_checklist_id,
-          observacion, requiere_trabajo, evidencia_foto, nombre_archivo, ruta_archivo,
+          observacion, requiere_trabajo, evidencia_foto, nombre_archivo, ruta_archivo, url_archivo,
           orden_visual, usuario_evaluacion, activo, usuario_registro
         ) VALUES (
           $1, $2, $3, $4,
-          $5, $6, $7, $8, $9,
+          $5, $6, $7, $8, $9, NULL,
           $10, $11, true, $11
         )`,
         [
