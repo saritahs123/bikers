@@ -77,10 +77,10 @@ export default function WorkshopDashboardView({ onNavigateList, onNavigateWorkOr
   }
 
   const {
-    ordenes_activas = 24,
-    mecanicos_disponibles = "3/8",
-    retrasos_criticos = 5,
-    ingresos_semanales = 12400,
+    ordenes_activas = 0,
+    mecanicos_disponibles = "0/0",
+    retrasos_criticos = 0,
+    ingresos_semanales = 0,
     carga_mecanicos = [],
     acciones_urgentes = []
   } = dashboardData;
@@ -115,7 +115,7 @@ export default function WorkshopDashboardView({ onNavigateList, onNavigateWorkOr
           </button>
           <button
             onClick={onOpenNewOrder || onOpenNewReception}
-            className="flex items-center gap-2 px-4 py-2 bg-[#84924a] text-white rounded-xl hover:brightness-110 transition-all font-mono text-xs font-bold tracking-wider uppercase border-t border-[#a5b467] shadow-lg shadow-[#84924a]/20"
+            className="flex items-center gap-2 px-4 py-2 bg-[#84924a] text-white rounded-xl hover:brightness-110 transition-all font-mono text-xs font-bold tracking-wider uppercase border-t border-[#a5b467] shadow-lg shadow-[#84924a]/20 cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             NUEVA ORDEN
@@ -136,9 +136,8 @@ export default function WorkshopDashboardView({ onNavigateList, onNavigateWorkOr
             </div>
           </div>
           <div className="text-4xl font-extrabold text-slate-100 font-mono">{ordenes_activas}</div>
-          <div className="flex items-center gap-1.5 mt-2 text-xs text-[#bfce7f] font-mono font-semibold">
-            <TrendingUp className="w-4 h-4" />
-            <span>+12% vs sem ant.</span>
+          <div className="flex items-center gap-1.5 mt-2 text-xs text-slate-400 font-mono font-semibold">
+            <span>En curso / Recibidas</span>
           </div>
         </div>
 
@@ -154,10 +153,7 @@ export default function WorkshopDashboardView({ onNavigateList, onNavigateWorkOr
           </div>
           <div className="text-4xl font-extrabold text-slate-100 font-mono">{mecanicos_disponibles}</div>
           <div className="flex items-center gap-2 mt-2">
-            <div className="flex-1 bg-[#0a0c10] h-2 rounded-full overflow-hidden border border-[#2d3748]">
-              <div className="bg-slate-300 h-full rounded-full" style={{ width: "37.5%" }}></div>
-            </div>
-            <span className="font-mono text-xs text-slate-400 font-semibold">Alta Carga</span>
+            <span className="font-mono text-xs text-slate-400 font-semibold">Capacidad asignada</span>
           </div>
         </div>
 
@@ -174,7 +170,7 @@ export default function WorkshopDashboardView({ onNavigateList, onNavigateWorkOr
           <div className="text-4xl font-extrabold text-rose-400 font-mono">{retrasos_criticos}</div>
           <div className="flex items-center gap-1.5 mt-2 text-xs text-rose-400 font-mono font-semibold">
             <Clock className="w-4 h-4" />
-            <span>&gt; 48h en cola</span>
+            <span>Alta prioridad / Demoras</span>
           </div>
         </div>
 
@@ -191,9 +187,8 @@ export default function WorkshopDashboardView({ onNavigateList, onNavigateWorkOr
           <div className="text-4xl font-extrabold text-slate-100 font-mono">
             ${(ingresos_semanales / 1000).toFixed(1)}k
           </div>
-          <div className="flex items-center gap-1.5 mt-2 text-xs text-[#bfce7f] font-mono font-semibold">
-            <TrendingUp className="w-4 h-4" />
-            <span>+4% objetivo</span>
+          <div className="flex items-center gap-1.5 mt-2 text-xs text-slate-400 font-mono font-semibold">
+            <span>Últimos 7 días</span>
           </div>
         </div>
       </div>

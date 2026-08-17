@@ -1,5 +1,6 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import {
   Search,
   Filter,
@@ -21,37 +22,75 @@ import {
   ClipboardList,
   ChevronLeft,
   ChevronRight,
-  MoreVertical
+  MoreVertical,
+  X,
+  Tag
 } from "lucide-react";
 
 export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onToggleKanban }) {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  // Primary URL source of truth
+  const urlFrom = searchParams.get("from") || "";
+  const urlTo = searchParams.get("to") || "";
+  const urlSearch = searchParams.get("search") || "";
+  const urlEstado = searchParams.get("estado_id") || "";
+  const urlPrioridad = searchParams.get("prioridad_id") || "";
+  const urlMecanico = searchParams.get("mecanico_id") || "";
+  const urlPage = parseInt(searchParams.get("page") || "1", 10);
+
   const [orders, setOrders] = useState([]);
   const [catalogs, setCatalogs] = useState({ estados: [], prioridades: [], mecanicos: [] });
   const [metrics, setMetrics] = useState({ abiertas: 0, aprobacion: 0, en_proceso: 0, atrasadas: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Filters state
-  const [search, setSearch] = useState("");
-  const [selectedEstado, setSelectedEstado] = useState("");
-  const [selectedPrioridad, setSelectedPrioridad] = useState("");
-  const [selectedMecanico, setSelectedMecanico] = useState("");
-  const [page, setPage] = useState(1);
+  // Synchronized state
+  const [search, setSearch] = useState(urlSearch);
+  const [selectedEstado, setSelectedEstado] = useState(urlEstado);
+  const [selectedPrioridad, setSelectedPrioridad] = useState(urlPrioridad);
+  const [selectedMecanico, setSelectedMecanico] = useState(urlMecanico);
+  const [dateFrom, setDateFrom] = useState(urlFrom);
+  const [dateTo, setDateTo] = useState(urlTo);
+  const [page, setPage] = useState(urlPage);
   const [meta, setMeta] = useState({ total: 0, total_pages: 1 });
 
-  const fetchOrders = async () => {
+  // Sync state with URL search params on mount & when URL params change
+  useEffect(() => {
+    setDateFrom(urlFrom);
+    setDateTo(urlTo);
+    setSearch(urlSearch);
+    setSelectedEstado(urlEstado);
+    setSelectedPrioridad(urlPrioridad);
+    setSelectedMecanico(urlMecanico);
+    setPage(urlPage);
+  }, [searchParams, urlFrom, urlTo, urlSearch, urlEstado, urlPrioridad, urlMecanico, urlPage]);
+
+  // Fetch orders using active URL / State filters
+  const fetchOrders = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
+      const activeFrom = dateFrom !== undefined ? dateFrom : urlFrom;
+      const activeTo = dateTo !== undefined ? dateTo : urlTo;
+      const activeSearch = search !== undefined ? search : urlSearch;
+      const activeEstado = selectedEstado !== undefined ? selectedEstado : urlEstado;
+      const activePrioridad = selectedPrioridad !== undefined ? selectedPrioridad : urlPrioridad;
+      const activeMecanico = selectedMecanico !== undefined ? selectedMecanico : urlMecanico;
+
       const queryParams = new URLSearchParams();
-      if (search) queryParams.set("search", search);
-      if (selectedEstado) queryParams.set("estado_id", selectedEstado);
-      if (selectedPrioridad) queryParams.set("prioridad_id", selectedPrioridad);
-      if (selectedMecanico) queryParams.set("mecanico_id", selectedMecanico);
+      if (activeSearch) queryParams.set("search", activeSearch);
+      if (activeEstado) queryParams.set("estado_id", activeEstado);
+      if (activePrioridad) queryParams.set("prioridad_id", activePrioridad);
+      if (activeMecanico) queryParams.set("mecanico_id", activeMecanico);
+      if (activeFrom) queryParams.set("from", activeFrom);
+      if (activeTo) queryParams.set("to", activeTo);
       queryParams.set("page", String(page));
       queryParams.set("limit", "15");
 
-      const res = await fetch(`/api/taller/ordenes?${queryParams.toString()}`);
+      const apiUrl = `/api/taller/ordenes?${queryParams.toString()}`;
+      const res = await fetch(apiUrl);
       const data = await res.json();
 
       if (!res.ok) {
@@ -63,7 +102,7 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
       if (data.catalogs) setCatalogs(data.catalogs);
       if (data.meta) setMeta(data.meta);
 
-      // Compute summary metrics dynamically for the 4 operational states
+      // Compute summary metrics dynamically
       const abiertasCount = fetchedOrders.filter(o => o.estado_orden_id !== 8).length;
       const recibidasCount = fetchedOrders.filter(o => o.estado_orden_id === 1).length;
       const enReparacionCount = fetchedOrders.filter(o => o.estado_orden_id === 5).length;
@@ -81,18 +120,53 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
     } finally {
       setLoading(false);
     }
-  };
+  }, [dateFrom, dateTo, search, selectedEstado, selectedPrioridad, selectedMecanico, page, urlFrom, urlTo, urlSearch, urlEstado, urlPrioridad, urlMecanico]);
 
   useEffect(() => {
     fetchOrders();
-  }, [search, selectedEstado, selectedPrioridad, selectedMecanico, page]);
+  }, [fetchOrders]);
+
+  const updateUrlParams = (newParamsObj) => {
+    const params = new URLSearchParams(searchParams.toString());
+    Object.entries(newParamsObj).forEach(([key, val]) => {
+      if (val === null || val === "") {
+        params.delete(key);
+      } else {
+        params.set(key, val);
+      }
+    });
+    params.set("page", "1");
+    setPage(1);
+    const newQuery = params.toString();
+    router.push(newQuery ? `/work-orders?${newQuery}` : "/work-orders");
+  };
 
   const handleClearFilters = () => {
     setSearch("");
     setSelectedEstado("");
     setSelectedPrioridad("");
     setSelectedMecanico("");
+    setDateFrom("");
+    setDateTo("");
     setPage(1);
+    router.push("/work-orders");
+  };
+
+  const removeFilter = (filterKey) => {
+    if (filterKey === "date") {
+      setDateFrom("");
+      setDateTo("");
+      updateUrlParams({ from: null, to: null });
+    } else if (filterKey === "search") {
+      setSearch("");
+      updateUrlParams({ search: null });
+    } else if (filterKey === "estado") {
+      setSelectedEstado("");
+      updateUrlParams({ estado_id: null });
+    } else if (filterKey === "mecanico") {
+      setSelectedMecanico("");
+      updateUrlParams({ mecanico_id: null });
+    }
   };
 
   const getEstadoBadge = (codigo, nombre) => {
@@ -109,26 +183,19 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
     );
   };
 
-  const getProgressPercentage = (estadoId) => {
-    switch (estadoId) {
-      case 1: return { pct: 25, text: "Recibida en taller" };
-      case 5: return { pct: 60, text: "Reparación en proceso" };
-      case 7: return { pct: 90, text: "Lista para entrega" };
-      case 8: return { pct: 100, text: "Entregada al cliente" };
-      default: return { pct: 50, text: "En progreso" };
-    }
-  };
+  const selectedMecanicoObj = catalogs.mecanicos?.find(m => String(m.usuario_id) === String(selectedMecanico));
+  const hasActiveFilters = Boolean(search || selectedEstado || selectedMecanico || dateFrom || dateTo);
 
   return (
     <div className="space-y-6">
       {/* Breadcrumb */}
       <div className="text-xs font-mono text-slate-400 font-medium flex items-center gap-1.5 uppercase tracking-wider">
-        <span className="hover:text-slate-200 transition-colors cursor-pointer">TALLER</span>
+        <span className="hover:text-slate-200 transition-colors cursor-pointer" onClick={handleClearFilters}>TALLER</span>
         <span>/</span>
         <span className="text-[#bfce7f] font-semibold">ÓRDENES DE TRABAJO</span>
       </div>
 
-      {/* Stitch Page Header */}
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl md:text-4xl font-extrabold text-slate-100 tracking-tight font-sans">
@@ -148,7 +215,7 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
           </button>
           <button
             onClick={onOpenNewModal}
-            className="flex items-center gap-2 px-4 py-2 bg-[#84924a] text-white rounded-xl hover:brightness-110 transition-all font-mono text-xs font-bold tracking-wider uppercase border-t border-[#a5b467] shadow-lg shadow-[#84924a]/20"
+            className="flex items-center gap-2 px-4 py-2 bg-[#84924a] text-white rounded-xl hover:brightness-110 transition-all font-mono text-xs font-bold tracking-wider uppercase border-t border-[#a5b467] shadow-lg shadow-[#84924a]/20 cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             NUEVA ORDEN
@@ -156,7 +223,7 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
         </div>
       </div>
 
-      {/* Stitch Summary Bento Cards Grid */}
+      {/* Summary Bento Cards Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Card 1: ABIERTAS */}
         <div className="bg-[#161a21] border border-[#2d3748] rounded-xl p-5 hover:border-[#4a5568] transition-all relative overflow-hidden group">
@@ -199,220 +266,255 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
         </div>
       </div>
 
-      {/* Stitch Filters & Search Bar */}
-      <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-[#1c2129] border border-[#2d3748] p-4 rounded-xl">
-        {/* Status Quick Filter Pills */}
-        <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 custom-scrollbar">
-          <button
-            onClick={() => { setSelectedEstado(""); setPage(1); }}
-            className={`px-3 py-1.5 rounded font-mono text-xs font-bold tracking-wider uppercase transition-colors whitespace-nowrap ${
-              selectedEstado === ""
-                ? "bg-[#2d3748] text-white border border-slate-600"
-                : "text-slate-400 hover:bg-[#2d3748]/50 hover:text-white border border-transparent"
-            }`}
-          >
-            Todas
-          </button>
-          <button
-            onClick={() => { setSelectedEstado("1"); setPage(1); }}
-            className={`px-3 py-1.5 rounded font-mono text-xs font-bold tracking-wider uppercase transition-colors whitespace-nowrap ${
-              selectedEstado === "1"
-                ? "bg-[#2d3748] text-[#bfce7f] border border-slate-600"
-                : "text-slate-400 hover:bg-[#2d3748]/50 hover:text-white border border-transparent"
-            }`}
-          >
-            Recibidas
-          </button>
-          <button
-            onClick={() => { setSelectedEstado("5"); setPage(1); }}
-            className={`px-3 py-1.5 rounded font-mono text-xs font-bold tracking-wider uppercase transition-colors whitespace-nowrap ${
-              selectedEstado === "5"
-                ? "bg-[#2d3748] text-[#bfce7f] border border-slate-600"
-                : "text-slate-400 hover:bg-[#2d3748]/50 hover:text-white border border-transparent"
-            }`}
-          >
-            En Reparación
-          </button>
-          <button
-            onClick={() => { setSelectedEstado("7"); setPage(1); }}
-            className={`px-3 py-1.5 rounded font-mono text-xs font-bold tracking-wider uppercase transition-colors whitespace-nowrap ${
-              selectedEstado === "7"
-                ? "bg-[#2d3748] text-amber-400 border border-slate-600"
-                : "text-slate-400 hover:bg-[#2d3748]/50 hover:text-white border border-transparent"
-            }`}
-          >
-            Listas para Entrega
-          </button>
-          <button
-            onClick={() => { setSelectedEstado("8"); setPage(1); }}
-            className={`px-3 py-1.5 rounded font-mono text-xs font-bold tracking-wider uppercase transition-colors whitespace-nowrap ${
-              selectedEstado === "8"
-                ? "bg-[#2d3748] text-emerald-400 border border-slate-600"
-                : "text-slate-400 hover:bg-[#2d3748]/50 hover:text-white border border-transparent"
-            }`}
-          >
-            Entregadas
-          </button>
-        </div>
-
-        {/* Search & Select Filters */}
-        <div className="flex flex-wrap md:flex-nowrap gap-3 w-full md:w-auto items-center">
-          <div className="relative flex-1 md:w-64">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              placeholder="Filtrar por mecánico, cliente..."
-              className="w-full bg-[#0a0c10] border border-[#2d3748] rounded-lg py-2 pl-10 pr-4 text-xs text-slate-200 placeholder-slate-500 focus:border-[#bfce7f] outline-none"
-            />
+      {/* Filters & Search Bar */}
+      <div className="space-y-3">
+        <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-[#1c2129] border border-[#2d3748] p-4 rounded-xl">
+          {/* Status Quick Filter Pills */}
+          <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 custom-scrollbar">
+            <button
+              onClick={() => updateUrlParams({ estado_id: null })}
+              className={`px-3 py-1.5 rounded font-mono text-xs font-bold tracking-wider uppercase transition-colors whitespace-nowrap ${
+                selectedEstado === ""
+                  ? "bg-[#2d3748] text-white border border-slate-600"
+                  : "text-slate-400 hover:bg-[#2d3748]/50 hover:text-white border border-transparent"
+              }`}
+            >
+              Todas
+            </button>
+            <button
+              onClick={() => updateUrlParams({ estado_id: "1" })}
+              className={`px-3 py-1.5 rounded font-mono text-xs font-bold tracking-wider uppercase transition-colors whitespace-nowrap ${
+                selectedEstado === "1"
+                  ? "bg-[#2d3748] text-[#bfce7f] border border-slate-600"
+                  : "text-slate-400 hover:bg-[#2d3748]/50 hover:text-white border border-transparent"
+              }`}
+            >
+              Recibidas
+            </button>
+            <button
+              onClick={() => updateUrlParams({ estado_id: "5" })}
+              className={`px-3 py-1.5 rounded font-mono text-xs font-bold tracking-wider uppercase transition-colors whitespace-nowrap ${
+                selectedEstado === "5"
+                  ? "bg-[#2d3748] text-[#bfce7f] border border-slate-600"
+                  : "text-slate-400 hover:bg-[#2d3748]/50 hover:text-white border border-transparent"
+              }`}
+            >
+              En Reparación
+            </button>
+            <button
+              onClick={() => updateUrlParams({ estado_id: "7" })}
+              className={`px-3 py-1.5 rounded font-mono text-xs font-bold tracking-wider uppercase transition-colors whitespace-nowrap ${
+                selectedEstado === "7"
+                  ? "bg-[#2d3748] text-amber-400 border border-slate-600"
+                  : "text-slate-400 hover:bg-[#2d3748]/50 hover:text-white border border-transparent"
+              }`}
+            >
+              Listas para Entrega
+            </button>
+            <button
+              onClick={() => updateUrlParams({ estado_id: "8" })}
+              className={`px-3 py-1.5 rounded font-mono text-xs font-bold tracking-wider uppercase transition-colors whitespace-nowrap ${
+                selectedEstado === "8"
+                  ? "bg-[#2d3748] text-emerald-400 border border-slate-600"
+                  : "text-slate-400 hover:bg-[#2d3748]/50 hover:text-white border border-transparent"
+              }`}
+            >
+              Entregadas
+            </button>
           </div>
 
-          <select
-            value={selectedMecanico}
-            onChange={(e) => { setSelectedMecanico(e.target.value); setPage(1); }}
-            className="bg-[#0a0c10] border border-[#2d3748] rounded-lg py-2 px-3 text-xs text-slate-200 focus:border-[#bfce7f] outline-none"
-          >
-            <option value="">Todos los Mecánicos</option>
-            {catalogs.mecanicos?.map((m) => (
-              <option key={m.usuario_id} value={m.usuario_id}>
-                {m.nombre_completo}
-              </option>
-            ))}
-          </select>
+          {/* Search & Select Filters */}
+          <div className="flex flex-wrap md:flex-nowrap gap-3 w-full md:w-auto items-center">
+            <div className="relative flex-1 md:w-64">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  updateUrlParams({ search: e.target.value || null });
+                }}
+                placeholder="Buscar código, cliente, bicicleta..."
+                className="w-full bg-[#0a0c10] border border-[#2d3748] rounded-lg py-2 pl-10 pr-4 text-xs text-slate-200 placeholder-slate-500 focus:border-[#bfce7f] outline-none"
+              />
+            </div>
 
-          <button
-            onClick={handleClearFilters}
-            className="p-2 bg-[#0a0c10] border border-[#2d3748] text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
-            title="Limpiar Filtros"
-          >
-            <RotateCcw className="w-4 h-4" />
-          </button>
+            <select
+              value={selectedMecanico}
+              onChange={(e) => {
+                setSelectedMecanico(e.target.value);
+                updateUrlParams({ mecanico_id: e.target.value || null });
+              }}
+              className="bg-[#0a0c10] border border-[#2d3748] rounded-lg py-2 px-3 text-xs text-slate-200 focus:border-[#bfce7f] outline-none"
+            >
+              <option value="">Todos los Mecánicos</option>
+              {catalogs.mecanicos?.map((m) => (
+                <option key={m.usuario_id} value={m.usuario_id}>
+                  {m.nombre_completo}
+                </option>
+              ))}
+            </select>
+
+            <button
+              onClick={handleClearFilters}
+              className="p-2 bg-[#0a0c10] border border-[#2d3748] text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+              title="Limpiar Filtros"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </button>
+          </div>
         </div>
+
+        {/* Active Filters Bar */}
+        {hasActiveFilters && (
+          <div className="p-3 bg-[#13171f] border border-[#bfce7f]/40 rounded-xl flex flex-wrap items-center gap-2 font-mono text-xs animate-in fade-in duration-200">
+            <span className="text-[#bfce7f] font-bold flex items-center gap-1.5 mr-1">
+              <Tag size={13} /> Filtros Activos:
+            </span>
+
+            {/* Date Tag */}
+            {(dateFrom || dateTo) && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#bfce7f]/15 border border-[#bfce7f]/30 text-[#bfce7f] font-bold">
+                <Calendar size={12} />
+                Fecha: {dateFrom === dateTo ? dateFrom : `${dateFrom} a ${dateTo}`}
+                <button onClick={() => removeFilter("date")} className="hover:text-white ml-0.5">
+                  <X size={12} />
+                </button>
+              </span>
+            )}
+
+            {/* Search Tag */}
+            {search && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-500/15 border border-sky-500/30 text-sky-400 font-bold">
+                <Search size={12} />
+                Búsqueda: "{search}"
+                <button onClick={() => removeFilter("search")} className="hover:text-white ml-0.5">
+                  <X size={12} />
+                </button>
+              </span>
+            )}
+
+            {/* Mechanic Tag */}
+            {selectedMecanico && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-500/15 border border-purple-500/30 text-purple-400 font-bold">
+                <User size={12} />
+                Mecánico: {selectedMecanicoObj?.nombre_completo || `#${selectedMecanico}`}
+                <button onClick={() => removeFilter("mecanico")} className="hover:text-white ml-0.5">
+                  <X size={12} />
+                </button>
+              </span>
+            )}
+
+            {/* Estado Tag */}
+            {selectedEstado && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-400 font-bold">
+                Estado #{selectedEstado}
+                <button onClick={() => removeFilter("estado")} className="hover:text-white ml-0.5">
+                  <X size={12} />
+                </button>
+              </span>
+            )}
+
+            <button
+              onClick={handleClearFilters}
+              className="ml-auto text-[11px] text-slate-400 hover:text-white underline font-bold"
+            >
+              Limpiar todos los filtros
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Stitch Data Table Container */}
+      {/* Data Table Container */}
       {loading ? (
         <div className="p-12 flex flex-col items-center justify-center bg-[#161a21] border border-[#2d3748] rounded-xl text-slate-400 gap-3">
           <Loader2 className="w-7 h-7 animate-spin text-[#bfce7f]" />
           <span className="text-xs font-mono">Cargando órdenes de trabajo...</span>
         </div>
       ) : error ? (
-        <div className="p-6 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-400 text-xs flex items-center gap-3">
-          <AlertCircle className="w-5 h-5 shrink-0" />
-          <div>
-            <span className="font-semibold block">Error al cargar datos</span>
-            <span className="text-rose-300/80">{error}</span>
-          </div>
-        </div>
-      ) : orders.length === 0 ? (
-        <div className="p-12 flex flex-col items-center justify-center bg-[#161a21] border border-[#2d3748] rounded-xl text-center gap-3">
-          <Wrench className="w-10 h-10 text-slate-600" />
-          <h3 className="text-sm font-semibold text-slate-300">No se encontraron órdenes de trabajo</h3>
-          <p className="text-xs text-slate-500 max-w-sm">
-            Prueba ajustando los filtros de búsqueda o registra una nueva Orden de Trabajo.
-          </p>
+        <div className="p-8 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs font-mono text-center space-y-3">
+          <AlertCircle className="w-6 h-6 mx-auto" />
+          <p>{error}</p>
           <button
-            onClick={onOpenNewModal}
-            className="mt-2 px-4 py-2 bg-[#84924a] text-white text-xs font-mono font-bold rounded-xl hover:brightness-110"
+            onClick={fetchOrders}
+            className="px-4 py-1.5 bg-rose-500/20 rounded-lg hover:bg-rose-500/30 font-bold"
           >
-            NUEVA ORDEN DE TRABAJO
+            Reintentar
           </button>
         </div>
+      ) : orders.length === 0 ? (
+        <div className="p-12 text-center bg-[#161a21] border border-[#2d3748] rounded-xl text-slate-400 space-y-3 font-mono">
+          <Inbox className="w-8 h-8 mx-auto text-slate-500" />
+          <p className="text-sm font-bold text-slate-300">No se encontraron órdenes de trabajo</p>
+          <p className="text-xs text-slate-500">Prueba ajustando los filtros de búsqueda o fecha.</p>
+          {hasActiveFilters && (
+            <button
+              onClick={handleClearFilters}
+              className="px-4 py-2 bg-[#bfce7f] text-[#1d1f18] rounded-xl font-bold hover:brightness-110 text-xs shadow"
+            >
+              Limpiar Filtros
+            </button>
+          )}
+        </div>
       ) : (
-        <>
-          {/* Desktop Stitch Data Table */}
-          <div className="hidden md:block bg-[#161a21] border border-[#2d3748] rounded-xl overflow-hidden shadow-xl">
-            <table className="w-full text-left border-collapse">
+        <div className="border border-[#2d3748] rounded-xl overflow-hidden bg-[#161a21]">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
               <thead>
-                <tr className="bg-[#1c2129] border-b border-[#2d3748] font-mono text-xs text-slate-400 font-semibold uppercase tracking-wider">
-                  <th className="p-4 whitespace-nowrap">Orden #</th>
-                  <th className="p-4 whitespace-nowrap">Fecha / Cliente</th>
-                  <th className="p-4 whitespace-nowrap">Bicicleta / Mecánico</th>
-                  <th className="p-4 whitespace-nowrap">Estado / Progreso</th>
-                  <th className="p-4 whitespace-nowrap text-right">Total Est.</th>
-                  <th className="p-4 whitespace-nowrap text-center">Acciones</th>
+                <tr className="border-b border-[#2d3748] bg-[#12151b] font-mono text-[10px] text-slate-400 font-bold uppercase tracking-wider select-none">
+                  <th className="py-3 px-4">CÓDIGO</th>
+                  <th className="py-3 px-4">CLIENTE / VEHÍCULO</th>
+                  <th className="py-3 px-4 text-center">ESTADO</th>
+                  <th className="py-3 px-4">MECÁNICO ASIGNADO</th>
+                  <th className="py-3 px-4 text-right">TOTAL</th>
+                  <th className="py-3 px-4 text-center">ACCIONES</th>
                 </tr>
               </thead>
-              <tbody className="text-xs divide-y divide-[#2d3748]">
-                {orders.map((item) => {
-                  const isUrgent = item.prioridad_id === 3 || item.prioridad_nombre?.toLowerCase().includes("alta") || item.prioridad_nombre?.toLowerCase().includes("urgente");
-                  const progress = getProgressPercentage(item.estado_orden_id);
-
+              <tbody className="divide-y divide-[#2d3748]">
+                {orders.map((order) => {
                   return (
                     <tr
-                      key={item.orden_id}
-                      className={`border-b border-[#2d3748] hover:bg-[#1c2129] transition-colors ${
-                        isUrgent ? "bg-rose-500/5" : ""
-                      }`}
+                      key={order.orden_id}
+                      onClick={() => onViewDetail && onViewDetail(order.orden_id)}
+                      className="hover:bg-[#1f242d] transition-colors cursor-pointer group"
                     >
-                      {/* Orden # */}
-                      <td className="p-4 align-top">
-                        <div className="flex items-center gap-2">
-                          {isUrgent && (
-                            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" title="Alta Prioridad / Atrasada" />
+                      <td className="py-3.5 px-4 font-mono font-bold text-[#bfce7f] whitespace-nowrap">
+                        <div className="flex flex-col">
+                          <span>{order.codigo_orden}</span>
+                          {order.codigo_recepcion && (
+                            <span className="text-[10px] text-slate-500">Rec: {order.codigo_recepcion}</span>
                           )}
-                          <span className="font-mono font-extrabold text-slate-100 text-xs">
-                            {item.codigo_orden}
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <div className="flex flex-col">
+                          <span className="font-bold text-white font-mono">{order.cliente_nombre}</span>
+                          <span className="text-[11px] text-slate-400 font-mono">
+                            {order.bicicleta_marca} {order.bicicleta_modelo}
                           </span>
                         </div>
                       </td>
-
-                      {/* Fecha / Cliente */}
-                      <td className="p-4 align-top">
-                        <div className="text-slate-200 font-semibold">
-                          {new Date(item.fecha_ingreso).toLocaleDateString("es-ES", {
-                            month: "short",
-                            day: "2-digit"
-                          })}, {new Date(item.fecha_ingreso).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}
-                        </div>
-                        <div className="text-slate-400 mt-1">{item.cliente_nombre}</div>
+                      <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                        {getEstadoBadge(order.estado_codigo, order.estado_nombre)}
                       </td>
-
-                      {/* Bicicleta / Mecánico */}
-                      <td className="p-4 align-top">
-                        <div className="text-slate-200 font-semibold">{item.bicicleta_marca} {item.bicicleta_modelo}</div>
-                        <div className="flex items-center gap-2 mt-1">
-                          <div className="w-5 h-5 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-400">
-                            <User className="w-3 h-3" />
-                          </div>
-                          <span className="text-slate-400">
-                            {item.mecanico_nombre || "No asignado"}
-                          </span>
+                      <td className="py-3.5 px-4 font-mono text-slate-300 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <User size={13} className="text-slate-400" />
+                          <span>{order.mecanico_nombre || "Por asignar"}</span>
                         </div>
                       </td>
-
-                      {/* Estado / Progreso */}
-                      <td className="p-4 align-top max-w-[200px]">
-                        <div className="mb-2">{getEstadoBadge(item.estado_codigo, item.estado_nombre)}</div>
-                        <div className="w-full bg-[#0a0c10] h-1.5 rounded-full overflow-hidden border border-[#2d3748]">
-                          <div
-                            className={`h-full rounded-full ${
-                              isUrgent ? "bg-rose-400" : "bg-[#84924a]"
-                            }`}
-                            style={{ width: `${progress.pct}%` }}
-                          ></div>
-                        </div>
-                        <div className="text-[10px] text-slate-400 mt-1 text-right font-mono">
-                          {progress.pct}% - {progress.text}
-                        </div>
+                      <td className="py-3.5 px-4 font-mono text-right font-bold text-emerald-400 whitespace-nowrap">
+                        RD$ {Number(order.total_estimado || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })}
                       </td>
-
-                      {/* Total Est. */}
-                      <td className="p-4 align-top text-right">
-                        <div className="text-slate-100 font-mono font-bold">
-                          RD$ {parseFloat(item.total_estimado || 0).toLocaleString("es-DO", { minimumFractionDigits: 0 })}
-                        </div>
-                      </td>
-
-                      {/* Acciones */}
-                      <td className="p-4 align-top text-center">
+                      <td className="py-3.5 px-4 text-center whitespace-nowrap">
                         <button
-                          onClick={() => onViewDetail(item.orden_id)}
-                          className="p-1.5 text-slate-400 hover:text-[#bfce7f] hover:bg-slate-800 rounded-lg transition-colors"
-                          title="Ver Detalle"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onViewDetail) onViewDetail(order.orden_id);
+                          }}
+                          className="px-3 py-1 bg-[#0a0c10] border border-[#2d3748] rounded-lg text-slate-300 hover:text-white hover:border-[#bfce7f] font-mono text-[11px] font-bold transition-colors"
                         >
-                          <Eye className="w-4 h-4" />
+                          Ver detalle
                         </button>
                       </td>
                     </tr>
@@ -422,88 +524,30 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
             </table>
           </div>
 
-          {/* Mobile Stitch Cards View */}
-          <div className="md:hidden space-y-3">
-            {orders.map((item) => {
-              const isUrgent = item.prioridad_id === 3 || item.prioridad_nombre?.toLowerCase().includes("alta");
-              const progress = getProgressPercentage(item.estado_orden_id);
-
-              return (
-                <div
-                  key={item.orden_id}
-                  onClick={() => onViewDetail(item.orden_id)}
-                  className="bg-[#161a21] border border-[#2d3748] p-4 rounded-xl space-y-3 hover:border-slate-600 transition-colors cursor-pointer"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono font-extrabold text-[#bfce7f] text-xs flex items-center gap-1.5">
-                      {isUrgent && <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />}
-                      {item.codigo_orden}
-                    </span>
-                    {getEstadoBadge(item.estado_codigo, item.estado_nombre)}
-                  </div>
-
-                  <div className="space-y-1 text-xs text-slate-300">
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">Cliente:</span>
-                      <span className="font-semibold text-slate-200">{item.cliente_nombre}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">Bicicleta:</span>
-                      <span className="text-slate-300">{item.bicicleta_marca} {item.bicicleta_modelo}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">Mecánico:</span>
-                      <span className="text-slate-300 font-medium">{item.mecanico_nombre || "Sin asignar"}</span>
-                    </div>
-                    <div className="flex justify-between pt-1">
-                      <span className="text-slate-500">Total Est.:</span>
-                      <span className="font-mono font-bold text-slate-100">
-                        RD$ {parseFloat(item.total_estimado || 0).toLocaleString("es-DO", { minimumFractionDigits: 0 })}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="pt-2 border-t border-[#2d3748]">
-                    <div className="w-full bg-[#0a0c10] h-1.5 rounded-full overflow-hidden border border-[#2d3748]">
-                      <div
-                        className="bg-[#84924a] h-full rounded-full"
-                        style={{ width: `${progress.pct}%` }}
-                      ></div>
-                    </div>
-                    <div className="text-[10px] text-slate-400 mt-1 text-right font-mono">
-                      {progress.pct}% - {progress.text}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Stitch Pagination Footer */}
-          <div className="flex items-center justify-between px-2 pt-2 text-xs text-slate-400 font-mono">
+          {/* Pagination Footer */}
+          <div className="p-4 border-t border-[#2d3748] bg-[#12151b] flex items-center justify-between font-mono text-xs text-slate-400">
             <span>
-              Mostrando {orders.length > 0 ? (page - 1) * 15 + 1 : 0}-{Math.min(page * 15, meta.total)} de {meta.total} órdenes
+              Mostrando {orders.length} de {meta.total} órdenes
             </span>
             <div className="flex items-center gap-2">
               <button
                 disabled={page <= 1}
-                onClick={() => setPage(page - 1)}
-                className="p-2 bg-[#161a21] border border-[#2d3748] hover:bg-[#1c2129] disabled:opacity-40 rounded-lg transition-all text-slate-300"
-                title="Página Anterior"
+                onClick={() => updateUrlParams({ page: String(Math.max(1, page - 1)) })}
+                className="p-1.5 bg-[#0a0c10] border border-[#2d3748] rounded-lg disabled:opacity-40 hover:text-white"
               >
-                <ChevronLeft className="w-4 h-4" />
+                <ChevronLeft size={16} />
               </button>
+              <span>Página {page} de {meta.total_pages}</span>
               <button
                 disabled={page >= meta.total_pages}
-                onClick={() => setPage(page + 1)}
-                className="p-2 bg-[#161a21] border border-[#2d3748] hover:bg-[#1c2129] disabled:opacity-40 rounded-lg transition-all text-slate-300"
-                title="Página Siguiente"
+                onClick={() => updateUrlParams({ page: String(Math.min(meta.total_pages, page + 1)) })}
+                className="p-1.5 bg-[#0a0c10] border border-[#2d3748] rounded-lg disabled:opacity-40 hover:text-white"
               >
-                <ChevronRight className="w-4 h-4" />
+                <ChevronRight size={16} />
               </button>
             </div>
           </div>
-        </>
+        </div>
       )}
     </div>
   );
