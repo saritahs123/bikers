@@ -70,23 +70,7 @@ export function TopBar({
         </button>
       </div>
 
-      <div className="flex items-center gap-lg">
-        <div className="flex items-center gap-md">
-          <button className="relative text-on-surface-variant hover:text-primary transition-colors cursor-pointer">
-            <span className="material-symbols-outlined">notifications</span>
-            <span className="absolute top-0 right-0 w-2 h-2 bg-error rounded-full border border-surface"></span>
-          </button>
-          <Link
-            href="/security/my-profile"
-            aria-label="Mi perfil y seguridad"
-            className="text-on-surface-variant hover:text-primary transition-colors cursor-pointer flex items-center justify-center"
-          >
-            <span className="material-symbols-outlined">settings</span>
-          </Link>
-        </div>
-
-        <div className="h-8 w-[1px] bg-outline-variant"></div>
-
+      <div className="flex items-center">
         {/* Authenticated User Banner & Profile Menu */}
         <div className="relative" ref={dropdownRef}>
           <button
