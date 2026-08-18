@@ -168,13 +168,25 @@ export default function WorkshopModuleContainer() {
       <NewReceptionModal
         isOpen={isNewReceptionModalOpen}
         onClose={handleCloseModals}
-        onSuccess={() => {
+        onSuccess={(createdData) => {
+          const hasOT = Boolean(
+            createdData?.orden_trabajo_id ||
+            createdData?.data?.orden_trabajo_id
+          );
           handleCloseModals();
-          setActiveTab("recepciones");
+          if (!hasOT) {
+            setActiveTab("recepciones");
+          }
         }}
-        onCreated={() => {
+        onCreated={(createdData) => {
+          const hasOT = Boolean(
+            createdData?.orden_trabajo_id ||
+            createdData?.data?.orden_trabajo_id
+          );
           handleCloseModals();
-          setActiveTab("recepciones");
+          if (!hasOT) {
+            setActiveTab("recepciones");
+          }
         }}
       />
 

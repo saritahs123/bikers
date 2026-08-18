@@ -1747,7 +1747,7 @@ export default function BicyclesView({ initialBikeId = null, initialTab = "gener
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
                   <div className="md:col-span-7 bg-[#161a21] border border-[#2d3748] rounded-2xl p-4 font-mono space-y-2">
                     <div className="flex justify-between items-center">
-                      <span className="text-xs font-bold text-white">Global Health Index</span>
+                      <span className="text-xs font-bold text-white">Estado General</span>
                       <span className={`text-xs font-bold ${healthData.textColor}`}>
                         {healthData.statusLabel}
                       </span>
@@ -2419,7 +2419,7 @@ export default function BicyclesView({ initialBikeId = null, initialTab = "gener
                                       }`}
                                     >
                                       <Activity size={11} />
-                                      <span>Health Index: {item.salud_global_porcentaje}%</span>
+                                      <span>Estado General: {item.salud_global_porcentaje}%</span>
                                     </span>
                                   )}
                                   {item.es_mantenimiento_general && (

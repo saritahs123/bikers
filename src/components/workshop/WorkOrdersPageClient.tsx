@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import WorkOrdersListView from "./WorkOrdersListView";
 import WorkOrderDetailView from "./WorkOrderDetailView";
@@ -11,24 +11,15 @@ export default function WorkOrdersPageClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
+  // Directly derive activeOrderId from URL searchParams (zero flicker)
+  const rawOrderId = searchParams.get("order_id");
+  const parsedOrderId = rawOrderId ? parseInt(rawOrderId, 10) : NaN;
+  const activeOrderId = Number.isInteger(parsedOrderId) && parsedOrderId > 0 ? parsedOrderId : null;
+
   const [viewMode, setViewMode] = useState<"list" | "kanban">("list");
   const [isNewOrderModalOpen, setIsNewOrderModalOpen] = useState(false);
 
-  useEffect(() => {
-    const orderIdParam = searchParams.get("order_id");
-    if (orderIdParam) {
-      const oid = parseInt(orderIdParam, 10);
-      if (!isNaN(oid)) {
-        setSelectedOrderId(oid);
-      }
-    } else {
-      setSelectedOrderId(null);
-    }
-  }, [searchParams]);
-
   const handleNavigateOrderDetail = (orderId: number) => {
-    setSelectedOrderId(orderId);
     const params = new URLSearchParams(searchParams.toString());
     params.set("order_id", String(orderId));
     router.push(`/work-orders?${params.toString()}`);
@@ -47,7 +38,6 @@ export default function WorkOrdersPageClient() {
       return;
     }
 
-    setSelectedOrderId(null);
     const params = new URLSearchParams(searchParams.toString());
     params.delete("order_id");
     params.delete("return_to");
@@ -57,8 +47,8 @@ export default function WorkOrdersPageClient() {
 
   return (
     <div className="max-w-[1440px] mx-auto space-y-6">
-      {selectedOrderId ? (
-        <WorkOrderDetailView ordenId={selectedOrderId} onBack={handleBackFromDetail} />
+      {activeOrderId ? (
+        <WorkOrderDetailView ordenId={activeOrderId} onBack={handleBackFromDetail} />
       ) : viewMode === "kanban" ? (
         <WorkOrdersKanbanView
           onViewDetail={(oid: number) => handleNavigateOrderDetail(oid)}
