@@ -88,8 +88,12 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
     const { id } = await context.params;
     const bicicletaId = parseInt(id, 10);
 
-    if (isNaN(bicicletaId)) {
-      return NextResponse.json({ error: "ID de bicicleta inválido." }, { status: 400 });
+    if (isNaN(bicicletaId) || bicicletaId <= 0) {
+      return NextResponse.json({
+        success: false,
+        error: "INVALID_BIKE_ID",
+        message: "ID de bicicleta inválido."
+      }, { status: 400 });
     }
 
     const body = await req.json();
@@ -97,48 +101,119 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
     const estado_componente_id = parseInt(body.estado_componente_id || 1, 10);
     const marca = (body.marca || '').trim();
     const modelo = (body.modelo || '').trim();
+    const especificacion = (body.especificacion || [marca, modelo].filter(Boolean).join(" ") || '').trim();
     const numero_serie = (body.numero_serie || '').trim();
-    const descripcion = (body.descripcion || '').trim();
-    const fecha_instalacion = cleanFecha(body.fecha_instalacion) || new Date().toISOString();
+    const descripcion = (body.descripcion || especificacion || '').trim();
+    const fecha_instalacion = cleanFecha(body.fecha_instalacion);
     const kilometraje_instalacion = body.kilometraje_instalacion ? parseInt(body.kilometraje_instalacion, 10) : 0;
     const observaciones = (body.observaciones || '').trim();
 
-    if (isNaN(categoria_componente_id)) {
-      return NextResponse.json({ error: "Debe seleccionar una categoría de componente." }, { status: 400 });
+    if (isNaN(categoria_componente_id) || categoria_componente_id <= 0) {
+      return NextResponse.json({
+        success: false,
+        error: "VALIDATION_ERROR",
+        message: "Selecciona una categoría válida.",
+        fields: { categoria_componente_id: "Requerido" }
+      }, { status: 400 });
     }
 
-    const sql = `
-      INSERT INTO admin.bicicleta_componentes (
-        bicicleta_componente_id, bicicleta_id, categoria_componente_id, estado_componente_id,
-        marca, modelo, numero_serie, descripcion, fecha_instalacion,
-        kilometraje_instalacion, vigente, observaciones, activo, fecha_creacion
-      ) VALUES (
-        (SELECT COALESCE(MAX(bicicleta_componente_id), 0) + 1 FROM admin.bicicleta_componentes),
-        $1, $2, $3,
-        $4, $5, $6, $7, $8::timestamptz,
-        $9, true, $10, true, NOW()
-      )
-      RETURNING *
-    `;
+    if (isNaN(estado_componente_id) || estado_componente_id <= 0) {
+      return NextResponse.json({
+        success: false,
+        error: "VALIDATION_ERROR",
+        message: "Selecciona un estado de uso válido.",
+        fields: { estado_componente_id: "Requerido" }
+      }, { status: 400 });
+    }
 
-    const result = await query(sql, [
-      bicicletaId,
-      categoria_componente_id,
-      estado_componente_id,
-      marca || null,
-      modelo || null,
-      numero_serie || null,
-      descripcion || null,
-      fecha_instalacion,
-      kilometraje_instalacion,
-      observaciones || null
-    ]);
+    let sql = "";
+    let queryParams: any[] = [];
 
-    return NextResponse.json(result[0]);
+    if (fecha_instalacion) {
+      sql = `
+        INSERT INTO admin.bicicleta_componentes (
+          bicicleta_componente_id, bicicleta_id, categoria_componente_id, estado_componente_id,
+          marca, modelo, numero_serie, descripcion, fecha_instalacion,
+          kilometraje_instalacion, vigente, observaciones, activo, fecha_creacion
+        ) VALUES (
+          (SELECT COALESCE(MAX(bicicleta_componente_id), 0) + 1 FROM admin.bicicleta_componentes),
+          $1, $2, $3,
+          $4, $5, $6, $7, $8::timestamptz,
+          $9, true, $10, true, NOW()
+        )
+        RETURNING *
+      `;
+      queryParams = [
+        bicicletaId,
+        categoria_componente_id,
+        estado_componente_id,
+        marca || null,
+        modelo || null,
+        numero_serie || null,
+        descripcion || null,
+        fecha_instalacion,
+        kilometraje_instalacion,
+        observaciones || null
+      ];
+    } else {
+      sql = `
+        INSERT INTO admin.bicicleta_componentes (
+          bicicleta_componente_id, bicicleta_id, categoria_componente_id, estado_componente_id,
+          marca, modelo, numero_serie, descripcion,
+          kilometraje_instalacion, vigente, observaciones, activo, fecha_creacion
+        ) VALUES (
+          (SELECT COALESCE(MAX(bicicleta_componente_id), 0) + 1 FROM admin.bicicleta_componentes),
+          $1, $2, $3,
+          $4, $5, $6, $7,
+          $8, true, $9, true, NOW()
+        )
+        RETURNING *
+      `;
+      queryParams = [
+        bicicletaId,
+        categoria_componente_id,
+        estado_componente_id,
+        marca || null,
+        modelo || null,
+        numero_serie || null,
+        descripcion || null,
+        kilometraje_instalacion,
+        observaciones || null
+      ];
+    }
+
+    const result = await query(sql, queryParams);
+    const createdRow = result[0];
+
+    const mapped = {
+      id: createdRow.bicicleta_componente_id,
+      bicicleta_componente_id: createdRow.bicicleta_componente_id,
+      bicicleta_id: createdRow.bicicleta_id,
+      categoria_componente_id: createdRow.categoria_componente_id,
+      estado_componente_id: createdRow.estado_componente_id,
+      marca: createdRow.marca || "",
+      modelo: createdRow.modelo || "",
+      especificacion: [createdRow.marca, createdRow.modelo].filter(Boolean).join(" ") || createdRow.descripcion || "Componente",
+      numero_serie: createdRow.numero_serie || "",
+      descripcion: createdRow.descripcion || "",
+      fecha_instalacion: createdRow.fecha_instalacion ? String(createdRow.fecha_instalacion).substring(0, 10) : null,
+      kilometraje_instalacion: Number(createdRow.kilometraje_instalacion || 0),
+      vigente: createdRow.vigente !== false,
+      observaciones: createdRow.observaciones || ""
+    };
+
+    return NextResponse.json({
+      success: true,
+      data: mapped
+    }, { status: 201 });
 
   } catch (error: any) {
     console.error("Error in POST /api/crm/bicicletas/[id]/components:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({
+      success: false,
+      error: "SERVER_ERROR",
+      message: "No pudimos guardar este componente. Inténtalo nuevamente."
+    }, { status: 500 });
   }
 }
 
@@ -165,7 +240,6 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
     const modelo = (body.modelo || '').trim();
     const numero_serie = (body.numero_serie || '').trim();
     const descripcion = (body.descripcion || '').trim();
-    const fecha_instalacion = cleanFecha(body.fecha_instalacion);
     const kilometraje_instalacion = body.kilometraje_instalacion ? parseInt(body.kilometraje_instalacion, 10) : 0;
     const observaciones = (body.observaciones || '').trim();
 
@@ -173,34 +247,46 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
       return NextResponse.json({ error: "Debe seleccionar una categoría de componente." }, { status: 400 });
     }
 
-    const sql = `
-      UPDATE admin.bicicleta_componentes
-      SET categoria_componente_id = $1,
-          estado_componente_id = $2,
-          marca = $3,
-          modelo = $4,
-          numero_serie = $5,
-          descripcion = $6,
-          fecha_instalacion = $7::timestamptz,
-          kilometraje_instalacion = $8,
-          observaciones = $9
-      WHERE bicicleta_componente_id = $10 AND bicicleta_id = $11
-      RETURNING *
-    `;
+    const setClauses: string[] = [
+      "categoria_componente_id = $1",
+      "estado_componente_id = $2",
+      "marca = $3",
+      "modelo = $4",
+      "numero_serie = $5",
+      "descripcion = $6",
+      "kilometraje_instalacion = $7",
+      "observaciones = $8"
+    ];
 
-    const result = await query(sql, [
+    const sqlParams: any[] = [
       categoria_componente_id,
       estado_componente_id,
       marca || null,
       modelo || null,
       numero_serie || null,
       descripcion || null,
-      fecha_instalacion,
       kilometraje_instalacion,
-      observaciones || null,
-      componentId,
-      bicicletaId
-    ]);
+      observaciones || null
+    ];
+
+    if (body.fecha_instalacion !== undefined) {
+      sqlParams.push(cleanFecha(body.fecha_instalacion));
+      setClauses.push(`fecha_instalacion = $${sqlParams.length}::timestamptz`);
+    }
+
+    sqlParams.push(componentId);
+    const compIdx = sqlParams.length;
+    sqlParams.push(bicicletaId);
+    const bikeIdx = sqlParams.length;
+
+    const sql = `
+      UPDATE admin.bicicleta_componentes
+      SET ${setClauses.join(", ")}
+      WHERE bicicleta_componente_id = $${compIdx} AND bicicleta_id = $${bikeIdx}
+      RETURNING *
+    `;
+
+    const result = await query(sql, sqlParams);
 
     if (!result || result.length === 0) {
       return NextResponse.json({ error: "No se encontró el componente a actualizar." }, { status: 404 });

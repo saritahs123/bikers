@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
+import Link from "next/link";
 import {
   Bike,
   Search,
@@ -28,6 +29,7 @@ import {
   ExternalLink,
   ChevronRight,
   Sparkles,
+  Eye,
   Camera,
   FileCheck,
   Upload,
@@ -37,10 +39,13 @@ import {
   Check,
   ArrowLeft,
   Printer,
-  Copy
+  Copy,
+  Download
 } from "lucide-react";
 import { validateRequiredText } from "@/lib/validations";
 import BikeFormDrawer from "./BikeFormDrawer";
+import BicycleComponentsEditor from "./BicycleComponentsEditor";
+import BicyclePhotosEditor from "./BicyclePhotosEditor";
 
 export const formatDateForInput = (dateVal) => {
   if (!dateVal) return new Date().toISOString().substring(0, 10);
@@ -55,7 +60,17 @@ export const formatDateForInput = (dateVal) => {
   }
 };
 
-export default function BicyclesView({ initialBikeId = null, onClose = null }) {
+const VALID_BICYCLE_TABS = new Set([
+  "general",
+  "componentes",
+  "fotos",
+  "historial"
+]);
+
+/**
+ * @param {{ initialBikeId?: number | string | null, initialTab?: string, onClose?: any }} props
+ */
+export default function BicyclesView({ initialBikeId = null, initialTab = "general", onClose = null }) {
   const [data, setData] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -69,8 +84,14 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
 
   // Detail Modal State (Fullscreen Bike Workspace View)
   const [detailBike, setDetailBike] = useState(null);
+  const [loadingDetail, setLoadingDetail] = useState(() => Boolean(initialBikeId));
+  const [detailError, setDetailError] = useState(null);
   const [isEditingDetail, setIsEditingDetail] = useState(false);
-  const [activeTab, setActiveTab] = useState("general");
+  const [activeTab, setActiveTab] = useState(() =>
+    VALID_BICYCLE_TABS.has(initialTab)
+      ? initialTab
+      : "general"
+  );
 
   // Bike Photos & Components State
   const [bikePhotos, setBikePhotos] = useState([]);
@@ -151,7 +172,6 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
 
   useEffect(() => {
     setMounted(true);
-    fetchData();
     fetchClientes();
     fetchAuxiliaryLists();
 
@@ -159,30 +179,34 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
       const params = new URLSearchParams(window.location.search);
       const action = params.get("action");
       const urlClienteId = params.get("clienteId") || params.get("cliente_id");
+      const urlId = initialBikeId || params.get("id") || params.get("bikeId");
       
       if (action === "new" || urlClienteId) {
+        fetchData();
         handleOpenDrawer();
         if (urlClienteId) {
           setFormData((prev) => ({ ...prev, cliente_id: urlClienteId }));
         }
+      } else if (urlId) {
+        const startInEdit = params.get("edit") === "true";
+        handleFetchSingleBike(urlId, startInEdit);
       } else {
-        const urlId = initialBikeId || params.get("id") || params.get("bikeId");
-        if (urlId) {
-          const startInEdit = params.get("edit") === "true";
-          handleFetchSingleBike(urlId, startInEdit);
-        }
+        fetchData();
       }
+    } else {
+      fetchData();
     }
   }, [initialBikeId]);
 
   const handleFetchSingleBike = async (targetId, startInEdit = false) => {
-    // Set immediate detail object to prevent any table background flashing
-    setDetailBike((prev) => prev || { id: targetId, marca: "Bicicleta", modelo: "" });
+    setLoadingDetail(true);
+    setDetailError(null);
     try {
       const res = await fetch(`/api/crm/bicicletas/${targetId}`);
       if (res.ok) {
         const fullBike = await res.json();
         handleViewDetail(fullBike, startInEdit);
+        setLoadingDetail(false);
         return;
       }
     } catch (err) {
@@ -196,12 +220,16 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
         if (bikes && bikes.length > 0) {
           const matched = bikes.find(b => String(b.id) === String(targetId) || String(b.bicicleta_id) === String(targetId));
           handleViewDetail(matched || bikes[0], startInEdit);
+          setLoadingDetail(false);
           return;
         }
       }
     } catch (e) {
       console.error("Error fallback fetching bikes:", e);
     }
+
+    setDetailError("No pudimos cargar la bicicleta.");
+    setLoadingDetail(false);
   };
 
   const handleCloseDetailModal = () => {
@@ -426,6 +454,60 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
     }
   };
 
+  const handleDownloadQrPng = async (bike) => {
+    const codeQrStr = bike?.codigo_qr || (bike?.id ? `BF-QR-${bike.id}` : null);
+    if (!codeQrStr) {
+      showToast("No pudimos generar el código QR.", "error");
+      return;
+    }
+    const filename = `QR-${codeQrStr}.png`;
+    const qrApiSrc = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(codeQrStr)}`;
+
+    try {
+      const response = await fetch(qrApiSrc);
+      if (!response.ok) throw new Error("Error fetching QR image");
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+      showToast(`Código QR descargado como ${filename}.`);
+    } catch (err) {
+      console.error("Error downloading QR:", err);
+      showToast("No pudimos descargar el código QR.", "error");
+    }
+  };
+
+  const handleCopyQrUrlNew = async (bike) => {
+    const codeQrStr = bike?.codigo_qr || (bike?.id ? `BF-QR-${bike.id}` : null);
+    if (!codeQrStr) {
+      showToast("No pudimos copiar el código QR.", "error");
+      return;
+    }
+
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(codeQrStr);
+      } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = codeQrStr;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textArea);
+      }
+      showToast("Código QR copiado.");
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 1800);
+    } catch (err) {
+      showToast("No pudimos copiar el código QR.", "error");
+    }
+  };
+
   const handleCopyQrUrl = async (urlToCopy) => {
     if (!urlToCopy) {
       showToast("No se pudo copiar el QR.", "error");
@@ -442,13 +524,13 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
         document.execCommand("copy");
         document.body.removeChild(textArea);
       }
-      showToast("QR copiado correctamente.");
+      showToast("Enlace del QR copiado.");
       setIsCopied(true);
       setTimeout(() => {
         setIsCopied(false);
       }, 1800);
     } catch (err) {
-      showToast("No se pudo copiar el QR.", "error");
+      showToast("No pudimos copiar el enlace. Inténtalo nuevamente.", "error");
     }
   };
 
@@ -456,8 +538,8 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
     if (!bike) return;
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
-    const qrUrl = bike.url_qr || `${window.location.origin}/bike/${bike.codigo_qr || bike.id}`;
-    const qrImgSrc = `https://api.qrserver.com/v1/create-qr-code/?size=350x350&data=${encodeURIComponent(qrUrl)}`;
+    const codeQrStr = bike.codigo_qr || `BF-QR-${bike.id}`;
+    const qrImgSrc = `https://api.qrserver.com/v1/create-qr-code/?size=350x350&data=${encodeURIComponent(codeQrStr)}`;
 
     printWindow.document.write(`
       <!DOCTYPE html>
@@ -524,7 +606,7 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [detailBike, isEditingDetail, isDrawerOpen]);
 
-  const handleViewDetail = async (item, startInEditMode = false) => {
+  const handleViewDetail = async (item, startInEditMode = false, targetTab = null) => {
     let bikeData = item;
     try {
       const res = await fetch(`/api/crm/bicicletas/${item.id}`);
@@ -553,7 +635,12 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
       kilometraje_actual: bikeData.kilometraje_actual || 0,
       notas_tecnicas: bikeData.notas_tecnicas || ""
     });
-    setActiveTab("general");
+    const tabCandidate = targetTab || initialTab || (typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("tab") : null);
+    if (tabCandidate && VALID_BICYCLE_TABS.has(tabCandidate)) {
+      setActiveTab(tabCandidate);
+    } else {
+      setActiveTab("general");
+    }
     setIsEditingDetail(startInEditMode);
     setErrors({});
   };
@@ -1084,7 +1171,6 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
       modelo: comp.modelo || "",
       numero_serie: comp.numero_serie || "",
       descripcion: comp.descripcion || "",
-      fecha_instalacion: formatDateForInput(comp.fecha_instalacion),
       kilometraje_instalacion: comp.kilometraje_instalacion || 0
     });
     setIsComponentFormOpen(true);
@@ -1100,7 +1186,6 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
       modelo: "",
       numero_serie: "",
       descripcion: "",
-      fecha_instalacion: formatDateForInput(new Date()),
       kilometraje_instalacion: 0
     });
   };
@@ -1179,6 +1264,46 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
     }
     return "bg-emerald-500/15 text-emerald-400 border-emerald-500/30";
   };
+
+  const isOpeningInitialBike = Boolean(initialBikeId) && loadingDetail && !detailBike;
+
+  if (isOpeningInitialBike) {
+    if (detailError) {
+      return (
+        <div className="p-8 max-w-lg mx-auto mt-12 bg-rose-500/10 border border-rose-500/20 rounded-2xl text-rose-300 font-mono text-xs text-center space-y-4">
+          <AlertTriangle className="w-8 h-8 text-rose-400 mx-auto" />
+          <p className="font-bold text-sm text-rose-200">No pudimos cargar la bicicleta.</p>
+          <div className="flex justify-center gap-3">
+            <button
+              onClick={() => handleFetchSingleBike(initialBikeId)}
+              className="px-4 py-2 bg-[#bfce7f] text-slate-950 rounded-xl font-bold uppercase hover:bg-[#a6b66b]"
+            >
+              Reintentar
+            </button>
+            <button
+              onClick={() => {
+                setDetailError(null);
+                setLoadingDetail(false);
+                if (typeof window !== "undefined") {
+                  window.history.replaceState(null, "", "/crm/bicycles");
+                }
+              }}
+              className="px-4 py-2 bg-rose-500/20 text-rose-200 rounded-xl font-bold uppercase hover:bg-rose-500/30"
+            >
+              Volver al listado
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="p-12 flex flex-col items-center justify-center bg-[#161a21] border border-[#2d3748] rounded-2xl text-slate-400 gap-3 font-mono min-h-[450px]">
+        <RefreshCw className="w-8 h-8 animate-spin text-[#bfce7f]" />
+        <span className="text-xs font-bold text-slate-300">Cargando expediente de la bicicleta...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-[1550px] mx-auto space-y-6 animate-in fade-in duration-300">
@@ -1723,19 +1848,7 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
                 }`}
               >
                 <Wrench size={16} />
-                <span>Historial Técnico</span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab("qr")}
-                className={`py-3.5 font-bold border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 shrink-0 ${
-                  activeTab === "qr"
-                    ? "border-[#bfce7f] text-[#bfce7f]"
-                    : "border-transparent text-slate-400 hover:text-white"
-                }`}
-              >
-                <QrCode size={16} />
-                <span>Pasaporte Digital & QR</span>
+                <span>Órdenes de Trabajo</span>
               </button>
             </div>
 
@@ -1819,38 +1932,120 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
                         </div>
                       </div>
 
-                      {/* Registro Digital */}
-                      <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-6 space-y-4">
-                        <h3 className="text-[#bfce7f] font-bold uppercase tracking-wider text-xs border-b border-[#2d3748] pb-2 flex items-center gap-2">
-                          <QrCode size={16} /> Identificación Digital & Registro
-                        </h3>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                      {/* Grid de 2 Columnas para Identificación Digital (QR) y Observaciones */}
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch font-mono text-xs">
+                        {/* COLUMNA IZQUIERDA — 50% Desktop: Identificación Digital & Registro */}
+                        <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-6 space-y-4 h-full flex flex-col justify-between">
                           <div>
-                            <span className="block text-slate-400 text-[10px] uppercase">Código QR Único</span>
-                            <span className="text-white font-bold">{detailBike.codigo_qr}</span>
-                          </div>
-                          <div className="sm:col-span-2">
-                            <span className="block text-slate-400 text-[10px] uppercase">URL del Pasaporte Digital</span>
-                            <span className="text-[#bfce7f] font-bold truncate block">
-                              {detailBike.url_qr || `/assets/bikes/${detailBike.codigo_qr}`}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
+                            <h3 className="text-[#bfce7f] font-bold uppercase tracking-wider text-xs border-b border-[#2d3748] pb-2 flex items-center gap-2 mb-4">
+                              <QrCode size={16} /> Identificación Digital & Registro
+                            </h3>
 
-                      {/* Observaciones */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-6 space-y-2">
-                          <span className="block text-slate-400 text-[10px] uppercase font-bold">Descripción General</span>
-                          <p className="text-slate-200 leading-relaxed">
-                            {detailBike.descripcion || "Sin descripción adicional registrada."}
-                          </p>
+                            {detailBike.codigo_qr ? (
+                              <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 bg-[#0e1117] p-5 rounded-2xl border border-[#2d3748]">
+                                {/* Block with white background for QR Code */}
+                                <div className="p-3 bg-white rounded-2xl shrink-0 shadow-lg text-center space-y-1.5 border border-slate-200">
+                                  <img
+                                    src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
+                                      detailBike.codigo_qr || `BF-QR-${detailBike.id}`
+                                    )}`}
+                                    alt={`Código QR ${detailBike.codigo_qr}`}
+                                    className="w-32 h-32 sm:w-36 sm:h-36 object-contain mx-auto"
+                                    onError={(e) => {
+                                      e.currentTarget.style.display = 'none';
+                                      const parent = e.currentTarget.parentElement;
+                                      if (parent && !parent.querySelector('.qr-err-msg')) {
+                                        const errDiv = document.createElement('div');
+                                        errDiv.className = 'qr-err-msg text-rose-500 text-[10px] p-4 text-center font-bold';
+                                        errDiv.innerText = 'No pudimos generar el código QR.';
+                                        parent.appendChild(errDiv);
+                                      }
+                                    }}
+                                  />
+                                  <span className="block text-[10px] font-bold text-slate-900 bg-slate-100 py-0.5 px-2 rounded border border-slate-300 font-mono">
+                                    {detailBike.codigo_qr}
+                                  </span>
+                                </div>
+
+                                {/* Information & Action Buttons */}
+                                <div className="space-y-3.5 flex-1 w-full min-w-0">
+                                  <div className="space-y-2">
+                                    <div>
+                                      <span className="block text-slate-400 text-[10px] uppercase font-bold">Código QR Único</span>
+                                      <span className="text-white font-bold text-sm truncate block">{detailBike.codigo_qr}</span>
+                                    </div>
+                                    <div>
+                                      <span className="block text-slate-400 text-[10px] uppercase font-bold">Estado del Pasaporte</span>
+                                      <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold uppercase inline-block">
+                                        Activo Verificado
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {/* Action Buttons: Descargar QR & Copiar */}
+                                  <div className="flex items-center gap-2.5 pt-1 flex-wrap">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDownloadQrPng(detailBike)}
+                                      className="px-3.5 py-2 bg-[#bfce7f] hover:bg-[#a9ba6b] text-[#1d1f18] font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-lg active:scale-95 shrink-0"
+                                    >
+                                      <Download size={14} />
+                                      <span>Descargar QR</span>
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => handleCopyQrUrlNew(detailBike)}
+                                      className="px-3.5 py-2 bg-[#161a21] border border-[#2d3748] text-slate-200 hover:text-white hover:border-[#bfce7f] hover:bg-[#212631] font-bold rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 shrink-0"
+                                    >
+                                      {isCopied ? <Check size={14} className="text-[#bfce7f]" /> : <Copy size={14} />}
+                                      <span>{isCopied ? "Copiado" : "Copiar"}</span>
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="bg-[#0e1117] p-6 rounded-2xl border border-[#2d3748] text-center space-y-4">
+                                <p className="text-slate-400 text-xs font-bold">
+                                  Esta bicicleta todavía no tiene un código QR asignado.
+                                </p>
+                                <div className="flex justify-center gap-3">
+                                  <button
+                                    type="button"
+                                    disabled
+                                    className="px-4 py-2 bg-slate-800 text-slate-500 rounded-xl text-xs font-bold flex items-center gap-2 cursor-not-allowed opacity-50"
+                                  >
+                                    <Download size={14} />
+                                    <span>Descargar QR</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled
+                                    className="px-4 py-2 bg-slate-800 text-slate-500 rounded-xl text-xs font-bold flex items-center gap-2 cursor-not-allowed opacity-50"
+                                  >
+                                    <Copy size={14} />
+                                    <span>Copiar</span>
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-6 space-y-2">
-                          <span className="block text-slate-400 text-[10px] uppercase font-bold">Notas Técnicas u Observaciones</span>
-                          <p className="text-slate-200 leading-relaxed">
-                            {detailBike.notas_tecnicas || "Sin observaciones técnicas especiales."}
-                          </p>
+
+                        {/* COLUMNA DERECHA — 50% Desktop: Descripción General & Notas Técnicas */}
+                        <div className="grid grid-rows-1 sm:grid-rows-2 gap-5 h-full">
+                          <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-6 space-y-2 h-full flex flex-col">
+                            <span className="block text-[#bfce7f] text-xs font-bold uppercase tracking-wider border-b border-[#2d3748] pb-2">Descripción General</span>
+                            <p className="text-slate-200 leading-relaxed pt-1 flex-1">
+                              {detailBike.descripcion || "Sin descripción adicional registrada."}
+                            </p>
+                          </div>
+                          <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-6 space-y-2 h-full flex flex-col">
+                            <span className="block text-[#bfce7f] text-xs font-bold uppercase tracking-wider border-b border-[#2d3748] pb-2">Notas Técnicas u Observaciones</span>
+                            <p className="text-slate-200 leading-relaxed pt-1 flex-1">
+                              {detailBike.notas_tecnicas || "Sin observaciones técnicas especiales."}
+                            </p>
+                          </div>
                         </div>
                       </div>
 
@@ -2068,488 +2263,37 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
 
               {/* 2. COMPONENTES & DESGASTE TAB */}
               {activeTab === "componentes" && (
-                <div className="space-y-5 font-mono text-xs">
-                  
-                  {/* Header Bar with Add Component Toggle Button */}
-                  <div className="flex justify-between items-center bg-[#161a21] border border-[#2d3748] p-4 rounded-2xl">
-                    <div>
-                      <h4 className="font-bold text-white text-xs uppercase tracking-wider flex items-center gap-2">
-                        <Layers size={16} className="text-[#bfce7f]" />
-                        Componentes & Repuestos Instalados
-                      </h4>
-                      <p className="text-[11px] text-slate-400 mt-0.5">
-                        Registro detallado de piezas, especificaciones técnicas y estado de conservación.
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => setIsComponentFormOpen(!isComponentFormOpen)}
-                      className={`px-4 py-2 text-[#1d1f18] font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-lg ${
-                        isComponentFormOpen
-                          ? "bg-rose-400 hover:bg-rose-300 text-rose-950"
-                          : "bg-[#bfce7f] hover:bg-[#a9ba6b]"
-                      }`}
-                    >
-                      {isComponentFormOpen ? <X size={15} /> : <Plus size={15} />}
-                      <span>{isComponentFormOpen ? "Cancelar" : "Agregar Componente"}</span>
-                    </button>
-                  </div>
-
-                  {/* Inline Form Unfolded */}
-                  {isComponentFormOpen && (
-                    <form
-                      onSubmit={handleSaveComponent}
-                      className="p-5 bg-[#161a21] border border-[#bfce7f]/40 rounded-2xl space-y-4 font-mono text-xs animate-in fade-in duration-200 shadow-xl"
-                    >
-                      <div className="flex justify-between items-center border-b border-[#2d3748] pb-2">
-                        <h4 className="font-bold text-[#bfce7f] uppercase text-xs flex items-center gap-2">
-                          {editingComponent ? <Edit2 size={16} /> : <Plus size={16} />}
-                          <span>{editingComponent ? "EDITAR COMPONENTE DE BICICLETA" : "REGISTRAR NUEVO COMPONENTE DE BICICLETA"}</span>
-                        </h4>
-                        <button
-                          type="button"
-                          onClick={handleCancelComponentForm}
-                          className="text-slate-400 hover:text-white p-1 rounded transition-colors"
-                        >
-                          <X size={16} />
-                        </button>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                        <div>
-                          <label className="block text-slate-300 mb-1">Categoría <span className="text-rose-400">*</span></label>
-                          <select
-                            value={componentForm.categoria_componente_id}
-                            onChange={(e) => setComponentForm({ ...componentForm, categoria_componente_id: e.target.value })}
-                            className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#bfce7f]"
-                          >
-                            {categoriesList.map((cat) => (
-                              <option key={cat.id} value={cat.id}>
-                                {cat.nombre} ({cat.codigo})
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="block text-slate-300 mb-1">Marca</label>
-                          <input
-                            type="text"
-                            value={componentForm.marca}
-                            onChange={(e) => setComponentForm({ ...componentForm, marca: e.target.value })}
-                            placeholder="Ej: Fox, SRAM, Shimano"
-                            className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#bfce7f]"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-slate-300 mb-1">Modelo / Especificación</label>
-                          <input
-                            type="text"
-                            value={componentForm.modelo}
-                            onChange={(e) => setComponentForm({ ...componentForm, modelo: e.target.value })}
-                            placeholder="Ej: 34 Float, XX1 AXS"
-                            className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#bfce7f]"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-slate-300 mb-1">Estado de Uso</label>
-                          <select
-                            value={componentForm.estado_componente_id}
-                            onChange={(e) => setComponentForm({ ...componentForm, estado_componente_id: e.target.value })}
-                            className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#bfce7f]"
-                          >
-                            {statesList.map((est) => (
-                              <option key={est.id} value={est.id}>
-                                {est.nombre} ({est.nivel_desgaste}% desgaste)
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
-                        <div>
-                          <label className="block text-slate-300 mb-1">Número de Serie</label>
-                          <input
-                            type="text"
-                            value={componentForm.numero_serie}
-                            onChange={(e) => setComponentForm({ ...componentForm, numero_serie: e.target.value })}
-                            placeholder="Ej: FOX34-20240001"
-                            className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#bfce7f]"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-slate-300 mb-1 flex items-center gap-1.5">
-                            <Calendar size={14} className="text-[#bfce7f]" />
-                            <span>Fecha Instalación</span>
-                          </label>
-                          <input
-                            type="date"
-                            value={formatDateForInput(componentForm.fecha_instalacion)}
-                            onChange={(e) => setComponentForm({ ...componentForm, fecha_instalacion: e.target.value })}
-                            className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#bfce7f] cursor-pointer [color-scheme:dark]"
-                          />
-                        </div>
-
-                        <div className="flex gap-2 justify-end">
-                          <button
-                            type="button"
-                            onClick={handleCancelComponentForm}
-                            className="px-4 py-2 rounded-xl border border-[#2d3748] bg-[#0e1117] text-slate-300 hover:text-white transition-colors cursor-pointer"
-                          >
-                            Cancelar
-                          </button>
-                          <button
-                            type="submit"
-                            className="px-5 py-2 rounded-xl bg-[#bfce7f] hover:bg-[#a9ba6b] text-[#1d1f18] font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-lg"
-                          >
-                            {editingComponent ? <Edit2 size={15} /> : <Save size={15} />}
-                            <span>{editingComponent ? "Actualizar Componente" : "Guardar Componente"}</span>
-                          </button>
-                        </div>
-                      </div>
-                    </form>
-                  )}
-
-                  {/* Components Table */}
-                  <div className="border border-[#2d3748] rounded-2xl overflow-hidden bg-[#161a21]">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="bg-[#0e1117] border-b border-[#2d3748] text-slate-400 text-[11px]">
-                          <th className="py-3.5 px-4 font-bold uppercase">MÓDULO COMPONENTE</th>
-                          <th className="py-3.5 px-4 font-bold uppercase">ESPECIFICACIÓN / MODELO</th>
-                          <th className="py-3.5 px-4 font-bold uppercase">NÚMERO DE SERIE</th>
-                          <th className="py-3.5 px-4 font-bold uppercase">FECHA INSTALACIÓN</th>
-                          <th className="py-3.5 px-4 text-center font-bold uppercase">ESTADO</th>
-                          <th className="py-3.5 px-4 text-right font-bold uppercase">ACCIONES</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-[#2d3748]">
-                        {loadingComponents ? (
-                          <tr>
-                            <td colSpan={6} className="py-10 text-center text-slate-400">
-                              <RefreshCw size={18} className="animate-spin inline-block mr-2" />
-                              Cargando componentes...
-                            </td>
-                          </tr>
-                        ) : bikeComponents.length === 0 ? (
-                          <tr>
-                            <td colSpan={6} className="py-10 text-center text-slate-400">
-                              No hay componentes registrados aún para esta bicicleta.
-                            </td>
-                          </tr>
-                        ) : (
-                          bikeComponents.map((comp) => (
-                            <tr key={comp.id} className="hover:bg-[#1f242d] transition-colors">
-                              <td className="py-3.5 px-4 font-bold text-[#bfce7f]">
-                                {comp.categoria_nombre}
-                              </td>
-
-                              <td className="py-3.5 px-4 text-white font-bold">
-                                {comp.especificacion}
-                              </td>
-
-                              <td className="py-3.5 px-4 text-slate-300">
-                                {comp.numero_serie || "—"}
-                              </td>
-
-                              <td className="py-3.5 px-4 text-slate-300">
-                                {comp.fecha_instalacion || "—"}
-                              </td>
-
-                              <td className="py-3.5 px-4 text-center">
-                                <span
-                                  className={`px-2.5 py-1 rounded-lg border text-[10px] font-bold uppercase inline-flex items-center gap-1.5 whitespace-nowrap ${getBadgeStyleForState(
-                                    comp.nivel_desgaste,
-                                    comp.estado_codigo
-                                  )}`}
-                                >
-                                  <span>{comp.estado_nombre}</span>
-                                  <span className="opacity-40">•</span>
-                                  <span>{comp.nivel_desgaste !== undefined && comp.nivel_desgaste !== null ? comp.nivel_desgaste : 0}%</span>
-                                </span>
-                              </td>
-
-                              <td className="py-3.5 px-4 text-right">
-                                <div className="flex items-center justify-end gap-1.5">
-                                  <button
-                                    onClick={() => handleEditComponent(comp)}
-                                    className="p-1.5 text-slate-400 hover:text-white hover:bg-[#2d3748] rounded-lg transition-colors cursor-pointer"
-                                    title="Editar componente"
-                                  >
-                                    <Edit2 size={15} />
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteComponent(detailBike.id, comp.id)}
-                                    className="p-1.5 text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
-                                    title="Eliminar componente"
-                                  >
-                                    <Trash2 size={15} />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-
-                </div>
+                <BicycleComponentsEditor
+                  mode="persisted"
+                  bikeId={detailBike.id}
+                  components={bikeComponents}
+                  categoriesList={categoriesList}
+                  statesList={statesList}
+                  onRefresh={() => {
+                    fetchComponents(detailBike.id);
+                    fetchHistory(detailBike.id);
+                    fetchData();
+                  }}
+                  showToast={showToast}
+                />
               )}
 
               {/* 3. FOTOGRAFÍAS DE ACTIVO TAB */}
-              {activeTab === "fotos" && (() => {
-                return (
-                  <div className="space-y-6 font-mono text-xs">
-                    
-                    {/* Photo Uploader / Editor Form Card */}
-                    <div
-                      className={`p-5 bg-[#161a21] border rounded-2xl space-y-4 transition-all ${
-                        editingPhoto
-                          ? "border-[#bfce7f] shadow-[0_0_20px_rgba(191,206,127,0.15)]"
-                          : "border-[#2d3748]"
-                      }`}
-                    >
-                      <div className="flex justify-between items-center">
-                        <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                          {editingPhoto ? (
-                            <>
-                              <Edit2 size={16} className="text-[#bfce7f]" />
-                              <span>EDITAR DATOS DE LA FOTOGRAFÍA SELECCIONADA</span>
-                            </>
-                          ) : (
-                            <>
-                              <Upload size={16} className="text-[#bfce7f]" />
-                              <span>CARGAR NUEVA FOTOGRAFÍA DE LA BICICLETA</span>
-                            </>
-                          )}
-                        </h4>
+              {activeTab === "fotos" && (
+                <BicyclePhotosEditor
+                  mode="persisted"
+                  bikeId={detailBike.id}
+                  photos={bikePhotos}
+                  componentsList={bikeComponents}
+                  onRefresh={() => {
+                    fetchPhotos(detailBike.id);
+                    fetchData();
+                  }}
+                  showToast={showToast}
+                />
+              )}
 
-                        {editingPhoto && (
-                          <button
-                            type="button"
-                            onClick={handleCancelPhotoEdit}
-                            className="px-3 py-1 bg-[#2d3748] hover:bg-slate-700 text-white font-bold rounded-lg text-[11px] flex items-center gap-1 transition-colors cursor-pointer"
-                          >
-                            <X size={14} />
-                            <span>Cerrar Vista</span>
-                          </button>
-                        )}
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-                        
-                        <div className="md:col-span-4">
-                          <label className="block text-slate-300 mb-1">
-                            {editingPhoto ? "Imagen Registrada" : "Seleccionar Imagen Local"}
-                          </label>
-                          {editingPhoto ? (
-                            <div className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-2 text-slate-400 text-xs truncate flex items-center gap-2">
-                              <ImageIcon size={14} className="text-[#bfce7f]" />
-                              <span className="truncate">{editingPhoto.nombre_archivo}</span>
-                            </div>
-                          ) : (
-                            <input
-                              type="file"
-                              accept="image/*"
-                              onChange={handleFileSelect}
-                              className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-2 text-slate-300 text-xs focus:outline-none focus:border-[#bfce7f] cursor-pointer file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-[#bfce7f] file:text-[#1d1f18]"
-                            />
-                          )}
-                        </div>
-
-                        <div className="md:col-span-3">
-                          <label className="block text-slate-300 mb-1">Descripción / Módulo</label>
-                          <input
-                            type="text"
-                            value={newPhotoDesc}
-                            onChange={(e) => setNewPhotoDesc(e.target.value)}
-                            placeholder="Ej: Vista lateral, Transmisión"
-                            className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#bfce7f]"
-                          />
-                        </div>
-
-                        <div className="md:col-span-2">
-                          <label className="block text-slate-300 mb-1">Tipo</label>
-                          <select
-                            value={newPhotoType}
-                            onChange={(e) => setNewPhotoType(e.target.value)}
-                            className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-2 py-2 text-white focus:outline-none focus:border-[#bfce7f]"
-                          >
-                            <option value="GENERAL">GENERAL</option>
-                            <option value="PRINCIPAL">PRINCIPAL</option>
-                            <option value="COMPONENTE">COMPONENTE</option>
-                            <option value="DETALLE">DETALLE</option>
-                            <option value="DANO">DAÑO / DESGASTE</option>
-                            <option value="DIAGNOSTICO">DIAGNÓSTICO</option>
-                            <option value="ANTES">ANTES DEL SERVICIO</option>
-                            <option value="DESPUES">DESPUÉS DEL SERVICIO</option>
-                          </select>
-                        </div>
-
-                        <div className="md:col-span-3">
-                          <label className="block text-slate-300 mb-1">Componente Vinculado</label>
-                          <select
-                            value={newPhotoComponentId}
-                            onChange={(e) => setNewPhotoComponentId(e.target.value)}
-                            className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#bfce7f] cursor-pointer"
-                          >
-                            <option value="">-- Sin Componente Vinculado (Opcional) --</option>
-                            {bikeComponents.map((comp) => (
-                              <option key={comp.id} value={comp.id}>
-                                [{comp.categoria_nombre || "COMPONENTE"}] {comp.marca ? `${comp.marca} ${comp.modelo || ""}` : comp.modelo || comp.especificacion || `ID #${comp.id}`}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                      </div>
-
-                      <div className="flex items-center gap-2 pt-1 border-t border-[#2d3748]/40">
-                        <input
-                          type="checkbox"
-                          id="es_principal_checkbox"
-                          checked={newPhotoEsPrincipal}
-                          onChange={(e) => setNewPhotoEsPrincipal(e.target.checked)}
-                          className="w-4 h-4 rounded bg-[#0e1117] border-[#2d3748] text-[#bfce7f] focus:ring-0 cursor-pointer accent-[#bfce7f]"
-                        />
-                        <label htmlFor="es_principal_checkbox" className="font-bold text-xs select-none flex items-center gap-1.5 text-[#bfce7f] cursor-pointer">
-                          <Star size={14} className={newPhotoEsPrincipal ? "fill-[#bfce7f]" : ""} />
-                          <span>Marcar como Fotografía Principal del Activo</span>
-                        </label>
-                      </div>
-
-                      <div className="flex justify-between items-center pt-2 border-t border-[#2d3748]/50">
-                        <div>
-                          {editingPhoto ? (
-                            <p className="text-[11px] text-[#bfce7f]">
-                              ✏️ Editando datos de la fotografía ID <strong className="text-white">#{editingPhoto.id}</strong>. Modifique sus atributos y presione <strong className="text-white">"Guardar Cambios"</strong>.
-                            </p>
-                          ) : selectedPhotoFile ? (
-                            <p className="text-[11px] text-[#bfce7f]">
-                              ✓ Archivo seleccionado: <strong className="text-white">{selectedPhotoFile.name}</strong>. Presione <strong className="text-white">"Guardar Foto"</strong> para registrar.
-                            </p>
-                          ) : (
-                            <p className="text-[11px] text-slate-400">
-                              Haga clic en cualquiera de las fotografías inferiores para seleccionar y editar sus atributos.
-                            </p>
-                          )}
-                        </div>
-
-                        <button
-                          type="button"
-                          disabled={isUploading || (!editingPhoto && !selectedPhotoFile && !selectedPhotoDataUrl)}
-                          onClick={() => saveOrUpdatePhoto(detailBike?.bicicleta_id || detailBike?.id)}
-                          className="px-6 py-2 bg-[#bfce7f] hover:bg-[#a9ba6b] text-[#1d1f18] font-bold rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 cursor-pointer shadow-lg shrink-0 ml-4"
-                        >
-                          {isUploading ? (
-                            <RefreshCw size={15} className="animate-spin" />
-                          ) : (
-                            <Save size={15} />
-                          )}
-                          <span>{editingPhoto ? "Guardar Cambios" : "Guardar Foto"}</span>
-                        </button>
-                      </div>
-                    </div>
-
-                  {/* Photo Gallery Grid */}
-                  {loadingPhotos ? (
-                    <div className="py-8 text-center text-slate-400">
-                      <RefreshCw size={20} className="animate-spin inline-block mr-2" />
-                      Cargando fotografías registradas...
-                    </div>
-                  ) : bikePhotos.length === 0 ? (
-                    <div className="p-8 text-center bg-[#161a21] border border-[#2d3748] rounded-2xl space-y-3">
-                      <Camera size={36} className="mx-auto text-slate-500" />
-                      <p className="text-slate-300 font-bold">No hay fotografías registradas aún</p>
-                      <p className="text-slate-500 text-[11px]">
-                        Utilice el panel superior para cargar imágenes y fotografías de la bicicleta.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                      {bikePhotos.map((photo) => {
-                        const isSelectedForEdit = editingPhoto && editingPhoto.id === photo.id;
-                        return (
-                          <div
-                            key={photo.id}
-                            onClick={() => handleSelectPhotoForEdit(photo)}
-                            className={`bg-[#161a21] rounded-2xl overflow-hidden shadow-lg group relative flex flex-col justify-between cursor-pointer transition-all ${
-                              isSelectedForEdit
-                                ? "ring-2 ring-[#bfce7f] border-2 border-[#bfce7f] bg-[#1f242d]"
-                                : "border border-[#2d3748] hover:border-[#bfce7f]/60"
-                            }`}
-                          >
-                            <div className="aspect-video w-full relative overflow-hidden bg-black/40">
-                              <img
-                                src={photo.url_archivo}
-                                alt={photo.nombre_archivo || "Foto Bicicleta"}
-                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                              />
-                              
-                              <div className="absolute top-2 left-2 flex gap-1 flex-wrap">
-                                {photo.es_principal && (
-                                  <span className="bg-[#bfce7f] text-[#1d1f18] px-2 py-0.5 rounded text-[9px] font-bold uppercase shadow">
-                                    PRINCIPAL
-                                  </span>
-                                )}
-                                {isSelectedForEdit && (
-                                  <span className="bg-blue-600 text-white px-2 py-0.5 rounded text-[9px] font-bold uppercase shadow flex items-center gap-1">
-                                    <Edit2 size={10} /> EDITANDO
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="p-3 space-y-2 flex-1 flex flex-col justify-between">
-                              <div>
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className="text-[10px] text-[#bfce7f] font-bold uppercase">
-                                    {photo.tipo_foto || "GENERAL"}
-                                  </span>
-                                  {photo.componente_nombre && (
-                                    <span className="px-1.5 py-0.2 rounded bg-[#bfce7f]/15 border border-[#bfce7f]/30 text-[#bfce7f] text-[9px] font-bold truncate max-w-[170px]" title={photo.componente_nombre}>
-                                      ⚙️ {photo.componente_nombre}
-                                    </span>
-                                  )}
-                                </div>
-                                <p className="text-xs text-white font-bold truncate mt-1">
-                                  {photo.descripcion || photo.nombre_archivo}
-                                </p>
-                              </div>
-
-                              <div className="pt-2 border-t border-[#2d3748] flex justify-between items-center text-[10px]">
-                                <span className="text-slate-400">
-                                  {photo.fecha_creacion || "Reciente"}
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleDeletePhoto(detailBike.id, photo.id);
-                                  }}
-                                  className="text-rose-400 hover:text-rose-300 p-1 rounded hover:bg-rose-950/40 transition-colors cursor-pointer"
-                                  title="Eliminar permanentemente de la base de datos"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-
-              {/* 4. HISTORIAL TÉCNICO TAB */}
+              {/* 4. ÓRDENES DE TRABAJO TAB */}
               {activeTab === "historial" && (
                 <div className="space-y-6 font-mono text-xs">
                   {/* Top Bar Header */}
@@ -2557,7 +2301,7 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
                     <div>
                       <h4 className="font-bold text-white text-xs uppercase tracking-wider flex items-center gap-2">
                         <Wrench size={16} className="text-[#bfce7f]" />
-                        <span>Historial de Servicios Técnicos & Mantenimientos</span>
+                        <span>Órdenes de Trabajo & Mantenimientos</span>
                       </h4>
                       <p className="text-[11px] text-slate-400 mt-0.5">
                         Registro cronológico real de intervenciones realizadas a esta bicicleta.
@@ -2569,19 +2313,26 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
                   {loadingHistory ? (
                     <div className="py-10 text-center text-slate-400 font-mono">
                       <RefreshCw size={20} className="animate-spin inline-block mr-2" />
-                      Cargando historial técnico...
+                      Cargando órdenes de trabajo...
                     </div>
                   ) : bikeHistory.length === 0 ? (
                     <div className="p-8 text-center bg-[#161a21] border border-[#2d3748] rounded-2xl space-y-3 font-mono">
                       <Wrench size={36} className="mx-auto text-slate-500" />
-                      <p className="text-slate-300 font-bold">Sin intervenciones técnicas registradas</p>
+                      <p className="text-slate-300 font-bold">Sin órdenes de trabajo registradas</p>
                       <p className="text-slate-500 text-[11px]">
-                        Presione el botón "Registrar Servicio Técnico" para añadir el primer registro al historial de la bicicleta.
+                        Las órdenes de trabajo creadas para esta bicicleta se mostrarán cronológicamente aquí.
                       </p>
                     </div>
                   ) : (
                     <div className="border-l-2 border-[#2d3748] pl-6 space-y-6 ml-4 py-2 font-mono">
                       {bikeHistory.map((item) => {
+                        const rawOrderId = item.orden_trabajo_id || item.id;
+                        const validOrderId = Number(rawOrderId) && !isNaN(Number(rawOrderId)) ? Number(rawOrderId) : null;
+
+                        if (!validOrderId && process.env.NODE_ENV !== "production") {
+                          console.warn("Falta orden_trabajo_id para el registro:", item);
+                        }
+
                         let badgeStyle = "bg-[#bfce7f]/15 text-[#bfce7f] border-[#bfce7f]/30";
                         let dotBg = "bg-[#bfce7f]";
 
@@ -2595,6 +2346,15 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
                           badgeStyle = "bg-purple-500/15 text-purple-400 border-purple-500/30";
                           dotBg = "bg-purple-400";
                         }
+
+                        const codeText = item.codigo_orden || (item.titulo_servicio ? item.titulo_servicio.split(" — ")[0] : "");
+                        const descriptionText = item.titulo_servicio && item.titulo_servicio.includes(" — ")
+                          ? item.titulo_servicio.split(" — ").slice(1).join(" — ")
+                          : (item.titulo_servicio && !item.codigo_orden ? item.titulo_servicio : "Orden de Trabajo");
+
+                        const currentBikeId = detailBike?.id || detailBike?.bicicleta_id;
+                        const bicycleReturnUrl = currentBikeId ? `/crm/bicycles?id=${currentBikeId}&tab=historial` : "/crm/bicycles";
+                        const encodedReturnUrl = encodeURIComponent(bicycleReturnUrl);
 
                         return (
                           <div key={item.id} className="relative group">
@@ -2610,12 +2370,42 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
                                       • {(item.kilometraje_servicio !== undefined && item.kilometraje_servicio !== null && item.kilometraje_servicio !== '') ? item.kilometraje_servicio : (detailBike?.kilometraje_actual || 0)} KM
                                     </span>
                                   </div>
-                                  <h4 className="font-bold text-white text-sm mt-1">
-                                    {item.titulo_servicio}
+                                  <h4 className="font-bold text-white text-sm mt-1 flex items-center gap-2 flex-wrap">
+                                    {validOrderId ? (
+                                      <Link
+                                        href={`/work-orders?order_id=${validOrderId}&return_to=${encodedReturnUrl}`}
+                                        onClick={(e) => e.stopPropagation()}
+                                        aria-label={`Ver detalle de la orden ${item.codigo_orden || codeText || validOrderId}`}
+                                        className="text-[#bfce7f] hover:text-[#a6b66b] underline transition-colors font-bold focus:outline-none focus:ring-1 focus:ring-[#bfce7f] rounded"
+                                      >
+                                        {codeText || `OT-${validOrderId}`}
+                                      </Link>
+                                    ) : (
+                                      <span className="text-slate-200">
+                                        {codeText || "SIN OT"}
+                                      </span>
+                                    )}
+                                    {descriptionText && (
+                                      <span className="text-slate-300">
+                                        — {descriptionText}
+                                      </span>
+                                    )}
                                   </h4>
                                 </div>
 
                                 <div className="flex items-center gap-2 flex-wrap">
+                                  {validOrderId ? (
+                                    <Link
+                                      href={`/work-orders?order_id=${validOrderId}&return_to=${encodedReturnUrl}`}
+                                      onClick={(e) => e.stopPropagation()}
+                                      aria-label={`Ver detalle de la orden ${item.codigo_orden || codeText || validOrderId}`}
+                                      className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#bfce7f]/15 hover:bg-[#bfce7f]/25 text-[#bfce7f] border border-[#bfce7f]/30 hover:border-[#bfce7f]/60 rounded-xl font-mono text-xs font-bold transition-all focus:outline-none focus:ring-1 focus:ring-[#bfce7f] cursor-pointer"
+                                    >
+                                      <Eye size={14} />
+                                      <span>Ver detalle</span>
+                                    </Link>
+                                  ) : null}
+
                                   {item.salud_global_porcentaje !== undefined && item.salud_global_porcentaje !== null && (
                                     <span
                                       className={`px-2.5 py-0.5 rounded border text-[10px] font-bold uppercase shadow flex items-center gap-1 ${
@@ -2706,120 +2496,6 @@ export default function BicyclesView({ initialBikeId = null, onClose = null }) {
                       })}
                     </div>
                   )}
-                </div>
-              )}
-
-              {/* 5. PASAPORTE DIGITAL & QR TAB */}
-              {activeTab === "qr" && (
-                <div className="p-6 bg-[#161a21] border border-[#2d3748] rounded-2xl font-mono text-xs space-y-6">
-                  <div className="flex flex-col md:flex-row items-center md:items-start gap-6 bg-[#0e1117] p-6 rounded-2xl border border-[#2d3748]">
-                    {/* Dynamic Scannable QR Code */}
-                    <div className="p-4 bg-white rounded-2xl shrink-0 shadow-xl text-center space-y-2">
-                      <img
-                        src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
-                          detailBike.url_qr || `${typeof window !== 'undefined' ? window.location.origin : ''}/bike/${detailBike.codigo_qr || detailBike.id}`
-                        )}`}
-                        alt="Código QR de Bicicleta"
-                        className="w-40 h-40 object-contain mx-auto"
-                      />
-                      <span className="block text-[10px] font-bold text-slate-900 bg-slate-100 py-1 px-2 rounded border border-slate-300">
-                        {detailBike.codigo_qr || `QR-BF-${detailBike.id}`}
-                      </span>
-                    </div>
-
-                    <div className="space-y-4 flex-1">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h4 className="font-bold text-white text-base">Pasaporte Digital QR de Bicicleta</h4>
-                          <span className="px-2 py-0.5 rounded bg-[#bfce7f]/15 text-[#bfce7f] border border-[#bfce7f]/30 text-[10px] font-bold uppercase">
-                            Activo Verificado
-                          </span>
-                        </div>
-                        <p className="text-slate-400 text-xs mt-1 leading-relaxed">
-                          Código QR oficial para escaneo rápido en la recepción del taller, check-in express y validación de trazabilidad/expediente técnico.
-                        </p>
-                      </div>
-
-                      {/* Info grid */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-[#161a21] p-4 rounded-xl border border-[#2d3748] text-slate-300 text-xs">
-                        <div>
-                          <span className="text-slate-500 block text-[10px] uppercase font-bold">N° Serie / VIN Cuadro:</span>
-                          <strong className="text-white font-mono">{detailBike.numero_serie_cuadro || "TRSPUR20240001"}</strong>
-                        </div>
-                        <div>
-                          <span className="text-slate-500 block text-[10px] uppercase font-bold">Propietario Registrado:</span>
-                          <strong className="text-white font-mono">{detailBike.cliente_nombre || "Cliente Registrado"}</strong>
-                        </div>
-                        <div className="sm:col-span-2">
-                          <div className="flex justify-between items-center mb-0.5">
-                            <span className="text-slate-500 block text-[10px] uppercase font-bold">URL de Escaneo:</span>
-                            <span className="text-[10px] text-slate-400 font-bold hover:text-[#bfce7f] transition-colors">
-                              (Clic para copiar URL)
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const urlToCopy = detailBike.url_qr || (typeof window !== 'undefined' ? `${window.location.origin}/bike/${detailBike.codigo_qr || detailBike.id}` : '');
-                              if (urlToCopy) {
-                                if (navigator.clipboard && navigator.clipboard.writeText) {
-                                  navigator.clipboard.writeText(urlToCopy);
-                                } else {
-                                  const textArea = document.createElement("textarea");
-                                  textArea.value = urlToCopy;
-                                  document.body.appendChild(textArea);
-                                  textArea.select();
-                                  document.execCommand("copy");
-                                  document.body.removeChild(textArea);
-                                }
-                                showToast("URL copiada correctamente.");
-                              } else {
-                                showToast("No se pudo copiar la URL.", "error");
-                              }
-                            }}
-                            className="w-full text-left font-mono text-[#bfce7f] text-[11px] break-all bg-[#0e1117] hover:bg-[#1b212c] hover:border-[#bfce7f]/60 px-3 py-1.5 rounded-lg border border-[#2d3748] transition-all flex items-center justify-between gap-2 group cursor-pointer active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#bfce7f]"
-                            title="Haz clic para copiar la URL de escaneo al portapapeles"
-                          >
-                            <span className="break-all">{detailBike.url_qr || `${typeof window !== 'undefined' ? window.location.origin : ''}/bike/${detailBike.codigo_qr || detailBike.id}`}</span>
-                            <Copy size={13} className="text-slate-400 group-hover:text-[#bfce7f] shrink-0" />
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Action buttons */}
-                      <div className="flex flex-wrap items-center gap-3 pt-1">
-                        {/* 1. Imprimir QR */}
-                        <button
-                          type="button"
-                          disabled={isPrinting}
-                          onClick={() => {
-                            if (isPrinting) return;
-                            setIsPrinting(true);
-                            handlePrintQrSticker(detailBike);
-                            setTimeout(() => setIsPrinting(false), 800);
-                          }}
-                          className="h-10 px-4 py-2 bg-[#bfce7f] text-[#1d1f18] hover:bg-[#a9ba6b] hover:shadow-md active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#bfce7f] font-bold rounded-xl text-xs flex items-center gap-2 transition-all duration-150 ease-in-out cursor-pointer shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <Printer size={15} />
-                          <span>Imprimir QR</span>
-                        </button>
-
-                        {/* 2. Copiar QR */}
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleCopyQrUrl(
-                              detailBike.codigo_qr || `QR-BF-${detailBike.id}`
-                            )
-                          }
-                          className="h-10 px-4 py-2 bg-[#161a21] border border-[#2d3748] text-slate-200 hover:text-white hover:border-[#bfce7f] hover:bg-[#212631] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#bfce7f] font-bold rounded-xl text-xs flex items-center gap-2 transition-all duration-150 ease-in-out cursor-pointer"
-                        >
-                          {isCopied ? <Check size={15} className="text-[#bfce7f]" /> : <Copy size={15} />}
-                          <span>{isCopied ? "Copiado" : "Copiar QR"}</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
                 </div>
               )}
             </div>
