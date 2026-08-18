@@ -499,10 +499,11 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
               </thead>
               <tbody className="divide-y divide-[#2d3748]">
                 {orders.map((order) => {
+                  const targetId = order.orden_trabajo_id || order.orden_id;
                   return (
                     <tr
-                      key={order.orden_id}
-                      onClick={() => onViewDetail && onViewDetail(order.orden_id)}
+                      key={targetId}
+                      onClick={() => onViewDetail && onViewDetail(targetId)}
                       className="hover:bg-[#1f242d] transition-colors cursor-pointer group"
                     >
                       <td className="py-3.5 px-4 font-mono font-bold text-[#bfce7f] whitespace-nowrap">
@@ -537,7 +538,7 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (onViewDetail) onViewDetail(order.orden_id);
+                            if (onViewDetail) onViewDetail(targetId);
                           }}
                           className="px-3 py-1 bg-[#0a0c10] border border-[#2d3748] rounded-lg text-slate-300 hover:text-white hover:border-[#bfce7f] font-mono text-[11px] font-bold transition-colors"
                         >

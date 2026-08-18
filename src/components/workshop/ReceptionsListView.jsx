@@ -336,15 +336,26 @@ export default function ReceptionsListView({ onViewDetail }) {
         onClose={() => setIsNewModalOpen(false)}
         onSuccess={(createdReception) => {
           setIsNewModalOpen(false);
+          const hasOT = Boolean(
+            createdReception?.orden_trabajo_id ||
+            createdReception?.data?.orden_trabajo_id ||
+            createdReception?.generar_orden_trabajo
+          );
           fetchRecepciones();
           fetchDashboardMetrics();
-          showToast("Recepción creada exitosamente.", "success");
+          if (!hasOT) {
+            showToast("Recepción creada exitosamente.", "success");
+          }
         }}
         onCreated={(createdReception) => {
           setIsNewModalOpen(false);
+          const hasOT = Boolean(
+            createdReception?.orden_trabajo_id ||
+            createdReception?.data?.orden_trabajo_id ||
+            createdReception?.generar_orden_trabajo
+          );
           fetchRecepciones();
           fetchDashboardMetrics();
-          showToast("Recepción creada exitosamente.", "success");
         }}
       />
     </div>

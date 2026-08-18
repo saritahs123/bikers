@@ -40,11 +40,12 @@ export async function GET() {
       `SELECT prioridad_orden_trabajo_id AS prioridad_id, codigo, nombre FROM admin.prioridad_orden_trabajo WHERE activo = true ORDER BY prioridad_orden_trabajo_id ASC`
     );
     const mecanicos = await query(
-      `SELECT u.usuario_id, TRIM(CONCAT_WS(' ', ui.nombre, ui.apellido)) AS nombre_completo
+      `SELECT u.usuario_id,
+              COALESCE(NULLIF(TRIM(CONCAT_WS(' ', ui.nombre, ui.apellido)), ''), ui.correo_electronico, ('Mecánico #' || u.usuario_id::text)) AS nombre_completo
        FROM admin.usuario u
-       JOIN admin.tipo_usuario tu ON tu.tipo_usuario_id = u.tipo_usuario_id
+       LEFT JOIN admin.tipo_usuario tu ON tu.tipo_usuario_id = u.tipo_usuario_id
        LEFT JOIN admin.usuario_identidad ui ON ui.usuario_id = u.usuario_id
-       WHERE tu.codigo = 'MECANICO' AND u.estado = 'ACTIVO'
+       WHERE (tu.codigo = 'MECANICO' OR u.tipo_usuario_id = 2) AND (u.estado = 'ACTIVO' OR u.estado IS NULL)
        ORDER BY ui.nombre, ui.apellido, u.usuario_id`
     );
 

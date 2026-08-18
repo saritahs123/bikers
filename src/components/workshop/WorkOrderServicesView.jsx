@@ -975,13 +975,6 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
             </Link>
           )}
           <button
-            onClick={() => window.print()}
-            className="px-4 py-2 bg-[#1c2129] hover:bg-[#252c37] border border-[#2d3748] text-slate-200 text-xs font-mono font-bold rounded-xl transition-all flex items-center gap-2"
-          >
-            <Printer className="w-4 h-4 text-slate-400" />
-            Imprimir OT
-          </button>
-          <button
             onClick={() => {
               setModalError(null);
               setAddServiceModalOpen(true);
