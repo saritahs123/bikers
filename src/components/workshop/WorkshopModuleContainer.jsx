@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { LayoutDashboard, ClipboardList, Wrench, Plus } from "lucide-react";
 import WorkshopDashboardView from "./WorkshopDashboardView";
 import ReceptionsListView from "./ReceptionsListView";
@@ -13,6 +13,7 @@ import NewWorkOrderModal from "./NewWorkOrderModal";
 
 export default function WorkshopModuleContainer() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState("dashboard"); // 'dashboard' | 'recepciones' | 'work_orders' | 'kanban'
   const [selectedRecepcionId, setSelectedRecepcionId] = useState(null);
   const [selectedOrderId, setSelectedOrderId] = useState(null);
@@ -95,12 +96,25 @@ export default function WorkshopModuleContainer() {
   };
 
   const handleBackFromDetail = () => {
+    const returnTo = searchParams ? searchParams.get("return_to") : null;
+    const isSafeInternalReturn =
+      typeof returnTo === "string" &&
+      returnTo.startsWith("/") &&
+      !returnTo.startsWith("//") &&
+      !returnTo.includes("://");
+
+    if (isSafeInternalReturn) {
+      router.push(returnTo);
+      return;
+    }
+
     setSelectedRecepcionId(null);
     setSelectedOrderId(null);
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       params.delete("id");
       params.delete("order_id");
+      params.delete("return_to");
       const newQuery = params.toString();
       const newUrl = window.location.pathname + (newQuery ? `?${newQuery}` : "");
       window.history.replaceState(null, "", newUrl);

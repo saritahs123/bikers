@@ -35,9 +35,22 @@ export default function WorkOrdersPageClient() {
   };
 
   const handleBackFromDetail = () => {
+    const returnTo = searchParams.get("return_to");
+    const isSafeInternalReturn =
+      typeof returnTo === "string" &&
+      returnTo.startsWith("/") &&
+      !returnTo.startsWith("//") &&
+      !returnTo.includes("://");
+
+    if (isSafeInternalReturn) {
+      router.push(returnTo);
+      return;
+    }
+
     setSelectedOrderId(null);
     const params = new URLSearchParams(searchParams.toString());
     params.delete("order_id");
+    params.delete("return_to");
     const newQuery = params.toString();
     router.push(newQuery ? `/work-orders?${newQuery}` : "/work-orders");
   };

@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Wrench,
@@ -29,6 +30,29 @@ import WorkOrderServicesView from "./WorkOrderServicesView";
 import WorkOrderHistoryView from "./WorkOrderHistoryView";
 
 export default function WorkOrderDetailView({ ordenId, onBack }) {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  const handleBackClick = () => {
+    const returnTo = searchParams ? searchParams.get("return_to") : null;
+    const isSafeInternalReturn =
+      typeof returnTo === "string" &&
+      returnTo.startsWith("/") &&
+      !returnTo.startsWith("//") &&
+      !returnTo.includes("://");
+
+    if (isSafeInternalReturn) {
+      router.push(returnTo);
+      return;
+    }
+
+    if (onBack) {
+      onBack();
+    } else {
+      router.push("/work-orders");
+    }
+  };
+
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -331,11 +355,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
     const isRetryable = error && typeof error === 'object' && error.status === 500;
 
     const handleBackToList = () => {
-      if (onBack) {
-        onBack();
-      } else if (typeof window !== "undefined") {
-        window.location.href = "/workshop?view=work_orders";
-      }
+      handleBackClick();
     };
 
     return (
@@ -542,7 +562,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
         <div>
           <div className="flex items-center gap-2 mb-2 flex-wrap font-mono">
             <button
-              onClick={onBack}
+              onClick={handleBackClick}
               className="text-xs text-slate-400 hover:text-slate-200 flex items-center gap-1 uppercase tracking-wider font-semibold mr-2 transition-colors"
             >
               <ArrowLeft className="w-3.5 h-3.5" /> VOLVER
