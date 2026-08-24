@@ -28,10 +28,12 @@ export async function GET(
       return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permiso para consultar este servicio." }, { status: 403 });
     }
 
-    // Query main service info
+    // Query main service info joining bicicleta_componentes & estado_componente
     const servSql = `
       SELECT 
         os.orden_servicio_id AS servicio_id,
+        os.orden_servicio_id,
+        os.codigo_servicio,
         os.orden_trabajo_id,
         os.tipo_servicio_id,
         ts.nombre AS tipo_servicio_nombre,
@@ -46,13 +48,26 @@ export async function GET(
         COALESCE(NULLIF(os.subtotal, 0), ROUND((os.cantidad * os.precio_unitario) - COALESCE(os.valor_descuento, 0), 2)) AS subtotal,
         os.observacion_tecnica AS motivo_sin_mano_obra,
         os.observacion_tecnica,
-        os.usuario_id AS mecanico_usuario_id,
-        COALESCE(NULLIF(TRIM(CONCAT_WS(' ', ui.nombre, ui.apellido)), ''), ui.correo_electronico, ('Mecánico #' || u.usuario_id::text)) AS mecanico_nombre
+        os.bicicleta_componente_id,
+        cat.nombre AS componente_categoria,
+        bc.marca AS componente_marca,
+        bc.modelo AS componente_modelo,
+        bc.numero_serie AS componente_numero_serie,
+        bc.estado_componente_id AS componente_estado_actual_id,
+        est_actual.nombre AS componente_estado_actual_nombre,
+        est_actual.nivel_desgaste AS componente_estado_actual_porcentaje,
+        os.nuevo_estado_componente_id,
+        est_nuevo.nombre AS nuevo_estado_componente_nombre,
+        os.fecha_inicio,
+        os.fecha_finalizacion,
+        COALESCE(os.tiempo_transcurrido, 0) AS tiempo_transcurrido
       FROM admin.orden_servicios os
       LEFT JOIN admin.tipo_servicio ts ON os.tipo_servicio_id = ts.tipo_servicio_id
       LEFT JOIN admin.estado_orden_servicio eos ON os.estado_orden_servicio_id = eos.estado_orden_servicio_id
-      LEFT JOIN admin.usuario u ON os.usuario_id = u.usuario_id
-      LEFT JOIN admin.usuario_identidad ui ON u.usuario_id = ui.usuario_id
+      LEFT JOIN admin.bicicleta_componentes bc ON os.bicicleta_componente_id = bc.bicicleta_componente_id
+      LEFT JOIN admin.categoria_componente cat ON bc.categoria_componente_id = cat.categoria_componente_id
+      LEFT JOIN admin.estado_componente est_actual ON bc.estado_componente_id = est_actual.estado_componente_id
+      LEFT JOIN admin.estado_componente est_nuevo ON os.nuevo_estado_componente_id = est_nuevo.estado_componente_id
       WHERE os.orden_servicio_id = $1 AND os.orden_trabajo_id = $2 AND (os.activo IS DISTINCT FROM false)
     `;
     const servRes = await query<any>(servSql, [servId, ordenId]);
@@ -127,6 +142,17 @@ export async function GET(
       success: true,
       data: {
         ...service,
+        tiempo_transcurrido: Number(service.tiempo_transcurrido ?? 0),
+        componente: service.bicicleta_componente_id ? {
+          id: service.bicicleta_componente_id,
+          categoria: service.componente_categoria || "Componente",
+          marca: service.componente_marca || "",
+          modelo: service.componente_modelo || "",
+          numero_serie: service.componente_numero_serie || "",
+          estado_actual_id: service.componente_estado_actual_id,
+          estado_actual_nombre: service.componente_estado_actual_nombre || "",
+          estado_actual_porcentaje: service.componente_estado_actual_porcentaje || 0
+        } : null,
         en_proceso_cronometro: cronStatus.activo,
         cronometro: cronStatus,
         mano_obra: manoObra || [],
@@ -169,24 +195,22 @@ export async function PUT(
   try {
     const body = await req.json();
     const estado_orden_servicio_id = body.estado_orden_servicio_id ?? body.estado_servicio_id;
-    const mecanico_usuario_id = body.mecanico_usuario_id ?? body.usuario_id;
     const rawPrecio = body.precio_acordado ?? body.precio_unitario;
     const precio_acordado = (rawPrecio !== undefined && rawPrecio !== null && rawPrecio !== "" && !isNaN(Number(rawPrecio)))
       ? Number(rawPrecio)
       : undefined;
     const observaciones = body.observaciones ?? body.observacion_tecnica;
-    const {
-      motivo_reasignacion,
-      confirmar_reasignacion,
-      motivo_sin_mano_obra,
-      confirmar_sin_mano_obra
-    } = body;
+
+    const rawNuevoEstadoComponenteId = body.nuevo_estado_componente_id;
+    const nuevoEstadoComponenteId = (rawNuevoEstadoComponenteId !== undefined && rawNuevoEstadoComponenteId !== null && rawNuevoEstadoComponenteId !== "" && !isNaN(parseInt(rawNuevoEstadoComponenteId, 10)))
+      ? parseInt(rawNuevoEstadoComponenteId, 10)
+      : undefined;
 
     await client.query("BEGIN");
 
     // Lock Order Row Exclusively
     const orderRes = await client.query(`
-      SELECT orden_trabajo_id, estado_orden_id
+      SELECT orden_trabajo_id, estado_orden_id, bicicleta_id
       FROM admin.ordenes_trabajo
       WHERE orden_trabajo_id = $1 AND activo = true
       FOR UPDATE OF ordenes_trabajo
@@ -197,7 +221,10 @@ export async function PUT(
       return NextResponse.json({ error: "Orden de trabajo no encontrada." }, { status: 404 });
     }
 
-    const estadoOrdenId = orderRes.rows[0].estado_orden_id;
+    const currentOrder = orderRes.rows[0];
+    const estadoOrdenId = currentOrder.estado_orden_id;
+    const bicicletaId = currentOrder.bicicleta_id;
+
     if (estadoOrdenId === 8) {
       await client.query("ROLLBACK");
       return NextResponse.json({ error: "READ_ONLY_ORDER", message: "La orden se encuentra ENTREGADA y está en solo lectura." }, { status: 409 });
@@ -205,7 +232,7 @@ export async function PUT(
 
     // Lock Service Row
     const servRes = await client.query(`
-      SELECT orden_servicio_id, tipo_servicio_id, estado_orden_servicio_id, usuario_id, precio_unitario
+      SELECT orden_servicio_id, tipo_servicio_id, estado_orden_servicio_id, bicicleta_componente_id, nuevo_estado_componente_id, usuario_id, precio_unitario
       FROM admin.orden_servicios
       WHERE orden_servicio_id = $1 AND orden_trabajo_id = $2 AND (activo IS DISTINCT FROM false)
       FOR UPDATE OF orden_servicios
@@ -219,131 +246,151 @@ export async function PUT(
     const currentServ = servRes.rows[0];
     const currentServStateId = currentServ.estado_orden_servicio_id;
 
-    // Map functional actions or explicit state ID to target state
-    let targetServStateId: number | undefined = estado_orden_servicio_id !== undefined ? parseInt(estado_orden_servicio_id, 10) : undefined;
-    
-    if (body.accion === "INICIAR_SERVICIO") {
-      targetServStateId = 2; // EN_PROCESO
-    } else if (body.accion === "PAUSAR_SERVICIO") {
-      targetServStateId = 5; // SUSPENDIDO
-    } else if (body.accion === "REANUDAR_SERVICIO") {
-      targetServStateId = 2; // EN_PROCESO
-    } else if (body.accion === "FINALIZAR_SERVICIO") {
-      // Resolver dinámicamente el estado COMPLETADO desde catálogo
-      const compRes = await client.query(`
-        SELECT estado_orden_servicio_id
-        FROM admin.estado_orden_servicio
-        WHERE UPPER(codigo) = 'COMPLETADO' AND (activo IS DISTINCT FROM false)
-        LIMIT 1
-      `);
-      targetServStateId = compRes.rows[0]?.estado_orden_servicio_id || 3;
-    }
-
-    // Enforce order state MUST be REPARACIÓN (5) for service actions (start, pause, resume, finish)
-    if (estadoOrdenId === 1 && (body.accion || targetServStateId !== undefined)) {
-      await client.query("ROLLBACK");
-      return NextResponse.json({
-        error: "ORDER_NOT_IN_REPAIR",
-        message: "Primero debes iniciar la reparación de la orden."
-      }, { status: 409 });
-    }
-
-    // Handle Mechanic Reassignment
-    const hasMecProp = mecanico_usuario_id !== undefined || body.mecanico_usuario_id !== undefined || body.usuario_id !== undefined;
-    const newMecId = (mecanico_usuario_id !== null && mecanico_usuario_id !== "" && mecanico_usuario_id !== undefined && !isNaN(parseInt(mecanico_usuario_id, 10)))
-      ? parseInt(mecanico_usuario_id, 10)
-      : null;
-    const currentMecId = (currentServ.usuario_id !== null && currentServ.usuario_id !== undefined && !isNaN(Number(currentServ.usuario_id)))
-      ? Number(currentServ.usuario_id)
-      : null;
-
-    if (hasMecProp && newMecId !== currentMecId) {
-      // Verify open technical sessions before reassigning
-      const openSessCheck = await client.query(`
-        SELECT COUNT(*)::int AS count
-        FROM admin.orden_servicio_mano_obra
-        WHERE orden_servicio_id = $1
-          AND (detalle_mano_obra IS NULL OR BTRIM(detalle_mano_obra) = '')
-          AND (observacion IS NULL OR BTRIM(observacion) = '')
-          AND fecha_inicio IS NOT NULL
-          AND fecha_finalizacion IS NULL
-          AND (activo IS DISTINCT FROM false)
-      `, [servId]);
-
-      if (openSessCheck.rows[0]?.count > 0) {
+    // Save nuevo_estado_componente_id if passed
+    let updatedNuevoEstadoCompId = currentServ.nuevo_estado_componente_id;
+    if (nuevoEstadoComponenteId !== undefined && nuevoEstadoComponenteId !== null) {
+      if (currentServStateId === 1) { // PENDIENTE
         await client.query("ROLLBACK");
         return NextResponse.json({
-          error: "OPEN_SESSION_EXISTS",
-          message: "No se puede reasignar el mecánico mientras exista una sesión de trabajo abierta. Pause la sesión primero."
+          success: false,
+          error: "COMPONENT_RESULT_STATE_NOT_ALLOWED",
+          message: "El estado final del componente solo puede definirse cuando el servicio está en proceso o pausado."
         }, { status: 409 });
       }
 
-      const isInitialAssignment = !currentMecId || currentMecId === 0;
-      const isUnassigning = newMecId === null;
-      if (estadoOrdenId === 5 && !isInitialAssignment && !isUnassigning && (!confirmar_reasignacion || !motivo_reasignacion || !motivo_reasignacion.trim())) {
+      if (!currentServ.bicicleta_componente_id) {
         await client.query("ROLLBACK");
         return NextResponse.json({
-          error: "REASSIGNMENT_CONFIRMATION_REQUIRED",
-          message: "Para reasignar el mecánico en una orden en Reparación, se requiere confirmación explícita y motivo obligatorio."
-        }, { status: 400 });
+          success: false,
+          error: "NO_COMPONENT_ATTACHED",
+          message: "Este servicio no tiene un componente vinculado."
+        }, { status: 409 });
       }
 
-      await client.query(`
-        UPDATE admin.orden_servicios
-        SET usuario_id = $1, usuario_actualizacion = $2
-        WHERE orden_servicio_id = $3
-      `, [newMecId, sessionUserId, servId]);
+      if (currentServStateId !== 2 && currentServStateId !== 5) { // Must be EN_PROCESO or PAUSADO
+        await client.query("ROLLBACK");
+        return NextResponse.json({
+          success: false,
+          error: "COMPONENT_RESULT_STATE_NOT_ALLOWED",
+          message: "El estado final del componente solo puede definirse cuando el servicio está en proceso o pausado."
+        }, { status: 409 });
+      }
 
-      // History record
-      await client.query(`
-        INSERT INTO admin.orden_historial_estado (
-          orden_historial_estado_id, orden_trabajo_id, estado_anterior_id, estado_nuevo_id, usuario_cambio, comentario, fecha_cambio, activo, fecha_registro
-        ) VALUES (
-          (SELECT COALESCE(MAX(orden_historial_estado_id), 0) + 1 FROM admin.orden_historial_estado),
-          $1, $2, $2, $3, $4, NOW(), true, NOW()
-        )
-      `, [
-        ordenId,
-        estadoOrdenId,
-        sessionUserId,
-        `Asignación de mecánico en servicio #${servId}: ${motivo_reasignacion || (newMecId ? 'Asignado' : 'Desasignado')}`
-      ]);
+      if (nuevoEstadoComponenteId > 0) {
+        const estCheck = await client.query(
+          `SELECT estado_componente_id FROM admin.estado_componente WHERE estado_componente_id = $1 AND activo = true LIMIT 1`,
+          [nuevoEstadoComponenteId]
+        );
+        if (estCheck.rows.length === 0) {
+          await client.query("ROLLBACK");
+          return NextResponse.json({ error: "INVALID_COMPONENT_STATE", message: "El estado de componente seleccionado no es válido." }, { status: 400 });
+        }
+      }
+
+      const updateStateRes = await client.query(`
+        UPDATE admin.orden_servicios
+        SET nuevo_estado_componente_id = $1,
+            fecha_actualizacion = NOW(),
+            usuario_actualizacion = $2
+        WHERE orden_servicio_id = $3
+          AND orden_trabajo_id = $4
+        RETURNING orden_servicio_id, nuevo_estado_componente_id;
+      `, [nuevoEstadoComponenteId > 0 ? nuevoEstadoComponenteId : null, sessionUserId, servId, ordenId]);
+
+      if (updateStateRes.rowCount !== 1) {
+        await client.query("ROLLBACK");
+        return NextResponse.json({ error: "SERVICE_UPDATE_FAILED", message: "No fue posible actualizar el servicio." }, { status: 500 });
+      }
+
+      updatedNuevoEstadoCompId = updateStateRes.rows[0].nuevo_estado_componente_id;
+    }
+
+    // Map functional actions or explicit state ID to target state
+    let targetServStateId: number | undefined = estado_orden_servicio_id !== undefined ? parseInt(estado_orden_servicio_id, 10) : undefined;
+
+    if (body.accion === "INICIAR_SERVICIO") {
+      targetServStateId = 2; // EN_PROCESO
+    } else if (body.accion === "PAUSAR_SERVICIO") {
+      targetServStateId = 5; // SUSPENDIDO / PAUSADO
+    } else if (body.accion === "REANUDAR_SERVICIO") {
+      targetServStateId = 2; // EN_PROCESO
+    } else if (body.accion === "FINALIZAR_SERVICIO") {
+      targetServStateId = 3; // COMPLETADO
     }
 
     // Handle Service State Transitions
-    if (targetServStateId !== undefined && targetServStateId !== currentServStateId) {
-      const isReopenAction = currentServStateId === 3 && targetServStateId === 2;
+    let calculatedTiempoTranscurrido: number | null = null;
+    let finishFechaInicio: string | null = null;
+    let finishFechaFin: string | null = null;
 
-      // Allowed transitions map
+    if (targetServStateId !== undefined && targetServStateId !== currentServStateId) {
+      if (currentServStateId === 3) {
+        await client.query("ROLLBACK");
+        return NextResponse.json({
+          success: false,
+          error: "INVALID_SERVICE_TRANSITION",
+          message: "El servicio ya se encuentra completado y no admite más cambios de estado.",
+          details: {
+            estado_actual: "COMPLETADO",
+            accion: body.accion || "CAMBIO_ESTADO"
+          }
+        }, { status: 409 });
+      }
+
+      if (currentServStateId === 1 && targetServStateId === 3) { // PENDIENTE -> COMPLETADO IS PROHIBITED
+        await client.query("ROLLBACK");
+        return NextResponse.json({
+          success: false,
+          error: "INVALID_SERVICE_TRANSITION",
+          message: "Debes iniciar el servicio antes de finalizarlo.",
+          details: {
+            estado_actual: "PENDIENTE",
+            accion: body.accion || "FINALIZAR_SERVICIO"
+          }
+        }, { status: 409 });
+      }
+
+      if (estadoOrdenId === 1) {
+        await client.query("ROLLBACK");
+        return NextResponse.json({
+          error: "ORDER_NOT_IN_REPAIR",
+          message: "Primero debes iniciar la reparación de la orden."
+        }, { status: 409 });
+      }
+
       const ALLOWED_SERV_TRANSITIONS: Record<number, number[]> = {
         1: [2],    // PENDIENTE -> EN_PROCESO
         2: [5, 3], // EN_PROCESO -> PAUSADO o COMPLETADO
         5: [2, 3], // PAUSADO -> EN_PROCESO o COMPLETADO
-        3: []      // COMPLETADO: ninguna transición ordinaria
+        3: []      // COMPLETADO -> ninguna
       };
 
-      if (!isReopenAction && !ALLOWED_SERV_TRANSITIONS[currentServStateId]?.includes(targetServStateId)) {
+      if (!ALLOWED_SERV_TRANSITIONS[currentServStateId]?.includes(targetServStateId)) {
         await client.query("ROLLBACK");
         return NextResponse.json({
+          success: false,
           error: "INVALID_SERVICE_TRANSITION",
-          message: `Transición de estado de servicio no permitida: del estado ${currentServStateId} al estado ${targetServStateId}.`
+          message: `Transición de estado de servicio no permitida.`,
+          details: {
+            estado_actual: currentServStateId === 1 ? "PENDIENTE" : (currentServStateId === 2 ? "EN_PROCESO" : currentServStateId === 5 ? "PAUSADO" : "COMPLETADO"),
+            accion: body.accion || "CAMBIO_ESTADO"
+          }
         }, { status: 409 });
-      }
-
-      // Check mechanic required for starting PENDIENTE service (1 -> 2)
-      if (currentServStateId === 1 && targetServStateId === 2) {
-        const mecId = currentServ.usuario_id || mecanico_usuario_id;
-        if (!mecId) {
-          await client.query("ROLLBACK");
-          return NextResponse.json({
-            error: "MECHANIC_REQUIRED",
-            message: "Asigna un mecánico antes de iniciar el servicio."
-          }, { status: 422 });
-        }
       }
 
       // Action 1: Iniciar o Reanudar (1 -> 2 o 5 -> 2)
       if (targetServStateId === 2) {
+        // Set fecha_inicio COALESCE(fecha_inicio, NOW()) and tiempo_transcurrido = COALESCE(tiempo_transcurrido, 0)
+        await client.query(`
+          UPDATE admin.orden_servicios
+          SET fecha_inicio = COALESCE(fecha_inicio, NOW()),
+              tiempo_transcurrido = COALESCE(tiempo_transcurrido, 0),
+              fecha_actualizacion = NOW(),
+              usuario_actualizacion = $1
+          WHERE orden_servicio_id = $2
+            AND orden_trabajo_id = $3
+        `, [sessionUserId, servId, ordenId]);
+
         const openSessionsRes = await client.query(`
           SELECT orden_servicio_mano_obra_id, fecha_inicio, costo_hora
           FROM admin.orden_servicio_mano_obra
@@ -363,7 +410,6 @@ export async function PUT(
           await client.query("ROLLBACK");
           return NextResponse.json({
             error: "MULTIPLE_OPEN_TIMER_SESSIONS",
-            code: "MULTIPLE_OPEN_TIMER_SESSIONS",
             message: "Se encontraron múltiples sesiones de trabajo abiertas de forma inconsistente."
           }, { status: 409 });
         }
@@ -372,7 +418,6 @@ export async function PUT(
           const openSess = openSessionsRes.rows[0];
 
           if (currentServStateId === 5) {
-            // Reconcile orphaned session if service is in state PAUSADO (5)
             const histPauseRes = await client.query(`
               SELECT COALESCE(fecha_cambio, fecha_registro) AS fecha_pausa
               FROM admin.orden_historial_estado
@@ -389,35 +434,29 @@ export async function PUT(
               fechaPausa = new Date();
             }
 
+            const sessionSecs = Math.max(0, Math.round((fechaPausa.getTime() - fechaInicio.getTime()) / 1000));
+
             await client.query(`
               UPDATE admin.orden_servicio_mano_obra
               SET 
                 fecha_finalizacion = $1,
-                minutos_trabajados = ROUND(EXTRACT(EPOCH FROM ($1 - fecha_inicio))/60.0),
-                minutos_facturables = ROUND(EXTRACT(EPOCH FROM ($1 - fecha_inicio))/60.0),
-                costo_total = ROUND((EXTRACT(EPOCH FROM ($1 - fecha_inicio))/3600.0) * costo_hora, 2),
+                minutos_trabajados = ROUND($3 / 60.0),
+                minutos_facturables = ROUND($3 / 60.0),
+                costo_total = ROUND(($3 / 3600.0) * costo_hora, 2),
                 usuario_actualizacion = $2
-              WHERE orden_servicio_mano_obra_id = $3
-            `, [fechaPausa, sessionUserId, openSess.orden_servicio_mano_obra_id]);
+              WHERE orden_servicio_mano_obra_id = $4
+            `, [fechaPausa, sessionUserId, sessionSecs, openSess.orden_servicio_mano_obra_id]);
 
             await client.query(`
-              INSERT INTO admin.orden_historial_estado (
-                orden_historial_estado_id, orden_trabajo_id, estado_anterior_id, estado_nuevo_id, usuario_cambio, comentario, fecha_cambio, activo, fecha_registro
-              ) VALUES (
-                (SELECT COALESCE(MAX(orden_historial_estado_id), 0) + 1 FROM admin.orden_historial_estado),
-                $1, $2, $2, $3, $4, NOW(), true, NOW()
-              )
-            `, [
-              ordenId,
-              estadoOrdenId,
-              sessionUserId,
-              `Sesión técnica reconciliada al reanudar servicio #${servId} (Cerrada en ${fechaPausa.toISOString()})`
-            ]);
+              UPDATE admin.orden_servicios
+              SET tiempo_transcurrido = COALESCE(tiempo_transcurrido, 0) + $1
+              WHERE orden_servicio_id = $2
+            `, [sessionSecs, servId]);
+
           } else {
             await client.query("ROLLBACK");
             return NextResponse.json({
               error: "OPEN_SESSION_EXISTS",
-              code: "OPEN_SESSION_EXISTS",
               message: "Ya existe una sesión de trabajo abierta para este servicio."
             }, { status: 409 });
           }
@@ -455,7 +494,7 @@ export async function PUT(
               (SELECT COALESCE(MAX(orden_servicio_mano_obra_id), 0) + 1 FROM admin.orden_servicio_mano_obra),
               $1, $2, NOW(), NULL, 0, 0, $3, 0.00, true, NOW(), $4
             )
-          `, [servId, currentServ.usuario_id || sessionUserId, rate, sessionUserId]);
+          `, [servId, sessionUserId, rate, sessionUserId]);
         } catch (dbErr: any) {
           console.warn("Notice inserting open session:", dbErr?.message);
         }
@@ -465,7 +504,7 @@ export async function PUT(
       if (currentServStateId === 2 && targetServStateId === 5) {
         const pauseRes = await client.query(`
           WITH latest_session AS (
-            SELECT orden_servicio_mano_obra_id
+            SELECT orden_servicio_mano_obra_id, fecha_inicio
             FROM admin.orden_servicio_mano_obra
             WHERE orden_servicio_id = $1
               AND (detalle_mano_obra IS NULL OR BTRIM(detalle_mano_obra) = '')
@@ -485,7 +524,7 @@ export async function PUT(
             costo_total = ROUND((EXTRACT(EPOCH FROM (NOW() - fecha_inicio))/3600.0) * costo_hora, 2),
             usuario_actualizacion = $2
           WHERE orden_servicio_mano_obra_id IN (SELECT orden_servicio_mano_obra_id FROM latest_session)
-          RETURNING orden_servicio_mano_obra_id;
+          RETURNING orden_servicio_mano_obra_id, ROUND(EXTRACT(EPOCH FROM (NOW() - fecha_inicio))) AS session_seconds;
         `, [servId, sessionUserId]);
 
         if (pauseRes.rowCount !== 1) {
@@ -495,11 +534,17 @@ export async function PUT(
             message: "No fue posible pausar el servicio porque la sesión de trabajo no es válida."
           }, { status: 409 });
         }
+
+        const sessSecs = Math.max(0, parseInt(pauseRes.rows[0]?.session_seconds || 0, 10));
+        await client.query(`
+          UPDATE admin.orden_servicios
+          SET tiempo_transcurrido = COALESCE(tiempo_transcurrido, 0) + $1
+          WHERE orden_servicio_id = $2
+        `, [sessSecs, servId]);
       }
 
       // Action 3: Completar / Finalizar Servicio (targetServStateId === 3)
       if (targetServStateId === 3) {
-        // Enforce order state MUST be REPARACIÓN (5)
         if (estadoOrdenId !== 5) {
           await client.query("ROLLBACK");
           return NextResponse.json({
@@ -508,40 +553,128 @@ export async function PUT(
           }, { status: 409 });
         }
 
-        // Auto-close open technical timer session upon service completion
-        await client.query(`
-          WITH latest_session AS (
-            SELECT orden_servicio_mano_obra_id
-            FROM admin.orden_servicio_mano_obra
-            WHERE orden_servicio_id = $1
-              AND (detalle_mano_obra IS NULL OR BTRIM(detalle_mano_obra) = '')
-              AND (observacion IS NULL OR BTRIM(observacion) = '')
-              AND fecha_inicio IS NOT NULL
-              AND fecha_finalizacion IS NULL
-              AND (activo IS DISTINCT FROM false)
-            ORDER BY orden_servicio_mano_obra_id DESC
-            LIMIT 1
-          )
-          UPDATE admin.orden_servicio_mano_obra
-          SET 
-            fecha_finalizacion = NOW(),
-            minutos_trabajados = GREATEST(1, ROUND(EXTRACT(EPOCH FROM (NOW() - fecha_inicio))/60)),
-            minutos_facturables = GREATEST(1, ROUND(EXTRACT(EPOCH FROM (NOW() - fecha_inicio))/60)),
-            costo_total = ROUND((GREATEST(1, ROUND(EXTRACT(EPOCH FROM (NOW() - fecha_inicio))/60))/60.0) * costo_hora, 2),
-            usuario_actualizacion = $2
-          WHERE orden_servicio_mano_obra_id IN (SELECT orden_servicio_mano_obra_id FROM latest_session)
-        `, [servId, sessionUserId]);
-      }
+        const compId = currentServ.bicicleta_componente_id;
+        const targetNuevoStateId = nuevoEstadoComponenteId !== undefined && nuevoEstadoComponenteId > 0
+          ? nuevoEstadoComponenteId
+          : currentServ.nuevo_estado_componente_id;
 
-      // Update Service State & Set fecha_finalizacion when completing
-      await client.query(`
-        UPDATE admin.orden_servicios
-        SET 
-          estado_orden_servicio_id = $1,
-          fecha_finalizacion = CASE WHEN $1 = 3 THEN NOW() ELSE fecha_finalizacion END,
-          usuario_actualizacion = $2
-        WHERE orden_servicio_id = $3
-      `, [targetServStateId, sessionUserId, servId]);
+        if (compId) {
+          if (!targetNuevoStateId) {
+            await client.query("ROLLBACK");
+            return NextResponse.json({
+              error: "COMPONENT_RESULT_STATUS_REQUIRED",
+              message: "Selecciona el estado final del componente antes de completar el servicio."
+            }, { status: 400 });
+          }
+
+          const compLockRes = await client.query(`
+            SELECT bc.bicicleta_componente_id, bc.estado_componente_id, est.nombre AS estado_anterior_nombre
+            FROM admin.bicicleta_componentes bc
+            JOIN admin.ordenes_trabajo ot ON ot.bicicleta_id = bc.bicicleta_id
+            JOIN admin.orden_servicios os ON os.orden_trabajo_id = ot.orden_trabajo_id AND os.bicicleta_componente_id = bc.bicicleta_componente_id
+            LEFT JOIN admin.estado_componente est ON bc.estado_componente_id = est.estado_componente_id
+            WHERE os.orden_servicio_id = $1
+              AND ot.orden_trabajo_id = $2
+              AND (bc.activo IS DISTINCT FROM false)
+              AND bc.fecha_eliminacion IS NULL
+            FOR UPDATE OF bc, os;
+          `, [servId, ordenId]);
+
+          if (compLockRes.rows.length === 0) {
+            await client.query("ROLLBACK");
+            return NextResponse.json({
+              error: "INVALID_BICYCLE_COMPONENT",
+              message: "El componente asociado no pertenece a la bicicleta de la orden."
+            }, { status: 409 });
+          }
+
+          const prevEstadoId = compLockRes.rows[0].estado_componente_id;
+
+          await client.query(`
+            UPDATE admin.bicicleta_componentes
+            SET estado_componente_id = $1,
+                fecha_modificacion = NOW(),
+                usuario_modificacion = $2
+            WHERE bicicleta_componente_id = $3
+          `, [targetNuevoStateId, sessionUserId, compId]);
+
+          await client.query(`
+            INSERT INTO admin.orden_historial_estado (
+              orden_historial_estado_id, orden_trabajo_id, estado_anterior_id, estado_nuevo_id, usuario_cambio, comentario, fecha_cambio, activo, fecha_registro
+            ) VALUES (
+              (SELECT COALESCE(MAX(orden_historial_estado_id), 0) + 1 FROM admin.orden_historial_estado),
+              $1, $2, $2, $3, $4, NOW(), true, NOW()
+            )
+          `, [
+            ordenId,
+            estadoOrdenId,
+            sessionUserId,
+            `Actualización de componente #${compId}: estado cambiado de ${prevEstadoId} a ${targetNuevoStateId} al finalizar servicio #${servId}`
+          ]);
+        }
+
+        // Close open session if finishing from EN_PROCESO
+        let finishSessionSecs = 0;
+        if (currentServStateId === 2) {
+          const finishSessRes = await client.query(`
+            WITH latest_session AS (
+              SELECT orden_servicio_mano_obra_id, fecha_inicio
+              FROM admin.orden_servicio_mano_obra
+              WHERE orden_servicio_id = $1
+                AND fecha_inicio IS NOT NULL
+                AND fecha_finalizacion IS NULL
+                AND (activo IS DISTINCT FROM false)
+              ORDER BY orden_servicio_mano_obra_id DESC
+              LIMIT 1
+              FOR UPDATE
+            )
+            UPDATE admin.orden_servicio_mano_obra
+            SET
+              fecha_finalizacion = NOW(),
+              minutos_trabajados = GREATEST(1, ROUND(EXTRACT(EPOCH FROM (NOW() - fecha_inicio))/60.0)),
+              minutos_facturables = GREATEST(1, ROUND(EXTRACT(EPOCH FROM (NOW() - fecha_inicio))/60.0)),
+              costo_total = ROUND((GREATEST(1, ROUND(EXTRACT(EPOCH FROM (NOW() - fecha_inicio))/60.0))/60.0) * costo_hora, 2),
+              usuario_actualizacion = $2
+            WHERE orden_servicio_mano_obra_id IN (SELECT orden_servicio_mano_obra_id FROM latest_session)
+            RETURNING ROUND(EXTRACT(EPOCH FROM (NOW() - fecha_inicio))) AS session_seconds;
+          `, [servId, sessionUserId]);
+
+          if (finishSessRes.rows.length > 0) {
+            finishSessionSecs = Math.max(0, parseInt(finishSessRes.rows[0]?.session_seconds || 0, 10));
+          }
+        }
+
+        // Calculate total active seconds (existing accumulated + closing session seconds)
+        calculatedTiempoTranscurrido = Math.max(0, parseInt(currentServ.tiempo_transcurrido || 0, 10) + finishSessionSecs);
+
+        // Update Service to COMPLETADO with non-null tiempo_transcurrido
+        const finishUpdateRes = await client.query(`
+          UPDATE admin.orden_servicios
+          SET
+            estado_orden_servicio_id = $1,
+            fecha_finalizacion = NOW(),
+            tiempo_transcurrido = $2,
+            nuevo_estado_componente_id = COALESCE($3, nuevo_estado_componente_id),
+            fecha_actualizacion = NOW(),
+            usuario_actualizacion = $4
+          WHERE orden_servicio_id = $5
+            AND orden_trabajo_id = $6
+          RETURNING orden_servicio_id, fecha_inicio, fecha_finalizacion, tiempo_transcurrido, nuevo_estado_componente_id;
+        `, [targetServStateId, calculatedTiempoTranscurrido, targetNuevoStateId || null, sessionUserId, servId, ordenId]);
+
+        finishFechaInicio = finishUpdateRes.rows[0]?.fecha_inicio ? new Date(finishUpdateRes.rows[0].fecha_inicio).toISOString() : null;
+        finishFechaFin = finishUpdateRes.rows[0]?.fecha_finalizacion ? new Date(finishUpdateRes.rows[0].fecha_finalizacion).toISOString() : null;
+      } else {
+        // Non-completion state update
+        await client.query(`
+          UPDATE admin.orden_servicios
+          SET
+            estado_orden_servicio_id = $1,
+            nuevo_estado_componente_id = COALESCE($4, nuevo_estado_componente_id),
+            usuario_actualizacion = $2
+          WHERE orden_servicio_id = $3
+        `, [targetServStateId, sessionUserId, servId, nuevoEstadoComponenteId ?? null]);
+      }
 
       // History record
       await client.query(`
@@ -555,121 +688,56 @@ export async function PUT(
         ordenId,
         estadoOrdenId,
         sessionUserId,
-        `Estado de servicio #${servId} cambiado de ${currentServStateId} a ${targetServStateId}`
+        targetServStateId === 2
+          ? (currentServStateId === 5 ? `Servicio #${servId} reanudado por técnico` : `Servicio #${servId} iniciado`)
+          : targetServStateId === 5
+          ? `Servicio #${servId} pausado`
+          : `Servicio #${servId} completado`
       ]);
-
-      // If completing a service, check if ALL active services are now completed
-      if (targetServStateId === 3 && estadoOrdenId === 5) {
-        const allServsRes = await client.query(`
-          SELECT orden_servicio_id, estado_orden_servicio_id, usuario_id, cantidad, precio_unitario
-          FROM admin.orden_servicios
-          WHERE orden_trabajo_id = $1 AND (activo IS DISTINCT FROM false)
-        `, [ordenId]);
-
-        const allActiveServices = allServsRes.rows;
-
-        const openSessionsRes = await client.query(`
-          SELECT COUNT(*)::int AS count
-          FROM admin.orden_servicio_mano_obra osmo
-          JOIN admin.orden_servicios os ON osmo.orden_servicio_id = os.orden_servicio_id
-          WHERE os.orden_trabajo_id = $1 AND osmo.fecha_finalizacion IS NULL AND (osmo.activo IS DISTINCT FROM false)
-        `, [ordenId]);
-
-        const totalOpenSessions = openSessionsRes.rows[0]?.count || 0;
-        const hasAtLeastOneService = allActiveServices.length > 0;
-        const allCompleted = hasAtLeastOneService && allActiveServices.every(s => Number(s.estado_orden_servicio_id) === 3);
-
-        if (allCompleted && totalOpenSessions === 0) {
-          // Auto-advance Order from REPARACIÓN (5) to LISTA_ENTREGA (7)
-          await client.query(`
-            UPDATE admin.ordenes_trabajo
-            SET 
-              estado_orden_id = 7,
-              fecha_finalizacion = NOW(),
-              usuario_actualizacion = $2,
-              fecha_actualizacion = NOW()
-            WHERE orden_trabajo_id = $1
-          `, [ordenId, sessionUserId]);
-
-          await client.query(`
-            INSERT INTO admin.orden_historial_estado (
-              orden_historial_estado_id, orden_trabajo_id, estado_anterior_id, estado_nuevo_id, usuario_cambio, comentario, fecha_cambio, activo, fecha_registro
-            ) VALUES (
-              (SELECT COALESCE(MAX(orden_historial_estado_id), 0) + 1 FROM admin.orden_historial_estado),
-              $1, 5, 7, $2, 'Orden finalizada automáticamente al completar todos sus servicios (Pasó a Lista para Entrega)', NOW(), true, NOW()
-            )
-          `, [ordenId, sessionUserId]);
-        }
-      }
     }
 
-    // Handle Price and Observations Update
+    // Handle Price / Observaciones updates
     if (precio_acordado !== undefined || observaciones !== undefined) {
-      const updates: string[] = [];
-      const values: any[] = [];
-      let paramIdx = 1;
-
-      if (precio_acordado !== undefined) {
-        updates.push(`precio_unitario = $${paramIdx}`);
-        values.push(precio_acordado);
-        paramIdx++;
-        updates.push(`subtotal = ROUND((COALESCE(cantidad, 1) * $${paramIdx - 1}) - COALESCE(valor_descuento, 0), 2)`);
-      }
-
-      if (observaciones !== undefined) {
-        updates.push(`observacion_tecnica = $${paramIdx}`);
-        values.push(observaciones);
-        paramIdx++;
-      }
-
-      updates.push(`usuario_actualizacion = $${paramIdx}`);
-      values.push(sessionUserId);
-      paramIdx++;
-
-      values.push(servId);
-      const updateSql = `
+      await client.query(`
         UPDATE admin.orden_servicios
-        SET ${updates.join(", ")}
-        WHERE orden_servicio_id = $${paramIdx}
-      `;
-      await client.query(updateSql, values);
+        SET
+          precio_unitario = COALESCE($1, precio_unitario),
+          subtotal = COALESCE($1, subtotal),
+          observacion_tecnica = COALESCE($2, observacion_tecnica),
+          usuario_actualizacion = $3
+        WHERE orden_servicio_id = $4
+      `, [
+        precio_acordado !== undefined ? precio_acordado : null,
+        observaciones !== undefined ? observaciones : null,
+        sessionUserId,
+        servId
+      ]);
     }
 
     await recalculateWorkOrderTotals(client, ordenId);
 
     await client.query("COMMIT");
 
-    const cronStatus = await getCronometroStatus(pool, servId);
-
     return NextResponse.json({
       success: true,
-      message: "Servicio actualizado exitosamente.",
-      cronometro: cronStatus
+      message: targetServStateId === 3 ? "Servicio completado exitosamente." : "Servicio actualizado correctamente.",
+      data: {
+        servicio_id: servId,
+        orden_servicio_id: servId,
+        estado_codigo: targetServStateId === 3 ? "COMPLETADO" : (targetServStateId === 2 ? "EN_PROCESO" : targetServStateId === 5 ? "PAUSADO" : "PENDIENTE"),
+        fecha_inicio: finishFechaInicio || currentServ.fecha_inicio,
+        fecha_finalizacion: finishFechaFin,
+        tiempo_transcurrido: calculatedTiempoTranscurrido,
+        nuevo_estado_componente_id: updatedNuevoEstadoCompId
+      }
     });
-  } catch (err: any) {
+  } catch (error: any) {
     await client.query("ROLLBACK").catch(() => {});
-    console.error("PUT /api/taller/ordenes/[id]/servicios/[servicioId] Error:", {
-      message: err?.message,
-      code: err?.code,
-      detail: err?.detail,
-      constraint: err?.constraint,
-      stack: err?.stack
-    });
-
+    console.error("PUT /api/taller/ordenes/[id]/servicios/[servicioId] failed:", error);
     return NextResponse.json({
-      success: false,
-      error: "SERVICE_UPDATE_FAILED",
-      message: err.message || "Error al actualizar servicio.",
-      ...(process.env.NODE_ENV === "development" ? {
-        debug: {
-          phase: "PUT_SERVICE_UPDATE",
-          pgCode: err?.code,
-          pgMessage: err?.message,
-          detail: err?.detail,
-          constraint: err?.constraint
-        }
-      } : {})
-    }, { status: 500 });
+      error: error?.code || "INTERNAL_ERROR",
+      message: error?.message || "Error al actualizar servicio."
+    }, { status: 400 });
   } finally {
     client.release();
   }
@@ -695,7 +763,7 @@ export async function DELETE(
   const sessionUserId = session.usuario_id;
 
   const perms = await getModulePermissions("TALLER", session.usuario_id);
-  if (!perms.puede_eliminar) {
+  if (!perms.puede_eliminar && !perms.puede_editar) {
     return NextResponse.json({ error: "FORBIDDEN", message: "No posee permiso para eliminar servicios." }, { status: 403 });
   }
 
@@ -705,44 +773,62 @@ export async function DELETE(
   try {
     await client.query("BEGIN");
 
-    // Lock order
+    // Lock Order Row Exclusively
     const orderRes = await client.query(`
-      SELECT estado_orden_id FROM admin.ordenes_trabajo WHERE orden_trabajo_id = $1 AND activo = true FOR UPDATE
+      SELECT orden_trabajo_id, estado_orden_id
+      FROM admin.ordenes_trabajo
+      WHERE orden_trabajo_id = $1 AND activo = true
+      FOR UPDATE OF ordenes_trabajo
     `, [ordenId]);
 
     if (orderRes.rows.length === 0) {
       await client.query("ROLLBACK");
-      return NextResponse.json({ error: "Orden de trabajo no encontrada." }, { status: 404 });
+      return NextResponse.json({ error: "NOT_FOUND", message: "Orden de trabajo no encontrada." }, { status: 404 });
     }
 
     const estadoOrdenId = orderRes.rows[0].estado_orden_id;
     if (estadoOrdenId === 8) {
       await client.query("ROLLBACK");
-      return NextResponse.json({ error: "READ_ONLY_ORDER", message: "La orden está ENTREGADA y en solo lectura." }, { status: 409 });
+      return NextResponse.json({ error: "READ_ONLY_ORDER", message: "La orden se encuentra ENTREGADA y está en solo lectura." }, { status: 409 });
     }
 
-    // Check products
-    const prodRes = await client.query(`
-      SELECT COUNT(*)::int AS count FROM admin.orden_productos WHERE orden_servicio_id = $1
-    `, [servId]);
+    // Lock Service Row
+    const servRes = await client.query(`
+      SELECT orden_servicio_id, estado_orden_servicio_id, tipo_servicio_id
+      FROM admin.orden_servicios
+      WHERE orden_servicio_id = $1 AND orden_trabajo_id = $2 AND (activo IS DISTINCT FROM false)
+      FOR UPDATE OF orden_servicios
+    `, [servId, ordenId]);
 
-    if (prodRes.rows[0]?.count > 0) {
+    if (servRes.rows.length === 0) {
       await client.query("ROLLBACK");
-      return NextResponse.json({
-        error: "PRODUCTS_REGISTERED",
-        message: "No se puede eliminar el servicio porque tiene repuestos asociados."
-      }, { status: 409 });
+      return NextResponse.json({ error: "NOT_FOUND", message: "Servicio no encontrado en esta orden." }, { status: 404 });
     }
 
-    // Safe deletion / soft deactivation
+    const serviceToDel = servRes.rows[0];
+
+    if (serviceToDel.estado_orden_servicio_id === 3 && estadoOrdenId === 8) {
+      await client.query("ROLLBACK");
+      return NextResponse.json({ error: "COMPLETED_SERVICE_LOCKED", message: "No se puede eliminar un servicio completado en una orden cerrada." }, { status: 409 });
+    }
+
+    // Delete associated timer sessions & products
     await client.query(`
-      UPDATE admin.orden_servicios SET activo = false WHERE orden_servicio_id = $1
+      DELETE FROM admin.orden_servicio_mano_obra WHERE orden_servicio_id = $1
     `, [servId]);
 
-    // Recalculate Order Financial Totals
-    await recalculateWorkOrderTotals(client, ordenId);
+    await client.query(`
+      DELETE FROM admin.orden_productos WHERE orden_servicio_id = $1
+    `, [servId]);
 
-    // History record
+    // Soft delete or delete service from admin.orden_servicios
+    await client.query(`
+      UPDATE admin.orden_servicios
+      SET activo = false, usuario_actualizacion = $1, fecha_actualizacion = NOW()
+      WHERE orden_servicio_id = $2 AND orden_trabajo_id = $3
+    `, [sessionUserId, servId, ordenId]);
+
+    // Audit History Record
     await client.query(`
       INSERT INTO admin.orden_historial_estado (
         orden_historial_estado_id, orden_trabajo_id, estado_anterior_id, estado_nuevo_id, usuario_cambio, comentario, fecha_cambio, activo, fecha_registro
@@ -757,28 +843,26 @@ export async function DELETE(
       `Servicio #${servId} eliminado de la orden`
     ]);
 
+    // Recalculate financial totals
+    await recalculateWorkOrderTotals(client, ordenId);
+
     await client.query("COMMIT");
 
     return NextResponse.json({
       success: true,
-      message: "Servicio eliminado exitosamente."
+      message: "Servicio eliminado de la orden exitosamente.",
+      data: {
+        servicio_id: servId,
+        orden_servicio_id: servId
+      }
     });
-  } catch (err: any) {
+
+  } catch (error: any) {
     await client.query("ROLLBACK").catch(() => {});
-    console.error("DELETE /api/taller/ordenes/[id]/servicios/[servicioId] Error:", err);
+    console.error("DELETE /api/taller/ordenes/[id]/servicios/[servicioId] failed:", error);
     return NextResponse.json({
-      success: false,
-      error: "SERVICE_DELETE_FAILED",
-      message: err.message || "Error al eliminar servicio.",
-      ...(process.env.NODE_ENV === "development" ? {
-        debug: {
-          phase: "DELETE_SERVICE",
-          pgCode: err?.code,
-          pgMessage: err?.message,
-          detail: err?.detail,
-          constraint: err?.constraint
-        }
-      } : {})
+      error: error?.code || "INTERNAL_ERROR",
+      message: error?.message || "Error al eliminar servicio."
     }, { status: 500 });
   } finally {
     client.release();

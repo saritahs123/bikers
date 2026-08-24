@@ -7,19 +7,29 @@ export default function ReceptionChecklistModal({
   onClose,
   itemsCatalog = [],
   estadosCatalog = [],
+  initialState = [],
   checklistState = [],
+  value = [],
+  onChange,
   onChangeChecklist,
+  onSave,
   recepcionId = null,
   recepcion_id = null
 }) {
   const currentRecepcionId = recepcionId || recepcion_id || null;
 
+  // Resolve initial checklist array from props
+  const incomingItems = value.length > 0 ? value : (checklistState.length > 0 ? checklistState : initialState);
+
+  const [localItems, setLocalItems] = useState(incomingItems);
   const [activeCategory, setActiveCategory] = useState("CUADRO");
   const [uploadingItem, setUploadingItem] = useState(null);
   const [validationError, setValidationError] = useState(null);
 
+  // Sync local items when modal opens or incomingItems change
   useEffect(() => {
     if (isOpen) {
+      setLocalItems(incomingItems);
       setActiveCategory("CUADRO");
       setValidationError(null);
     }
@@ -52,7 +62,7 @@ export default function ReceptionChecklistModal({
   const filteredItems = itemsCatalog.filter(i => i.categoria === activeCategory);
 
   const getItemEvaluated = (itemId) => {
-    return checklistState.find(c => c.item_checklist_id === itemId) || {
+    return localItems.find(c => Number(c.item_checklist_id) === Number(itemId)) || {
       item_checklist_id: itemId,
       estado_checklist_id: null,
       observacion: "",
@@ -65,11 +75,33 @@ export default function ReceptionChecklistModal({
 
   const updateItem = (itemId, updates) => {
     setValidationError(null);
-    const current = getItemEvaluated(itemId);
-    const updated = { ...current, ...updates };
-    const newList = checklistState.filter(c => c.item_checklist_id !== itemId);
-    newList.push(updated);
-    onChangeChecklist(newList);
+    const existingIndex = localItems.findIndex(c => Number(c.item_checklist_id) === Number(itemId));
+    let nextList;
+    if (existingIndex >= 0) {
+      nextList = [...localItems];
+      nextList[existingIndex] = { ...nextList[existingIndex], ...updates };
+    } else {
+      const newItem = {
+        item_checklist_id: itemId,
+        estado_checklist_id: null,
+        observacion: "",
+        requiere_trabajo: false,
+        upload_token: null,
+        preview_url: null,
+        filename: null,
+        ...updates
+      };
+      nextList = [...localItems, newItem];
+    }
+
+    setLocalItems(nextList);
+
+    if (typeof onChange === "function") {
+      onChange(nextList);
+    }
+    if (typeof onChangeChecklist === "function") {
+      onChangeChecklist(nextList);
+    }
   };
 
   const handleFileUpload = async (itemId, e) => {
@@ -146,7 +178,7 @@ export default function ReceptionChecklistModal({
   const handleSaveEvaluation = () => {
     setValidationError(null);
     const unassignedItem = itemsCatalog.find(item => {
-      const state = checklistState.find(c => c.item_checklist_id === item.item_checklist_id);
+      const state = localItems.find(c => Number(c.item_checklist_id) === Number(item.item_checklist_id));
       return !state || state.estado_checklist_id === null || state.estado_checklist_id === undefined;
     });
 
@@ -158,12 +190,15 @@ export default function ReceptionChecklistModal({
       return;
     }
 
+    if (typeof onSave === "function") {
+      onSave(localItems);
+    }
     if (typeof onClose === "function") {
       onClose();
     }
   };
 
-  const evaluatedCount = checklistState.filter(
+  const evaluatedCount = localItems.filter(
     c => c.estado_checklist_id !== null && c.estado_checklist_id !== undefined
   ).length;
 

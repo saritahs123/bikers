@@ -1,45 +1,38 @@
 "use client";
-import React, { useState, useMemo } from "react";
+import React, { useMemo } from "react";
 import {
   Clock,
   User,
   ArrowRight,
   History,
-  CheckCircle2,
   Wrench,
   Package,
   FileText,
-  UserCheck,
-  Search,
-  Filter,
-  AlertCircle,
-  Sparkles,
-  RotateCcw
+  UserCheck
 } from "lucide-react";
 
 export default function WorkOrderHistoryView({ history = [] }) {
-  const [activeCategory, setActiveCategory] = useState("all"); // 'all' | 'estados' | 'servicios' | 'mano_obra' | 'repuestos' | 'mecanicos'
-  const [searchTerm, setSearchTerm] = useState("");
-
-  // Helper to parse dates safely
+  // Helper to parse dates safely (dia/mes/año hora:minutos a. m. / p. m.)
   const formatDate = (item) => {
     const rawDate = item.fecha_cambio ?? item.fecha_registro ?? item.fecha_hora ?? item.fecha;
     if (!rawDate) return "Fecha no disponible";
-    const parsedDate = new Date(rawDate);
-    if (!parsedDate || Number.isNaN(parsedDate.getTime())) {
+    const d = new Date(rawDate);
+    if (!d || Number.isNaN(d.getTime())) {
       return "Fecha no disponible";
     }
-    try {
-      return parsedDate.toLocaleString("es-DO", {
-        dateStyle: "medium",
-        timeStyle: "short"
-      });
-    } catch {
-      return parsedDate.toLocaleString();
-    }
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const year = d.getFullYear();
+    let hours = d.getHours();
+    const minutes = String(d.getMinutes()).padStart(2, "0");
+    const ampm = hours >= 12 ? "p. m." : "a. m.";
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    const hoursStr = String(hours).padStart(2, "0");
+    return `${day}/${month}/${year} ${hoursStr}:${minutes} ${ampm}`;
   };
 
-  // Helper to parse history event title, category, and icon
+  // Helper to parse history event title and icon
   const parseHistoryEvent = (item) => {
     const comment = (item.comentario || item.observacion || "").trim();
     const stPrev = item.estado_anterior_nombre;
@@ -49,57 +42,33 @@ export default function WorkOrderHistoryView({ history = [] }) {
 
     const cLower = comment.toLowerCase();
     let title = "Actividad en la Orden";
-    let category = "servicios";
     let iconType = "service";
 
     if (isRealStateChange) {
       title = `Orden cambió de ${stPrev} a ${stNext}`;
-      category = "estados";
       iconType = "state";
-    } else if (cLower.includes("mecanico") || cLower.includes("mecánico") || cLower.includes("reasign")) {
-      title = cLower.includes("reasign") ? "Mecánico Reasignado" : "Mecánico Asignado";
-      category = "mecanicos";
+    } else if (cLower.includes("mecanico") || cLower.includes("mecánico") || cLower.includes("reasign") || cLower.includes("iniciada por")) {
+      title = cLower.includes("reasign") ? "Mecánico Reasignado" : "Mecánico Asignado / Reparación Iniciada";
       iconType = "mechanic";
-    } else if (
-      cLower.includes("mano de obra") ||
-      cLower.includes("mano_obra") ||
-      cLower.includes("cronómetro") ||
-      cLower.includes("sesión")
-    ) {
-      if (cLower.includes("eliminad")) title = "Mano de Obra Eliminada";
-      else if (cLower.includes("actualizad") || cLower.includes("editad")) title = "Mano de Obra Editada";
-      else title = "Mano de Obra Registrada";
-      category = "mano_obra";
-      iconType = "labor";
     } else if (cLower.includes("repuesto") || cLower.includes("producto")) {
-      if (cLower.includes("desasociad") || cLower.includes("eliminad") || cLower.includes("anulad")) {
-        title = "Repuesto Eliminado";
-      } else {
-        title = "Repuesto Asociado / Modificado";
-      }
-      category = "repuestos";
+      if (cLower.includes("eliminad")) title = "Producto Eliminado";
+      else if (cLower.includes("editad") || cLower.includes("modificad")) title = "Producto Editado";
+      else title = "Producto Agregado";
       iconType = "product";
     } else if (cLower.includes("servicio")) {
-      if (cLower.includes("agregad") || cLower.includes("añadid")) title = "Servicio Agregado";
+      if (cLower.includes("agregad")) title = "Servicio Agregado";
       else if (cLower.includes("eliminad")) title = "Servicio Eliminado";
-      else if (cLower.includes("reabiert")) title = "Servicio Reabierto";
       else if (cLower.includes("completad") || cLower.includes("finalizad")) title = "Servicio Finalizado";
       else if (cLower.includes("pausad")) title = "Servicio Pausado";
       else if (cLower.includes("iniciad") || cLower.includes("reanudad")) title = "Servicio En Proceso";
       else title = "Actualización de Servicio";
-      category = "servicios";
       iconType = "service";
-    } else if (cLower.includes("prioridad")) {
-      title = "Prioridad Modificada";
-      category = "estados";
-      iconType = "state";
     } else if (comment) {
       title = comment;
-      category = "servicios";
       iconType = "service";
     }
 
-    return { title, category, iconType, isRealStateChange };
+    return { title, iconType, isRealStateChange };
   };
 
   // Icon renderer
@@ -109,119 +78,56 @@ export default function WorkOrderHistoryView({ history = [] }) {
         return <History className="w-3.5 h-3.5 text-emerald-400" />;
       case "mechanic":
         return <UserCheck className="w-3.5 h-3.5 text-amber-400" />;
-      case "labor":
-        return <Wrench className="w-3.5 h-3.5 text-[#bfce7f]" />;
       case "product":
-        return <Package className="w-3.5 h-3.5 text-sky-400" />;
+        return <Package className="w-3.5 h-3.5 text-cyan-400" />;
       default:
-        return <FileText className="w-3.5 h-3.5 text-indigo-400" />;
+        return <Wrench className="w-3.5 h-3.5 text-[#bfce7f]" />;
     }
   };
 
-  // Filter & Sort history (newest first)
-  const filteredHistory = useMemo(() => {
+  // Sort history (newest first)
+  const sortedHistory = useMemo(() => {
     if (!Array.isArray(history)) return [];
 
     return history
       .map((item) => ({ ...item, meta: parseHistoryEvent(item) }))
-      .filter((item) => {
-        // Category Filter
-        if (activeCategory !== "all" && item.meta.category !== activeCategory) {
-          return false;
-        }
-
-        // Search Filter
-        if (searchTerm.trim()) {
-          const s = searchTerm.toLowerCase();
-          const matchesTitle = item.meta.title.toLowerCase().includes(s);
-          const matchesComment = (item.comentario || item.observacion || "").toLowerCase().includes(s);
-          const matchesUser = (item.usuario_nombre || "").toLowerCase().includes(s);
-          const matchesState =
-            (item.estado_anterior_nombre || "").toLowerCase().includes(s) ||
-            (item.estado_nuevo_nombre || "").toLowerCase().includes(s);
-
-          return matchesTitle || matchesComment || matchesUser || matchesState;
-        }
-
-        return true;
-      })
       .sort((a, b) => {
         const idA = Number(a.historial_id || a.orden_historial_estado_id || 0);
         const idB = Number(b.historial_id || b.orden_historial_estado_id || 0);
         return idB - idA;
       });
-  }, [history, activeCategory, searchTerm]);
+  }, [history]);
 
   return (
     <div className="space-y-5 font-sans text-slate-100">
-      {/* Header & Controls Bar */}
-      <div className="bg-[#161a21] border border-[#2d3748] p-4 sm:p-5 rounded-2xl space-y-4 shadow-xl">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#2d3748] pb-4">
-          <div>
-            <h3 className="text-sm font-bold font-mono text-slate-100 flex items-center gap-2 uppercase tracking-wider">
-              <History className="w-4 h-4 text-[#bfce7f]" />
-              Historial de Auditoría & Eventos
-              <span className="text-xs px-2.5 py-0.5 bg-[#84924a]/20 text-[#bfce7f] border border-[#bfce7f]/30 rounded-full font-mono font-bold">
-                {filteredHistory.length} Eventos
-              </span>
-            </h3>
-            <p className="text-xs text-slate-400 mt-1">
-              Registro cronológico de cambios de estado, asignaciones, servicios, repuestos y mano de obra.
-            </p>
-          </div>
-
-          {/* Search Box */}
-          <div className="relative shrink-0 w-full sm:w-64">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar evento, usuario o nota..."
-              className="w-full pl-9 pr-3 py-1.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-xs text-slate-200 focus:outline-none focus:border-[#bfce7f] font-mono"
-            />
-          </div>
-        </div>
-
-        {/* Category Tabs */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs font-mono">
-          {[
-            { id: "all", label: "Todos" },
-            { id: "estados", label: "Estados" },
-            { id: "servicios", label: "Servicios" },
-            { id: "mano_obra", label: "Mano de Obra" },
-            { id: "repuestos", label: "Repuestos" },
-            { id: "mecanicos", label: "Mecánicos" }
-          ].map((cat) => (
-            <button
-              key={cat.id}
-              onClick={() => setActiveCategory(cat.id)}
-              className={`px-3 py-1.5 rounded-xl font-bold transition-all whitespace-nowrap ${
-                activeCategory === cat.id
-                  ? "bg-[#84924a] text-white border-t border-[#a6b66b] shadow-md"
-                  : "bg-[#1c2129] text-slate-400 hover:text-slate-200 border border-[#2d3748]"
-              }`}
-            >
-              {cat.label}
-            </button>
-          ))}
+      {/* Clean Header Bar */}
+      <div className="bg-[#161a21] border border-[#2d3748] p-4 sm:p-5 rounded-2xl shadow-xl flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-bold font-mono text-slate-100 flex items-center gap-2.5 uppercase tracking-wider">
+            <History className="w-4 h-4 text-[#bfce7f]" />
+            HISTORIAL DE LA ORDEN
+            <span className="text-xs px-2.5 py-0.5 bg-[#84924a]/20 text-[#bfce7f] border border-[#bfce7f]/30 rounded-full font-mono font-bold">
+              ({sortedHistory.length} EVENTOS)
+            </span>
+          </h3>
+          <p className="text-xs text-slate-400 mt-1 font-sans">
+            Registro cronológico oficial de auditoría, estados, productos y cambios de la orden de trabajo.
+          </p>
         </div>
       </div>
 
       {/* Events Timeline */}
-      {filteredHistory.length === 0 ? (
+      {sortedHistory.length === 0 ? (
         <div className="p-12 bg-[#161a21] border border-dashed border-[#2d3748] rounded-2xl text-center space-y-3 font-mono">
           <History className="w-8 h-8 text-slate-600 mx-auto" />
-          <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Sin eventos de historial registrados</h4>
-          <p className="text-xs text-slate-500 max-w-md mx-auto">
-            {searchTerm || activeCategory !== "all"
-              ? "No se encontraron eventos con los filtros seleccionados."
-              : "Las actividades de la orden generarán registros automáticos con auditoría de usuario."}
+          <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">SIN EVENTOS DE HISTORIAL REGISTRADOS</h4>
+          <p className="text-xs text-slate-500 max-w-md mx-auto font-sans">
+            Las actividades de la orden generarán registros automáticos con auditoría de usuario.
           </p>
         </div>
       ) : (
         <div className="relative pl-6 space-y-4 before:absolute before:left-2.5 before:top-3 before:bottom-3 before:w-0.5 before:bg-[#2d3748]">
-          {filteredHistory.map((item, idx) => {
+          {sortedHistory.map((item, idx) => {
             const hId = item.historial_id || item.orden_historial_estado_id || idx;
             const formattedDate = formatDate(item);
             const { title, isRealStateChange, iconType } = item.meta;
@@ -234,7 +140,7 @@ export default function WorkOrderHistoryView({ history = [] }) {
                 </div>
 
                 {/* Event Card */}
-                <div className="bg-[#161a21] border border-[#2d3748] hover:border-[#4a5568] rounded-xl p-4 space-y-2.5 shadow-lg transition-colors font-sans">
+                <div className="bg-[#161a21] border border-[#2d3748] hover:border-[#4a5568] rounded-xl p-4 space-y-2 shadow-lg transition-colors font-sans">
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#2d3748]/60 pb-2">
                     <div className="flex items-center gap-2 font-mono font-bold text-xs">
                       <span className="text-slate-100">{title}</span>
@@ -260,7 +166,7 @@ export default function WorkOrderHistoryView({ history = [] }) {
                   {/* Comment / Detail text */}
                   {(item.comentario || item.observacion) && (
                     <p className="text-xs text-slate-300 bg-[#0a0c10] p-2.5 rounded-lg border border-[#2d3748]/60 font-mono leading-relaxed">
-                      "{item.comentario || item.observacion}"
+                      {item.comentario || item.observacion}
                     </p>
                   )}
 

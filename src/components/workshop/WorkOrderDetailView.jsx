@@ -407,17 +407,17 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
   ];
 
   // Extract services, labor items, and products from live backend API or order object
-  const servicesList = order.resumen_financiero?.servicios ||
-    (order.servicios || []).map((s) => ({
-      servicio_id: s.servicio_id,
-      descripcion: s.tipo_servicio_nombre || s.descripcion_servicio || "Servicio",
-      mecanico_nombre: s.mecanico_nombre || "Sin asignar",
-      estado_nombre: s.estado_servicio_nombre || "Pendiente",
-      cantidad: Number(s.cantidad || 1),
-      precio_unitario: Number(s.precio_unitario || s.precio_acordado || 0),
-      descuento: Number(s.valor_descuento || 0),
-      subtotal: Number(s.subtotal || s.precio_acordado || 0)
-    }));
+  const servicesList = (order.resumen_financiero?.servicios || order.servicios || []).map((s) => ({
+    servicio_id: s.servicio_id,
+    descripcion: s.tipo_servicio_nombre || s.descripcion_servicio || s.descripcion || "Servicio",
+    observacion_tecnica: s.observacion_tecnica || s.observaciones || s.motivo_sin_mano_obra || s.diagnostico_preliminar || "",
+    mecanico_nombre: s.mecanico_nombre || "Sin asignar",
+    estado_nombre: s.estado_servicio_nombre || "Pendiente",
+    cantidad: Number(s.cantidad || 1),
+    precio_unitario: Number(s.precio_unitario || s.precio_acordado || 0),
+    descuento: Number(s.valor_descuento || 0),
+    subtotal: Number(s.subtotal || s.precio_acordado || 0)
+  }));
 
   const rawLabor = order.resumen_financiero?.mano_obra ||
     (order.servicios || []).flatMap((s) => (s.mano_obra || []));
@@ -814,12 +814,12 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
             <div className="bg-[#161a21] border border-[#2d3748] p-6 rounded-xl space-y-5">
               <div className="flex items-center justify-between pb-3 border-b border-[#2d3748]">
                 <h3 className="font-mono text-xs font-bold text-slate-300 uppercase tracking-widest">
-                  OBSERVACIONES Y REVISIÓN TÉCNICA
+                  DIAGNÓSTICO
                 </h3>
                 <FileText className="w-4 h-4 text-slate-400" />
               </div>
               <p className="text-xs text-slate-300 leading-relaxed font-sans">
-                {order.diagnostico_inicial || order.motivo_ingreso || "Sin diagnóstico técnico registrado."}
+                {order.descripcion_cliente || order.diagnostico_inicial || order.motivo_ingreso || "Sin diagnóstico registrado."}
               </p>
 
               <div className="space-y-2 pt-2">
@@ -848,12 +848,8 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
 
               <div className="flex flex-wrap gap-6 pt-2 text-xs font-mono text-slate-400">
                 <div className="flex items-center gap-1.5">
-                  <Clock className="w-4 h-4 text-slate-400" />
-                  <span>Horas estimadas: <strong className="text-slate-200">{horasEstimadasText}</strong></span>
-                </div>
-                <div className="flex items-center gap-1.5">
                   <Clock className="w-4 h-4 text-[#bfce7f]" />
-                  <span>Horas registradas: <strong className="text-slate-200">{horasRegistradasText}</strong></span>
+                  <span>Tiempo transcurrido total: <strong className="text-slate-200">{horasRegistradasText}</strong></span>
                 </div>
               </div>
             </div>
@@ -877,10 +873,10 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#2d3748]">
-                  {servicesList.length === 0 && laborList.length === 0 && productsList.length === 0 ? (
+                  {servicesList.length === 0 && productsList.length === 0 ? (
                     <tr className="bg-[#1c2129]">
                       <td colSpan={4} className="py-6 text-center text-slate-500 font-mono">
-                        No hay servicios, mano de obra ni repuestos registrados en esta orden.
+                        No hay servicios ni productos registrados en esta orden.
                       </td>
                     </tr>
                   ) : (
@@ -898,79 +894,42 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                           </td>
                         </tr>
                       ) : (
-                        servicesList.map((s, idx) => (
-                          <tr key={`s-${idx}`} className="bg-[#161a21]">
-                            <td className="py-2.5 px-5 font-medium text-slate-200 pl-7">
-                              {s.descripcion || s.tipo_servicio_nombre || "Servicio de Taller"}
-                            </td>
-                            <td className="py-2.5 px-5 text-right text-slate-400">{s.cantidad}</td>
-                            <td className="py-2.5 px-5 text-right text-slate-400">
-                              RD$ {(Number(s.precio_unitario) || 0).toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </td>
-                            <td className="py-2.5 px-5 text-right font-semibold text-slate-200">
-                              RD$ {(Number(s.subtotal) || 0).toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </td>
-                          </tr>
-                        ))
+                        servicesList.map((s, idx) => {
+                          const techNote = (s.observacion_tecnica || s.observaciones || "").trim();
+                          return (
+                            <tr key={`s-${idx}`} className="bg-[#161a21]">
+                              <td className="py-2.5 px-5 pl-7">
+                                <div className="font-medium text-slate-200">
+                                  {s.descripcion || s.tipo_servicio_nombre || "Servicio de Taller"}
+                                </div>
+                                {techNote ? (
+                                  <div className="text-[11px] text-slate-400 font-sans mt-0.5">
+                                    <span className="text-[#bfce7f] font-semibold">Nota técnica:</span> {techNote}
+                                  </div>
+                                ) : null}
+                              </td>
+                              <td className="py-2.5 px-5 text-right text-slate-400">{s.cantidad}</td>
+                              <td className="py-2.5 px-5 text-right text-slate-400">
+                                RD$ {(Number(s.precio_unitario) || 0).toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                              <td className="py-2.5 px-5 text-right font-semibold text-slate-200">
+                                RD$ {(Number(s.subtotal) || 0).toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                            </tr>
+                          );
+                        })
                       )}
-                      <tr className="bg-[#1c2129] font-bold border-b border-[#2d3748]">
-                        <td colSpan={3} className="py-2.5 px-5 text-slate-300 text-right uppercase text-[11px]">
-                          Subtotal servicios:
-                        </td>
-                        <td className="py-2.5 px-5 text-right text-[#bfce7f]">
-                          RD$ {subtotalServicios.toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </td>
-                      </tr>
 
-                      {/* GROUP 2: MANO DE OBRA */}
+                      {/* GROUP 2: PRODUCTOS / REPUESTOS */}
                       <tr className="bg-[#1c2129]/80 border-t border-[#2d3748]">
-                        <td colSpan={4} className="py-2.5 px-5 font-bold text-[#bfce7f] text-[11px] uppercase tracking-wider">
-                          MANO DE OBRA
-                        </td>
-                      </tr>
-                      {laborList.length === 0 ? (
-                        <tr className="bg-[#161a21]">
-                          <td colSpan={4} className="py-2 px-5 text-slate-500 italic">
-                            Sin mano de obra registrada
-                          </td>
-                        </tr>
-                      ) : (
-                        laborList.map((m, idx) => (
-                          <tr key={`m-${idx}`} className="bg-[#161a21]">
-                            <td className="py-2.5 px-5 font-medium text-slate-200 pl-7">
-                              {m.detalle_mano_obra || m.descripcion || m.observacion || "Mano de Obra"}
-                            </td>
-                            <td className="py-2.5 px-5 text-right text-slate-400">
-                              {m.horas_reales || m.horas_trabajadas || 1} h
-                            </td>
-                            <td className="py-2.5 px-5 text-right text-slate-400">
-                              RD$ {(Number(m.costo_hora) || 0).toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </td>
-                            <td className="py-2.5 px-5 text-right font-semibold text-slate-200">
-                              RD$ {(Number(m.subtotal) || 0).toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                      <tr className="bg-[#1c2129] font-bold border-b border-[#2d3748]">
-                        <td colSpan={3} className="py-2.5 px-5 text-slate-300 text-right uppercase text-[11px]">
-                          Subtotal mano de obra:
-                        </td>
-                        <td className="py-2.5 px-5 text-right text-[#bfce7f]">
-                          RD$ {subtotalManoObra.toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </td>
-                      </tr>
-
-                      {/* GROUP 3: PRODUCTOS / REPUESTOS */}
-                      <tr className="bg-[#1c2129]/80 border-t border-[#2d3748]">
-                        <td colSpan={4} className="py-2.5 px-5 font-bold text-[#bfce7f] text-[11px] uppercase tracking-wider">
+                        <td colSpan={4} className="py-2.5 px-5 font-bold text-cyan-400 text-[11px] uppercase tracking-wider">
                           PRODUCTOS / REPUESTOS
                         </td>
                       </tr>
                       {productsList.length === 0 ? (
                         <tr className="bg-[#161a21]">
                           <td colSpan={4} className="py-2 px-5 text-slate-500 italic">
-                            Sin repuestos registrados
+                            Sin productos registrados
                           </td>
                         </tr>
                       ) : (
@@ -989,101 +948,54 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                           </tr>
                         ))
                       )}
-                      <tr className="bg-[#1c2129] font-bold border-b border-[#2d3748]">
-                        <td colSpan={3} className="py-2.5 px-5 text-slate-300 text-right uppercase text-[11px]">
-                          Subtotal productos:
-                        </td>
-                        <td className="py-2.5 px-5 text-right text-[#bfce7f]">
-                          RD$ {subtotalProductos.toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </td>
-                      </tr>
                     </>
                   )}
                 </tbody>
               </table>
 
-              <div className="p-5 bg-[#1c2129] border-t-2 border-[#2d3748] space-y-2 font-mono text-xs">
-                <div className="flex justify-between items-center text-slate-300">
-                  <span className="uppercase font-semibold">Subtotal bruto:</span>
-                  <span className="font-bold">
-                    RD$ {subtotalBruto.toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </span>
-                </div>
-                {totalDescuentos > 0 && (
-                  <div className="flex justify-between items-center text-rose-400">
-                    <span className="uppercase font-semibold">Descuentos:</span>
-                    <span className="font-bold">
-                      - RD$ {totalDescuentos.toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                  </div>
-                )}
-                <div className="pt-3 border-t border-[#2d3748] flex justify-between items-center">
-                  <span className="text-base font-bold text-[#bfce7f] uppercase tracking-wider">TOTAL GENERAL:</span>
-                  <span className="text-xl font-extrabold text-[#bfce7f]">
-                    RD$ {totalEstimado.toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </span>
-                </div>
+              <div className="p-5 bg-[#1c2129] border-t-2 border-[#2d3748] flex justify-between items-center font-mono text-xs">
+                <span className="text-base font-bold text-[#bfce7f] uppercase tracking-wider">TOTAL GENERAL:</span>
+                <span className="text-xl font-extrabold text-[#bfce7f]">
+                  RD$ {totalEstimado.toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
               </div>
             </div>
           </div>
 
           {/* Right Sidebar Column (4/12 width) */}
           <div className="lg:col-span-4 flex flex-col gap-6">
-            {/* Assigned Mechanic Card */}
-            {/* Consolidated Mechanics Bento Card */}
+            {/* Assigned Mechanic Card (Singular: MECÁNICO RESPONSABLE per Section 5) */}
             <div className="bg-[#161a21] border border-[#2d3748] p-5 rounded-xl space-y-3">
               <div className="flex items-center gap-2 pb-2 border-b border-[#2d3748]">
                 <Wrench className="w-4 h-4 text-[#bfce7f]" />
                 <h3 className="font-mono text-xs font-bold text-slate-300 uppercase tracking-widest">
-                  MECÁNICOS ASIGNADOS
+                  MECÁNICO RESPONSABLE
                 </h3>
               </div>
-              {(() => {
-                const assignedMechanics = Array.from(
-                  new Map(
-                    (order.servicios || [])
-                      .filter((s) => s.mecanico_usuario_id || s.usuario_id || s.mecanico_nombre)
-                      .map((s) => [
-                        s.mecanico_usuario_id || s.usuario_id || s.mecanico_nombre,
-                        {
-                          usuario_id: s.mecanico_usuario_id || s.usuario_id,
-                          nombre: s.mecanico_nombre || `Mecánico #${s.mecanico_usuario_id || s.usuario_id}`
-                        }
-                      ])
-                  ).values()
-                );
-
-                return assignedMechanics.length > 0 ? (
-                  <div className="space-y-2.5">
-                    {assignedMechanics.map((m, idx) => (
-                      <div key={m.usuario_id || idx} className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-[#1c2129] border border-[#2d3748] flex items-center justify-center font-mono font-bold text-xs text-[#bfce7f] shrink-0">
-                          {m.nombre
-                            ? m.nombre
-                                .split(" ")
-                                .map((n) => n[0])
-                                .join("")
-                                .substring(0, 2)
-                                .toUpperCase()
-                            : "RM"}
-                        </div>
-                        <div>
-                          <div className="font-bold text-xs text-slate-100 font-sans">
-                            {m.nombre}
-                          </div>
-                          <div className="text-[10px] text-slate-400 font-mono">
-                            Técnico de Taller
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+              {order.mecanico_id || order.mecanico_nombre ? (
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-[#1c2129] border border-[#2d3748] flex items-center justify-center font-mono font-bold text-xs text-[#bfce7f] shrink-0">
+                    {order.mecanico?.iniciales || (order.mecanico_nombre ? order.mecanico_nombre.split(" ").map(n => n[0]).join("").substring(0,2).toUpperCase() : "MC")}
                   </div>
-                ) : (
-                  <div className="text-xs text-slate-500 font-mono italic p-2">
-                    Sin mecánicos asignados
+                  <div>
+                    <div className="font-bold text-sm text-slate-100 font-sans">
+                      {order.mecanico_nombre || order.mecanico?.nombre_completo}
+                    </div>
+                    <div className="text-[11px] text-slate-400 font-mono">
+                      {order.mecanico?.cargo_nombre || "Técnico de Taller"}
+                    </div>
                   </div>
-                );
-              })()}
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <div className="text-xs text-amber-400 font-mono font-bold">
+                    Sin asignar
+                  </div>
+                  <p className="text-[11px] text-slate-400 font-sans leading-normal">
+                    Se asignará al usuario que inicie la reparación.
+                  </p>
+                </div>
+              )}
             </div>
 
 

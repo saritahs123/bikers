@@ -23,7 +23,6 @@ export async function GET(
   const { id } = await params;
 
   try {
-    // 1. Validar ID con regex, Number(), y Number.isSafeInteger()
     if (!id || typeof id !== "string" || !/^\d+$/.test(id.trim())) {
       return NextResponse.json(
         { error: "INVALID_ID", message: "Identificador de orden inválido." },
@@ -38,7 +37,6 @@ export async function GET(
       );
     }
 
-    // 2. Validar sesión (sin retener conexiones de pool)
     const session = await getWorkshopSession();
     if (!session || !session.usuario_id) {
       return NextResponse.json(
@@ -47,7 +45,6 @@ export async function GET(
       );
     }
 
-    // 3. Validar permisos de módulo
     const perms = await getModulePermissions("TALLER", session.usuario_id);
     if (!perms.puede_ver) {
       return NextResponse.json(
@@ -56,8 +53,6 @@ export async function GET(
       );
     }
 
-    // 4. Comprobar existencia en admin.ordenes_trabajo y obtener empresa vía usuario
-    // 4. Comprobar existencia en admin.ordenes_trabajo y obtener empresa vía usuario de registro
     const existenceCheckSql = `
       SELECT
         ot.orden_trabajo_id,
@@ -80,7 +75,6 @@ export async function GET(
 
     const otCheck = existenceRes[0];
 
-    // 5. Resolver empresa asignada y validar alcance empresarial estricto sin fallback
     const orderEmpresaId = otCheck.order_empresa_id ?? null;
     if (
       otCheck.usuario_registro == null ||
@@ -94,7 +88,7 @@ export async function GET(
       );
     }
 
-    // 6. Cargar el detalle completo (usando helper query shared pool)
+    // Load full order details joining mecanico_id from admin.ordenes_trabajo
     const orderSql = `
       SELECT 
         ot.orden_trabajo_id AS orden_id,
@@ -108,6 +102,7 @@ export async function GET(
         pot.nombre AS prioridad_nombre,
         pot.color_estado AS prioridad_color,
         ot.diagnostico_inicial,
+        ot.descripcion_cliente,
         ot.observacion_interna AS observaciones,
         ot.fecha_recepcion AS fecha_ingreso,
         ot.fecha_entrega_estimada AS fecha_prometida,
@@ -133,13 +128,10 @@ export async function GET(
         ot.subtotal_general,
         ot.impuesto,
         ot.total_orden,
-        (
-          SELECT os.usuario_id
-          FROM admin.orden_servicios os
-          WHERE os.orden_trabajo_id = ot.orden_trabajo_id AND os.usuario_id IS NOT NULL AND (os.activo IS DISTINCT FROM false)
-          ORDER BY os.orden_servicio_id ASC
-          LIMIT 1
-        ) AS mecanico_usuario_id,
+        ot.mecanico_id,
+        COALESCE(NULLIF(TRIM(CONCAT_WS(' ', ui_mec.nombre, ui_mec.apellido)), ''), ui_mec.correo_electronico, ('Mecánico #' || u_mec.usuario_id::text)) AS mecanico_nombre,
+        c_mec.nombre AS mecanico_cargo,
+        tu_mec.nombre AS mecanico_tipo,
         u_ot.empresa_id AS empresa_id
       FROM admin.ordenes_trabajo ot
       LEFT JOIN admin.recepciones r ON ot.recepcion_id = r.recepcion_id
@@ -150,6 +142,10 @@ export async function GET(
       LEFT JOIN admin.bicicletas bicicleta_recepcion ON bicicleta_recepcion.bicicleta_id = r.bicicleta_id
       LEFT JOIN admin.estado_orden_trabajo eot ON ot.estado_orden_id = eot.estado_orden_id
       LEFT JOIN admin.prioridad_orden_trabajo pot ON ot.prioridad_orden_id = pot.prioridad_orden_trabajo_id
+      LEFT JOIN admin.usuario u_mec ON ot.mecanico_id = u_mec.usuario_id
+      LEFT JOIN admin.usuario_identidad ui_mec ON u_mec.usuario_id = ui_mec.usuario_id
+      LEFT JOIN admin.cargo c_mec ON ui_mec.cargo_id = c_mec.cargo_id
+      LEFT JOIN admin.tipo_usuario tu_mec ON u_mec.tipo_usuario_id = tu_mec.tipo_usuario_id
       WHERE ot.orden_trabajo_id = $1 AND ot.activo = true
     `;
 
@@ -160,10 +156,12 @@ export async function GET(
 
     const order = orderRes[0];
 
-    // Services query
+    // Services query joining bicicleta_componentes & estado_componente
     const servSql = `
       SELECT 
         os.orden_servicio_id AS servicio_id,
+        os.orden_servicio_id,
+        os.codigo_servicio,
         os.tipo_servicio_id,
         ts.nombre AS tipo_servicio_nombre,
         os.estado_orden_servicio_id AS estado_servicio_id,
@@ -174,19 +172,33 @@ export async function GET(
         os.valor_descuento,
         COALESCE(NULLIF(os.subtotal, 0), ROUND((os.cantidad * os.precio_unitario) - COALESCE(os.valor_descuento, 0), 2)) AS subtotal,
         os.observacion_tecnica AS motivo_sin_mano_obra,
-        os.usuario_id AS mecanico_usuario_id,
-        COALESCE(NULLIF(TRIM(CONCAT_WS(' ', ui.nombre, ui.apellido)), ''), ui.correo_electronico, ('Mecánico #' || u.usuario_id::text)) AS mecanico_nombre
+        os.observacion_tecnica,
+        os.fecha_inicio,
+        os.fecha_finalizacion,
+        COALESCE(os.tiempo_transcurrido, 0) AS tiempo_transcurrido,
+        os.bicicleta_componente_id,
+        cat.nombre AS componente_categoria,
+        bc.marca AS componente_marca,
+        bc.modelo AS componente_modelo,
+        bc.numero_serie AS componente_numero_serie,
+        bc.estado_componente_id AS componente_estado_actual_id,
+        est_actual.nombre AS componente_estado_actual_nombre,
+        est_actual.nivel_desgaste AS componente_estado_actual_porcentaje,
+        os.nuevo_estado_componente_id,
+        est_nuevo.nombre AS nuevo_estado_componente_nombre
       FROM admin.orden_servicios os
       LEFT JOIN admin.tipo_servicio ts ON os.tipo_servicio_id = ts.tipo_servicio_id
       LEFT JOIN admin.estado_orden_servicio eos ON os.estado_orden_servicio_id = eos.estado_orden_servicio_id
-      LEFT JOIN admin.usuario u ON os.usuario_id = u.usuario_id
-      LEFT JOIN admin.usuario_identidad ui ON u.usuario_id = ui.usuario_id
+      LEFT JOIN admin.bicicleta_componentes bc ON os.bicicleta_componente_id = bc.bicicleta_componente_id
+      LEFT JOIN admin.categoria_componente cat ON bc.categoria_componente_id = cat.categoria_componente_id
+      LEFT JOIN admin.estado_componente est_actual ON bc.estado_componente_id = est_actual.estado_componente_id
+      LEFT JOIN admin.estado_componente est_nuevo ON os.nuevo_estado_componente_id = est_nuevo.estado_componente_id
       WHERE os.orden_trabajo_id = $1 AND (os.activo IS DISTINCT FROM false)
       ORDER BY os.orden_servicio_id ASC
     `;
     const servRes = await query<any>(servSql, [ordenId]);
 
-    // Populate mano_obra and productos for each service in servRes
+    // Populate mano_obra and productos for each service
     const srvIds = (servRes || []).map((s: any) => s.servicio_id);
     let allManoObra: any[] = [];
     let allProductos: any[] = [];
@@ -221,53 +233,31 @@ export async function GET(
           AND BTRIM(mo.detalle_mano_obra) <> ''
         ORDER BY mo.orden_servicio_mano_obra_id ASC
       `, [srvIds]);
-
-      allProductos = await query<any>(`
-        SELECT 
-          op.orden_producto_id,
-          op.orden_producto_id AS id,
-          op.orden_trabajo_id,
-          op.orden_servicio_id,
-          op.producto_id,
-          COALESCE(p.nombre, 'Producto #' || op.producto_id::text) AS producto_nombre,
-          COALESCE(p.nombre, 'Producto #' || op.producto_id::text) AS nombre,
-          p.codigo_producto,
-          p.descripcion AS producto_descripcion,
-          op.cantidad,
-          op.precio_unitario,
-          op.porcentaje_descuento,
-          op.valor_descuento,
-          op.subtotal,
-          op.observacion
-        FROM admin.orden_productos op
-        LEFT JOIN admin.productos p ON op.producto_id = p.producto_id
-        WHERE op.orden_trabajo_id = $1 OR op.orden_servicio_id = ANY($2)
-        ORDER BY op.orden_producto_id ASC
-      `, [ordenId, srvIds]);
-    } else {
-      allProductos = await query<any>(`
-        SELECT 
-          op.orden_producto_id,
-          op.orden_producto_id AS id,
-          op.orden_trabajo_id,
-          op.orden_servicio_id,
-          op.producto_id,
-          COALESCE(p.nombre, 'Producto #' || op.producto_id::text) AS producto_nombre,
-          COALESCE(p.nombre, 'Producto #' || op.producto_id::text) AS nombre,
-          p.codigo_producto,
-          p.descripcion AS producto_descripcion,
-          op.cantidad,
-          op.precio_unitario,
-          op.porcentaje_descuento,
-          op.valor_descuento,
-          op.subtotal,
-          op.observacion
-        FROM admin.orden_productos op
-        LEFT JOIN admin.productos p ON op.producto_id = p.producto_id
-        WHERE op.orden_trabajo_id = $1
-        ORDER BY op.orden_producto_id ASC
-      `, [ordenId]);
     }
+
+    allProductos = await query<any>(`
+      SELECT
+        op.orden_producto_id,
+        op.orden_producto_id AS id,
+        op.orden_trabajo_id,
+        op.orden_servicio_id,
+        op.producto_id,
+        COALESCE(p.codigo_producto, 'PRD-' || LPAD(op.producto_id::text, 3, '0')) AS codigo,
+        COALESCE(p.nombre, 'Producto #' || op.producto_id::text) AS producto_nombre,
+        COALESCE(p.nombre, 'Producto #' || op.producto_id::text) AS nombre,
+        p.codigo_producto,
+        p.descripcion AS producto_descripcion,
+        op.cantidad,
+        op.precio_unitario,
+        op.porcentaje_descuento,
+        op.valor_descuento,
+        op.subtotal,
+        op.observacion
+      FROM admin.orden_productos op
+      LEFT JOIN admin.productos p ON op.producto_id = p.producto_id
+      WHERE op.orden_trabajo_id = $1
+      ORDER BY op.orden_producto_id ASC
+    `, [ordenId]);
 
     const pool = getPool();
     const serviciosEnriquecidos = await Promise.all((servRes || []).map(async (s: any) => {
@@ -276,6 +266,16 @@ export async function GET(
       const cronStatus = await getCronometroStatus(pool, s.servicio_id);
       return {
         ...s,
+        componente: s.bicicleta_componente_id ? {
+          id: s.bicicleta_componente_id,
+          categoria: s.componente_categoria || "Componente",
+          marca: s.componente_marca || "",
+          modelo: s.componente_modelo || "",
+          numero_serie: s.componente_numero_serie || "",
+          estado_actual_id: s.componente_estado_actual_id,
+          estado_actual_nombre: s.componente_estado_actual_nombre || "",
+          estado_actual_porcentaje: s.componente_estado_actual_porcentaje || 0
+        } : null,
         en_proceso_cronometro: cronStatus.activo,
         cronometro: cronStatus,
         mano_obra: serviceManoObra,
@@ -305,13 +305,14 @@ export async function GET(
     `;
     const histRes = await query<any>(histSql, [ordenId]);
 
-    // Recalculate financial summary as single source of truth
+    // Recalculate financial summary
     const summary = await recalculateWorkOrderTotals({ query }, ordenId);
 
     const resumen_financiero = {
       servicios: (servRes || []).map((s: any) => ({
         servicio_id: s.servicio_id,
         descripcion: s.tipo_servicio_nombre || s.descripcion_servicio || "Servicio",
+        observacion_tecnica: s.observacion_tecnica || s.motivo_sin_mano_obra || "",
         cantidad: Number(s.cantidad || 1),
         precio_unitario: Number(s.precio_unitario || s.precio_acordado || 0),
         descuento: Number(s.valor_descuento || 0),
@@ -336,7 +337,7 @@ export async function GET(
       }))
     };
 
-    // Compute progress metrics dynamically
+    // Compute progress metrics
     const catalogStatusRes = await query<{ estado_orden_servicio_id: number; codigo: string }>(`
       SELECT estado_orden_servicio_id, UPPER(codigo) AS codigo
       FROM admin.estado_orden_servicio
@@ -348,126 +349,89 @@ export async function GET(
       statusMap.set(r.codigo, r.estado_orden_servicio_id);
     }
 
-    const estadoPendienteId = statusMap.get("PENDIENTE") || 1;
-    const estadoEnProcesoId = statusMap.get("EN_PROCESO") || 2;
-    const estadoCompletadoId = statusMap.get("COMPLETADO") || 3;
-    const estadoPausadoId = statusMap.get("SUSPENDIDO") || 5;
+    const idCompletado = statusMap.get("COMPLETADO") || 3;
+    const idCancelado = statusMap.get("CANCELADO") || 4;
 
-    // Technical timer seconds calculation across all services belonging to order ID
-    const timerSumRes = await query<{ segundos_trabajados: number }>(`
-      SELECT COALESCE(
-        SUM(
-          EXTRACT(
-            EPOCH FROM (
-              COALESCE(mo.fecha_finalizacion, NOW()) - mo.fecha_inicio
-            )
-          )
-        ),
-        0
-      )::int AS segundos_trabajados
-      FROM admin.orden_servicio_mano_obra mo
-      JOIN admin.orden_servicios os ON mo.orden_servicio_id = os.orden_servicio_id
-      WHERE os.orden_trabajo_id = $1
-        AND (os.activo IS DISTINCT FROM false)
-        AND (mo.detalle_mano_obra IS NULL OR BTRIM(mo.detalle_mano_obra) = '')
-        AND (mo.observacion IS NULL OR BTRIM(mo.observacion) = '')
-        AND mo.fecha_inicio IS NOT NULL
-        AND (mo.activo IS DISTINCT FROM false)
-    `, [ordenId]);
+    const applicableServices = (servRes || []).filter(
+      (s: any) => s.estado_servicio_id !== idCancelado
+    );
+    const totalApplicable = applicableServices.length;
+    const completedServices = applicableServices.filter(
+      (s: any) => s.estado_servicio_id === idCompletado
+    ).length;
 
-    const segundosTrabajados = Number(timerSumRes[0]?.segundos_trabajados || 0);
-    const horasRegistradas = Math.round((segundosTrabajados / 3600.0) * 100) / 100;
-
-    // Service counts by status (excluding CANCELADO, ANULADO, INACTIVO)
-    const servStatsRes = await query<{
-      total_servicios: number;
-      servicios_pendientes: number;
-      servicios_en_proceso: number;
-      servicios_pausados: number;
-      servicios_completados: number;
-    }>(`
-      SELECT 
-        COUNT(*)::int AS total_servicios,
-        COUNT(*) FILTER (WHERE os.estado_orden_servicio_id = $2)::int AS servicios_pendientes,
-        COUNT(*) FILTER (WHERE os.estado_orden_servicio_id = $3)::int AS servicios_en_proceso,
-        COUNT(*) FILTER (WHERE os.estado_orden_servicio_id = $4)::int AS servicios_pausados,
-        COUNT(*) FILTER (WHERE os.estado_orden_servicio_id = $5)::int AS servicios_completados
-      FROM admin.orden_servicios os
-      WHERE os.orden_trabajo_id = $1 
-        AND (os.activo IS DISTINCT FROM false)
-        AND (os.estado_orden_servicio_id NOT IN (
-          SELECT estado_orden_servicio_id
-          FROM admin.estado_orden_servicio
-          WHERE UPPER(codigo) IN ('CANCELADO', 'ANULADO', 'INACTIVO')
-        ))
-    `, [ordenId, estadoPendienteId, estadoEnProcesoId, estadoPausadoId, estadoCompletadoId]);
-
-    const totalServicios = Number(servStatsRes[0]?.total_servicios || 0);
-    const serviciosCompletados = Number(servStatsRes[0]?.servicios_completados || 0);
-    const porcentajeProgreso = totalServicios > 0
-      ? Math.min(100, Math.max(0, Math.round((serviciosCompletados / totalServicios) * 10000) / 100))
+    const progresoPorcentaje = totalApplicable > 0
+      ? Math.round((completedServices / totalApplicable) * 100)
       : 0;
 
-    // Horas estimadas calculation from catalog tipo_servicio
-    const horasEstRes = await query<{ horas_estimadas: number }>(`
-      SELECT SUM(ts.duracion_estimada_horas) AS horas_estimadas
-      FROM admin.orden_servicios os
-      JOIN admin.tipo_servicio ts ON os.tipo_servicio_id = ts.tipo_servicio_id
-      WHERE os.orden_trabajo_id = $1 AND (os.activo IS DISTINCT FROM false)
-    `, [ordenId]);
-    const rawHorasEst = horasEstRes[0]?.horas_estimadas;
-    const horasEstimadas = (rawHorasEst !== null && rawHorasEst !== undefined && !isNaN(Number(rawHorasEst)) && Number(rawHorasEst) > 0)
-      ? Math.round(Number(rawHorasEst) * 10) / 10
-      : undefined;
+    const totalSegundosTrabajados = allManoObra.reduce((sum: number, m: any) => {
+      const mins = Number(m.minutos_trabajados || 0);
+      return sum + Math.max(0, Math.floor(mins * 60));
+    }, 0);
 
-    const progresoObj = {
-      total_servicios: totalServicios,
-      servicios_pendientes: Number(servStatsRes[0]?.servicios_pendientes || 0),
-      servicios_en_proceso: Number(servStatsRes[0]?.servicios_en_proceso || 0),
-      servicios_pausados: Number(servStatsRes[0]?.servicios_pausados || 0),
-      servicios_completados: serviciosCompletados,
-      porcentaje: porcentajeProgreso,
-      segundos_trabajados: segundosTrabajados,
-      horas_registradas: horasRegistradas
+    const totalHorasRegistradas = Math.round((totalSegundosTrabajados / 3600.0) * 10) / 10;
+
+    const getInitials = (name: string) => {
+      if (!name) return "MC";
+      const parts = name.trim().split(/\s+/);
+      if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+      return parts[0].substring(0, 2).toUpperCase();
     };
 
     return NextResponse.json({
       success: true,
       data: {
         ...order,
+        bicicleta_id: Number(order.bicicleta_id || 0),
+        bicicleta: order.bicicleta_id ? {
+          bicicleta_id: Number(order.bicicleta_id),
+          marca: order.bicicleta_marca || "",
+          modelo: order.bicicleta_modelo || "",
+          ano: order.bicicleta_ano || null,
+          serie: order.bicicleta_serie || ""
+        } : null,
+        mecanico_id: order.mecanico_id || null,
+        mecanico_nombre: order.mecanico_nombre || null,
+        mecanico: order.mecanico_id ? {
+          id: order.mecanico_id,
+          nombre_completo: order.mecanico_nombre,
+          iniciales: getInitials(order.mecanico_nombre),
+          cargo_nombre: order.mecanico_cargo || order.mecanico_tipo || "Técnico de Taller"
+        } : null,
         subtotal_servicios: summary.subtotal_servicios,
         subtotal_mano_obra: summary.subtotal_mano_obra,
         subtotal_productos: summary.subtotal_productos,
-        subtotal_repuestos: summary.subtotal_productos,
-        descuento_servicios: summary.descuento_servicios,
-        descuento_productos: summary.descuento_productos,
-        otros_descuentos: summary.otros_descuentos,
+        total_descuentos: (summary.descuento_servicios || 0) + (summary.descuento_productos || 0) + (summary.otros_descuentos || 0),
         subtotal_bruto: summary.subtotal_bruto,
         subtotal_neto: summary.subtotal_neto,
         impuesto: summary.impuesto,
         total_orden: summary.total_orden,
-        progreso: progresoObj,
-        progreso_porcentaje: porcentajeProgreso,
-        horas_registradas: horasRegistradas,
-        horas_estimadas: horasEstimadas,
-        resumen_financiero,
+        progreso: {
+          porcentaje: progresoPorcentaje,
+          servicios_totales: totalApplicable,
+          servicios_completados: completedServices,
+          segundos_trabajados: totalSegundosTrabajados,
+          horas_registradas: totalHorasRegistradas
+        },
         servicios: serviciosEnriquecidos,
-        historial: histRes || []
+        productos: (allProductos || []).map((p: any) => ({
+          orden_producto_id: p.orden_producto_id,
+          producto_id: p.producto_id,
+          codigo: p.codigo || p.codigo_producto || `PRD-${String(p.producto_id).padStart(3, "0")}`,
+          nombre: p.producto_nombre || p.nombre || "Producto / Repuesto",
+          cantidad: Number(p.cantidad || 1),
+          precio_unitario: Number(p.precio_unitario || 0),
+          subtotal: Number(p.subtotal || 0),
+          observacion: p.observacion || null
+        })),
+        historial: histRes || [],
+        resumen_financiero
       }
     });
-
   } catch (error: any) {
-    console.error("GET /api/taller/ordenes/[id] failed", {
-      message: error?.message,
-      code: error?.code,
-      stack: error?.stack
-    });
-
+    console.error("GET /api/taller/ordenes/[id] exception:", error);
     return NextResponse.json(
-      {
-        error: "INTERNAL_ERROR",
-        message: "No pudimos cargar la orden."
-      },
+      { error: "INTERNAL_ERROR", message: "Ocurrió un error al procesar la solicitud." },
       { status: 500 }
     );
   }
@@ -480,7 +444,6 @@ export async function PUT(
 ) {
   const { id } = await params;
 
-  // 1. Validar ID primero sin reservar cliente
   if (!id || typeof id !== "string" || !/^\d+$/.test(id.trim())) {
     return NextResponse.json(
       { error: "INVALID_ID", message: "Identificador de orden inválido." },
@@ -488,14 +451,7 @@ export async function PUT(
     );
   }
   const ordenId = Number(id.trim());
-  if (!Number.isSafeInteger(ordenId) || ordenId <= 0) {
-    return NextResponse.json(
-      { error: "INVALID_ID", message: "Identificador de orden inválido." },
-      { status: 400 }
-    );
-  }
 
-  // 2. Validar sesión primero
   const session = await getWorkshopSession();
   if (!session || !session.usuario_id) {
     return NextResponse.json(
@@ -504,10 +460,8 @@ export async function PUT(
     );
   }
 
-  // 3. Validar permisos de módulo
   const perms = await getModulePermissions("TALLER", session.usuario_id);
 
-  // 4. Ahora sí adquirir conexión transaccional dedicada
   const pool = getPool();
   const client = await pool.connect();
 
@@ -538,6 +492,7 @@ export async function PUT(
         ot.diagnostico_inicial, 
         ot.observacion_interna,
         ot.usuario_registro,
+        ot.mecanico_id,
         u_ot.empresa_id AS empresa_id
       FROM admin.ordenes_trabajo ot
       JOIN admin.usuario u_ot ON u_ot.usuario_id = ot.usuario_registro
@@ -605,17 +560,17 @@ export async function PUT(
       );
     }
 
-    // Resolve requested target state ID
     let requestedStateId: number | undefined = undefined;
     if (accion === "MARCAR_LISTA_ENTREGA") {
       requestedStateId = estadoListaEntregaId;
+    } else if (accion === "INICIAR_REPARACION") {
+      requestedStateId = estadoReparacionId;
     } else if (estado_orden_id !== undefined && estado_orden_id !== null && estado_orden_id !== "") {
       requestedStateId = parseInt(String(estado_orden_id), 10);
     }
 
     const isStateChangeRequested = requestedStateId !== undefined && requestedStateId !== currentStateId;
 
-    // Case A: No State Change Requested (updating priority or notes only)
     if (!isStateChangeRequested) {
       if (!perms.puede_editar) {
         await client.query("ROLLBACK");
@@ -677,20 +632,25 @@ export async function PUT(
       );
     }
 
-    // Permission Checks for transition
-    if (targetStateId === estadoListaEntregaId) {
+    // Permission Checks
+    if (targetStateId === estadoReparacionId) {
+      if (!perms.puede_mover && !perms.puede_editar && !perms.puede_crear) {
+        await client.query("ROLLBACK");
+        return NextResponse.json(
+          { error: "FORBIDDEN", message: "No tienes permiso para iniciar la reparación de esta orden." },
+          { status: 403 }
+        );
+      }
+    } else if (targetStateId === estadoListaEntregaId) {
       if (!perms.puede_mover && !perms.puede_editar) {
         await client.query("ROLLBACK");
         return NextResponse.json(
-          {
-            error: "FORBIDDEN",
-            message: "No tienes permiso para cambiar el estado de esta orden."
-          },
+          { error: "FORBIDDEN", message: "No tienes permiso para cambiar el estado de esta orden." },
           { status: 403 }
         );
       }
 
-      // Requirement 4 & 5: Service Completion Validation for LISTA_ENTREGA
+      // Check service completion
       const servAggRes = await client.query(`
         SELECT 
           COUNT(*)::int AS total_aplicables,
@@ -752,72 +712,28 @@ export async function PUT(
           { status: 409 }
         );
       }
-    } else if (currentStateId === estadoListaEntregaId && targetStateId === estadoReparacionId) {
-      if (accion !== "REABRIR_ORDEN") {
-        await client.query("ROLLBACK");
-        return NextResponse.json(
-          {
-            error: "REOPEN_ACTION_REQUIRED",
-            message: "La reapertura de la orden debe realizarse explícitamente con la acción de reabrir."
-          },
-          { status: 400 }
-        );
-      }
-
-      if (!perms.puede_reabrir) {
-        await client.query("ROLLBACK");
-        return NextResponse.json(
-          {
-            error: "FORBIDDEN",
-            message: "No tienes permiso para reabrir la reparación de esta orden."
-          },
-          { status: 403 }
-        );
-      }
-
-      const reopenReason = (body.motivo_reapertura || observacion_cambio_estado || observacion_interna || "").trim();
-      if (!reopenReason) {
-        await client.query("ROLLBACK");
-        return NextResponse.json(
-          {
-            error: "REOPEN_REASON_REQUIRED",
-            message: "Debes proporcionar un motivo obligatorio para reabrir la reparación."
-          },
-          { status: 400 }
-        );
-      }
-    } else if (targetStateId === estadoEntregadaId) {
-      if (!perms.puede_cerrar && !perms.puede_editar) {
-        await client.query("ROLLBACK");
-        return NextResponse.json(
-          {
-            error: "FORBIDDEN",
-            message: "No tienes permiso para entregar esta orden."
-          },
-          { status: 403 }
-        );
-      }
     } else {
       if (!perms.puede_mover && !perms.puede_editar) {
         await client.query("ROLLBACK");
         return NextResponse.json(
-          {
-            error: "FORBIDDEN",
-            message: "No tienes permiso para cambiar el estado de esta orden."
-          },
+          { error: "FORBIDDEN", message: "No tienes permiso para cambiar el estado de esta orden." },
           { status: 403 }
         );
       }
     }
 
-    // Execute Order State Update
+    // Execute Order State Update: Assign authenticated session.usuario_id as mecanico_id when NULL upon entering REPARACION
     await client.query(`
       UPDATE admin.ordenes_trabajo
       SET 
         estado_orden_id = $1::integer,
+        mecanico_id = CASE
+          WHEN mecanico_id IS NULL THEN $5::integer
+          ELSE mecanico_id
+        END,
         prioridad_orden_id = COALESCE($2::integer, prioridad_orden_id),
         observacion_interna = COALESCE($3, observacion_interna),
-        fecha_inicio_trabajo = CASE WHEN $1::integer = $7::integer AND fecha_inicio_trabajo IS NULL THEN NOW() ELSE fecha_inicio_trabajo END,
+        fecha_inicio_trabajo = COALESCE(fecha_inicio_trabajo, CASE WHEN $1::integer = $7::integer THEN NOW() ELSE NULL END),
         fecha_finalizacion = CASE WHEN $1::integer = $8::integer THEN NOW() WHEN $1::integer = $7::integer THEN NULL ELSE fecha_finalizacion END,
         fecha_entrega_real = CASE WHEN $1::integer = $9::integer THEN NOW() ELSE fecha_entrega_real END,
         observacion_entrega = CASE WHEN $1::integer = $9::integer THEN COALESCE($4, observacion_entrega) ELSE observacion_entrega END,
@@ -836,6 +752,21 @@ export async function PUT(
       estadoEntregadaId
     ]);
 
+    // Query assigned mechanic details for response
+    const effectiveMecanicoId = currentOrder.mecanico_id || session.usuario_id;
+    const mecRes = await client.query(`
+      SELECT
+        COALESCE(NULLIF(TRIM(CONCAT_WS(' ', ui.nombre, ui.apellido)), ''), ui.correo_electronico, ('Usuario #' || u.usuario_id::text)) AS nombre_completo,
+        c.nombre AS cargo_nombre
+      FROM admin.usuario u
+      LEFT JOIN admin.usuario_identidad ui ON u.usuario_id = ui.usuario_id
+      LEFT JOIN admin.cargo c ON c.cargo_id = ui.cargo_id
+      WHERE u.usuario_id = $1
+    `, [effectiveMecanicoId]);
+
+    const mecanicoNombre = mecRes.rows[0]?.nombre_completo || `Usuario #${effectiveMecanicoId}`;
+    const mecanicoCargo = mecRes.rows[0]?.cargo_nombre || "Técnico de Taller";
+
     // Insert Single History Record
     await client.query(`
       INSERT INTO admin.orden_historial_estado (
@@ -850,7 +781,9 @@ export async function PUT(
       currentStateId,
       targetStateId,
       session.usuario_id,
-      body.motivo_reapertura || observacion_cambio_estado || observacion_interna || (accion === "MARCAR_LISTA_ENTREGA" ? "Orden marcada como lista para entrega" : "Cambio de estado de la orden")
+      targetStateId === estadoReparacionId
+        ? `Reparación iniciada por ${mecanicoNombre}`
+        : (body.motivo_reapertura || observacion_cambio_estado || observacion_interna || "Cambio de estado de la orden")
     ]);
 
     await client.query("COMMIT");
@@ -860,11 +793,29 @@ export async function PUT(
 
     return NextResponse.json({
       success: true,
-      message: targetStateId === estadoListaEntregaId ? "La orden fue marcada como lista para entrega." : "Estado de la orden actualizado correctamente.",
+      message: targetStateId === estadoReparacionId
+        ? "La reparación fue iniciada correctamente."
+        : targetStateId === estadoListaEntregaId
+        ? "La orden fue marcada como lista para entrega."
+        : "Estado de la orden actualizado correctamente.",
       data: {
         orden_id: ordenId,
-        estado_anterior: estadoAnteriorObj,
-        estado_actual: estadoNuevoObj
+        orden_trabajo_id: ordenId,
+        estado_anterior: {
+          id: currentStateId,
+          codigo: estadoAnteriorObj.codigo,
+          nombre: estadoAnteriorObj.nombre
+        },
+        estado_actual: {
+          id: targetStateId,
+          codigo: estadoNuevoObj.codigo,
+          nombre: estadoNuevoObj.nombre
+        },
+        mecanico: {
+          usuario_id: effectiveMecanicoId,
+          nombre: mecanicoNombre,
+          cargo: mecanicoCargo
+        }
       }
     }, { status: 200 });
 
@@ -872,22 +823,11 @@ export async function PUT(
     await client.query("ROLLBACK").catch(() => {});
     console.error("PUT /api/taller/ordenes/[id] exception:", err);
 
-    const isDev = process.env.NODE_ENV !== "production";
-
     return NextResponse.json(
       {
         success: false,
         error: "SERVER_ERROR",
-        title: "No pudimos guardar los cambios",
-        message: isDev ? (err.message || "Error interno al actualizar la orden.") : "Inténtalo nuevamente en unos momentos.",
-        ...(isDev ? {
-          debug: {
-            phase: "UPDATE_ORDER",
-            pgCode: err.code,
-            pgMessage: err.message,
-            stack: err.stack
-          }
-        } : {})
+        message: err.message || "Error al actualizar el estado de la orden."
       },
       { status: 500 }
     );
