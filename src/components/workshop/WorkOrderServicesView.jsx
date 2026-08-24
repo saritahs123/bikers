@@ -1,38 +1,128 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import {
   Plus,
   Wrench,
   Package,
-  Clock,
-  User,
   Trash2,
   Pencil,
   CheckCircle2,
   AlertCircle,
   Loader2,
-  DollarSign,
-  FileText,
-  ChevronDown,
   X,
   AlertTriangle,
   Play,
   Pause,
-  Printer,
-  ShieldCheck,
-  CheckSquare,
-  Sparkles,
-  ArrowRight,
   ArrowLeft,
-  RotateCcw
+  Layers,
+  Sparkles
 } from "lucide-react";
 import { getServiceStateRules } from "@/lib/workshop-state-machine";
+
+// PORTAL MODAL SHELL (Directly rendered to document.body)
+function WorkshopItemModalShell({
+  open,
+  title,
+  description,
+  onClose,
+  children,
+  footer,
+  maxWidth = "760px"
+}) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open, onClose]);
+
+  if (!open || !mounted || typeof document === "undefined") return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="workshop-item-modal-title"
+    >
+      <button
+        type="button"
+        aria-label="Cerrar modal"
+        className="absolute inset-0 h-full w-full cursor-default bg-slate-950/80 backdrop-blur-sm transition-opacity"
+        onClick={onClose}
+      />
+
+      <section
+        className="relative z-10 flex min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 text-slate-100 shadow-2xl font-sans"
+        style={{
+          width: `min(${maxWidth}, calc(100vw - 32px))`,
+          maxHeight: "calc(100vh - 32px)"
+        }}
+      >
+        <header className="shrink-0 border-b border-slate-800 bg-slate-950/80 px-6 py-4 flex items-center justify-between font-mono">
+          <div>
+            <h2
+              id="workshop-item-modal-title"
+              className="text-base font-bold text-slate-100 uppercase tracking-wider flex items-center gap-2"
+            >
+              {title}
+            </h2>
+            {description ? (
+              <p className="mt-1 text-xs text-slate-400 font-sans">
+                {description}
+              </p>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Cerrar modal"
+            className="p-1.5 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+          >
+            <X size={18} />
+          </button>
+        </header>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 custom-scrollbar font-mono text-xs">
+          {children}
+        </div>
+
+        <footer className="shrink-0 border-t border-slate-800 bg-slate-950/80 px-6 py-4 font-sans">
+          {footer}
+        </footer>
+      </section>
+    </div>,
+    document.body
+  );
+}
 
 export default function WorkOrderServicesView({ ordenId, services = [], onRefresh, order, backUrl, onStartRepair = null }) {
   const [tiposServicio, setTiposServicio] = useState([]);
   const [productosList, setProductosList] = useState([]);
   const [mecanicosCatalog, setMecanicosCatalog] = useState([]);
+  const [estadosComponenteCatalog, setEstadosComponenteCatalog] = useState([]);
+  const [categoriasComponenteCatalog, setCategoriasComponenteCatalog] = useState([]);
   const [estadosServicio, setEstadosServicio] = useState([
     { estado_orden_servicio_id: 1, nombre: "Pendiente", codigo: "PENDIENTE" },
     { estado_orden_servicio_id: 2, nombre: "En Proceso", codigo: "EN_PROCESO" },
@@ -41,71 +131,84 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
     { estado_orden_servicio_id: 5, nombre: "Suspendido", codigo: "SUSPENDIDO" }
   ]);
 
-  const [estadosAprobacion] = useState([
-    { estado_aprobacion_id: 1, nombre: "Pendiente Autorización", codigo: "PENDIENTE" },
-    { estado_aprobacion_id: 2, nombre: "Aprobado", codigo: "APROBADO" },
-    { estado_aprobacion_id: 3, nombre: "Rechazado", codigo: "RECHAZADO" }
-  ]);
+  // Global Timer Reference Timestamp (updates every second)
+  const [nowTimestamp, setNowTimestamp] = useState(Date.now());
 
-  // Selected Service for detail view panel
-  const [selectedServiceId, setSelectedServiceId] = useState(null);
+  // Global 1-second Interval Ticker
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNowTimestamp(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
-  // Modal states
-  const [addServiceModalOpen, setAddServiceModalOpen] = useState(false);
-  const [editServiceModalOpen, setEditServiceModalOpen] = useState(false);
-  const [addLaborModalOpen, setAddLaborModalOpen] = useState(false);
-  const [editLaborModalOpen, setEditLaborModalOpen] = useState(false);
-  const [addProductModalOpen, setAddProductModalOpen] = useState(false);
+  // Modals & UI States
+  const [itemModalOpen, setItemModalOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
 
-  // Form inputs - Add/Edit Service
-  const [editingService, setEditingService] = useState(null);
-  const [newTipoServicioId, setNewTipoServicioId] = useState("");
-  const [newMecanicoId, setNewMecanicoId] = useState("");
-  const [newPrecioAcordado, setNewPrecioAcordado] = useState("");
-  const [newObservaciones, setNewObservaciones] = useState("");
-  const [confirmAdicional, setConfirmAdicional] = useState(false);
-  const [motivoAdicional, setMotivoAdicional] = useState("");
+  // Unified Item Modal Form States
+  const [itemType, setItemType] = useState("SERVICIO"); // "SERVICIO" | "PRODUCTO"
+  const [formTipoServicioId, setFormTipoServicioId] = useState("");
+  const [formBicicletaComponenteId, setFormBicicletaComponenteId] = useState("");
+  const [formNuevoEstadoComponenteId, setFormNuevoEstadoComponenteId] = useState("");
+  const [formProductoId, setFormProductoId] = useState("");
+  const [formCantidad, setFormCantidad] = useState("1");
+  const [formPrecioUnitario, setFormPrecioUnitario] = useState("");
+  const [formDescuentoPct, setFormDescuentoPct] = useState("0");
+  const [formObservaciones, setFormObservaciones] = useState("");
+  const [formConfirmAdicional, setFormConfirmAdicional] = useState(false);
+  const [formMotivoAdicional, setFormMotivoAdicional] = useState("");
 
-  // Edit Service Reassignment states
-  const [editConfirmReasignar, setEditConfirmReasignar] = useState(false);
-  const [editMotivoReasignar, setEditMotivoReasignar] = useState("");
+  // Bike Component Loading States
+  const [bicycleComponents, setBicycleComponents] = useState([]);
+  const [loadingComponents, setLoadingComponents] = useState(false);
+  const [componentsError, setComponentsError] = useState("");
 
-  // Finish Service Without Labor Modal states
-  const [finishNoLaborModalOpen, setFinishNoLaborModalOpen] = useState(false);
-  const [finishNoLaborService, setFinishNoLaborService] = useState(null);
-  const [finishNoLaborMotivo, setFinishNoLaborMotivo] = useState("");
-  const [finishNoLaborConfirm, setFinishNoLaborConfirm] = useState(false);
+  // Local Pending New Component Draft (NOT yet persisted to DB)
+  const [pendingNewComponent, setPendingNewComponent] = useState(null);
 
-  // Track processing service ID for per-button loading state
-  const [processingServiceId, setProcessingServiceId] = useState(null);
+  // Inline New Component Form States
+  const [showInlineComponentForm, setShowInlineComponentForm] = useState(false);
+  const [newComponentDraft, setNewComponentDraft] = useState({
+    categoria_componente_id: "",
+    marca: "",
+    estado_componente_id: "",
+    numero_serie: ""
+  });
+  const [newComponentErrors, setNewComponentErrors] = useState({});
+  const [savingComponent, setSavingComponent] = useState(false);
+  const [componentCreationMessage, setComponentCreationMessage] = useState("");
 
-  // Form inputs - Labor
-  const [laborDesc, setLaborDesc] = useState("");
-  const [laborHorasEst, setLaborHorasEst] = useState("1");
-  const [laborHorasReal, setLaborHorasReal] = useState("1");
-  const [laborCostoHora, setLaborCostoHora] = useState("0");
+  // Missing Component Status Modal on Service Finish
+  const [completeComponentModalOpen, setCompleteComponentModalOpen] = useState(false);
+  const [completeTargetService, setCompleteTargetService] = useState(null);
+  const [selectedFinalStateId, setSelectedFinalStateId] = useState("");
 
-  // Form inputs - Edit Labor
-  const [editLaborId, setEditLaborId] = useState(null);
-  const [editLaborDesc, setEditLaborDesc] = useState("");
-  const [editLaborHoras, setEditLaborHoras] = useState("");
-  const [editLaborCostoHora, setEditLaborCostoHora] = useState("");
-
-  // Form inputs - Add Product
-  const [prodProductoId, setProdProductoId] = useState("");
-  const [prodCantidad, setProdCantidad] = useState("1");
-  const [prodPrecio, setProdPrecio] = useState("");
-
-  // Custom Confirm Modal States
+  // Custom Confirmation Modal
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
   const [confirmModalTitle, setConfirmModalTitle] = useState("");
   const [confirmModalMessage, setConfirmModalMessage] = useState("");
   const [confirmModalOnConfirm, setConfirmModalOnConfirm] = useState(null);
-  const [confirmModalType, setConfirmModalType] = useState("delete"); // "delete" | "finish"
+  const [confirmModalType, setConfirmModalType] = useState("delete");
 
+  // Loading & Toast States
+  const [processingServiceId, setProcessingServiceId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [modalError, setModalError] = useState(null);
+  const [existingComponentSuggestionId, setExistingComponentSuggestionId] = useState(null);
   const [toast, setToast] = useState(null);
+
+  // Idempotency and Refresh states
+  const [idempotencyKey, setIdempotencyKey] = useState("");
+  const [refreshFailed, setRefreshFailed] = useState(false);
+
+  const generateUUID = () => {
+    if (typeof window !== "undefined" && window.crypto && window.crypto.randomUUID) {
+      return window.crypto.randomUUID();
+    }
+    return "idx-" + Math.random().toString(36).substring(2, 15) + "-" + Date.now();
+  };
 
   const showToast = (msg, type = "success") => {
     if (typeof msg === "object" && msg !== null && msg.text) {
@@ -127,6 +230,7 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
     setConfirmModalOpen(true);
   };
 
+  // Load Catalogs
   useEffect(() => {
     async function loadCatalogs() {
       try {
@@ -136,31 +240,258 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
           setTiposServicio(cData.tipos_servicio || cData.data?.tipos_servicio || []);
           setProductosList(cData.productos || cData.data?.productos || []);
           setMecanicosCatalog(cData.mecanicos || cData.data?.mecanicos || []);
+          setEstadosComponenteCatalog(cData.estados_componente || cData.data?.estados_componente || []);
+          setCategoriasComponenteCatalog(cData.categorias_componente || cData.data?.categorias_componente || []);
           if (cData.estados_servicio || cData.data?.estados_servicio) {
             setEstadosServicio(cData.estados_servicio || cData.data?.estados_servicio);
           }
         }
       } catch (err) {
-        console.error("Error loading catalogs in WorkOrderServicesView:", err);
+        console.error("Error loading catalogs:", err);
       }
     }
     loadCatalogs();
   }, []);
 
+  // Normalized Bike ID from order
+  const orderBicycleId = Number(
+    order?.bicicleta_id ??
+    order?.bicicleta?.bicicleta_id
+  );
+
+  // Load Bike Components when Item Modal opens in SERVICIO mode
+  const fetchBikeComponents = async (controllerSignal) => {
+    if (!Number.isInteger(orderBicycleId) || orderBicycleId <= 0) {
+      setBicycleComponents([]);
+      setComponentsError("No fue posible identificar la bicicleta asociada a esta orden.");
+      return;
+    }
+
+    setLoadingComponents(true);
+    setComponentsError("");
+
+    try {
+      const response = await fetch(`/api/crm/bicicletas/${orderBicycleId}/components`, {
+        signal: controllerSignal,
+        cache: "no-store"
+      });
+
+      const json = await response.json();
+
+      if (!response.ok) {
+        throw new Error(json?.message || "No pudimos cargar los componentes de la bicicleta.");
+      }
+
+      const rows = Array.isArray(json)
+        ? json
+        : Array.isArray(json?.data)
+        ? json.data
+        : Array.isArray(json?.components)
+        ? json.components
+        : [];
+
+      const normalized = rows
+        .map((component) => ({
+          bicicleta_componente_id: Number(component.bicicleta_componente_id ?? component.id),
+          bicicleta_id: Number(component.bicicleta_id ?? orderBicycleId),
+          categoria_componente_id: Number(component.categoria_componente_id ?? component.categoria_id),
+          categoria_nombre: component.categoria_nombre ?? component.categoria ?? "Componente",
+          marca: component.marca ?? "",
+          modelo: component.modelo ?? component.especificacion ?? "",
+          numero_serie: component.numero_serie ?? "",
+          estado_nombre: component.estado_nombre ?? "Sin estado",
+          nivel_desgaste: component.nivel_desgaste ?? 0,
+          porcentaje_salud: component.nivel_desgaste !== undefined
+            ? Math.max(0, 100 - Number(component.nivel_desgaste))
+            : 100,
+          activo: component.activo !== false
+        }))
+        .filter((component) =>
+          Number.isInteger(component.bicicleta_componente_id) &&
+          component.bicicleta_componente_id > 0 &&
+          component.activo
+        );
+
+      setBicycleComponents(normalized);
+    } catch (error) {
+      if (error.name !== "AbortError") {
+        setBicycleComponents([]);
+        setComponentsError(error.message);
+      }
+    } finally {
+      setLoadingComponents(false);
+    }
+  };
+
+  const existingCategoryIds = useMemo(() => {
+    const ids = new Set();
+    (bicycleComponents || []).forEach(c => {
+      const catId = Number(c.categoria_componente_id);
+      if (Number.isInteger(catId) && catId > 0) {
+        ids.add(catId);
+      }
+    });
+    if (pendingNewComponent?.categoria_componente_id) {
+      const pendingCatId = Number(pendingNewComponent.categoria_componente_id);
+      if (Number.isInteger(pendingCatId) && pendingCatId > 0) {
+        ids.add(pendingCatId);
+      }
+    }
+    return ids;
+  }, [bicycleComponents, pendingNewComponent]);
+
+  const availableCategoriesCount = (categoriasComponenteCatalog || []).filter(
+    (cat) => !existingCategoryIds.has(Number(cat.categoria_componente_id))
+  ).length;
+
+  const allCategoriesRegistered = (categoriasComponenteCatalog || []).length > 0 && availableCategoriesCount === 0;
+
+  useEffect(() => {
+    if (!itemModalOpen || itemType !== "SERVICIO") {
+      setShowInlineComponentForm(false);
+      setNewComponentErrors({});
+      return;
+    }
+
+    const controller = new AbortController();
+    fetchBikeComponents(controller.signal);
+
+    return () => controller.abort();
+  }, [itemModalOpen, itemType, orderBicycleId]);
+
+  // Derived Permission & Visibility Flags
+  const canCreateInlineComponent = !isEditing && itemType === "SERVICIO";
+
+  const normalizedItemType = String(itemType || "").trim().toUpperCase();
+  const isServiceMode = normalizedItemType === "SERVICIO" || normalizedItemType === "SERVICE";
+
+  const estadoFromCatalog = (estadosServicio || []).find(
+    (state) => Number(state.estado_orden_servicio_id) === Number(editingItem?.estado_servicio_id)
+  );
+
+  const effectiveStateCode = String(
+    editingItem?.estado_servicio_codigo ||
+    estadoFromCatalog?.codigo ||
+    (Number(editingItem?.estado_servicio_id) === 2 ? "EN_PROCESO" : Number(editingItem?.estado_servicio_id) === 5 ? "PAUSADO" : Number(editingItem?.estado_servicio_id) === 1 ? "PENDIENTE" : Number(editingItem?.estado_servicio_id) === 3 ? "COMPLETADO" : "")
+  ).trim().toUpperCase();
+
+  const tieneComponenteEdit =
+    Number.isInteger(Number(editingItem?.bicicleta_componente_id)) &&
+    Number(editingItem?.bicicleta_componente_id) > 0;
+
+  const puedeFinalizarEdit =
+    effectiveStateCode === "EN_PROCESO" ||
+    effectiveStateCode === "PAUSADO" ||
+    effectiveStateCode === "SUSPENDIDO";
+
+  const showFinalComponentStateField =
+    Boolean(isEditing) &&
+    isServiceMode &&
+    tieneComponenteEdit &&
+    puedeFinalizarEdit;
+  const canSetFinalComponentState = showFinalComponentStateField;
+
+  // Inline Component Form Handlers (LOCAL DRAFT ONLY, NO HTTP REQUEST)
+  const handleOpenInlineComponentForm = () => {
+    setShowInlineComponentForm(true);
+    setNewComponentErrors({});
+    setComponentCreationMessage("");
+    setNewComponentDraft({
+      categoria_componente_id: pendingNewComponent ? String(pendingNewComponent.categoria_componente_id || "") : "",
+      marca: pendingNewComponent ? pendingNewComponent.marca || "" : "",
+      estado_componente_id: pendingNewComponent ? String(pendingNewComponent.estado_componente_id || "") : "",
+      numero_serie: pendingNewComponent ? pendingNewComponent.numero_serie || "" : ""
+    });
+  };
+
+  const handleCancelInlineComponentForm = () => {
+    setShowInlineComponentForm(false);
+    setNewComponentErrors({});
+    setComponentCreationMessage("");
+  };
+
+  const handleSaveInlineComponentLocal = (e) => {
+    e.preventDefault();
+    setNewComponentErrors({});
+    setComponentCreationMessage("");
+
+    const catId = parseInt(newComponentDraft.categoria_componente_id, 10);
+    const stateId = parseInt(newComponentDraft.estado_componente_id, 10);
+    const marca = (newComponentDraft.marca || "").trim();
+    const serial = (newComponentDraft.numero_serie || "").trim();
+
+    const errs = {};
+    if (isNaN(catId) || catId <= 0) {
+      errs.categoria_componente_id = "Selecciona una categoría.";
+    } else if (existingCategoryIds.has(catId)) {
+      errs.categoria_componente_id = "Esta bicicleta ya tiene un componente registrado en la categoría seleccionada.";
+    }
+    if (isNaN(stateId) || stateId <= 0) {
+      errs.estado_componente_id = "Selecciona el estado actual del componente.";
+    }
+
+    if (Object.keys(errs).length > 0) {
+      setNewComponentErrors(errs);
+      return;
+    }
+
+    const catObj = categoriasComponenteCatalog.find(c => String(c.categoria_componente_id) === String(catId));
+    const stateObj = estadosComponenteCatalog.find(e => String(e.estado_componente_id) === String(stateId));
+
+    const draft = {
+      isNew: true,
+      temporaryId: `TEMP-${Date.now()}`,
+      categoria_componente_id: catId,
+      categoria_nombre: catObj?.nombre || "Componente",
+      estado_componente_id: stateId,
+      estado_nombre: stateObj?.nombre || "Nuevo",
+      nivel_desgaste: stateObj?.nivel_desgaste ?? 0,
+      porcentaje_salud: stateObj?.nivel_desgaste !== undefined ? Math.max(0, 100 - Number(stateObj.nivel_desgaste)) : 100,
+      marca,
+      numero_serie: serial
+    };
+
+    setPendingNewComponent(draft);
+    setFormBicicletaComponenteId("");
+    setShowInlineComponentForm(false);
+  };
+
+  const handleEditPendingComponent = () => {
+    if (!pendingNewComponent) return;
+    setNewComponentDraft({
+      categoria_componente_id: String(pendingNewComponent.categoria_componente_id || ""),
+      estado_componente_id: String(pendingNewComponent.estado_componente_id || ""),
+      marca: pendingNewComponent.marca || "",
+      numero_serie: pendingNewComponent.numero_serie || ""
+    });
+    setShowInlineComponentForm(true);
+  };
+
+  const handleRemovePendingComponent = () => {
+    setPendingNewComponent(null);
+    setShowInlineComponentForm(false);
+  };
+
   const getServId = (s) => (s ? Number(s.servicio_id ?? s.orden_servicio_id) : null);
 
-  // Auto-select initial service for detail side panel
-  useEffect(() => {
-    if (services.length > 0 && (!selectedServiceId || !services.some(s => getServId(s) === Number(selectedServiceId)))) {
-      setSelectedServiceId(getServId(services[0]));
-    }
-  }, [services]);
+  // Format Date as "dia/mes/año hora:minutos a. m. / p. m." (e.g. "19/08/2026 12:46 a. m.")
+  const formatDate = (dateStr) => {
+    if (!dateStr) return "—";
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return "—";
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const year = d.getFullYear();
+    let hours = d.getHours();
+    const minutes = String(d.getMinutes()).padStart(2, "0");
+    const ampm = hours >= 12 ? "p. m." : "a. m.";
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    const hoursStr = String(hours).padStart(2, "0");
+    return `${day}/${month}/${year} ${hoursStr}:${minutes} ${ampm}`;
+  };
 
-  const activeSelectedService = services.find(s => getServId(s) === Number(selectedServiceId)) || services[0] || null;
-
-  // Live Timer Counter (HH:MM:SS) reading cronometro contract
-  const [liveSeconds, setLiveSeconds] = useState(0);
-
+  // Format Timer HH:MM:SS
   const formatSecondsToHHMMSS = (totalSec) => {
     const s = Math.max(0, Math.floor(Number(totalSec) || 0));
     const h = Math.floor(s / 3600);
@@ -169,762 +500,535 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
     return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
   };
 
-  useEffect(() => {
-    const cron = activeSelectedService?.cronometro;
-    if (!cron) {
-      setLiveSeconds(0);
-      return;
+  // Compute live elapsed seconds for a service row
+  const getElapsedSecondsForService = (svc) => {
+    const cron = svc?.cronometro;
+    const segundosAcumulados = Number(svc?.tiempo_transcurrido ?? cron?.segundos_acumulados ?? 0);
+
+    if (cron?.activo && cron?.fecha_inicio_sesion) {
+      const startMs = new Date(cron.fecha_inicio_sesion).getTime();
+      const elapsedSec = Math.max(0, Math.floor((nowTimestamp - startMs) / 1000));
+      return segundosAcumulados + elapsedSec;
     }
 
-    const segundosAcumulados = Number(cron.segundos_acumulados || 0);
-
-    if (!cron.activo || !cron.fecha_inicio_sesion) {
-      setLiveSeconds(segundosAcumulados);
-      return;
-    }
-
-    const startMs = new Date(cron.fecha_inicio_sesion).getTime();
-
-    const updateTimer = () => {
-      const elapsedSec = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
-      setLiveSeconds(segundosAcumulados + elapsedSec);
-    };
-
-    updateTimer();
-    const intervalId = setInterval(updateTimer, 1000);
-
-    return () => clearInterval(intervalId);
-  }, [
-    activeSelectedService?.servicio_id,
-    activeSelectedService?.cronometro?.activo,
-    activeSelectedService?.cronometro?.fecha_inicio_sesion,
-    activeSelectedService?.cronometro?.segundos_acumulados
-  ]);
-
-  // Calculate KPIs
-  const kpiPendientes = services.filter(s => s.estado_servicio_id === 1 || s.estado_servicio_codigo === "PENDIENTE").length;
-  const kpiAprobando = services.filter(s => s.estado_aprobacion_id === 1 || s.estado_aprobacion_codigo === "PENDIENTE").length;
-  const kpiEnProceso = services.filter(s => s.estado_servicio_id === 2 || s.estado_servicio_codigo === "EN_PROCESO").length;
-  const kpiCompletados = services.filter(s => s.estado_servicio_id === 3 || s.estado_servicio_codigo === "COMPLETADO").length;
-
-  // Calculate Order Total
-  const totalOrdenCalculado = services.reduce((sum, s) => {
-    const pBase = Number(s.precio_acordado || s.precio_unitario || 0);
-    const prodSum = (s.productos || []).reduce((pSum, p) => pSum + Number(p.subtotal || 0), 0);
-    const moSum = (s.mano_obra || []).reduce((mSum, m) => mSum + Number(m.subtotal || (Number(m.horas_trabajadas || 1) * Number(m.costo_hora || 0))), 0);
-    return sum + pBase + prodSum + moSum;
-  }, 0);
-
-  // Helper to format worked time string
-  const getWorkedTimeString = (manoObraList = []) => {
-    const totalMinutes = manoObraList.reduce((sum, m) => {
-      if (m.minutos_trabajados !== undefined && m.minutos_trabajados !== null) {
-        return sum + Number(m.minutos_trabajados);
-      }
-      return sum + Math.round((Number(m.horas_trabajadas) || 0) * 60);
-    }, 0);
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = Math.round(totalMinutes % 60);
-    const hStr = String(hours).padStart(2, "0");
-    const mStr = String(minutes).padStart(2, "0");
-    return `${hStr}:${mStr}:00`;
+    return Number(segundosAcumulados);
   };
 
-  // Add Service Handler
-  const handleAddService = async (e) => {
-    e.preventDefault();
-    if (!newTipoServicioId) {
-      setModalError("Por favor selecciona un tipo de servicio.");
-      return;
-    }
-    const parsedPrecio = parseFloat(newPrecioAcordado);
-    if (newPrecioAcordado !== "" && (isNaN(parsedPrecio) || parsedPrecio < 0)) {
-      setModalError("El precio acordado debe ser un monto válido no negativo.");
-      return;
+  // Products array from order
+  const orderProducts = order?.productos || [];
+
+
+
+  const isOrderRecibida = Number(order?.estado_orden_id || order?.estado_id || 1) === 1;
+
+  // Open Unified Modal for Add Item
+  const handleOpenAddItem = () => {
+    setIsEditing(false);
+    setEditingItem(null);
+    setItemType("SERVICIO");
+    setFormTipoServicioId("");
+    setFormBicicletaComponenteId("");
+    setFormNuevoEstadoComponenteId("");
+    setFormProductoId("");
+    setFormCantidad("1");
+    setFormPrecioUnitario("");
+    setFormDescuentoPct("0");
+    setFormObservaciones("");
+    setFormConfirmAdicional(false);
+    setFormMotivoAdicional("");
+    setPendingNewComponent(null);
+    setShowInlineComponentForm(false);
+    setComponentCreationMessage("");
+    setModalError(null);
+    setIdempotencyKey(generateUUID());
+    setRefreshFailed(false);
+    setItemModalOpen(true);
+  };
+
+  // Open Unified Modal for Edit Item
+  const handleOpenEditItem = (item, type = "SERVICIO") => {
+    const isService = String(type || "").trim().toUpperCase() === "SERVICIO" || String(type || "").trim().toUpperCase() === "SERVICE";
+
+    const normalizedEditingItem = isService ? {
+      ...item,
+      servicio_id: Number(item.servicio_id ?? item.orden_servicio_id),
+      bicicleta_componente_id:
+        item.bicicleta_componente_id == null
+          ? null
+          : Number(item.bicicleta_componente_id),
+      estado_servicio_id: Number(item.estado_servicio_id),
+      estado_servicio_codigo: String(
+        item.estado_servicio_codigo ||
+        item.estado_codigo ||
+        item.codigo_estado ||
+        (Number(item.estado_servicio_id) === 2 ? "EN_PROCESO" : Number(item.estado_servicio_id) === 5 ? "PAUSADO" : Number(item.estado_servicio_id) === 1 ? "PENDIENTE" : Number(item.estado_servicio_id) === 3 ? "COMPLETADO" : "")
+      ).trim().toUpperCase(),
+      estado_servicio_nombre: item.estado_servicio_nombre || ""
+    } : { ...item };
+
+    setIsEditing(true);
+    setEditingItem(normalizedEditingItem);
+    setItemType(isService ? "SERVICIO" : "PRODUCTO");
+    setModalError(null);
+    setPendingNewComponent(null);
+    setShowInlineComponentForm(false);
+    setComponentCreationMessage("");
+
+    if (isService) {
+      setFormTipoServicioId(String(item.tipo_servicio_id || ""));
+      setFormBicicletaComponenteId(item.bicicleta_componente_id ? String(item.bicicleta_componente_id) : "");
+      setFormNuevoEstadoComponenteId(item.nuevo_estado_componente_id ? String(item.nuevo_estado_componente_id) : "");
+      setFormCantidad(String(item.cantidad || "1"));
+      setFormPrecioUnitario(String(item.precio_unitario || item.precio_acordado || ""));
+      setFormDescuentoPct(String(item.porcentaje_descuento || "0"));
+      setFormObservaciones(item.observacion_tecnica || item.observaciones || "");
+    } else {
+      setFormProductoId(String(item.producto_id || ""));
+      setFormCantidad(String(item.cantidad || "1"));
+      setFormPrecioUnitario(String(item.precio_unitario || ""));
+      setFormDescuentoPct(String(item.porcentaje_descuento || "0"));
+      setFormObservaciones(item.observacion || item.observaciones || "");
     }
 
-    const orderStateId = Number(order?.estado_orden_id || order?.estado_id || 0);
-    if (orderStateId === 5) {
-      if (!newMecanicoId) {
-        setModalError("Para agregar un servicio a una orden en Reparación, debes seleccionar un mecánico asignado.");
-        return;
-      }
-      if (!confirmAdicional || !motivoAdicional.trim()) {
-        setModalError("Para agregar un servicio adicional en una orden en Reparación se requiere confirmación explícita y motivo obligatorio.");
-        return;
-      }
+    setItemModalOpen(true);
+  };
+
+  // Unified Item Form Submission
+  const handleSubmitItemForm = async (e) => {
+    e.preventDefault();
+    setModalError(null);
+
+    const parsedQty = parseFloat(formCantidad);
+    if (isNaN(parsedQty) || parsedQty <= 0) {
+      setModalError("La cantidad debe ser un número positivo.");
+      return;
     }
 
     setSubmitting(true);
-    setModalError(null);
+
     try {
-      const res = await fetch(`/api/taller/ordenes/${ordenId}/servicios`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          accion: "AGREGAR_SERVICIO",
-          tipo_servicio_id: parseInt(newTipoServicioId, 10),
-          mecanico_usuario_id: newMecanicoId ? parseInt(newMecanicoId, 10) : null,
-          usuario_id: newMecanicoId ? parseInt(newMecanicoId, 10) : null,
-          precio_unitario: newPrecioAcordado !== "" ? parsedPrecio : null,
-          precio_acordado: newPrecioAcordado !== "" ? parsedPrecio : null,
-          observaciones: newObservaciones,
-          confirmar: confirmAdicional,
-          motivo: motivoAdicional,
-          confirmar_servicio_adicional: confirmAdicional,
-          motivo_servicio_adicional: motivoAdicional
-        })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        if (data.error === "CONFIRMATION_REQUIRED") {
-          throw new Error("Para agregar un servicio adicional en una orden en Reparación se requiere confirmación explícita y motivo obligatorio.");
+      if (itemType === "SERVICIO") {
+        if (!formTipoServicioId) {
+          setModalError("Debes seleccionar un tipo de servicio.");
+          setSubmitting(false);
+          return;
         }
-        throw new Error(data.message || data.error || "Error al agregar servicio a la orden.");
+
+        const url = isEditing
+          ? `/api/taller/ordenes/${ordenId}/servicios/${getServId(editingItem)}`
+          : `/api/taller/ordenes/${ordenId}/servicios`;
+        const method = isEditing ? "PUT" : "POST";
+
+        let payload;
+        if (!isEditing) {
+          // Check if inline component form is open with draft values filled in
+          let effectiveNewComponent = pendingNewComponent;
+
+          if (!effectiveNewComponent && showInlineComponentForm) {
+            const catId = parseInt(newComponentDraft.categoria_componente_id, 10);
+            const estId = parseInt(newComponentDraft.estado_componente_id, 10);
+            const marca = (newComponentDraft.marca || "").trim();
+            const serial = (newComponentDraft.numero_serie || "").trim();
+
+            if (isNaN(catId) || catId <= 0) {
+              setModalError("Selecciona una categoría para el nuevo componente.");
+              setSubmitting(false);
+              return;
+            }
+            if (isNaN(estId) || estId <= 0) {
+              setModalError("Selecciona el estado de uso del nuevo componente.");
+              setSubmitting(false);
+              return;
+            }
+
+            effectiveNewComponent = {
+              categoria_componente_id: catId,
+              estado_componente_id: estId,
+              marca: marca || null,
+              numero_serie: serial || null
+            };
+          }
+
+          if (effectiveNewComponent) {
+            payload = {
+              tipo_servicio_id: parseInt(formTipoServicioId, 10),
+              cantidad: parsedQty,
+              porcentaje_descuento: parseFloat(formDescuentoPct || "0"),
+              observaciones: formObservaciones,
+              observacion_tecnica: formObservaciones,
+              confirmar: true,
+              motivo: formMotivoAdicional,
+              bicicleta_componente_id: null,
+              nuevo_componente: {
+                categoria_componente_id: parseInt(effectiveNewComponent.categoria_componente_id, 10),
+                estado_componente_id: parseInt(effectiveNewComponent.estado_componente_id, 10),
+                marca: effectiveNewComponent.marca ? String(effectiveNewComponent.marca).trim() : null,
+                numero_serie: effectiveNewComponent.numero_serie ? String(effectiveNewComponent.numero_serie).trim() : null
+              }
+            };
+          } else {
+            payload = {
+              tipo_servicio_id: parseInt(formTipoServicioId, 10),
+              cantidad: parsedQty,
+              porcentaje_descuento: parseFloat(formDescuentoPct || "0"),
+              observaciones: formObservaciones,
+              observacion_tecnica: formObservaciones,
+              confirmar: true,
+              motivo: formMotivoAdicional,
+              bicicleta_componente_id: formBicicletaComponenteId ? parseInt(formBicicletaComponenteId, 10) : null,
+              nuevo_componente: null
+            };
+          }
+        } else {
+          // EDIT SERVICE PAYLOAD
+          payload = {
+            tipo_servicio_id: parseInt(formTipoServicioId, 10),
+            bicicleta_componente_id: formBicicletaComponenteId ? parseInt(formBicicletaComponenteId, 10) : null,
+            nuevo_estado_componente_id: canSetFinalComponentState && formNuevoEstadoComponenteId ? parseInt(formNuevoEstadoComponenteId, 10) : null,
+            cantidad: parsedQty,
+            porcentaje_descuento: parseFloat(formDescuentoPct || "0"),
+            observaciones: formObservaciones,
+            observacion_tecnica: formObservaciones
+          };
+        }
+
+        const reqHeaders = { "Content-Type": "application/json" };
+        if (method === "POST" && itemType === "SERVICIO") {
+          reqHeaders["x-idempotency-key"] = idempotencyKey;
+        }
+
+        const res = await fetch(url, {
+          method,
+          headers: reqHeaders,
+          body: JSON.stringify(payload)
+        });
+
+        const json = await res.json().catch(() => null);
+
+        console.log({
+          mode: isEditing ? "EDIT" : "CREATE",
+          itemType,
+          url,
+          requestBody: payload,
+          status: res.status,
+          responseBody: json
+        });
+
+        if (!isEditing) {
+          if (json?.warning || json?.code === "REQUIRES_CONFIRMATION" || json?.confirmRequired) {
+            setFormConfirmAdicional(true);
+            setModalError(json.message || "La orden de trabajo ya está en proceso. Haz clic en 'AGREGAR SERVICIO' nuevamente para confirmar.");
+            setSubmitting(false);
+            return;
+          }
+
+          const isHttp201 = res.status === 201 && json?.success === true;
+          const rawServId = json?.data?.servicio_id ?? json?.data?.orden_servicio_id ?? json?.servicio_id ?? json?.orden_servicio_id;
+          const returnedServiceId = Number(rawServId);
+          const hasValidServiceId = Number.isInteger(returnedServiceId) && returnedServiceId > 0;
+          const hasServiceCode = Boolean(json?.data?.codigo_servicio || json?.codigo_servicio);
+
+          let isContractValid = isHttp201 && hasValidServiceId && hasServiceCode;
+
+          if (pendingNewComponent) {
+            const createdCompId = Number(json?.data?.bicicleta_componente_id);
+            const compCreatedFlag = json?.data?.componente_creado === true;
+            if (!compCreatedFlag || !Number.isInteger(createdCompId) || createdCompId <= 0) {
+              isContractValid = false;
+            }
+          }
+
+          if (!isContractValid) {
+            if (res.status === 409 || json?.error === "BICYCLE_COMPONENT_CATEGORY_EXISTS" || json?.error === "DUPLICATE_COMPONENT_SERIAL") {
+              if (json?.error === "BICYCLE_COMPONENT_CATEGORY_EXISTS") {
+                setModalError(json.message || "Esta bicicleta ya tiene un componente registrado en la categoría seleccionada.");
+                if (json.data?.bicicleta_componente_id) {
+                  setExistingComponentSuggestionId(String(json.data.bicicleta_componente_id));
+                }
+              } else {
+                setModalError(json.message || "Ya existe un componente con este número de serie.");
+              }
+              await fetchBikeComponents();
+            } else {
+              setModalError(json?.message || json?.error || `Contrato o respuesta inválida al guardar el servicio. HTTP ${res.status}`);
+            }
+            setSubmitting(false);
+            return;
+          }
+        } else {
+          if (!res.ok || json?.success === false) {
+            setModalError(json?.message || json?.error || `No fue posible actualizar el servicio. HTTP ${res.status}`);
+            setSubmitting(false);
+            return;
+          }
+        }
+      } else {
+        // REPUESTO DIRECT TO ORDER
+        if (!formProductoId) {
+          setModalError("Debes seleccionar un repuesto del catálogo.");
+          setSubmitting(false);
+          return;
+        }
+
+        // Validate stock available
+        const selectedProd = productosList.find(p => String(p.producto_id) === String(formProductoId));
+        if (selectedProd && selectedProd.stock_disponible !== undefined) {
+          const stock = Number(selectedProd.stock_disponible);
+          if (parsedQty > stock) {
+            setModalError(`La cantidad solicitada (${parsedQty}) supera la existencia disponible (${stock} ${selectedProd.unidad_medida || "UND"}).`);
+            setSubmitting(false);
+            return;
+          }
+        }
+
+        const url = isEditing
+          ? `/api/taller/ordenes/${ordenId}/productos/${editingItem.orden_producto_id}`
+          : `/api/taller/ordenes/${ordenId}/productos`;
+        const method = isEditing ? "PUT" : "POST";
+
+        const payload = {
+          producto_id: parseInt(formProductoId, 10),
+          cantidad: parsedQty,
+          observacion: formObservaciones
+        };
+
+        const res = await fetch(url, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        const json = await res.json().catch(() => null);
+
+        console.log({
+          mode: isEditing ? "EDIT" : "CREATE",
+          itemType,
+          url,
+          requestBody: payload,
+          status: res.status,
+          responseBody: json
+        });
+
+        if (!res.ok || json?.success === false) {
+          setModalError(json?.message || json?.error || `No fue posible guardar el repuesto. HTTP ${res.status}`);
+          setSubmitting(false);
+          return;
+        }
+
+        // Validate Returned Product ID
+        const returnedProdId = Number(json?.data?.orden_producto_id ?? json?.data?.producto_id ?? json?.orden_producto_id);
+        if (!isEditing && (!returnedProdId || returnedProdId <= 0)) {
+          setModalError("Error contractual: La API no devolvió un ID de repuesto válido.");
+          setSubmitting(false);
+          return;
+        }
       }
 
-      setAddServiceModalOpen(false);
-      setNewTipoServicioId("");
-      setNewMecanicoId("");
-      setNewPrecioAcordado("");
-      setNewObservaciones("");
-      setConfirmAdicional(false);
-      setMotivoAdicional("");
-      setModalError(null);
-      showToast("Servicio agregado exitosamente.");
-      onRefresh();
+      // Await page refresh to update order state before closing modal
+      if (onRefresh) {
+        try {
+          await onRefresh();
+        } catch (refreshErr) {
+          if (!isEditing && itemType === "SERVICIO") {
+            setRefreshFailed(true);
+            setModalError("El servicio fue creado correctamente, pero no se pudo actualizar la vista.");
+            setSubmitting(false);
+            return;
+          } else {
+            setModalError("El ítem se guardó pero ocurrió un error al actualizar la vista. Por favor recarga la página.");
+            setSubmitting(false);
+            return;
+          }
+        }
+      }
+
+      setPendingNewComponent(null);
+      setShowInlineComponentForm(false);
+      setExistingComponentSuggestionId(null);
+      setItemModalOpen(false);
+      showSuccessToast(
+        isEditing
+          ? itemType === "PRODUCTO" ? "Repuesto actualizado exitosamente." : "Servicio actualizado exitosamente."
+          : itemType === "PRODUCTO" ? "Repuesto agregado a la orden exitosamente." : "Servicio agregado correctamente."
+      );
+      fetchBikeComponents();
     } catch (err) {
-      setModalError(err.message);
+      setModalError(err?.message || "Error de conexión al procesar la solicitud.");
     } finally {
       setSubmitting(false);
     }
   };
 
-  // Open Edit Service Modal
-  const openEditServiceModal = (svc) => {
-    const mecId = svc.mecanico_usuario_id || svc.usuario_id;
-    setEditingService(svc);
-    setNewMecanicoId(mecId ? String(mecId) : "");
-    setNewPrecioAcordado(svc.precio_acordado !== null && svc.precio_acordado !== undefined ? String(svc.precio_acordado) : String(svc.precio_unitario || ""));
-    setNewObservaciones(svc.observacion_tecnica || svc.observaciones || "");
-    setEditConfirmReasignar(false);
-    setEditMotivoReasignar("");
-    setModalError(null);
-    setEditServiceModalOpen(true);
-  };
-
-  // Update Service Handler
-  const handleUpdateService = async (e) => {
-    e.preventDefault();
-    if (!editingService) return;
-
-    const targetServId = getServId(editingService);
-    if (!targetServId) {
-      setModalError("ID de servicio no válido.");
-      return;
-    }
-
-    const parsedPrecio = parseFloat(newPrecioAcordado);
-    if (newPrecioAcordado !== "" && (isNaN(parsedPrecio) || parsedPrecio < 0)) {
-      setModalError("El precio acordado debe ser un monto válido no negativo.");
-      return;
-    }
-
-    const initialMecId = editingService.mecanico_usuario_id || editingService.usuario_id;
-    const selectedMecId = newMecanicoId ? parseInt(newMecanicoId, 10) : null;
-    const isMecChanged = selectedMecId !== (initialMecId ? Number(initialMecId) : null);
-    const orderStateId = Number(order?.estado_orden_id || order?.estado_id || 0);
-
-    if (isMecChanged && orderStateId === 5 && Boolean(initialMecId)) {
-      if (!editConfirmReasignar || !editMotivoReasignar.trim()) {
-        setModalError("Para reasignar el mecánico de un servicio en una orden en Reparación se requiere confirmación explícita y motivo obligatorio.");
-        return;
-      }
-    }
-
-    setSubmitting(true);
-    setModalError(null);
-    try {
-      const payload = {
-        precio_acordado: newPrecioAcordado !== "" ? parsedPrecio : null,
-        precio_unitario: newPrecioAcordado !== "" ? parsedPrecio : null,
-        observaciones: newObservaciones,
-        observacion_tecnica: newObservaciones
-      };
-
-      if (isMecChanged) {
-        payload.usuario_id = selectedMecId;
-        payload.mecanico_usuario_id = selectedMecId;
-        if (orderStateId === 5 && Boolean(initialMecId)) {
-          payload.confirmar_reasignacion = editConfirmReasignar;
-          payload.motivo_reasignacion = editMotivoReasignar.trim();
-        }
-      }
-
-      const res = await fetch(`/api/taller/ordenes/${ordenId}/servicios/${targetServId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-
-      let data = {};
-      try {
-        const text = await res.text();
-        data = text ? JSON.parse(text) : {};
-      } catch (err) {
-        data = {};
-      }
-
-      if (!res.ok) {
-        const msg = res.status === 403 || data.error === 'FORBIDDEN'
-          ? 'No tienes permiso para realizar esta acción.'
-          : (data.message || data.error || 'Error al actualizar servicio.');
-        throw new Error(msg);
-      }
-
-      setEditServiceModalOpen(false);
-      setEditingService(null);
-      showSuccessToast("Servicio actualizado correctamente.");
-      onRefresh();
-    } catch (err) {
-      setModalError(err.message);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // Single Unified Handler for Service Operational Actions
-  const handleExecuteServiceAction = async (svc, actionName, extraPayload = {}) => {
-    if (!svc) return;
-    const sId = getServId(svc) || selectedServiceId;
-    if (!sId) return;
-
-    const currentOrderState = Number(order?.estado_orden_id || order?.estado_id || 0);
-    if (currentOrderState === 1) {
+  // Handle Operative Action Execution (Iniciar, Pausar, Reanudar, Finalizar)
+  const executeOperativeAction = async (svc, actionCode, extraBody = {}) => {
+    if (isOrderRecibida) {
       showErrorToast("Primero debes iniciar la reparación de la orden.");
       return;
     }
 
-    setSubmitting(true);
+    const sId = getServId(svc);
     setProcessingServiceId(sId);
 
-    let targetStateId = null;
-    if (actionName === "INICIAR_SERVICIO" || actionName === "REANUDAR_SERVICIO") targetStateId = 2;
-    else if (actionName === "PAUSAR_SERVICIO") targetStateId = 5;
-    else if (actionName === "FINALIZAR_SERVICIO") targetStateId = 3;
-
     try {
+      let endpointAction = actionCode;
+      if (actionCode === "INICIAR") endpointAction = "INICIAR_SERVICIO";
+      if (actionCode === "PAUSAR") endpointAction = "PAUSAR_SERVICIO";
+      if (actionCode === "REANUDAR") endpointAction = "REANUDAR_SERVICIO";
+      if (actionCode === "FINALIZAR") endpointAction = "FINALIZAR_SERVICIO";
+
       const res = await fetch(`/api/taller/ordenes/${ordenId}/servicios/${sId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          accion: actionName,
-          estado_orden_servicio_id: targetStateId,
-          estado_servicio_id: targetStateId,
-          ...extraPayload
+          accion: endpointAction,
+          estado_codigo: actionCode,
+          ...extraBody
         })
       });
-      const data = await res.json();
+
+      const json = await res.json();
       if (!res.ok) {
-        if (res.status === 401) {
-          if (typeof window !== "undefined" && window.location.pathname !== "/login") {
-            window.location.replace("/login");
-          }
-          return;
-        }
-        if (res.status === 403) {
-          showErrorToast("No tienes permiso para realizar esta acción.");
-          return;
-        }
         if (res.status === 409) {
-          showErrorToast(data.message || "Transición de estado no permitida.");
-          return;
+          showErrorToast(json.message || "Primero debes iniciar la reparación de la orden.");
+        } else if (res.status === 400 && json.code === "COMPONENT_RESULT_STATUS_REQUIRED") {
+          setCompleteTargetService(svc);
+          setSelectedFinalStateId(String(svc.nuevo_estado_componente_id || ""));
+          setCompleteComponentModalOpen(true);
+        } else {
+          showErrorToast(json.message || json.error || "No se pudo actualizar el servicio.");
         }
-        if (res.status === 422) {
-          showErrorToast(data.message || "Asigna un mecánico antes de iniciar el servicio.");
-          return;
-        }
-        showErrorToast(data.message || data.error || "Error al actualizar el servicio.");
         return;
       }
 
-      let successMsg = "Estado del servicio actualizado.";
-      if (actionName === "INICIAR_SERVICIO") successMsg = "Servicio iniciado correctamente.";
-      else if (actionName === "PAUSAR_SERVICIO") successMsg = "Trabajo pausado y tiempo acumulado.";
-      else if (actionName === "REANUDAR_SERVICIO") successMsg = "Trabajo reanudado correctamente.";
-      else if (actionName === "FINALIZAR_SERVICIO") successMsg = "Servicio finalizado exitosamente.";
-
-      showSuccessToast(successMsg);
+      showSuccessToast(json.message || "Estado del servicio actualizado correctamente.");
+      fetchBikeComponents();
       if (onRefresh) onRefresh();
     } catch (err) {
-      showErrorToast(err.message || "Error al actualizar el servicio.");
+      showErrorToast("Error de conexión al comunicarse con el servidor.");
     } finally {
-      setSubmitting(false);
       setProcessingServiceId(null);
     }
   };
 
-  // Unified Handler for Finishing a Service (used by row button and side panel)
-  const handleFinishServiceClick = (svc) => {
-    if (!svc) return;
-    const sId = getServId(svc);
-    const orderStateId = Number(order?.estado_orden_id || order?.estado_id || 5);
-    const servStateId = Number(svc.estado_servicio_id);
-    const hasMechanic = Boolean(svc.mecanico_usuario_id || svc.usuario_id);
-
-    if (orderStateId === 8) {
-      showErrorToast("La orden se encuentra Entregada y está en solo lectura.");
-      return;
-    }
-    if (servStateId !== 2) {
-      showErrorToast("El servicio debe estar En Proceso para poder finalizarlo.");
-      return;
-    }
-    if (!hasMechanic) {
-      showErrorToast("Debes asignar un mecánico antes de finalizar el servicio.");
+  // Handle Finish Service Trigger
+  const handleFinishServiceTrigger = (svc) => {
+    if (isOrderRecibida) {
+      showErrorToast("Primero debes iniciar la reparación de la orden.");
       return;
     }
 
-    // Check if labor/time exists
-    const laborCount = svc.mano_obra ? svc.mano_obra.length : 0;
-    if (laborCount === 0) {
-      setFinishNoLaborService(svc);
-      setFinishNoLaborMotivo("");
-      setFinishNoLaborConfirm(false);
-      setFinishNoLaborModalOpen(true);
-      return;
-    }
+    if (svc.bicicleta_componente_id || svc.componente) {
+      const currentCompName = svc.componente
+        ? `${svc.componente.categoria} (${svc.componente.marca} ${svc.componente.modelo})`
+        : "Componente afectado";
 
-    // Positive Finish Confirmation modal
-    askConfirmation(
-      "Finalizar servicio",
-      `¿Confirmas que el servicio "${svc.tipo_servicio_nombre}" fue terminado?\n\nDespués de finalizar quedará en modo de solo lectura.`,
-      () => executeFinishService(sId),
-      "finish"
-    );
+      if (!svc.nuevo_estado_componente_id) {
+        setCompleteTargetService(svc);
+        setSelectedFinalStateId("");
+        setCompleteComponentModalOpen(true);
+        return;
+      }
+
+      const estNuevoObj = estadosComponenteCatalog.find(e => String(e.estado_componente_id) === String(svc.nuevo_estado_componente_id));
+      const estNuevoNombre = estNuevoObj?.nombre || svc.nuevo_estado_componente_nombre || "Nuevo Estado";
+      const estActualNombre = svc.componente?.estado_actual_nombre || "Actual";
+
+      askConfirmation(
+        "Finalizar Servicio con Componente",
+        `Al finalizar, el componente '${currentCompName}' cambiará de '${estActualNombre}' a '${estNuevoNombre}'. ¿Deseas marcar este servicio como completado?`,
+        () => executeOperativeAction(svc, "FINALIZAR"),
+        "finish"
+      );
+    } else {
+      askConfirmation(
+        "Finalizar Servicio",
+        `¿Deseas marcar el servicio '${svc.tipo_servicio_nombre}' como completado?`,
+        () => executeOperativeAction(svc, "FINALIZAR"),
+        "finish"
+      );
+    }
   };
 
-  const executeFinishService = async (sId, extraPayload = {}) => {
-    const targetService = services.find(s => getServId(s) === Number(sId)) || activeSelectedService;
-    await handleExecuteServiceAction(targetService, "FINALIZAR_SERVICIO", extraPayload);
-    setFinishNoLaborModalOpen(false);
-    setFinishNoLaborService(null);
-  };
-
-  const handleFinishNoLaborSubmit = (e) => {
+  // Submit missing component status on finish
+  const handleSaveCompleteComponentStatus = async (e) => {
     e.preventDefault();
-    if (!finishNoLaborService) return;
-    if (!finishNoLaborConfirm || !finishNoLaborMotivo.trim()) {
-      setModalError("Para finalizar un servicio sin mano de obra se requiere confirmación explícita y motivo obligatorio.");
+    if (!selectedFinalStateId) {
+      showErrorToast("Por favor selecciona el estado resultante del componente.");
       return;
     }
-    const sId = getServId(finishNoLaborService);
-    executeFinishService(sId, {
-      confirmar_sin_mano_obra: true,
-      motivo_sin_mano_obra: finishNoLaborMotivo.trim()
+    if (!completeTargetService) return;
+
+    setCompleteComponentModalOpen(false);
+    await executeOperativeAction(completeTargetService, "FINALIZAR", {
+      nuevo_estado_componente_id: parseInt(selectedFinalStateId, 10)
     });
   };
 
-  // Form inputs - Reopen Service
-  const [reopenModalOpen, setReopenModalOpen] = useState(false);
-  const [reopenService, setReopenService] = useState(null);
-  const [reopenMotivo, setReopenMotivo] = useState("");
-
-  const openReopenServiceModal = (svc) => {
-    setReopenService(svc);
-    setReopenMotivo("");
-    setModalError(null);
-    setReopenModalOpen(true);
-  };
-
-  const handleReopenServiceSubmit = async (e) => {
-    e.preventDefault();
-    if (!reopenService || !reopenMotivo.trim()) {
-      setModalError("Indica obligatoriamente el motivo de la reapertura.");
-      return;
-    }
-    setSubmitting(true);
-    setModalError(null);
-    try {
-      const sId = getServId(reopenService);
-      const res = await fetch(`/api/taller/ordenes/${ordenId}/servicios/${sId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          estado_orden_servicio_id: 2,
-          estado_servicio_id: 2,
-          motivo_reapertura: reopenMotivo,
-          motivo: reopenMotivo
-        })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        const msg = res.status === 403 || data.error === 'FORBIDDEN'
-          ? 'No tienes permiso para realizar esta acción.'
-          : (data.message || data.error || 'Error al reabrir el servicio.');
-        throw new Error(msg);
-      }
-      setReopenModalOpen(false);
-      setReopenService(null);
-      setReopenMotivo("");
-      showToast("Servicio reabierto exitosamente.");
-      onRefresh();
-    } catch (err) {
-      setModalError(err.message);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // Form inputs - Reassign Mechanic
-  const [reassignModalOpen, setReassignModalOpen] = useState(false);
-  const [reassignServId, setReassignServId] = useState(null);
-  const [reassignNewMecId, setReassignNewMecId] = useState("");
-  const [reassignMotivo, setReassignMotivo] = useState("");
-  const [reassignConfirm, setReassignConfirm] = useState(false);
-
-  // Mechanic Direct Change Handler
-  const handleMechanicChange = async (servicioId, newMecId) => {
-    const targetServ = services.find((s) => getServId(s) === Number(servicioId));
-    const currentMecId = targetServ?.mecanico_usuario_id || targetServ?.usuario_id;
-    const isReassign = currentMecId && Number(currentMecId) > 0 && newMecId && Number(newMecId) !== Number(currentMecId);
-
-    // If reassigning an already assigned mechanic while order is in REPARACION (5), open confirmation modal
-    if (Number(order?.estado_orden_id || order?.estado_id || 0) === 5 && isReassign) {
-      setReassignServId(servicioId);
-      setReassignNewMecId(newMecId);
-      setReassignMotivo("");
-      setReassignConfirm(false);
-      setModalError(null);
-      setReassignModalOpen(true);
-      return;
-    }
-
-    try {
-      const res = await fetch(`/api/taller/ordenes/${ordenId}/servicios/${servicioId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          usuario_id: newMecId ? parseInt(newMecId, 10) : null,
-          mecanico_usuario_id: newMecId ? parseInt(newMecId, 10) : null
-        })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        const msg = res.status === 403 || data.error === 'FORBIDDEN'
-          ? 'No tienes permiso para realizar esta acción.'
-          : (data.message || data.error || 'Error al asignar mecánico.');
-        showErrorToast(msg);
-        return;
-      }
-      showSuccessToast("Mecánico asignado correctamente.");
-      onRefresh();
-    } catch (err) {
-      showErrorToast(err.message);
-    }
-  };
-
-  const handleConfirmReassignMechanic = async (e) => {
-    e.preventDefault();
-    if (!reassignConfirm || !reassignMotivo.trim()) {
-      setModalError("Debes marcar la confirmación e indicar el motivo de la reasignación.");
-      return;
-    }
-    setSubmitting(true);
-    setModalError(null);
-    try {
-      const res = await fetch(`/api/taller/ordenes/${ordenId}/servicios/${reassignServId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          usuario_id: parseInt(reassignNewMecId, 10),
-          mecanico_usuario_id: parseInt(reassignNewMecId, 10),
-          confirmar_reasignacion: true,
-          motivo_reasignacion: reassignMotivo.trim()
-        })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        const msg = res.status === 403 || data.error === 'FORBIDDEN'
-          ? 'No tienes permiso para realizar esta acción.'
-          : (data.message || data.error || 'Error al reasignar mecánico.');
-        throw new Error(msg);
-      }
-      setReassignModalOpen(false);
-      showSuccessToast("Mecánico reasignado correctamente.");
-      onRefresh();
-    } catch (err) {
-      setModalError(err.message);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // Service Status Change Handler
-  const handleServiceStatusChange = async (servicioId, newEstadoId) => {
-    try {
-      const parsedState = parseInt(newEstadoId, 10);
-      const res = await fetch(`/api/taller/ordenes/${ordenId}/servicios/${servicioId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          estado_orden_servicio_id: parsedState,
-          estado_servicio_id: parsedState
-        })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        const msg = res.status === 403 || data.error === 'FORBIDDEN'
-          ? 'No tienes permiso para realizar esta acción.'
-          : (data.message || data.error || 'Error al cambiar estado del servicio.');
-        throw new Error(msg);
-      }
-      showToast("Estado del servicio actualizado.");
-      onRefresh();
-    } catch (err) {
-      showToast(err.message);
-    }
-  };
-
-  // Service Delete Handler
-  const handleDeleteService = (servicioId, svcNombre) => {
+  // Delete Service
+  const handleDeleteService = (svc) => {
     askConfirmation(
-      "Eliminar Servicio de la Orden",
-      `¿Estás seguro de eliminar el servicio "${svcNombre || 'seleccionado'}" de esta orden de trabajo?`,
+      "Eliminar Servicio",
+      `¿Deseas eliminar el servicio '${svc.tipo_servicio_nombre}' de esta orden?`,
       async () => {
         try {
-          const res = await fetch(`/api/taller/ordenes/${ordenId}/servicios/${servicioId}`, {
+          const res = await fetch(`/api/taller/ordenes/${ordenId}/servicios/${getServId(svc)}`, {
             method: "DELETE"
           });
-          const data = await res.json();
+          const json = await res.json();
           if (!res.ok) {
-            const msg = res.status === 403 || data.error === 'FORBIDDEN'
-              ? 'No tienes permiso para realizar esta acción.'
-              : (data.message || data.error || 'Error al eliminar servicio.');
-            throw new Error(msg);
+            showErrorToast(json.message || json.error || "No se pudo eliminar el servicio.");
+            return;
           }
-          showToast("Servicio eliminado de la orden.");
-          onRefresh();
+          showSuccessToast("Servicio eliminado de la orden.");
+          if (onRefresh) onRefresh();
         } catch (err) {
-          showToast(err.message);
+          showErrorToast("Error de conexión al eliminar el servicio.");
         }
-      }
+      },
+      "delete"
     );
   };
 
-  // Add Labor Handler
-  const handleAddLabor = async (e) => {
-    e.preventDefault();
-    if (!selectedServiceId || !laborDesc.trim()) return;
-    setSubmitting(true);
-    setModalError(null);
-    try {
-      const res = await fetch(`/api/taller/ordenes/${ordenId}/servicios/${selectedServiceId}/mano-obra`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          detalle_mano_obra: laborDesc.trim(),
-          descripcion: laborDesc.trim(),
-          horas_estimadas: laborHorasEst,
-          horas_reales: laborHorasReal,
-          costo_hora: laborCostoHora
-        })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || data.message || "Error al agregar mano de obra.");
-      setAddLaborModalOpen(false);
-      setLaborDesc("");
-      setLaborHorasEst("1");
-      setLaborHorasReal("1");
-      setLaborCostoHora("0");
-      setModalError(null);
-      showToast("Mano de obra registrada exitosamente.");
-      if (onRefresh) onRefresh();
-    } catch (err) {
-      setModalError(err.message);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // Edit Labor Handler
-  const openEditLaborModal = (servicioId, laborItem) => {
-    setSelectedServiceId(servicioId);
-    setEditLaborId(laborItem.orden_servicio_mano_obra_id || laborItem.mano_obra_id || laborItem.id);
-    setEditLaborDesc(laborItem.detalle_mano_obra || laborItem.descripcion || laborItem.observacion || "");
-    setEditLaborHoras(String(laborItem.horas_reales || laborItem.horas_trabajadas || 1));
-    setEditLaborCostoHora(String(laborItem.costo_hora || 0));
-    setModalError(null);
-    setEditLaborModalOpen(true);
-  };
-
-  const handleUpdateLabor = async (e) => {
-    e.preventDefault();
-    if (!editLaborDesc.trim()) {
-      setModalError("La descripción del trabajo es requerida.");
-      return;
-    }
-    setSubmitting(true);
-    setModalError(null);
-    try {
-      const res = await fetch(`/api/taller/ordenes/${ordenId}/servicios/${selectedServiceId}/mano-obra`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mano_obra_id: editLaborId,
-          detalle_mano_obra: editLaborDesc.trim(),
-          descripcion: editLaborDesc.trim(),
-          horas_reales: parseFloat(editLaborHoras),
-          costo_hora: parseFloat(editLaborCostoHora)
-        })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || data.message || "Error al actualizar mano de obra.");
-
-      setEditLaborModalOpen(false);
-      showToast("Mano de obra actualizada.");
-      if (onRefresh) onRefresh();
-    } catch (err) {
-      setModalError(err.message);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // Delete Labor Handler
-  const handleDeleteLabor = (servicioId, manoObraId, laborDesc) => {
+  // Delete Product
+  const handleDeleteProduct = (prod) => {
     askConfirmation(
-      "Eliminar Mano de Obra",
-      `¿Estás seguro de eliminar este registro de mano de obra "${laborDesc || 'de la orden'}"?`,
+      "Eliminar Repuesto",
+      `¿Deseas eliminar el repuesto '${prod.nombre || prod.producto_nombre}' de esta orden?`,
       async () => {
         try {
-          const res = await fetch(`/api/taller/ordenes/${ordenId}/servicios/${servicioId}/mano-obra?mano_obra_id=${manoObraId}`, {
+          const res = await fetch(`/api/taller/ordenes/${ordenId}/productos/${prod.orden_producto_id}`, {
             method: "DELETE"
           });
-          const data = await res.json();
+          const json = await res.json();
           if (!res.ok) {
-            const msg = res.status === 403 || data.error === 'FORBIDDEN'
-              ? 'No tienes permiso para realizar esta acción.'
-              : (data.message || data.error || 'Error al eliminar mano de obra.');
-            throw new Error(msg);
+            showErrorToast(json.message || json.error || "No se pudo eliminar el repuesto.");
+            return;
           }
-          showToast("Mano de obra eliminada.");
-          onRefresh();
+          showSuccessToast("Repuesto eliminado de la orden.");
+          if (onRefresh) onRefresh();
         } catch (err) {
-          showToast(err.message);
+          showErrorToast("Error de conexión al eliminar el repuesto.");
         }
-      }
+      },
+      "delete"
     );
   };
 
-  // Open Add Product Modal with initialized catalog selection
-  const openAddProductModal = (servicioId) => {
-    setSelectedServiceId(servicioId);
-    if (productosList && productosList.length > 0) {
-      setProdProductoId(String(productosList[0].producto_id));
-      setProdPrecio(String(productosList[0].precio_venta || "0"));
-    } else {
-      setProdProductoId("");
-      setProdPrecio("");
-    }
-    setProdCantidad("1");
-    setModalError(null);
-    setAddProductModalOpen(true);
-  };
-
-  // Add Product Handler
-  const handleAddProduct = async (e) => {
-    e.preventDefault();
-    const productoId = Number(prodProductoId);
-    if (!Number.isInteger(productoId) || productoId <= 0) {
-      setModalError("Selecciona un producto del inventario.");
-      return;
-    }
-
-    const qty = parseInt(prodCantidad, 10);
-    if (isNaN(qty) || qty <= 0) {
-      setModalError("La cantidad debe ser mayor a 0.");
-      return;
-    }
-
-    const price = parseFloat(prodPrecio);
-    if (isNaN(price) || price < 0) {
-      setModalError("El precio unitario no puede ser negativo.");
-      return;
-    }
-
-    setSubmitting(true);
-    setModalError(null);
-    try {
-      const res = await fetch(`/api/taller/ordenes/${ordenId}/servicios/${selectedServiceId}/productos`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          producto_id: productoId,
-          cantidad: qty,
-          precio_unitario: price
-        })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.details || data.message || data.error || "Error al asociar producto.");
-
-      setAddProductModalOpen(false);
-      setProdProductoId("");
-      setProdCantidad("1");
-      setProdPrecio("");
-      setModalError(null);
-      showToast("Producto asociado al servicio.");
-      onRefresh();
-    } catch (err) {
-      setModalError(err.message);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // Delete Product Handler
-  const handleDeleteProduct = (servicioId, ordenProductoId, prodNombre) => {
-    askConfirmation(
-      "Eliminar Producto del Servicio",
-      `¿Estás seguro de eliminar el producto "${prodNombre || 'asociado'}" de este servicio?`,
-      async () => {
-        try {
-          const res = await fetch(`/api/taller/ordenes/${ordenId}/servicios/${servicioId}/productos?orden_producto_id=${ordenProductoId}`, {
-            method: "DELETE"
-          });
-          const data = await res.json();
-          if (!res.ok) {
-            const msg = res.status === 403 || data.error === 'FORBIDDEN'
-              ? 'No tienes permiso para realizar esta acción.'
-              : (data.message || data.error || 'Error al eliminar producto del servicio.');
-            throw new Error(msg);
-          }
-          showToast("Producto eliminado del servicio.");
-          onRefresh();
-        } catch (err) {
-          showToast(err.message);
-        }
-      }
-    );
-  };
+  const totalItemsCount = services.length + orderProducts.length;
 
   return (
-    <div className="space-y-6 font-sans text-slate-100">
-      {/* Toast Notification */}
+    <div className="space-y-5 font-sans text-slate-100">
+      {/* Global Floating Toast */}
       {toast && (
         <div
           style={{
-            position: 'fixed',
-            top: '20px',
-            right: '20px',
-            zIndex: 99999,
-            width: 'min(380px, calc(100vw - 32px))',
-            minWidth: '280px',
-            whiteSpace: 'normal',
-            wordBreak: 'normal',
-            overflowWrap: 'break-word'
+            position: "fixed",
+            top: "24px",
+            right: "24px",
+            zIndex: 999999,
+            width: "min(380px, calc(100vw - 32px))"
           }}
-          className={`p-4 rounded-xl shadow-2xl font-mono text-xs flex items-start gap-3 border backdrop-blur-md transition-all animate-in fade-in slide-in-from-top-3 ${
+          className={`p-4 rounded-xl shadow-2xl font-mono text-xs flex items-start gap-3 border backdrop-blur-md transition-all ${
             toast.type === "error"
               ? "bg-rose-950/95 border-rose-500 text-rose-100 shadow-rose-950/50"
               : "bg-emerald-950/95 border-emerald-500 text-emerald-100 shadow-emerald-950/50"
@@ -942,1435 +1046,1033 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
             <span className="leading-relaxed font-sans text-xs block text-slate-200">{toast.text}</span>
           </div>
           <button
+            type="button"
             onClick={() => setToast(null)}
-            className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors ml-1 shrink-0"
+            className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors ml-1 shrink-0 cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
       )}
 
-      {/* Header Bar */}
-      <div className="bg-[#161a21] p-5 border border-[#2d3748] rounded-2xl flex flex-wrap items-center justify-between gap-4 shadow-lg">
-        <div>
-          <div className="flex items-center gap-3">
-            <h2 className="text-xl font-black text-slate-100 font-mono tracking-tight">Gestión de Servicios</h2>
-            <span className="px-2.5 py-1 bg-[#84924a]/20 text-[#bfce7f] border border-[#bfce7f]/40 rounded-md font-mono text-xs font-bold">
-              {order?.codigo_orden || `OT-${ordenId}`}
-            </span>
-          </div>
-          <p className="text-xs text-slate-400 font-sans mt-1">
-            Bicicleta: <strong className="text-slate-200">{order?.bicicleta_marca ? `${order.bicicleta_marca} ${order.bicicleta_modelo || ""}` : "Bicicleta de Taller"}</strong> | Cliente: <strong className="text-slate-200">{order?.cliente_nombre || "Cliente"}</strong>
-          </p>
-        </div>
-
+      {/* Top Controls Header */}
+      <div className="bg-[#161a21] border border-[#2d3748] p-4 sm:p-5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
         <div className="flex items-center gap-3">
           {backUrl && (
             <Link
               href={backUrl}
-              className="px-4 py-2 bg-[#1c2129] hover:bg-[#252c37] border border-[#2d3748] text-slate-200 text-xs font-mono font-bold rounded-xl transition-all flex items-center gap-2"
+              className="p-2 bg-[#161a21] border border-[#2d3748] rounded-xl text-slate-300 hover:text-white hover:border-[#bfce7f] transition-all"
+              title="Volver"
             >
-              <ArrowLeft className="w-4 h-4 text-slate-400" />
-              VOLVER AL DETALLE DE LA OT
+              <ArrowLeft className="w-4 h-4" />
             </Link>
           )}
-          <button
-            onClick={() => {
-              setModalError(null);
-              setAddServiceModalOpen(true);
-            }}
-            className="px-4 py-2 bg-[#84924a] hover:brightness-110 text-white text-xs font-mono font-bold rounded-xl transition-all flex items-center gap-2 border-t border-[#a6b66b] shadow-md"
-          >
-            <Plus className="w-4 h-4" />
-            AGREGAR SERVICIO
-          </button>
+          <div>
+            <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2 font-mono uppercase tracking-tight">
+              <Wrench className="w-5 h-5 text-[#bfce7f]" /> SERVICIOS Y REPUESTOS DE LA ORDEN
+            </h3>
+            <p className="text-xs text-slate-400 font-sans">
+              Gestión de servicios, repuestos asociados, tiempos de ejecución y componentes afectados.
+            </p>
+          </div>
         </div>
+
+        {/* Action Button "AGREGAR REPUESTO O SERVICIO" */}
+        <button
+          type="button"
+          onClick={handleOpenAddItem}
+          className="flex items-center gap-2 px-4 py-2 bg-[#bfce7f] hover:bg-[#aab86e] text-slate-950 font-bold rounded-xl text-xs shadow-lg transition-all cursor-pointer font-mono uppercase"
+        >
+          <Plus className="w-4 h-4 stroke-[3]" />
+          <span>AGREGAR REPUESTO O SERVICIO</span>
+        </button>
       </div>
 
-      {/* RECIBIDA Warning Banner */}
-      {Number(order?.estado_orden_id || order?.estado_id || 0) === 1 && (
-        <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-300 font-sans text-xs shadow-md">
+      {/* Banner for Order in RECIBIDA state */}
+      {isOrderRecibida && (
+        <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-between gap-4 font-mono text-xs text-amber-300">
           <div className="flex items-center gap-3">
-            <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
+            <AlertTriangle className="w-5 h-5 shrink-0 text-amber-400" />
             <div>
-              <strong className="block font-bold text-amber-200 text-sm font-mono mb-0.5">Orden en Recibida</strong>
-              <span>Primero debes iniciar la reparación de la orden para poder iniciar el trabajo en sus servicios.</span>
+              <p className="font-bold">Orden en estado RECIBIDA</p>
+              <p className="text-[11px] text-amber-400/80 font-sans">
+                Para iniciar el cronómetro y ejecutar las acciones de los servicios, primero debes iniciar la reparación de la orden.
+              </p>
             </div>
           </div>
           {onStartRepair && (
             <button
+              type="button"
               onClick={onStartRepair}
-              className="px-4 py-2 bg-[#bfce7f] hover:bg-[#a6b66b] text-slate-950 font-mono font-bold text-xs rounded-xl flex items-center gap-2 transition-colors shrink-0 shadow-lg cursor-pointer font-extrabold uppercase tracking-wider"
+              className="px-3.5 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold rounded-xl text-xs transition-all shrink-0 cursor-pointer uppercase"
             >
-              <Wrench className="w-4 h-4" />
-              INICIAR REPARACIÓN AHORA
+              INICIAR REPARACIÓN
             </button>
           )}
         </div>
       )}
 
-      {/* Main Two-Column Master-Detail Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column: Detalle de Servicios Table (2/3) */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl overflow-hidden shadow-xl">
-            <div className="p-4 bg-[#1c2129] border-b border-[#2d3748] flex items-center justify-between">
-              <h3 className="text-sm font-bold font-mono text-slate-200 uppercase tracking-wider flex items-center gap-2">
-                <FileText className="w-4 h-4 text-[#bfce7f]" />
-                Detalle de Servicios
-              </h3>
-              <span className="text-xs font-mono text-slate-400">
-                {services.length} {services.length === 1 ? "servicio registrado" : "servicios registrados"}
-              </span>
-            </div>
 
-            {services.length === 0 ? (
-              <div className="p-12 text-center text-slate-400 font-mono text-xs space-y-3">
-                <Wrench className="w-8 h-8 text-slate-600 mx-auto" />
-                <p>No hay servicios registrados en esta orden de trabajo.</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs font-sans border-collapse">
-                  <thead>
-                    <tr className="bg-[#0a0c10]/60 border-b border-[#2d3748] text-slate-400 font-mono text-[11px] uppercase tracking-wider">
-                      <th className="p-3.5 pl-4">Código</th>
-                      <th className="p-3.5">Tipo / Descripción</th>
-                      <th className="p-3.5">Mecánico</th>
-                      <th className="p-3.5">ESTADO DEL SERVICIO</th>
-                      <th className="p-3.5 text-right">Precio (RD$)</th>
-                      <th className="p-3.5 pr-4 text-center">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#2d3748]/60">
-                    {services.map((svc, idx) => {
-                      const sId = getServId(svc) || (idx + 1);
-                      const isSelected = Number(sId) === Number(selectedServiceId);
-                      const srvCode = `SRV-${String(idx + 1).padStart(3, "0")}`;
 
-                      return (
-                        <tr
-                          key={sId}
-                          onClick={() => setSelectedServiceId(sId)}
-                          className={`cursor-pointer transition-colors ${
-                            isSelected
-                              ? "bg-[#84924a]/10 border-l-4 border-l-[#bfce7f]"
-                              : "hover:bg-[#1c2129]/60"
-                          }`}
-                        >
-                          {/* Code */}
-                          <td className="p-3.5 pl-4 font-mono font-bold text-[#bfce7f] whitespace-nowrap">
-                            {srvCode}
-                          </td>
+      {/* Main Single Card - 100% Width "DETALLE DE SERVICIOS Y REPUESTOS" */}
+      <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl shadow-xl overflow-hidden">
+        <div className="p-4 border-b border-[#2d3748] bg-[#0a0c10]/40 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Layers className="w-4 h-4 text-[#bfce7f]" />
+            <h4 className="text-xs font-bold font-mono text-slate-100 uppercase tracking-wider">
+              DETALLE DE SERVICIOS Y REPUESTOS ({totalItemsCount})
+            </h4>
+          </div>
+          <span className="text-[11px] font-mono text-slate-400">
+            Ancho completo 100% • Control directo en tabla
+          </span>
+        </div>
 
-                          {/* Name & Desc */}
-                          <td className="p-3.5">
-                            <div className="font-bold text-slate-100 font-sans">{svc.tipo_servicio_nombre}</div>
-                            {svc.observacion_tecnica || svc.tipo_servicio_descripcion ? (
-                              <div className="text-[11px] text-slate-400 line-clamp-1 mt-0.5 font-sans">
-                                {svc.observacion_tecnica || svc.tipo_servicio_descripcion}
+        <div className="overflow-x-auto custom-scrollbar">
+          <table className="w-full text-left text-xs font-sans border-collapse">
+            <thead>
+              <tr className="bg-[#0a0c10]/60 border-b border-[#2d3748] text-slate-400 font-mono text-[11px] uppercase tracking-wider">
+                <th className="p-3.5 pl-4">Código</th>
+                <th className="p-3.5">Tipo / Descripción</th>
+                <th className="p-3.5">Componente Afectado</th>
+                <th className="p-3.5">Estado del Servicio</th>
+                <th className="p-3.5 text-right">Precio (RD$)</th>
+                <th className="p-3.5 text-center">Fecha Inicio</th>
+                <th className="p-3.5 text-center">Fecha Fin</th>
+                <th className="p-3.5 text-center">Tiempo Transcurrido</th>
+                <th className="p-3.5 pr-4 text-center">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#2d3748]/60 font-mono">
+              {totalItemsCount === 0 ? (
+                <tr>
+                  <td colSpan={9} className="p-8 text-center text-slate-400 text-xs italic">
+                    No hay servicios ni repuestos registrados en esta orden de trabajo. Haz clic en <strong>"AGREGAR REPUESTO O SERVICIO"</strong> para comenzar.
+                  </td>
+                </tr>
+              ) : (
+                <>
+                  {/* SERVICES ROWS */}
+                  {services.map((svc, idx) => {
+                    const sId = getServId(svc) || (idx + 1);
+                    const srvCode = svc.codigo_servicio || "SIN CÓDIGO";
+                    const stateRules = getServiceStateRules(svc.estado_servicio_id, svc.usuario_id, Number(order?.estado_orden_id || 1));
+                    const elapsedSec = getElapsedSecondsForService(svc);
+                    const isProcessing = processingServiceId === sId;
+
+                    const isPendiente = Number(svc.estado_servicio_id) === 1 || svc.estado_servicio_codigo === "PENDIENTE";
+                    const isEnProceso = Number(svc.estado_servicio_id) === 2 || svc.estado_servicio_codigo === "EN_PROCESO";
+                    const isPausado = Number(svc.estado_servicio_id) === 5 || svc.estado_servicio_codigo === "SUSPENDIDO" || svc.estado_servicio_codigo === "PAUSADO";
+                    const isCompletado = Number(svc.estado_servicio_id) === 3 || svc.estado_servicio_codigo === "COMPLETADO";
+
+                    return (
+                      <tr key={`svc-${sId}`} className="hover:bg-[#1c2129]/60 transition-colors">
+                        {/* Código */}
+                        <td className="p-3.5 pl-4 font-bold text-[#bfce7f] whitespace-nowrap font-mono">
+                          {srvCode}
+                        </td>
+
+                        {/* Tipo / Descripción */}
+                        <td className="p-3.5">
+                          <div className="font-bold text-slate-100 font-sans text-xs flex items-center gap-2">
+                            <span>{svc.tipo_servicio_nombre}</span>
+                            <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-[#bfce7f]/10 text-[#bfce7f] border border-[#bfce7f]/30">SERVICIO</span>
+                          </div>
+                          {svc.observacion_tecnica || svc.tipo_servicio_descripcion ? (
+                            <div className="text-[11px] text-slate-400 line-clamp-1 mt-0.5 font-sans">
+                              {svc.observacion_tecnica || svc.tipo_servicio_descripcion}
+                            </div>
+                          ) : null}
+                        </td>
+
+                        {/* Componente Afectado */}
+                        <td className="p-3.5 whitespace-nowrap text-xs text-slate-300">
+                          {svc.componente ? (
+                            <div>
+                              <div className="font-semibold text-slate-200">
+                                {svc.componente.categoria} - {svc.componente.marca} {svc.componente.modelo}
                               </div>
-                            ) : null}
-                          </td>
+                              <div className="text-[10px] text-emerald-400">
+                                Estado: {svc.componente.estado_actual_nombre || "Bueno"}
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-slate-500 italic font-normal">Servicio general</span>
+                          )}
+                        </td>
 
-                          {/* Mechanic Select */}
-                          <td className="p-3.5 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                            <select
-                              value={(svc.mecanico_usuario_id || svc.usuario_id) ? String(svc.mecanico_usuario_id || svc.usuario_id) : ""}
-                              onChange={(e) => handleMechanicChange(svc.orden_servicio_id || svc.servicio_id, e.target.value)}
-                              className="bg-[#0a0c10] border border-[#2d3748] rounded-lg px-2 py-1 text-slate-200 text-xs font-mono focus:outline-none focus:border-[#bfce7f]"
-                            >
-                              <option value="">Sin asignar</option>
-                              {mecanicosCatalog.map((m) => (
-                                <option key={m.usuario_id} value={String(m.usuario_id)}>
-                                  {m.nombre_completo}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
+                        {/* Estado del Servicio */}
+                        <td className="p-3.5 whitespace-nowrap">
+                          <span className={`px-2.5 py-1 border rounded-md text-[10px] font-bold inline-block ${stateRules.badgeClass}`}>
+                            {stateRules.badgeLabel}
+                          </span>
+                        </td>
 
-                          {/* Service Status Badge */}
-                          <td className="p-3.5 whitespace-nowrap space-y-1" onClick={(e) => e.stopPropagation()}>
-                            {(() => {
-                              const rules = getServiceStateRules(svc.estado_servicio_id, svc.mecanico_usuario_id || svc.usuario_id, Number(order?.estado_orden_id || order?.estado_id || 5));
-                              return (
-                                <span className={`px-2.5 py-1 border rounded-md text-[10px] font-mono font-bold inline-block ${rules.badgeClass}`}>
-                                  {rules.badgeLabel}
-                                </span>
-                              );
-                            })()}
-                          </td>
+                        {/* Precio */}
+                        <td className="p-3.5 text-right font-bold text-slate-100 whitespace-nowrap">
+                          RD$ {Number(svc.precio_unitario || svc.precio_acordado || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })}
+                        </td>
 
-                          {/* Price */}
-                          <td className="p-3.5 text-right font-mono font-bold text-slate-100 whitespace-nowrap">
-                            RD$ {Number(svc.precio_acordado || svc.precio_unitario || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })}
-                          </td>
+                        {/* Fecha Inicio */}
+                        <td className="p-3.5 text-center text-slate-300 text-[11px] whitespace-nowrap">
+                          {formatDate(svc.fecha_inicio)}
+                        </td>
 
-                          {/* Actions */}
-                          <td className="p-3.5 pr-4 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex items-center justify-center gap-1.5">
-                              {/* Edit Service Modal button */}
+                        {/* Fecha Fin */}
+                        <td className="p-3.5 text-center text-slate-300 text-[11px] whitespace-nowrap">
+                          {formatDate(svc.fecha_finalizacion)}
+                        </td>
+
+                        {/* Tiempo Transcurrido */}
+                        <td className="p-3.5 text-center whitespace-nowrap">
+                          <span className={`px-2 py-1 rounded border text-xs font-bold font-mono tracking-wider ${
+                            isEnProceso
+                              ? "bg-amber-500/10 text-amber-300 border-amber-500/40 animate-pulse"
+                              : isPausado
+                              ? "bg-cyan-500/10 text-cyan-300 border-cyan-500/40"
+                              : isCompletado
+                              ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/40"
+                              : "bg-slate-900 text-slate-400 border-slate-800"
+                          }`}>
+                            {formatSecondsToHHMMSS(elapsedSec)}
+                          </span>
+                        </td>
+
+                        {/* In-Line Operative Actions */}
+                        <td className="p-3.5 pr-4 text-center whitespace-nowrap">
+                          <div className="flex items-center justify-center gap-1.5">
+                            {/* PENDIENTE Actions */}
+                            {isPendiente && (
                               <button
-                                onClick={() => openEditServiceModal(svc)}
-                                className="p-1.5 text-slate-400 hover:text-slate-200 bg-[#1c2129] hover:bg-[#252c37] border border-[#2d3748] rounded-lg transition-colors"
-                                title="Editar servicio"
+                                type="button"
+                                onClick={() => executeOperativeAction(svc, "INICIAR")}
+                                disabled={isOrderRecibida || isProcessing}
+                                className="p-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                                title="Iniciar servicio"
+                                aria-label="Iniciar servicio"
                               >
-                                <Pencil className="w-3.5 h-3.5" />
+                                <Play className="w-3.5 h-3.5 fill-current" />
                               </button>
+                            )}
 
-                              {/* Delete button */}
+                            {/* EN PROCESO Actions */}
+                            {isEnProceso && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => executeOperativeAction(svc, "PAUSAR")}
+                                  disabled={isProcessing}
+                                  className="p-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 rounded-lg transition-colors cursor-pointer disabled:opacity-40"
+                                  title="Pausar servicio"
+                                  aria-label="Pausar servicio"
+                                >
+                                  <Pause className="w-3.5 h-3.5 fill-current" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleFinishServiceTrigger(svc)}
+                                  disabled={isProcessing}
+                                  className="p-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 rounded-lg transition-colors cursor-pointer disabled:opacity-40"
+                                  title="Finalizar servicio"
+                                  aria-label="Finalizar servicio"
+                                >
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                </button>
+                              </>
+                            )}
+
+                            {/* PAUSADO Actions */}
+                            {isPausado && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => executeOperativeAction(svc, "REANUDAR")}
+                                  disabled={isProcessing}
+                                  className="p-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 rounded-lg transition-colors cursor-pointer disabled:opacity-40"
+                                  title="Reanudar servicio"
+                                  aria-label="Reanudar servicio"
+                                >
+                                  <Play className="w-3.5 h-3.5 fill-current" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleFinishServiceTrigger(svc)}
+                                  disabled={isProcessing}
+                                  className="p-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 rounded-lg transition-colors cursor-pointer disabled:opacity-40"
+                                  title="Finalizar servicio"
+                                  aria-label="Finalizar servicio"
+                                >
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                </button>
+                              </>
+                            )}
+
+                            {/* Edit Button */}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditItem(svc, "SERVICIO")}
+                              className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors cursor-pointer border border-slate-700"
+                              title="Editar servicio"
+                              aria-label="Editar servicio"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+
+                            {/* Delete Button (Only if Pendiente or Cancelado) */}
+                            {(isPendiente || Number(svc.estado_servicio_id) === 4) && (
                               <button
-                                onClick={() => handleDeleteService(sId, svc.tipo_servicio_nombre)}
-                                className="p-1.5 text-slate-400 hover:text-rose-400 bg-[#1c2129] hover:bg-rose-500/10 border border-[#2d3748] hover:border-rose-500/30 rounded-lg transition-colors"
+                                type="button"
+                                onClick={() => handleDeleteService(svc)}
+                                className="p-1.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 rounded-lg transition-colors cursor-pointer"
                                 title="Eliminar servicio"
+                                aria-label="Eliminar servicio"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
 
-            {/* Table Footer Total */}
-            <div className="p-4 bg-[#1c2129] border-t border-[#2d3748] flex items-center justify-between font-mono text-xs">
-              <span className="text-slate-400 uppercase font-semibold">
-                Mostrando {services.length} de {services.length} servicios
-              </span>
-              <div className="flex items-center gap-2">
-                <span className="text-slate-400 uppercase font-bold">TOTAL GENERAL OT:</span>
-                <span className="text-[#bfce7f] font-black text-base">
-                  RD$ {(Number(order?.total_orden ?? totalOrdenCalculado)).toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
+                  {/* PRODUCTS (REPUESTOS) ROWS */}
+                  {orderProducts.map((prod, idx) => {
+                    const prdCode = prod.codigo || `REP-${String(idx + 1).padStart(3, "0")}`;
+                    const prodQty = Number(prod.cantidad || 1);
+                    const prodPrice = Number(prod.precio_unitario || 0);
+                    const prodSubtotal = Number(prod.subtotal || (prodQty * prodPrice));
 
-        {/* Right Column: Detalle del Servicio Activo Side Panel (1/3) */}
-        <div className="space-y-4">
-          <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-5 space-y-5 shadow-xl sticky top-4">
-            <div className="border-b border-[#2d3748] pb-3 flex items-center justify-between">
-              <h3 className="text-xs font-bold font-mono text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-[#bfce7f]" />
-                Detalle del Servicio Seleccionado
-              </h3>
-              {activeSelectedService && (
-                <span className="text-[11px] font-mono text-[#bfce7f] font-bold">
-                  ID #{activeSelectedService.orden_servicio_id}
-                </span>
+                    return (
+                      <tr key={`prod-${prod.orden_producto_id || idx}`} className="hover:bg-[#1c2129]/60 transition-colors bg-[#0a0c10]/20">
+                        {/* Código */}
+                        <td className="p-3.5 pl-4 font-bold text-cyan-400 whitespace-nowrap">
+                          {prdCode}
+                        </td>
+
+                        {/* Tipo / Descripción */}
+                        <td className="p-3.5">
+                          <div className="font-bold text-slate-100 font-sans text-xs flex items-center gap-2">
+                            <Package className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                            <span>{prod.nombre || prod.producto_nombre || "Repuesto"}</span>
+                            <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 font-mono">REPUESTO</span>
+                          </div>
+                          <div className="text-[11px] text-slate-400 font-sans mt-0.5">
+                            Cant: <strong>{prodQty}</strong> • Unit: RD$ {prodPrice.toLocaleString("es-DO", { minimumFractionDigits: 2 })}
+                            {prod.observacion ? ` • ${prod.observacion}` : ""}
+                          </div>
+                        </td>
+
+                        {/* Componente Afectado */}
+                        <td className="p-3.5 whitespace-nowrap text-slate-500 text-xs italic">No aplica</td>
+
+                        {/* Estado del Servicio */}
+                        <td className="p-3.5 whitespace-nowrap text-slate-500 text-xs text-center">—</td>
+
+                        {/* Precio Subtotal */}
+                        <td className="p-3.5 text-right font-bold text-slate-100 whitespace-nowrap">
+                          RD$ {prodSubtotal.toLocaleString("es-DO", { minimumFractionDigits: 2 })}
+                        </td>
+
+                        {/* Fecha Inicio */}
+                        <td className="p-3.5 text-center text-slate-500 whitespace-nowrap text-xs">—</td>
+
+                        {/* Fecha Fin */}
+                        <td className="p-3.5 text-center text-slate-500 whitespace-nowrap text-xs">—</td>
+
+                        {/* Tiempo Transcurrido */}
+                        <td className="p-3.5 text-center text-slate-500 whitespace-nowrap text-xs">—</td>
+
+                        {/* Actions (Edit / Delete Product) */}
+                        <td className="p-3.5 pr-4 text-center whitespace-nowrap">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditItem(prod, "PRODUCTO")}
+                              className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors cursor-pointer border border-slate-700"
+                              title="Editar repuesto"
+                              aria-label="Editar repuesto"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteProduct(prod)}
+                              className="p-1.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 rounded-lg transition-colors cursor-pointer"
+                              title="Eliminar repuesto"
+                              aria-label="Eliminar repuesto"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </>
               )}
-            </div>
-
-            {activeSelectedService ? (() => {
-              const actId = getServId(activeSelectedService);
-              const activeRules = getServiceStateRules(
-                activeSelectedService.estado_servicio_id,
-                activeSelectedService.mecanico_usuario_id || activeSelectedService.usuario_id,
-                Number(order?.estado_orden_id || order?.estado_id || 5)
-              );
-              const actHasOpenSession = Boolean(
-                activeSelectedService.cronometro?.activo ?? activeSelectedService.en_proceso_cronometro
-              );
-
-              return (
-                <div className="space-y-4">
-                  {/* Service Header Info */}
-                  <div>
-                    <div className="flex items-center justify-between gap-2 mb-1">
-                      <h4 className="text-base font-bold text-slate-100 font-sans">
-                        {activeSelectedService.tipo_servicio_nombre}
-                      </h4>
-                      <span className={`px-2 py-0.5 border rounded-md text-[10px] font-mono font-bold ${activeRules.badgeClass}`}>
-                        {activeRules.badgeLabel}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-400 mt-1 leading-relaxed font-sans">
-                      {activeSelectedService.observacion_tecnica || activeSelectedService.tipo_servicio_descripcion || "Sin observaciones técnicas registradas."}
-                    </p>
-                  </div>
-
-                  {/* Worked Time & Live Cronómetro Box */}
-                  <div className="p-4 bg-[#0a0c10] border border-[#2d3748] rounded-xl space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2.5">
-                        <Clock className={`w-5 h-5 ${actHasOpenSession ? "text-emerald-400 animate-pulse" : "text-[#bfce7f]"}`} />
-                        <div>
-                          <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 block font-bold">
-                            {actHasOpenSession ? "Cronómetro activo" : "Tiempo trabajado"}
-                          </span>
-                          <span className="text-xl font-black font-mono text-slate-100 tracking-wider">
-                            {formatSecondsToHHMMSS(liveSeconds)}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="text-right font-mono">
-                        <span className="text-[10px] text-slate-400 block uppercase">
-                          {actHasOpenSession ? "Tiempo de la sesión actual" : "Tiempo acumulado"}
-                        </span>
-                        <span className="text-xs font-semibold text-slate-300">
-                          {formatSecondsToHHMMSS(activeSelectedService.cronometro?.segundos_acumulados || 0)}
-                        </span>
-                      </div>
-                    </div>
-
-                  </div>
-
-                  {/* Mano de Obra Registrada Section */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between border-b border-[#2d3748] pb-1.5">
-                      <span className="text-xs font-bold font-mono text-slate-300 flex items-center gap-1.5">
-                        <Wrench className="w-4 h-4 text-[#bfce7f]" /> Mano de Obra Registrada
-                      </span>
-                      {activeRules.canAddLabor ? (
-                        <button
-                          onClick={() => {
-                            setSelectedServiceId(actId);
-                            setLaborDesc("");
-                            setLaborHorasEst("1");
-                            setLaborHorasReal("1");
-                            setLaborCostoHora("0");
-                            setModalError(null);
-                            setAddLaborModalOpen(true);
-                          }}
-                          className="text-[11px] font-mono text-[#bfce7f] hover:underline flex items-center gap-1"
-                        >
-                          + Agregar Mano de Obra
-                        </button>
-                      ) : (
-                        <span className="text-[10px] font-mono text-slate-500 italic">
-                          {activeSelectedService.estado_servicio_id === 5 ? "Reanuda para agregar" : "No disponible"}
-                        </span>
-                      )}
-                    </div>
-
-                    {activeSelectedService.mano_obra && activeSelectedService.mano_obra.length > 0 ? (
-                      <div className="space-y-2">
-                        {activeSelectedService.mano_obra.map((m) => {
-                          const mId = m.orden_servicio_mano_obra_id || m.mano_obra_id || m.id;
-                          return (
-                            <div
-                              key={mId}
-                              className="p-2.5 bg-[#1c2129] border border-[#2d3748] rounded-xl flex items-center justify-between text-xs font-mono"
-                            >
-                              <div className="flex items-center gap-2 truncate pr-2">
-                                <Wrench className="w-3.5 h-3.5 text-[#bfce7f] shrink-0" />
-                                <div className="truncate">
-                                  <span className="truncate text-slate-200 block font-semibold">
-                                    {m.detalle_mano_obra?.trim()}
-                                  </span>
-                                  <span className="text-[10px] text-slate-400 block">
-                                    {m.horas_trabajadas || m.horas_reales || (m.minutos_trabajados ? (m.minutos_trabajados / 60).toFixed(1) : 1)} hr(s)
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2 shrink-0">
-                                <span className="font-bold text-[#bfce7f]">
-                                  RD$ {Number(m.subtotal || m.costo_total || (Number(m.horas_trabajadas || 1) * Number(m.costo_hora || 0))).toLocaleString("es-DO", { minimumFractionDigits: 2 })}
-                                </span>
-                                {activeRules.canAddLabor && (
-                                  <>
-                                    <button
-                                      onClick={() => openEditLaborModal(actId, m)}
-                                      className="text-slate-500 hover:text-slate-200 transition-colors p-1"
-                                      title="Editar mano de obra"
-                                    >
-                                      <Pencil className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleDeleteLabor(actId, mId, m.detalle_mano_obra || m.descripcion || m.observacion)}
-                                      className="text-slate-500 hover:text-rose-400 transition-colors p-1"
-                                      title="Eliminar mano de obra"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-slate-500 italic p-3 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-center font-mono">
-                        Sin registros de mano de obra.
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Associated Spare Parts / Products Section */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between border-b border-[#2d3748] pb-1.5">
-                      <span className="text-xs font-bold font-mono text-slate-300 flex items-center gap-1.5">
-                        <Package className="w-4 h-4 text-sky-400" /> Repuestos Asociados
-                      </span>
-                      {activeRules.canAddProduct ? (
-                        <button
-                          onClick={() => openAddProductModal(actId)}
-                          className="text-[11px] font-mono text-sky-400 hover:underline flex items-center gap-1"
-                        >
-                          + Agregar Repuesto
-                        </button>
-                      ) : (
-                        <span className="text-[10px] font-mono text-slate-500 italic">
-                          {activeSelectedService.estado_servicio_id === 5 ? "Reanuda para agregar" : "No disponible"}
-                        </span>
-                      )}
-                    </div>
-
-                    {activeSelectedService.productos && activeSelectedService.productos.length > 0 ? (
-                      <div className="space-y-2">
-                        {activeSelectedService.productos.map((prod) => {
-                          const pId = prod.orden_producto_id || prod.producto_id || prod.id;
-                          return (
-                            <div
-                              key={pId}
-                              className="p-2.5 bg-[#1c2129] border border-[#2d3748] rounded-xl flex items-center justify-between text-xs font-mono"
-                            >
-                              <div className="flex items-center gap-2 truncate pr-2">
-                                <CheckSquare className="w-4 h-4 text-emerald-400 shrink-0" />
-                                <span className="truncate text-slate-200">{prod.producto_nombre} (x{prod.cantidad})</span>
-                              </div>
-                              <div className="flex items-center gap-2 shrink-0">
-                                <span className="font-bold text-sky-400">
-                                  RD$ {Number(prod.subtotal || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })}
-                                </span>
-                                {activeRules.canAddProduct && (
-                                  <button
-                                    onClick={() => handleDeleteProduct(actId, pId, prod.producto_nombre)}
-                                    className="text-slate-500 hover:text-rose-400 transition-colors p-1"
-                                    title="Eliminar repuesto"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-slate-500 italic p-3 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-center font-mono">
-                        Sin repuestos o productos asociados.
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Quick Action Buttons */}
-                  <div className="pt-3 border-t border-[#2d3748] space-y-2">
-                    {/* PENDIENTE (1) -> INICIAR_SERVICIO */}
-                    {Number(activeSelectedService.estado_servicio_id) === 1 && (
-                      activeRules.requiresMechanicToStart ? (
-                        <div className="space-y-1">
-                          <button
-                            disabled
-                            className="w-full py-2.5 bg-slate-800 text-slate-500 border border-slate-700 rounded-xl font-mono text-xs font-bold cursor-not-allowed flex items-center justify-center gap-2"
-                          >
-                            <Play className="w-4 h-4" /> Iniciar Servicio
-                          </button>
-                          <p className="text-[11px] font-mono text-amber-400 text-center">
-                            Asigna un mecánico antes de iniciar el servicio.
-                          </p>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => handleExecuteServiceAction(activeSelectedService, "INICIAR_SERVICIO")}
-                          disabled={submitting || processingServiceId === actId}
-                          className="w-full py-2.5 bg-[#84924a] hover:brightness-110 text-white font-bold rounded-xl font-mono text-xs transition-all flex items-center justify-center gap-2 border-t border-[#a6b66b]"
-                        >
-                          {processingServiceId === actId ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Play className="w-4 h-4" />
-                          )}
-                          Iniciar Servicio
-                        </button>
-                      )
-                    )}
-
-                    {/* EN_PROCESO (2) -> PAUSAR_SERVICIO or FINALIZAR_SERVICIO */}
-                    {Number(activeSelectedService.estado_servicio_id) === 2 && (
-                      <>
-                        <button
-                          onClick={() => handleExecuteServiceAction(activeSelectedService, "PAUSAR_SERVICIO")}
-                          disabled={submitting || processingServiceId === actId}
-                          className="w-full py-2.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-xl font-mono text-xs font-bold hover:bg-amber-500/30 transition-all flex items-center justify-center gap-2"
-                        >
-                          {processingServiceId === actId ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Pause className="w-4 h-4" />
-                          )}
-                          Pausar Trabajo
-                        </button>
-
-                        <button
-                          onClick={() => handleFinishServiceClick(activeSelectedService)}
-                          disabled={submitting || processingServiceId === actId}
-                          className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl font-mono text-xs transition-all flex items-center justify-center gap-2 border-t border-emerald-400 disabled:opacity-50"
-                        >
-                          {processingServiceId === actId ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <CheckCircle2 className="w-4 h-4" />
-                          )}
-                          Finalizar Servicio
-                        </button>
-                      </>
-                    )}
-
-                    {/* PAUSADO (5 or 4) -> REANUDAR_SERVICIO */}
-                    {(Number(activeSelectedService.estado_servicio_id) === 5 || Number(activeSelectedService.estado_servicio_id) === 4) && (
-                      <button
-                        onClick={() => handleExecuteServiceAction(activeSelectedService, "REANUDAR_SERVICIO")}
-                        disabled={submitting || processingServiceId === actId}
-                        className="w-full py-2.5 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-xl font-mono text-xs font-bold hover:bg-amber-500/30 transition-all flex items-center justify-center gap-2"
-                      >
-                        {processingServiceId === actId ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Play className="w-4 h-4 text-amber-300" />
-                        )}
-                        Reanudar Trabajo
-                      </button>
-                    )}
-
-                    {/* COMPLETADO (3) -> Reabrir (if canReopen) */}
-                    {Number(activeSelectedService.estado_servicio_id) === 3 && activeRules.canReopen && (
-                      <button
-                        onClick={() => openReopenServiceModal(activeSelectedService)}
-                        className="w-full py-2.5 bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 hover:bg-indigo-500/30 rounded-xl font-mono text-xs font-bold transition-all flex items-center justify-center gap-2"
-                      >
-                        <RotateCcw className="w-4 h-4 text-indigo-300" /> Reabrir Servicio
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })() : (
-              <p className="text-xs text-slate-500 italic text-center p-4 font-mono">
-                Selecciona un servicio de la tabla para ver su detalle.
-              </p>
-            )}
-          </div>
+            </tbody>
+          </table>
         </div>
       </div>
 
-      {/* MODAL 1: Agregar Servicio */}
-      {addServiceModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto">
-          <div
-            className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-6 sm:p-7 space-y-5 shadow-2xl relative my-auto shrink-0 z-10 font-sans text-slate-100"
-            style={{ width: "100%", maxWidth: "580px", boxSizing: "border-box" }}
-          >
-            <div className="flex items-center justify-between border-b border-[#2d3748] pb-4">
-              <h3 className="text-base font-bold text-slate-100 font-mono flex items-center gap-2">
-                <Plus className="w-5 h-5 text-[#bfce7f]" />
-                Agregar Servicio a la Orden
-              </h3>
+      {/* UNIFIED MODAL SHELL FOR ADD / EDIT ITEM (Rendered via Portal to document.body) */}
+      <WorkshopItemModalShell
+        open={itemModalOpen}
+        title={
+          isEditing
+            ? itemType === "PRODUCTO"
+              ? "EDITAR REPUESTO"
+              : "EDITAR SERVICIO"
+            : "AGREGAR REPUESTO O SERVICIO"
+        }
+        description="Selecciona si deseas registrar un servicio o un repuesto en la orden."
+        onClose={() => setItemModalOpen(false)}
+        footer={
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end font-sans">
+            <button
+              type="button"
+              onClick={() => setItemModalOpen(false)}
+              className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors cursor-pointer"
+            >
+              Cancelar
+            </button>
+            {refreshFailed ? (
               <button
                 type="button"
-                onClick={() => setAddServiceModalOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-[#1c2129] rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {modalError && (
-              <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs font-sans flex items-start gap-2.5">
-                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold block">Error al validar</span>
-                  <span>{modalError}</span>
-                </div>
-              </div>
-            )}
-
-            <form onSubmit={handleAddService} className="space-y-4 text-xs font-sans">
-              {Number(order?.estado_orden_id || order?.estado_id || 5) === 5 && (
-                <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-2.5 text-amber-300">
-                  <div className="flex items-center gap-2 font-bold text-xs">
-                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span>Orden en Reparación: Servicio Adicional</span>
-                  </div>
-                  <p className="text-[11px] leading-relaxed text-amber-200/90 font-mono">
-                    La orden está en Reparación. Añadir un servicio adicional requiere mecánico asignado, confirmación y motivo explicativo.
-                  </p>
-                  <div className="pt-2 border-t border-amber-500/20 space-y-2 font-mono">
-                    <label className="flex items-center gap-2 cursor-pointer font-semibold text-xs text-amber-200">
-                      <input
-                        type="checkbox"
-                        checked={confirmAdicional}
-                        onChange={(e) => setConfirmAdicional(e.target.checked)}
-                        className="rounded border-amber-500/50 bg-[#0a0c10] text-[#bfce7f] focus:ring-0"
-                      />
-                      Confirmar adición de servicio adicional
-                    </label>
-                    <div>
-                      <label className="block text-[11px] font-semibold text-amber-200/90 mb-1 font-sans">Motivo del servicio adicional *</label>
-                      <input
-                        type="text"
-                        value={motivoAdicional}
-                        onChange={(e) => setMotivoAdicional(e.target.value)}
-                        placeholder="Ej: Detectado desgaste extra durante la revisión técnica"
-                        className="w-full p-2 bg-[#0a0c10] border border-amber-500/40 rounded-lg text-slate-200 text-xs focus:outline-none focus:border-amber-400"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-              <div>
-                <label className="block text-slate-300 mb-1 font-semibold">Tipo de Servicio *</label>
-                <select
-                  required
-                  value={newTipoServicioId}
-                  onChange={(e) => {
-                    setNewTipoServicioId(e.target.value);
-                    const found = tiposServicio.find((t) => String(t.tipo_servicio_id) === String(e.target.value));
-                    if (found) setNewPrecioAcordado(found.precio_base);
-                  }}
-                  className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-[#bfce7f]"
-                >
-                  <option value="">-- Selecciona un Servicio --</option>
-                  {tiposServicio.map((t) => (
-                    <option key={t.tipo_servicio_id} value={t.tipo_servicio_id}>
-                      {t.nombre} (RD$ {parseFloat(t.precio_base || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-slate-300 mb-1 font-semibold">Mecánico Responsable</label>
-                <select
-                  value={newMecanicoId}
-                  onChange={(e) => setNewMecanicoId(e.target.value)}
-                  className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-[#bfce7f] font-mono"
-                >
-                  <option value="">-- Sin mecánico asignado --</option>
-                  {mecanicosCatalog.map((m) => (
-                    <option key={m.usuario_id} value={String(m.usuario_id)}>
-                      {m.nombre_completo}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-slate-300 mb-1 font-semibold">Precio Acordado (RD$)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={newPrecioAcordado}
-                  onChange={(e) => setNewPrecioAcordado(e.target.value)}
-                  placeholder="Monto acordado..."
-                  className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-[#bfce7f]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-300 mb-1 font-semibold">Observaciones / Notas Técnicas</label>
-                <textarea
-                  rows={3}
-                  value={newObservaciones}
-                  onChange={(e) => setNewObservaciones(e.target.value)}
-                  placeholder="Instrucciones o notas adicionales para este servicio..."
-                  className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-[#bfce7f] leading-relaxed"
-                />
-              </div>
-
-              <div className="flex justify-end items-center gap-3 pt-4 border-t border-[#2d3748]">
-                <button
-                  type="button"
-                  onClick={() => setAddServiceModalOpen(false)}
-                  className="px-4 py-2.5 text-slate-400 hover:text-slate-200 font-mono text-xs"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-5 py-2.5 bg-[#84924a] text-white font-bold rounded-xl hover:brightness-110 flex items-center gap-2 font-mono text-xs border-t border-[#a6b66b]"
-                >
-                  {submitting && <Loader2 className="w-4 h-4 animate-spin text-white" />}
-                  {submitting ? "Guardando..." : "Guardar Servicio"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL 2: Editar Servicio */}
-      {editServiceModalOpen && editingService && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto">
-          <div
-            className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-6 sm:p-7 space-y-5 shadow-2xl relative my-auto shrink-0 z-10 font-sans text-slate-100"
-            style={{ width: "100%", maxWidth: "580px", boxSizing: "border-box" }}
-          >
-            <div className="flex items-center justify-between border-b border-[#2d3748] pb-4">
-              <h3 className="text-base font-bold text-slate-100 font-mono flex items-center gap-2">
-                <Pencil className="w-5 h-5 text-[#bfce7f]" />
-                Editar Servicio — {editingService.tipo_servicio_nombre}
-              </h3>
-              <button
-                type="button"
-                onClick={() => setEditServiceModalOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-[#1c2129] rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {modalError && (
-              <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs font-sans flex items-start gap-2.5">
-                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold block">Error al validar</span>
-                  <span>{modalError}</span>
-                </div>
-              </div>
-            )}
-
-            <form onSubmit={handleUpdateService} className="space-y-4 text-xs font-sans">
-              <div>
-                <label className="block text-slate-300 mb-1 font-semibold">Mecánico Responsable</label>
-                <select
-                  value={newMecanicoId}
-                  onChange={(e) => setNewMecanicoId(e.target.value)}
-                  className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-[#bfce7f] font-mono"
-                >
-                  <option value="">-- Sin mecánico asignado --</option>
-                  {mecanicosCatalog.map((m) => (
-                    <option key={m.usuario_id} value={String(m.usuario_id)}>
-                      {m.nombre_completo}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {(() => {
-                const selMecId = newMecanicoId ? parseInt(newMecanicoId, 10) : null;
-                const initMecId = editingService.mecanico_usuario_id || editingService.usuario_id;
-                const isMecChanged = selMecId !== (initMecId ? Number(initMecId) : null);
-                const orderStateId = Number(order?.estado_orden_id || order?.estado_id || 5);
-
-                if (isMecChanged && orderStateId === 5 && Boolean(initMecId)) {
-                  return (
-                    <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-2.5 text-amber-300 font-sans">
-                      <div className="flex items-center gap-2 font-bold text-xs">
-                        <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-                        <span>Reasignación de Mecánico en Reparación</span>
-                      </div>
-                      <p className="text-[11px] leading-relaxed text-amber-200/90 font-mono">
-                        Estás cambiando el mecánico asignado en una orden en Reparación. Debes confirmar y proporcionar un motivo obligatorio.
-                      </p>
-                      <div className="pt-2 border-t border-amber-500/20 space-y-2 font-mono">
-                        <label className="flex items-center gap-2 cursor-pointer font-semibold text-xs text-amber-200">
-                          <input
-                            type="checkbox"
-                            checked={editConfirmReasignar}
-                            onChange={(e) => setEditConfirmReasignar(e.target.checked)}
-                            className="rounded border-amber-500/50 bg-[#0a0c10] text-[#bfce7f] focus:ring-0"
-                          />
-                          Confirmo la reasignación
-                        </label>
-                        <div>
-                          <label className="block text-[11px] font-semibold text-amber-200/90 mb-1 font-sans">Motivo de la reasignación *</label>
-                          <input
-                            type="text"
-                            value={editMotivoReasignar}
-                            onChange={(e) => setEditMotivoReasignar(e.target.value)}
-                            placeholder="Ej: Reasignación por especialidad / disponibilidad"
-                            className="w-full p-2 bg-[#0a0c10] border border-amber-500/40 rounded-lg text-slate-200 text-xs focus:outline-none focus:border-amber-400 font-sans"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  );
-                }
-                return null;
-              })()}
-
-              <div>
-                <label className="block text-slate-300 mb-1 font-semibold">Precio Acordado (RD$)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={newPrecioAcordado}
-                  onChange={(e) => setNewPrecioAcordado(e.target.value)}
-                  className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-[#bfce7f] font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-300 mb-1 font-semibold">Observaciones / Notas Técnicas</label>
-                <textarea
-                  rows={3}
-                  value={newObservaciones}
-                  onChange={(e) => setNewObservaciones(e.target.value)}
-                  className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-[#bfce7f] leading-relaxed"
-                />
-              </div>
-
-              <div className="flex justify-end items-center gap-3 pt-4 border-t border-[#2d3748]">
-                <button
-                  type="button"
-                  onClick={() => setEditServiceModalOpen(false)}
-                  className="px-4 py-2.5 text-slate-400 hover:text-slate-200 font-mono text-xs"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-5 py-2.5 bg-[#84924a] text-white font-bold rounded-xl hover:brightness-110 flex items-center gap-2 font-mono text-xs border-t border-[#a6b66b]"
-                >
-                  {submitting && <Loader2 className="w-4 h-4 animate-spin text-white" />}
-                  {submitting ? "Actualizando..." : "Actualizar Servicio"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL 3: Registrar Mano de Obra */}
-      {addLaborModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto">
-          <div
-            className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-6 sm:p-7 space-y-5 shadow-2xl relative my-auto shrink-0 z-10 font-sans text-slate-100"
-            style={{ width: "100%", maxWidth: "580px", boxSizing: "border-box" }}
-          >
-            <div className="flex items-center justify-between border-b border-[#2d3748] pb-4">
-              <h3 className="text-base font-bold text-slate-100 font-mono flex items-center gap-2">
-                <Wrench className="w-5 h-5 text-[#bfce7f]" />
-                Registrar Mano de Obra
-              </h3>
-              <button
-                type="button"
-                onClick={() => setAddLaborModalOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-[#1c2129] rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {modalError && (
-              <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs font-sans flex items-start gap-2.5">
-                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold block">Error al validar</span>
-                  <span>{modalError}</span>
-                </div>
-              </div>
-            )}
-
-            <form onSubmit={handleAddLabor} className="space-y-4 text-xs font-sans">
-              <div>
-                <label className="block text-slate-300 mb-1 font-semibold">Descripción del Trabajo *</label>
-                <input
-                  required
-                  type="text"
-                  value={laborDesc}
-                  onChange={(e) => setLaborDesc(e.target.value)}
-                  placeholder="ej. Diagnóstico, cambio de sellos y desangrado"
-                  className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-[#bfce7f]"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono">
-                <div>
-                  <label className="block text-slate-300 mb-1 font-semibold font-sans">Horas Est.</label>
-                  <input
-                    type="number"
-                    step="0.25"
-                    min="0"
-                    value={laborHorasEst}
-                    onChange={(e) => setLaborHorasEst(e.target.value)}
-                    className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-[#bfce7f]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-300 mb-1 font-semibold font-sans">Horas Reales</label>
-                  <input
-                    type="number"
-                    step="0.25"
-                    min="0"
-                    value={laborHorasReal}
-                    onChange={(e) => setLaborHorasReal(e.target.value)}
-                    className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-[#bfce7f]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-300 mb-1 font-semibold font-sans">Costo/Hora (RD$)</label>
-                  <input
-                    type="number"
-                    step="1"
-                    min="0"
-                    value={laborCostoHora}
-                    onChange={(e) => setLaborCostoHora(e.target.value)}
-                    className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-[#bfce7f]"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end items-center gap-3 pt-4 border-t border-[#2d3748]">
-                <button
-                  type="button"
-                  onClick={() => setAddLaborModalOpen(false)}
-                  className="px-4 py-2.5 text-slate-400 hover:text-slate-200 font-mono text-xs"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-5 py-2.5 bg-[#84924a] text-white font-bold rounded-xl hover:brightness-110 flex items-center gap-2 font-mono text-xs border-t border-[#a6b66b]"
-                >
-                  {submitting && <Loader2 className="w-4 h-4 animate-spin text-white" />}
-                  {submitting ? "Guardando..." : "Guardar Mano de Obra"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL 4: Editar Mano de Obra */}
-      {editLaborModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto">
-          <div
-            className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-6 sm:p-7 space-y-5 shadow-2xl relative my-auto shrink-0 z-10 font-sans text-slate-100"
-            style={{ width: "100%", maxWidth: "580px", boxSizing: "border-box" }}
-          >
-            <div className="flex items-center justify-between border-b border-[#2d3748] pb-4">
-              <h3 className="text-base font-bold text-slate-100 font-mono flex items-center gap-2">
-                <Pencil className="w-5 h-5 text-[#bfce7f]" />
-                Editar Mano de Obra
-              </h3>
-              <button
-                type="button"
-                onClick={() => setEditLaborModalOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-[#1c2129] rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {modalError && (
-              <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs font-sans flex items-start gap-2.5">
-                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold block">Error al validar</span>
-                  <span>{modalError}</span>
-                </div>
-              </div>
-            )}
-
-            <form onSubmit={handleUpdateLabor} className="space-y-4 text-xs font-sans">
-              <div>
-                <label className="block text-slate-300 mb-1 font-semibold">Descripción del Trabajo *</label>
-                <input
-                  required
-                  type="text"
-                  value={editLaborDesc}
-                  onChange={(e) => setEditLaborDesc(e.target.value)}
-                  placeholder="Detalle del trabajo realizado..."
-                  className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-[#bfce7f]"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 font-mono">
-                <div>
-                  <label className="block text-slate-300 mb-1 font-semibold font-sans">Horas Trabajadas</label>
-                  <input
-                    type="number"
-                    step="0.25"
-                    min="0"
-                    value={editLaborHoras}
-                    onChange={(e) => setEditLaborHoras(e.target.value)}
-                    className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-[#bfce7f]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-300 mb-1 font-semibold font-sans">Costo/Hora (RD$)</label>
-                  <input
-                    type="number"
-                    step="1"
-                    min="0"
-                    value={editLaborCostoHora}
-                    onChange={(e) => setEditLaborCostoHora(e.target.value)}
-                    className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-[#bfce7f]"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end items-center gap-3 pt-4 border-t border-[#2d3748]">
-                <button
-                  type="button"
-                  onClick={() => setEditLaborModalOpen(false)}
-                  className="px-4 py-2.5 text-slate-400 hover:text-slate-200 font-mono text-xs"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-5 py-2.5 bg-[#84924a] text-white font-bold rounded-xl hover:brightness-110 flex items-center gap-2 font-mono text-xs border-t border-[#a6b66b]"
-                >
-                  {submitting && <Loader2 className="w-4 h-4 animate-spin text-white" />}
-                  {submitting ? "Actualizando..." : "Actualizar Mano de Obra"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL 5: Asociar Producto */}
-      {addProductModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto">
-          <div
-            className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-6 sm:p-7 space-y-5 shadow-2xl relative my-auto shrink-0 z-10 font-sans text-slate-100"
-            style={{ width: "100%", maxWidth: "580px", boxSizing: "border-box" }}
-          >
-            <div className="flex items-center justify-between border-b border-[#2d3748] pb-4">
-              <h3 className="text-base font-bold text-slate-100 font-mono flex items-center gap-2">
-                <Package className="w-5 h-5 text-sky-400" />
-                Asociar Producto / Repuesto
-              </h3>
-              <button
-                type="button"
-                onClick={() => setAddProductModalOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-[#1c2129] rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {selectedServiceId && (
-              <div className="p-3 bg-[#0a0c10] border border-[#2d3748] rounded-xl flex items-center justify-between font-mono text-xs">
-                <span className="text-slate-400 font-semibold">Servicio Receptor:</span>
-                <span className="font-bold text-[#bfce7f]">
-                  {services.find((s) => getServId(s) === Number(selectedServiceId))?.tipo_servicio_nombre || `Servicio #${selectedServiceId}`}
-                </span>
-              </div>
-            )}
-
-            {modalError && (
-              <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs font-sans flex items-start gap-2.5">
-                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold block">Error al validar</span>
-                  <span>{modalError}</span>
-                </div>
-              </div>
-            )}
-
-            <form onSubmit={handleAddProduct} className="space-y-4 text-xs font-sans">
-              <div>
-                <label className="block text-slate-300 mb-1 font-semibold">Producto del Inventario *</label>
-                <select
-                  required
-                  value={prodProductoId}
-                  onChange={(e) => {
-                    setProdProductoId(e.target.value);
-                    const found = productosList.find((p) => String(p.producto_id) === String(e.target.value));
-                    if (found) setProdPrecio(found.precio_venta);
-                  }}
-                  className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-sky-500 font-mono"
-                >
-                  <option value="">-- Selecciona un Producto --</option>
-                  {productosList.map((p) => (
-                    <option key={p.producto_id} value={p.producto_id}>
-                      {p.nombre} (RD$ {parseFloat(p.precio_venta || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 font-mono">
-                <div>
-                  <label className="block text-slate-300 mb-1 font-semibold font-sans">Cantidad *</label>
-                  <input
-                    type="number"
-                    step="1"
-                    min="1"
-                    required
-                    value={prodCantidad}
-                    onChange={(e) => setProdCantidad(e.target.value)}
-                    className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-sky-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-300 mb-1 font-semibold font-sans">Precio Unitario (RD$)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    required
-                    value={prodPrecio}
-                    onChange={(e) => setProdPrecio(e.target.value)}
-                    className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-sky-500"
-                  />
-                </div>
-              </div>
-
-              <div className="p-3 bg-[#0a0c10] border border-[#2d3748] rounded-xl flex justify-between items-center font-mono text-xs">
-                <span className="text-slate-400 font-semibold uppercase">Subtotal Calculado:</span>
-                <span className="font-bold text-sky-400 text-sm">
-                  RD$ {(parseFloat(prodCantidad || 0) * parseFloat(prodPrecio || 0)).toLocaleString("es-DO", { minimumFractionDigits: 2 })}
-                </span>
-              </div>
-
-              <div className="flex justify-end items-center gap-3 pt-4 border-t border-[#2d3748]">
-                <button
-                  type="button"
-                  onClick={() => setAddProductModalOpen(false)}
-                  className="px-4 py-2.5 text-slate-400 hover:text-slate-200 font-mono text-xs"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-5 py-2.5 bg-sky-500 text-white font-bold rounded-xl hover:brightness-110 flex items-center gap-2 font-mono text-xs border-t border-sky-400"
-                >
-                  {submitting && <Loader2 className="w-4 h-4 animate-spin text-white" />}
-                  {submitting ? "Asociando..." : "Asociar Producto"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: Finalizar servicio sin mano de obra */}
-      {finishNoLaborModalOpen && finishNoLaborService && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto">
-          <div
-            className="bg-[#161a21] border border-amber-500/40 rounded-2xl p-6 sm:p-7 space-y-5 shadow-2xl relative my-auto shrink-0 z-10 font-sans text-slate-100"
-            style={{ width: "100%", maxWidth: "540px", boxSizing: "border-box" }}
-          >
-            <div className="flex items-center justify-between border-b border-[#2d3748] pb-4">
-              <h3 className="text-base font-bold text-slate-100 font-mono flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5 text-amber-400" />
-                Finalizar Servicio Sin Mano de Obra
-              </h3>
-              <button
-                type="button"
-                onClick={() => setFinishNoLaborModalOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-[#1c2129] rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {modalError && (
-              <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs font-sans flex items-start gap-2.5">
-                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold block">Error al validar</span>
-                  <span>{modalError}</span>
-                </div>
-              </div>
-            )}
-
-            <form onSubmit={handleFinishNoLaborSubmit} className="space-y-4 text-xs font-sans">
-              <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-2.5 text-amber-300">
-                <p className="text-[11px] leading-relaxed text-amber-200/90 font-mono">
-                  El servicio <strong>"{finishNoLaborService.tipo_servicio_nombre}"</strong> no registra horas ni mano de obra trabajada. Para finalizarlo, debes confirmar explícitamente y justificar el motivo.
-                </p>
-                <div className="pt-2 border-t border-amber-500/20 space-y-2 font-mono">
-                  <label className="flex items-center gap-2 cursor-pointer font-semibold text-xs text-amber-200">
-                    <input
-                      type="checkbox"
-                      checked={finishNoLaborConfirm}
-                      onChange={(e) => setFinishNoLaborConfirm(e.target.checked)}
-                      className="rounded border-amber-500/50 bg-[#0a0c10] text-[#bfce7f] focus:ring-0"
-                    />
-                    Confirmo la finalización sin mano de obra
-                  </label>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-amber-200/90 mb-1 font-sans">
-                      Motivo explicativo obligatorio *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={finishNoLaborMotivo}
-                      onChange={(e) => setFinishNoLaborMotivo(e.target.value)}
-                      placeholder="Ej: Servicio incluido en paquete preliminar / No requirió tiempo adicional"
-                      className="w-full p-2.5 bg-[#0a0c10] border border-amber-500/40 rounded-lg text-slate-200 text-xs focus:outline-none focus:border-amber-400 font-sans"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-end items-center gap-3 pt-4 border-t border-[#2d3748]">
-                <button
-                  type="button"
-                  onClick={() => setFinishNoLaborModalOpen(false)}
-                  className="px-4 py-2.5 text-slate-400 hover:text-slate-200 font-mono text-xs"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl flex items-center gap-2 font-mono text-xs border-t border-emerald-400 disabled:opacity-50"
-                >
-                  {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                  Confirmar y Finalizar Servicio
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL 6: Confirmación (Eliminación o Finalización) */}
-      {confirmModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto">
-          <div
-            className={`bg-[#161a21] border rounded-2xl p-6 sm:p-7 space-y-5 shadow-2xl relative my-auto shrink-0 z-10 font-sans text-slate-100 animate-in fade-in zoom-in duration-150 ${
-              confirmModalType === "finish" ? "border-emerald-500/40" : "border-[#2d3748]"
-            }`}
-            style={{ width: "100%", maxWidth: "480px", boxSizing: "border-box" }}
-          >
-            <div className="flex items-center justify-between border-b border-[#2d3748] pb-4">
-              <h3 className="text-base font-bold text-slate-100 font-mono flex items-center gap-2">
-                {confirmModalType === "finish" ? (
-                  <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                ) : (
-                  <AlertCircle className="w-5 h-5 text-rose-400" />
-                )}
-                {confirmModalTitle || (confirmModalType === "finish" ? "Finalizar servicio" : "Confirmación Requerida")}
-              </h3>
-              <button
-                type="button"
-                onClick={() => setConfirmModalOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-[#1c2129] rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="py-2 text-xs sm:text-sm text-slate-300 font-sans leading-relaxed whitespace-pre-line">
-              {confirmModalMessage}
-            </div>
-
-            <div className="flex justify-end items-center gap-3 pt-4 border-t border-[#2d3748]">
-              <button
-                type="button"
-                onClick={() => setConfirmModalOpen(false)}
-                className="px-4 py-2.5 text-slate-400 hover:text-slate-200 font-mono text-xs hover:bg-[#1c2129] rounded-xl transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                disabled={submitting}
                 onClick={async () => {
-                  setConfirmModalOpen(false);
-                  if (confirmModalOnConfirm) {
-                    await confirmModalOnConfirm();
+                  setSubmitting(true);
+                  setModalError(null);
+                  try {
+                    await onRefresh();
+                    setPendingNewComponent(null);
+                    setShowInlineComponentForm(false);
+                    setExistingComponentSuggestionId(null);
+                    setItemModalOpen(false);
+                    setRefreshFailed(false);
+                    showSuccessToast("Vista actualizada exitosamente.");
+                  } catch (err) {
+                    setModalError("El servicio fue creado correctamente, pero no se pudo actualizar la vista.");
+                  } finally {
+                    setSubmitting(false);
                   }
                 }}
-                className={`px-5 py-2.5 text-white font-bold rounded-xl flex items-center gap-2 font-mono text-xs transition-colors border-t ${
-                  confirmModalType === "finish"
-                    ? "bg-emerald-600 hover:bg-emerald-500 border-emerald-400"
-                    : "bg-rose-600 hover:bg-rose-500 border-rose-400"
-                }`}
+                disabled={submitting}
+                className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl text-xs shadow-lg transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 font-mono uppercase"
               >
-                {confirmModalType === "finish" ? (
-                  <>
-                    <CheckCircle2 className="w-4 h-4" />
-                    Confirmar finalización
-                  </>
-                ) : (
-                  <>
-                    <Trash2 className="w-4 h-4" />
-                    Confirmar Eliminación
-                  </>
-                )}
+                {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                <span>Reintentar actualización</span>
+              </button>
+            ) : (
+              <button
+                type="submit"
+                form="workshop-item-form"
+                disabled={submitting}
+                className="px-5 py-2 bg-[#bfce7f] hover:bg-[#aab86e] text-slate-950 font-bold rounded-xl text-xs shadow-lg transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 font-mono uppercase"
+              >
+                {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                <span>
+                  {isEditing
+                    ? "Guardar Cambios"
+                    : itemType === "PRODUCTO"
+                    ? "Agregar Repuesto"
+                    : formConfirmAdicional
+                    ? "Confirmar y Agregar Servicio"
+                    : "Agregar Servicio"}
+                </span>
+              </button>
+            )}
+          </div>
+        }
+      >
+        <form id="workshop-item-form" onSubmit={handleSubmitItemForm} className="space-y-4 font-mono text-xs">
+          <fieldset disabled={refreshFailed || submitting} className="space-y-4 w-full">
+          {/* Type Switcher */}
+          <div>
+            <label className="text-[11px] text-slate-400 block mb-1.5 font-semibold uppercase">Tipo de Ítem *</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                disabled={isEditing}
+                onClick={() => {
+                  setItemType("SERVICIO");
+                  setModalError(null);
+                }}
+                className={`py-2 px-3 rounded-xl border font-bold flex items-center justify-center gap-2 transition-all ${
+                  itemType === "SERVICIO"
+                    ? "bg-[#bfce7f]/20 border-[#bfce7f] text-[#bfce7f]"
+                    : "bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700"
+                } ${isEditing ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+              >
+                <Wrench className="w-4 h-4" />
+                <span>Servicio</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={isEditing}
+                onClick={() => {
+                  setItemType("PRODUCTO");
+                  setModalError(null);
+                }}
+                className={`py-2 px-3 rounded-xl border font-bold flex items-center justify-center gap-2 transition-all ${
+                  itemType === "PRODUCTO"
+                    ? "bg-cyan-500/20 border-cyan-400 text-cyan-300"
+                    : "bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700"
+                } ${isEditing ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+              >
+                <Package className="w-4 h-4" />
+                <span>Repuesto</span>
               </button>
             </div>
           </div>
-        </div>
-      )}
 
-      {/* MODAL 6: Reabrir Servicio */}
-      {reopenModalOpen && reopenService && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto">
-          <div
-            className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-6 sm:p-7 space-y-5 shadow-2xl relative my-auto shrink-0 z-10 font-sans text-slate-100"
-            style={{ width: "100%", maxWidth: "540px", boxSizing: "border-box" }}
-          >
-            <div className="flex items-center justify-between border-b border-[#2d3748] pb-4">
-              <h3 className="text-base font-bold text-slate-100 font-mono flex items-center gap-2">
-                <RotateCcw className="w-5 h-5 text-indigo-400" />
-                Reabrir Servicio — {reopenService.tipo_servicio_nombre}
-              </h3>
-              <button
-                type="button"
-                onClick={() => setReopenModalOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-[#1c2129] rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-3.5 bg-indigo-500/10 border border-indigo-500/30 rounded-xl space-y-1.5 text-indigo-300">
-              <div className="flex items-center gap-2 font-bold text-xs">
-                <AlertTriangle className="w-4 h-4 text-indigo-400 shrink-0" />
-                <span>Acción de Control de Calidad</span>
+          {/* Error Message */}
+          {modalError && (
+            <div className="p-3 bg-rose-950/80 border border-rose-500/50 rounded-xl text-rose-200 text-xs flex flex-col gap-2 font-mono">
+              <div className="flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                <span>{modalError}</span>
               </div>
-              <p className="text-[11px] leading-relaxed text-indigo-200/90 font-mono">
-                La reapertura de un servicio completado cambiará su estado a En Proceso y requiere indicar obligatoriamente el motivo explicativo.
-              </p>
-            </div>
-
-            {modalError && (
-              <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs font-sans flex items-start gap-2.5">
-                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold block">Error al validar</span>
-                  <span>{modalError}</span>
+              {existingComponentSuggestionId && (
+                <div className="pt-2 border-t border-rose-800/60 flex items-center justify-between font-sans">
+                  <span className="text-[11px] text-rose-300">¿Deseas usar el componente de esa categoría ya registrado en esta bicicleta?</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormBicicletaComponenteId(existingComponentSuggestionId);
+                      setPendingNewComponent(null);
+                      setShowInlineComponentForm(false);
+                      setExistingComponentSuggestionId(null);
+                      setModalError(null);
+                    }}
+                    className="px-3 py-1 bg-[#bfce7f] hover:bg-[#aab86e] text-slate-950 font-bold rounded-lg text-xs font-mono uppercase cursor-pointer shrink-0"
+                  >
+                    Usar el componente existente
+                  </button>
                 </div>
-              </div>
-            )}
-
-            <form onSubmit={handleReopenServiceSubmit} className="space-y-4 text-xs font-sans">
-              <div>
-                <label className="block text-slate-300 mb-1 font-semibold">Motivo de Reapertura *</label>
-                <textarea
-                  required
-                  rows={3}
-                  value={reopenMotivo}
-                  onChange={(e) => setReopenMotivo(e.target.value)}
-                  placeholder="Ej: Se requiere revisión adicional debido a leve fricción detectada en prueba de ruta..."
-                  className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-indigo-400 leading-relaxed font-sans"
-                />
-              </div>
-
-              <div className="flex justify-end items-center gap-3 pt-4 border-t border-[#2d3748]">
-                <button
-                  type="button"
-                  onClick={() => setReopenModalOpen(false)}
-                  className="px-4 py-2.5 text-slate-400 hover:text-slate-200 font-mono text-xs"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl flex items-center gap-2 font-mono text-xs transition-all border-t border-indigo-400"
-                >
-                  {submitting && <Loader2 className="w-4 h-4 animate-spin text-white" />}
-                  {submitting ? "Reabriendo..." : "Confirmar Reapertura"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL 7: Reasignar Mecánico en Reparación */}
-      {reassignModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto">
-          <div
-            className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-6 sm:p-7 space-y-5 shadow-2xl relative my-auto shrink-0 z-10 font-sans text-slate-100"
-            style={{ width: "100%", maxWidth: "540px", boxSizing: "border-box" }}
-          >
-            <div className="flex items-center justify-between border-b border-[#2d3748] pb-4">
-              <h3 className="text-base font-bold text-slate-100 font-mono flex items-center gap-2">
-                <User className="w-5 h-5 text-amber-400" />
-                Reasignar Mecánico Responsable
-              </h3>
-              <button
-                type="button"
-                onClick={() => setReassignModalOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-[#1c2129] rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              )}
             </div>
+          )}
 
-            <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-1.5 text-amber-300 font-mono text-xs">
-              <div className="flex items-center gap-2 font-bold">
-                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-                <span>Orden en Reparación: Reasignación de Mecánico</span>
-              </div>
-              <p className="text-[11px] leading-relaxed text-amber-200/90 font-sans">
-                Para cambiar el mecánico asignado en un servicio en Reparación se requiere confirmación explícita y motivo obligatorio.
-              </p>
-            </div>
-
-            {modalError && (
-              <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs font-sans flex items-start gap-2.5">
-                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold block">Error al validar</span>
-                  <span>{modalError}</span>
+          {/* FORM GRID */}
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {/* FIELDS WHEN TYPE IS "SERVICIO" */}
+            {itemType === "SERVICIO" && (
+              <>
+                <div className="md:col-span-2">
+                  <label className="text-[11px] text-slate-400 block mb-1 font-semibold uppercase">Tipo de Servicio *</label>
+                  <select
+                    value={formTipoServicioId}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFormTipoServicioId(val);
+                      const ts = tiposServicio.find(t => String(t.tipo_servicio_id) === val);
+                      if (ts && ts.precio_base) {
+                        setFormPrecioUnitario(String(ts.precio_base));
+                      }
+                    }}
+                    className="w-full min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-[#bfce7f]"
+                  >
+                    <option value="">-- Seleccionar servicio --</option>
+                    {tiposServicio.map((t) => (
+                      <option key={t.tipo_servicio_id} value={t.tipo_servicio_id}>
+                        {t.nombre} (RD$ {Number(t.precio_base || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })})
+                      </option>
+                    ))}
+                  </select>
                 </div>
-              </div>
-            )}
 
-            <form onSubmit={handleConfirmReassignMechanic} className="space-y-4 text-xs font-sans">
-              <div>
-                <label className="flex items-center gap-2 cursor-pointer font-semibold text-amber-200 font-mono">
+                {/* Componente Afectado with Inline Creator */}
+                <div className="md:col-span-2 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] text-slate-400 font-semibold uppercase">Componente Afectado (Opcional)</label>
+                    {canCreateInlineComponent && !showInlineComponentForm && !pendingNewComponent && (
+                      <button
+                        type="button"
+                        onClick={handleOpenInlineComponentForm}
+                        className="text-[11px] text-[#bfce7f] hover:underline flex items-center gap-1 font-mono cursor-pointer"
+                      >
+                        <Plus size={12} />
+                        <span>No encuentro el componente · Agregalo</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <select
+                    value={formBicicletaComponenteId || ""}
+                    onChange={(e) => {
+                      setFormBicicletaComponenteId(e.target.value);
+                      if (e.target.value) {
+                        setPendingNewComponent(null);
+                        setShowInlineComponentForm(false);
+                      }
+                    }}
+                    disabled={loadingComponents || Boolean(pendingNewComponent)}
+                    className="w-full min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-[#bfce7f] disabled:opacity-60"
+                  >
+                    <option value="">Sin componente específico (Servicio General)</option>
+
+                    {bicycleComponents.length > 0 && (
+                      <optgroup label="Componentes de la bicicleta">
+                        {bicycleComponents.map((c) => {
+                          const compId = c.bicicleta_componente_id;
+                          const marcaMod = [c.marca, c.modelo].filter(Boolean).join(" ");
+                          const healthText = `${c.estado_nombre} (${c.porcentaje_salud}% salud)`;
+                          const label = `${c.categoria_nombre}${marcaMod ? ` — ${marcaMod}` : ""} — ${healthText}${c.numero_serie ? ` (SN: ${c.numero_serie})` : ""}`;
+                          return (
+                            <option key={compId} value={compId}>
+                              {label}
+                            </option>
+                          );
+                        })}
+                      </optgroup>
+                    )}
+
+                    {loadingComponents && <option value="" disabled>Cargando componentes de la bicicleta…</option>}
+                  </select>
+
+                  {/* CARD: NUEVO COMPONENTE PENDIENTE DE GUARDAR */}
+                  {pendingNewComponent && (
+                    <div className="mt-2 p-3 bg-[#bfce7f]/10 border border-[#bfce7f]/40 rounded-xl space-y-2 font-mono text-xs shadow-lg animate-in fade-in duration-200">
+                      <div className="flex items-center justify-between border-b border-[#bfce7f]/20 pb-2">
+                        <div className="flex items-center gap-2">
+                          <Sparkles className="w-4 h-4 text-[#bfce7f]" />
+                          <span className="font-bold text-[#bfce7f] uppercase text-[11px]">
+                            NUEVO COMPONENTE — PENDIENTE DE GUARDAR
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={handleEditPendingComponent}
+                            className="text-[10px] text-[#bfce7f] hover:underline cursor-pointer"
+                          >
+                            Editar borrador
+                          </button>
+                          <span className="text-slate-600">•</span>
+                          <button
+                            type="button"
+                            onClick={handleRemovePendingComponent}
+                            className="text-[10px] text-rose-400 hover:underline cursor-pointer"
+                          >
+                            Quitar borrador
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-300">
+                        <div>
+                          <span className="text-slate-400 font-semibold block">Categoría:</span>
+                          <span className="font-bold text-slate-100">{pendingNewComponent.categoria_nombre}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-semibold block">Marca:</span>
+                          <span>{pendingNewComponent.marca || "—"}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-semibold block">Estado actual:</span>
+                          <span>{pendingNewComponent.estado_nombre} ({pendingNewComponent.porcentaje_salud}% salud)</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 font-semibold block">Número de serie:</span>
+                          <span>{pendingNewComponent.numero_serie || "—"}</span>
+                        </div>
+                      </div>
+
+                      <p className="text-[10px] text-amber-300/90 italic pt-1 border-t border-[#bfce7f]/20">
+                        Este componente se registrará cuando agregues el servicio.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Error Messages */}
+                  {componentsError && (
+                    <p className="text-[11px] text-rose-400 font-mono mt-1 flex items-center gap-1">
+                      <AlertCircle size={12} />
+                      <span>{componentsError}</span>
+                    </p>
+                  )}
+
+                  {/* INLINE NEW COMPONENT FORM (LOCAL DRAFT ONLY) */}
+                  {canCreateInlineComponent && showInlineComponentForm && (
+                    <div className="mt-3 rounded-xl border border-[#bfce7f]/40 bg-slate-950/90 p-4 space-y-3 font-mono text-xs shadow-xl animate-in fade-in slide-in-from-top-2 duration-200">
+                      <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                        <h4 className="font-bold text-[#bfce7f] uppercase text-[11px] flex items-center gap-1.5">
+                          <Sparkles size={14} /> REGISTRAR NUEVO COMPONENTE DE LA BICICLETA
+                        </h4>
+                        <button
+                          type="button"
+                          onClick={handleCancelInlineComponentForm}
+                          className="text-slate-400 hover:text-white p-1 rounded transition-colors"
+                          title="Cancelar registro de componente"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+
+                      <p className="text-[10px] text-slate-400 font-sans leading-relaxed">
+                        El componente se registrará cuando agregues el servicio.
+                      </p>
+
+                      {allCategoriesRegistered && (
+                        <div className="p-2.5 bg-amber-950/80 border border-amber-500/50 rounded-lg text-amber-200 text-[11px] flex items-center gap-2 font-mono">
+                          <AlertTriangle size={14} className="text-amber-400 shrink-0" />
+                          <span>Esta bicicleta ya tiene registrados todos los tipos de componentes disponibles.</span>
+                        </div>
+                      )}
+
+                      {newComponentErrors.general && (
+                        <div className="p-2 bg-rose-950/80 border border-rose-500/50 rounded-lg text-rose-200 text-[11px] flex items-center gap-1.5 font-mono">
+                          <AlertCircle size={13} className="text-rose-400 shrink-0" />
+                          <span>{newComponentErrors.general}</span>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        {/* Categoría */}
+                        <div>
+                          <label className="text-[10px] text-slate-400 block mb-1 font-semibold uppercase">Categoría *</label>
+                          <select
+                            value={newComponentDraft.categoria_componente_id}
+                            disabled={allCategoriesRegistered}
+                            onChange={(e) => setNewComponentDraft(prev => ({ ...prev, categoria_componente_id: e.target.value }))}
+                            className={`w-full bg-slate-900 border rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none ${newComponentErrors.categoria_componente_id ? "border-rose-500" : "border-slate-800 focus:border-[#bfce7f]"} disabled:opacity-50 cursor-pointer`}
+                          >
+                            <option value="">-- Seleccionar categoría --</option>
+                            {categoriasComponenteCatalog.map((cat) => {
+                              const catId = Number(cat.categoria_componente_id);
+                              const isAlreadyRegistered = existingCategoryIds.has(catId);
+                              return (
+                                <option
+                                  key={catId}
+                                  value={catId}
+                                  disabled={isAlreadyRegistered}
+                                >
+                                  {cat.nombre} {cat.codigo ? `(${cat.codigo})` : ""}{isAlreadyRegistered ? " — Ya registrada en esta bicicleta" : ""}
+                                </option>
+                              );
+                            })}
+                          </select>
+                          {newComponentErrors.categoria_componente_id && (
+                            <p className="text-[10px] text-rose-400 mt-0.5 font-mono">{newComponentErrors.categoria_componente_id}</p>
+                          )}
+                        </div>
+
+                        {/* Estado de Uso */}
+                        <div>
+                          <label className="text-[10px] text-slate-400 block mb-1 font-semibold uppercase">Estado de Uso *</label>
+                          <select
+                            value={newComponentDraft.estado_componente_id}
+                            onChange={(e) => setNewComponentDraft(prev => ({ ...prev, estado_componente_id: e.target.value }))}
+                            className={`w-full bg-slate-900 border rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none ${newComponentErrors.estado_componente_id ? "border-rose-500" : "border-slate-800 focus:border-[#bfce7f]"}`}
+                          >
+                            <option value="">-- Seleccionar estado --</option>
+                            {estadosComponenteCatalog.map((est) => {
+                              const salud = est.nivel_desgaste !== undefined ? Math.max(0, 100 - Number(est.nivel_desgaste)) : 100;
+                              return (
+                                <option key={est.estado_componente_id} value={est.estado_componente_id}>
+                                  {est.nombre} ({salud}% salud)
+                                </option>
+                              );
+                            })}
+                          </select>
+                          {newComponentErrors.estado_componente_id && (
+                            <p className="text-[10px] text-rose-400 mt-0.5">{newComponentErrors.estado_componente_id}</p>
+                          )}
+                        </div>
+
+                        {/* Marca */}
+                        <div>
+                          <label className="text-[10px] text-slate-400 block mb-1 font-semibold uppercase">Marca (Opcional)</label>
+                          <input
+                            type="text"
+                            placeholder="Ej. Shimano, SRAM, Fox"
+                            value={newComponentDraft.marca}
+                            onChange={(e) => setNewComponentDraft(prev => ({ ...prev, marca: e.target.value }))}
+                            className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-[#bfce7f]"
+                          />
+                        </div>
+
+                        {/* Número de Serie */}
+                        <div>
+                          <label className="text-[10px] text-slate-400 block mb-1 font-semibold uppercase">Número de Serie (Opcional)</label>
+                          <input
+                            type="text"
+                            placeholder="SN-123456"
+                            value={newComponentDraft.numero_serie}
+                            onChange={(e) => setNewComponentDraft(prev => ({ ...prev, numero_serie: e.target.value }))}
+                            className={`w-full bg-slate-900 border rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none ${newComponentErrors.numero_serie ? "border-rose-500" : "border-slate-800 focus:border-[#bfce7f]"}`}
+                          />
+                          {newComponentErrors.numero_serie && (
+                            <p className="text-[10px] text-rose-400 mt-0.5">{newComponentErrors.numero_serie}</p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-800 flex items-center justify-end gap-2 font-sans">
+                        <button
+                          type="button"
+                          onClick={handleCancelInlineComponentForm}
+                          className="px-3 py-1 text-xs text-slate-400 hover:text-white transition-colors cursor-pointer"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSaveInlineComponentLocal}
+                          className="px-3.5 py-1.5 bg-[#bfce7f] hover:bg-[#aab86e] text-slate-950 font-bold rounded-lg text-xs transition-all cursor-pointer font-mono uppercase flex items-center gap-1.5"
+                        >
+                          <span>Agregar</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="md:col-span-1">
+                  <label className="text-[11px] text-slate-400 block mb-1 font-semibold uppercase">Cantidad *</label>
                   <input
-                    type="checkbox"
-                    checked={reassignConfirm}
-                    onChange={(e) => setReassignConfirm(e.target.checked)}
-                    className="rounded border-amber-500/50 bg-[#0a0c10] text-[#bfce7f] focus:ring-0"
+                    type="number"
+                    min="1"
+                    value={formCantidad}
+                    onChange={(e) => setFormCantidad(e.target.value)}
+                    className="w-full min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-[#bfce7f]"
                   />
-                  Confirmar reasignación de mecánico en este servicio
-                </label>
-              </div>
+                </div>
 
-              <div>
-                <label className="block text-slate-300 mb-1 font-semibold">Motivo de Reasignación *</label>
-                <input
-                  type="text"
-                  required
-                  value={reassignMotivo}
-                  onChange={(e) => setReassignMotivo(e.target.value)}
-                  placeholder="Ej: Reasignación por rotación de turno / especialidad técnica"
-                  className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-amber-400"
-                />
-              </div>
+                <div className="md:col-span-1">
+                  <label className="text-[11px] text-slate-400 block mb-1 font-semibold uppercase">Precio Catálogo (RD$) *</label>
+                  <input
+                    type="number"
+                    readOnly={true}
+                    value={formPrecioUnitario}
+                    placeholder="0.00"
+                    className="w-full min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-400 cursor-not-allowed"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">Precio vigente del catálogo (No editable)</p>
+                </div>
 
-              <div className="flex justify-end items-center gap-3 pt-4 border-t border-[#2d3748]">
-                <button
-                  type="button"
-                  onClick={() => setReassignModalOpen(false)}
-                  className="px-4 py-2.5 text-slate-400 hover:text-slate-200 font-mono text-xs"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-5 py-2.5 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl flex items-center gap-2 font-mono text-xs transition-all border-t border-amber-400"
-                >
-                  {submitting && <Loader2 className="w-4 h-4 animate-spin text-white" />}
-                  {submitting ? "Guardando..." : "Confirmar Reasignación"}
-                </button>
-              </div>
-            </form>
+                <div className="md:col-span-2">
+                  <label className="text-[11px] text-slate-400 block mb-1 font-semibold uppercase">Diagnóstico / Observación</label>
+                  <textarea
+                    rows={2}
+                    value={formObservaciones}
+                    onChange={(e) => setFormObservaciones(e.target.value)}
+                    placeholder="Observaciones iniciales o diagnóstico..."
+                    className="w-full min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-[#bfce7f] font-sans text-xs"
+                  />
+                </div>
+
+                {/* Nuevo Estado del Componente (SOLO en Edición de Servicio EN_PROCESO o PAUSADO con componente) */}
+                {showFinalComponentStateField && (
+                  <div className="md:col-span-2">
+                    <label className="text-[11px] text-slate-400 block mb-1 font-semibold uppercase">Nuevo estado del componente (al finalizar)</label>
+                    {(!estadosComponenteCatalog || estadosComponenteCatalog.length === 0) ? (
+                      <p className="text-[11px] text-rose-400 font-mono py-1">No fue posible cargar los estados del componente.</p>
+                    ) : (
+                      <select
+                        value={formNuevoEstadoComponenteId}
+                        onChange={(e) => setFormNuevoEstadoComponenteId(e.target.value)}
+                        className="w-full min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-[#bfce7f]"
+                      >
+                        <option value="">-- Seleccionar nuevo estado resultante --</option>
+                        {estadosComponenteCatalog.map((ec) => (
+                          <option key={ec.estado_componente_id} value={ec.estado_componente_id}>
+                            {ec.nombre} (Desgaste: {ec.nivel_desgaste}%)
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                )}
+
+                {/* Resultado de Solo Lectura si el servicio está COMPLETADO */}
+                {isEditing && itemType === "SERVICIO" && String(editingItem?.estado_servicio_codigo || "").toUpperCase() === "COMPLETADO" && editingItem?.nuevo_estado_componente_nombre && (
+                  <div className="md:col-span-2 p-3 bg-emerald-950/40 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs font-mono">
+                    <span className="font-semibold block uppercase text-[10px] text-emerald-400">Estado Resultante Aplicado:</span>
+                    <span className="font-bold">{editingItem.nuevo_estado_componente_nombre}</span>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* FIELDS WHEN TYPE IS "PRODUCTO" (REPUESTO) */}
+            {itemType === "PRODUCTO" && (
+              <>
+                <div className="md:col-span-2">
+                  <label className="text-[11px] text-slate-400 block mb-1 font-semibold uppercase">Producto / Repuesto *</label>
+                  <select
+                    value={formProductoId}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFormProductoId(val);
+                      const prod = productosList.find(p => String(p.producto_id) === val);
+                      if (prod) {
+                        setFormPrecioUnitario(String(prod.precio_venta || prod.precio || 0));
+                      }
+                    }}
+                    className="w-full min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-cyan-400"
+                  >
+                    <option value="">-- Seleccionar repuesto del catálogo --</option>
+                    {productosList.map((p) => {
+                      const stock = Number(p.stock_disponible ?? 9999);
+                      const isOutOfStock = stock <= 0;
+                      return (
+                        <option key={p.producto_id} value={p.producto_id} disabled={isOutOfStock}>
+                          [{p.codigo || `REP-${p.producto_id}`}] {p.nombre} - Stock: {stock} {p.unidad_medida || "UND"} (RD$ {Number(p.precio_venta || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })}){isOutOfStock ? " [SIN EXISTENCIA]" : ""}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                <div className="md:col-span-1">
+                  <label className="text-[11px] text-slate-400 block mb-1 font-semibold uppercase">Cantidad *</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={formCantidad}
+                    onChange={(e) => setFormCantidad(e.target.value)}
+                    className="w-full min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-cyan-400"
+                  />
+                </div>
+
+                <div className="md:col-span-1">
+                  <label className="text-[11px] text-slate-400 block mb-1 font-semibold uppercase">Precio Catálogo (RD$) *</label>
+                  <input
+                    type="number"
+                    readOnly={true}
+                    value={formPrecioUnitario}
+                    placeholder="0.00"
+                    className="w-full min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-400 cursor-not-allowed"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">Precio vigente del catálogo (No editable)</p>
+                </div>
+
+                <div className="md:col-span-2 bg-slate-950 p-3 rounded-xl border border-slate-800 flex justify-between items-center font-mono">
+                  <span className="text-slate-400 font-semibold uppercase text-[11px]">Subtotal Estimado:</span>
+                  <span className="text-sm font-bold text-cyan-300">
+                    RD$ {((parseFloat(formCantidad || "0") || 0) * (parseFloat(formPrecioUnitario || "0") || 0)).toLocaleString("es-DO", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="text-[11px] text-slate-400 block mb-1 font-semibold uppercase">Observaciones (Opcional)</label>
+                  <textarea
+                    rows={2}
+                    value={formObservaciones}
+                    onChange={(e) => setFormObservaciones(e.target.value)}
+                    placeholder="Notas adicionales..."
+                    className="w-full min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-cyan-400 font-sans text-xs"
+                  />
+                </div>
+              </>
+            )}
           </div>
+          </fieldset>
+        </form>
+      </WorkshopItemModalShell>
+
+      {/* MODAL FOR MISSING COMPONENT RESULTING STATUS ON SERVICE FINISH */}
+      <WorkshopItemModalShell
+        open={completeComponentModalOpen && Boolean(completeTargetService)}
+        title="Selecciona el estado final del componente"
+        maxWidth="520px"
+        onClose={() => setCompleteComponentModalOpen(false)}
+        footer={
+          <div className="flex justify-end gap-2 font-sans">
+            <button
+              type="button"
+              onClick={() => setCompleteComponentModalOpen(false)}
+              className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors cursor-pointer"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              form="complete-component-form"
+              className="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-xs font-mono uppercase cursor-pointer"
+            >
+              Confirmar y Finalizar
+            </button>
+          </div>
+        }
+      >
+        {completeTargetService && (
+          <form id="complete-component-form" onSubmit={handleSaveCompleteComponentStatus} className="space-y-4 font-mono text-xs">
+            <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1">
+              <p className="text-slate-400 text-[11px]">Servicio:</p>
+              <p className="font-bold text-slate-100">{completeTargetService.tipo_servicio_nombre}</p>
+              {completeTargetService.componente && (
+                <p className="text-[11px] text-emerald-400 pt-1 border-t border-slate-800 mt-1">
+                  Componente: {completeTargetService.componente.categoria} - {completeTargetService.componente.marca} {completeTargetService.componente.modelo}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="text-[11px] text-slate-400 block mb-1 font-semibold uppercase">
+                Estado Resultante del Componente *
+              </label>
+              <select
+                value={selectedFinalStateId}
+                onChange={(e) => setSelectedFinalStateId(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-emerald-400"
+              >
+                <option value="">-- Seleccionar estado final --</option>
+                {estadosComponenteCatalog.map((ec) => (
+                  <option key={ec.estado_componente_id} value={ec.estado_componente_id}>
+                    {ec.nombre} (Desgaste: {ec.nivel_desgaste}%)
+                  </option>
+                ))}
+              </select>
+            </div>
+          </form>
+        )}
+      </WorkshopItemModalShell>
+
+      {/* CONFIRMATION MODAL */}
+      <WorkshopItemModalShell
+        open={confirmModalOpen}
+        title={confirmModalTitle || "Confirmación"}
+        maxWidth="440px"
+        onClose={() => setConfirmModalOpen(false)}
+        footer={
+          <div className="flex justify-end gap-2 font-sans">
+            <button
+              type="button"
+              onClick={() => setConfirmModalOpen(false)}
+              className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors cursor-pointer"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setConfirmModalOpen(false);
+                if (confirmModalOnConfirm) confirmModalOnConfirm();
+              }}
+              className={`px-5 py-2 font-bold text-slate-950 rounded-xl text-xs font-mono uppercase cursor-pointer ${
+                confirmModalType === "finish"
+                  ? "bg-emerald-400 hover:bg-emerald-300"
+                  : "bg-rose-500 hover:bg-rose-400 text-white"
+              }`}
+            >
+              Confirmar
+            </button>
+          </div>
+        }
+      >
+        <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl flex items-center gap-3">
+          <div className={`p-2.5 rounded-xl shrink-0 ${confirmModalType === "finish" ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"}`}>
+            {confirmModalType === "finish" ? <CheckCircle2 className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
+          </div>
+          <p className="text-xs text-slate-200 font-sans leading-relaxed">
+            {confirmModalMessage}
+          </p>
         </div>
-      )}
+      </WorkshopItemModalShell>
     </div>
   );
 }

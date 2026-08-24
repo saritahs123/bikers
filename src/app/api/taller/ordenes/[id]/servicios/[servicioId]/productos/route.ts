@@ -243,3 +243,86 @@ export async function DELETE(
     client.release();
   }
 }
+
+// PUT /api/taller/ordenes/[id]/servicios/[servicioId]/productos
+export async function PUT(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string; servicioId: string }> }
+) {
+  const { id, servicioId } = await params;
+
+  if (!id || !servicioId || !/^\d+$/.test(id.trim()) || !/^\d+$/.test(servicioId.trim())) {
+    return NextResponse.json({ error: "INVALID_ID", message: "IDs no válidos." }, { status: 400 });
+  }
+  const ordenId = Number(id.trim());
+  const servId = Number(servicioId.trim());
+
+  const session = await getWorkshopSession();
+  if (!session || !session.usuario_id) {
+    return NextResponse.json({ error: "NO_SESSION", message: "Sesión no válida o expirada." }, { status: 401 });
+  }
+
+  const perms = await getModulePermissions("TALLER", session.usuario_id);
+  if (!perms.puede_editar) {
+    return NextResponse.json({ error: "FORBIDDEN", message: "No posee permiso para modificar repuestos." }, { status: 403 });
+  }
+
+  const pool = getPool();
+  const client = await pool.connect();
+
+  try {
+    const body = await req.json();
+    const { orden_producto_id, cantidad, precio_unitario, porcentaje_descuento } = body;
+
+    const opId = parseInt(orden_producto_id, 10);
+    if (isNaN(opId) || opId <= 0) {
+      client.release();
+      return NextResponse.json({ error: "El orden_producto_id es obligatorio." }, { status: 400 });
+    }
+
+    await client.query("BEGIN");
+
+    const orderRes = await client.query(`
+      SELECT orden_trabajo_id, estado_orden_id
+      FROM admin.ordenes_trabajo
+      WHERE orden_trabajo_id = $1 AND activo = true
+      FOR UPDATE OF ordenes_trabajo
+    `, [ordenId]);
+
+    if (orderRes.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return NextResponse.json({ error: "Orden de trabajo no encontrada." }, { status: 404 });
+    }
+
+    const qty = Math.max(1, parseInt(cantidad || "1", 10));
+    const price = Math.max(0, parseFloat(precio_unitario || "0"));
+    const descPct = Math.min(100, Math.max(0, parseFloat(porcentaje_descuento || "0")));
+    const bruto = qty * price;
+    const valorDesc = Math.min(bruto, Math.round((bruto * (descPct / 100.0)) * 100) / 100);
+    const subtotal = Math.max(0, bruto - valorDesc);
+
+    await client.query(`
+      UPDATE admin.orden_productos
+      SET cantidad = $1,
+          precio_unitario = $2,
+          porcentaje_descuento = $3,
+          valor_descuento = $4,
+          subtotal = $5
+      WHERE orden_producto_id = $6 AND orden_servicio_id = $7 AND orden_trabajo_id = $8
+    `, [qty, price, descPct, valorDesc, subtotal, opId, servId, ordenId]);
+
+    await recalculateWorkOrderTotals(client, ordenId);
+    await client.query("COMMIT");
+
+    return NextResponse.json({
+      success: true,
+      message: "Repuesto actualizado exitosamente."
+    });
+  } catch (err: any) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error("PUT /api/taller/ordenes/[id]/servicios/[servicioId]/productos Error:", err);
+    return NextResponse.json({ error: "Error al actualizar repuesto.", details: err.message }, { status: 500 });
+  } finally {
+    client.release();
+  }
+}
