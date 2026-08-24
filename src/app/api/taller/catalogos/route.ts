@@ -28,7 +28,18 @@ export async function GET() {
       `SELECT tipo_servicio_id, codigo, nombre, descripcion, duracion_estimada_horas, precio_base FROM admin.tipo_servicio WHERE activo = true ORDER BY orden_visual ASC`
     );
     const productos = await query(
-      `SELECT producto_id, codigo_producto AS codigo, nombre, precio_venta FROM admin.productos WHERE (estado = 'ACTIVO' OR estado IS NULL) ORDER BY nombre ASC`
+      `SELECT p.producto_id,
+              p.codigo_producto AS codigo,
+              p.nombre,
+              p.precio_venta,
+              um.codigo AS unidad_medida,
+              COALESCE(SUM(ep.cantidad_actual), 0)::numeric AS stock_disponible
+       FROM admin.productos p
+       LEFT JOIN admin.unidad_medida um ON p.unidad_medida_id = um.unidad_medida_id
+       LEFT JOIN admin.existencias_producto ep ON p.producto_id = ep.producto_id
+       WHERE (p.estado = 'ACTIVO' OR p.estado IS NULL)
+       GROUP BY p.producto_id, p.codigo_producto, p.nombre, p.precio_venta, um.codigo
+       ORDER BY p.nombre ASC`
     );
     const estadosServicio = await query(
       `SELECT estado_orden_servicio_id, codigo, nombre, descripcion FROM admin.estado_orden_servicio WHERE (activo = true OR activo IS NULL) ORDER BY estado_orden_servicio_id ASC`
@@ -48,6 +59,18 @@ export async function GET() {
        WHERE (tu.codigo = 'MECANICO' OR u.tipo_usuario_id = 2) AND (u.estado = 'ACTIVO' OR u.estado IS NULL)
        ORDER BY ui.nombre, ui.apellido, u.usuario_id`
     );
+    const estadosComponente = await query(
+      `SELECT estado_componente_id, codigo, nombre, nivel_desgaste, requiere_revision
+       FROM admin.estado_componente
+       WHERE activo = true
+       ORDER BY orden_visual ASC, estado_componente_id ASC`
+    );
+    const categoriasComponente = await query(
+      `SELECT categoria_componente_id, codigo, nombre, descripcion
+       FROM admin.categoria_componente
+       WHERE activo = true
+       ORDER BY orden_visual ASC, nombre ASC`
+    );
 
     return NextResponse.json({
       success: true,
@@ -56,6 +79,8 @@ export async function GET() {
       estados_orden_trabajo: estadosOrdenTrabajo || [],
       prioridades: prioridades || [],
       mecanicos: mecanicos || [],
+      estados_componente: estadosComponente || [],
+      categorias_componente: categoriasComponente || [],
       data: {
         estados_recepcion: estadosRecepcion || [],
         items_checklist: itemsChecklist || [],
@@ -65,7 +90,9 @@ export async function GET() {
         estados_servicio: estadosServicio || [],
         estados_orden_trabajo: estadosOrdenTrabajo || [],
         prioridades: prioridades || [],
-        mecanicos: mecanicos || []
+        mecanicos: mecanicos || [],
+        estados_componente: estadosComponente || [],
+        categorias_componente: categoriasComponente || []
       }
     });
   } catch (error: any) {
