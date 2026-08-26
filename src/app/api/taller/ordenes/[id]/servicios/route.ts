@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
 import { recalculateWorkOrderTotals } from "@/lib/workshop/recalculateWorkOrderTotals";
+import { validateOrderInRepair } from "@/lib/workshop/validateOrderState";
 import crypto from "crypto";
 
 function hashPayload(payload: any): string {
@@ -89,6 +90,13 @@ export async function POST(
     client = await pool.connect();
 
     await client.query("BEGIN");
+
+    // Enforce order state machine check
+    const orderStateCheck = await validateOrderInRepair(client, ordenId, session.empresa_id, "AGREGAR_SERVICIO");
+    if (!orderStateCheck.isValid) {
+      await client.query("ROLLBACK");
+      return orderStateCheck.response;
+    }
 
     // 1. Enforce SQL idempotency verification using ON CONFLICT DO NOTHING
     const idempotencyInsert = await client.query(`
@@ -515,7 +523,7 @@ export async function POST(
     ]);
 
     // Recalculate totals in transaction
-    await recalculateWorkOrderTotals(client, ordenId);
+    await recalculateWorkOrderTotals(client, ordenId, sessionUserId);
 
     // Save final response payload
     const responseData = {

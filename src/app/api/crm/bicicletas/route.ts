@@ -16,8 +16,21 @@ const getFallbackPhotoUrl = (tipo: string) => {
 };
 
 // GET /api/crm/bicicletas
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    const { searchParams } = new URL(req.url);
+    const clienteIdParam = searchParams.get("cliente_id");
+    const params: any[] = [];
+    let whereClause = "WHERE b.fecha_eliminacion IS NULL";
+
+    if (clienteIdParam) {
+      const cId = parseInt(clienteIdParam, 10);
+      if (!isNaN(cId) && cId > 0) {
+        params.push(cId);
+        whereClause += ` AND b.cliente_id = $${params.length}`;
+      }
+    }
+
     const sql = `
       SELECT 
         b.bicicleta_id AS id,
@@ -54,11 +67,11 @@ export async function GET() {
         ORDER BY es_principal DESC, bicicleta_foto_id DESC
         LIMIT 1
       ) f ON true
-      WHERE b.fecha_eliminacion IS NULL
+      ${whereClause}
       ORDER BY b.bicicleta_id DESC
     `;
 
-    const rows = await query(sql, []);
+    const rows = await query(sql, params);
 
     const mapped = (rows || []).map((r: any) => ({
       id: r.bicicleta_id,

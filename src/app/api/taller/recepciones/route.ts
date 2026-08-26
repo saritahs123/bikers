@@ -82,6 +82,47 @@ export async function GET(req: Request) {
 
     const rows = await query<any>(dataSql, params);
 
+    // Fetch dynamic reception metrics (America/Santo_Domingo timezone)
+    const metricsRes = await query<any>(`
+      SELECT
+        COALESCE(
+          COUNT(r.recepcion_id) FILTER (
+            WHERE timezone('America/Santo_Domingo', r.fecha_recepcion::timestamptz)::date = timezone('America/Santo_Domingo', NOW())::date
+          ),
+          0
+        )::integer AS recepciones_hoy,
+
+        COALESCE(
+          COUNT(r.recepcion_id) FILTER (
+            WHERE er.codigo IN ('BORRADOR', 'PENDIENTE_FIRMA', 'CONFIRMADA')
+          ),
+          0
+        )::integer AS recepciones_pendientes,
+
+        COALESCE(
+          COUNT(r.recepcion_id) FILTER (
+            WHERE er.codigo = 'CONVERTIDA_OT'
+              AND (r.convertido_orden_id IS NOT NULL OR EXISTS (
+                SELECT 1 FROM admin.ordenes_trabajo ot
+                WHERE ot.recepcion_id = r.recepcion_id AND ot.activo = true
+              ))
+          ),
+          0
+        )::integer AS convertidas_ot
+      FROM admin.recepciones r
+      JOIN admin.estado_recepcion er ON r.estado_recepcion_id = er.estado_recepcion_id
+      LEFT JOIN admin.usuario u ON r.recibido_por_usuario_id = u.usuario_id
+      WHERE (u.empresa_id = $1 OR u.empresa_id IS NULL OR $1 = 1)
+        AND (r.activo = true OR r.activo IS NULL)
+        AND r.fecha_eliminacion IS NULL;
+    `, [session.empresa_id]);
+
+    const metricsObj = metricsRes[0] || {
+      recepciones_hoy: 0,
+      recepciones_pendientes: 0,
+      convertidas_ot: 0
+    };
+
     return NextResponse.json({
       success: true,
       data: (rows || []).map((r: any) => ({
@@ -121,6 +162,11 @@ export async function GET(req: Request) {
         page,
         limit,
         totalPages: Math.ceil(total / limit)
+      },
+      metricas: {
+        recepciones_hoy: Number(metricsObj.recepciones_hoy || 0),
+        recepciones_pendientes: Number(metricsObj.recepciones_pendientes || 0),
+        convertidas_ot: Number(metricsObj.convertidas_ot || 0)
       }
     });
   } catch (error: any) {
@@ -427,7 +473,101 @@ export async function POST(req: NextRequest) {
 
           subtotal_servicios += sPrice;
 
-          const compId = s.bicicleta_componente_id ? parseInt(s.bicicleta_componente_id, 10) : null;
+          let compId = s.bicicleta_componente_id ? parseInt(s.bicicleta_componente_id, 10) : null;
+
+          // Atomic creation of new component draft if provided
+          if (!compId && s.nuevo_componente) {
+            const nc = s.nuevo_componente;
+            const catCompId = parseInt(nc.categoria_componente_id, 10);
+            const estCompId = parseInt(nc.estado_componente_id || 1, 10);
+            const marca = (nc.marca || "").trim();
+            const numSerie = (nc.numero_serie || "").trim();
+
+            if (isNaN(catCompId) || catCompId <= 0) {
+              const err: any = new Error("Categoría de componente inválida.");
+              err.code = "VALIDATION_ERROR";
+              err.status = 400;
+              throw err;
+            }
+
+            // Check if category is already taken on this bicycle
+            const existingCatCheck = await client.query(
+              `SELECT bicicleta_componente_id FROM admin.bicicleta_componentes
+               WHERE bicicleta_id = $1 AND categoria_componente_id = $2 AND fecha_eliminacion IS NULL LIMIT 1`,
+              [bicicleta_id, catCompId]
+            );
+
+            if (existingCatCheck.rows && existingCatCheck.rows.length > 0) {
+              const err: any = new Error("Esta bicicleta ya tiene un componente registrado en la categoría seleccionada.");
+              err.code = "BICYCLE_COMPONENT_CATEGORY_EXISTS";
+              err.status = 409;
+              throw err;
+            }
+
+            // Check if serial number already exists on this bike if provided
+            if (numSerie) {
+              const serialCheck = await client.query(
+                `SELECT bicicleta_componente_id FROM admin.bicicleta_componentes
+                 WHERE bicicleta_id = $1 AND UPPER(TRIM(numero_serie)) = UPPER(TRIM($2)) AND fecha_eliminacion IS NULL LIMIT 1`,
+                [bicicleta_id, numSerie]
+              );
+              if (serialCheck.rows && serialCheck.rows.length > 0) {
+                const err: any = new Error("Ya existe un componente con este número de serie.");
+                err.code = "DUPLICATE_COMPONENT_SERIAL";
+                err.status = 409;
+                throw err;
+              }
+            }
+
+            // Advisory lock for component ID sequence
+            await client.query(`SELECT pg_advisory_xact_lock(7008)`);
+            const nextCompRes = await client.query(
+              `SELECT COALESCE(MAX(bicicleta_componente_id), 0) + 1 AS next_id FROM admin.bicicleta_componentes`
+            );
+            const new_comp_id = nextCompRes.rows[0].next_id;
+
+            const insertedComp = await client.query(
+              `INSERT INTO admin.bicicleta_componentes (
+                bicicleta_componente_id, bicicleta_id, categoria_componente_id, estado_componente_id,
+                marca, numero_serie, descripcion, fecha_instalacion, kilometraje_instalacion,
+                vigente, activo, fecha_creacion, usuario_creacion
+              ) VALUES (
+                $1, $2, $3, $4,
+                $5, $6, $7, NOW(), 0,
+                true, true, NOW(), $8
+              ) RETURNING bicicleta_componente_id`,
+              [
+                new_comp_id,
+                bicicleta_id,
+                catCompId,
+                estCompId,
+                marca || null,
+                numSerie || null,
+                marca || null,
+                session.usuario_id
+              ]
+            );
+
+            compId = insertedComp.rows[0].bicicleta_componente_id;
+          } else if (compId && !isNaN(compId) && compId > 0) {
+            const compCheck = await client.query(
+              `SELECT bicicleta_componente_id
+               FROM admin.bicicleta_componentes
+               WHERE bicicleta_componente_id = $1
+                 AND bicicleta_id = $2
+                 AND fecha_eliminacion IS NULL
+                 AND (activo IS DISTINCT FROM false)
+               LIMIT 1`,
+              [compId, bicicleta_id]
+            );
+
+            if (!compCheck || compCheck.rows.length === 0) {
+              const err: any = new Error("El componente seleccionado no pertenece a la bicicleta de esta recepción.");
+              err.code = "INVALID_BICYCLE_COMPONENT";
+              err.status = 400;
+              throw err;
+            }
+          }
 
           preparedServicesData.push({
             tipo_servicio_id: s_tipo_id,
@@ -480,6 +620,22 @@ export async function POST(req: NextRequest) {
           `SELECT estado_aprobacion_id FROM admin.estado_aprobacion WHERE (UPPER(codigo) IN ('APROBADO', 'PENDIENTE', 'NO_REQUERIDO') OR estado_aprobacion_id = 1) ORDER BY estado_aprobacion_id ASC LIMIT 1`
         );
         if (estAppRes.rows.length > 0) estado_aprobacion_id = estAppRes.rows[0].estado_aprobacion_id;
+
+        // Verify that all linked components belong to the order's bicycle
+        for (const sData of preparedServicesData) {
+          if (sData.bicicleta_componente_id) {
+            const checkBikeComp = await client.query(
+              `SELECT bicicleta_id FROM admin.bicicleta_componentes WHERE bicicleta_componente_id = $1 AND fecha_eliminacion IS NULL`,
+              [sData.bicicleta_componente_id]
+            );
+            if (!checkBikeComp.rows.length || checkBikeComp.rows[0].bicicleta_id !== bicicleta_id) {
+              const err: any = new Error("El componente vinculado al servicio no pertenece a la bicicleta de la orden.");
+              err.code = "INVALID_BICYCLE_COMPONENT";
+              err.status = 400;
+              throw err;
+            }
+          }
+        }
 
         // Insert Services with bicicleta_componente_id and usuario_id = null
         await client.query(`SELECT pg_advisory_xact_lock(7007)`);
@@ -544,17 +700,31 @@ export async function POST(req: NextRequest) {
     console.error("Error in POST /api/taller/recepciones:", error);
 
     const isDev = process.env.NODE_ENV !== "production";
-    const userMessage = (error?.message && !error.message.includes("Position:") && !error.message.includes("SQLState"))
-      ? error.message
-      : "Ocurrió un error interno al registrar la recepción. Inténtalo nuevamente.";
+
+    let statusCode = error?.status || 400;
+    let errorCode = error?.code || "SERVER_ERROR";
+    let message = error?.message || "Ocurrió un error interno al registrar la recepción.";
+
+    if (error?.code === "23505" || error?.message?.includes("uk_bicicleta_componentes")) {
+      statusCode = 409;
+      errorCode = "BICYCLE_COMPONENT_CATEGORY_EXISTS";
+      message = "Esta bicicleta ya tiene un componente registrado en la categoría seleccionada.";
+    } else if (error?.code === "BICYCLE_COMPONENT_CATEGORY_EXISTS") {
+      statusCode = 409;
+      errorCode = "BICYCLE_COMPONENT_CATEGORY_EXISTS";
+    } else if (error?.code === "DUPLICATE_COMPONENT_SERIAL") {
+      statusCode = 409;
+      errorCode = "DUPLICATE_COMPONENT_SERIAL";
+    }
 
     return NextResponse.json(
       {
-        error: error?.code === "INVALID_BICYCLE_COMPONENT" ? "INVALID_BICYCLE_COMPONENT" : "SERVER_ERROR",
-        message: userMessage,
+        success: false,
+        error: errorCode,
+        message: message,
         ...(isDev ? { dev_details: error?.message, dev_stack: error?.stack } : {})
       },
-      { status: 400 }
+      { status: statusCode }
     );
   }
 }

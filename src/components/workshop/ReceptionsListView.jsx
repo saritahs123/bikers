@@ -8,7 +8,6 @@ import {
   Calendar,
   Wrench,
   Clock,
-  CheckCircle2,
   AlertCircle,
   Loader2,
   ChevronLeft,
@@ -22,9 +21,8 @@ export default function ReceptionsListView({ onViewDetail }) {
   const [recepciones, setRecepciones] = useState([]);
   const [metrics, setMetrics] = useState({
     recepciones_hoy: 0,
-    ordenes_activas: 0,
-    pendientes_aprobacion: 0,
-    entregas_programadas_hoy: 0
+    recepciones_pendientes: 0,
+    convertidas_ot: 0
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -40,25 +38,7 @@ export default function ReceptionsListView({ onViewDetail }) {
 
   useEffect(() => {
     fetchRecepciones();
-    fetchDashboardMetrics();
   }, [page, search]);
-
-  const fetchDashboardMetrics = async () => {
-    try {
-      const res = await fetch("/api/taller/dashboard");
-      const json = await res.json();
-      if (res.ok && json.data) {
-        setMetrics({
-          recepciones_hoy: json.data.recepciones_hoy || 0,
-          ordenes_activas: json.data.ordenes_activas || 0,
-          pendientes_aprobacion: json.data.pendientes_aprobacion || 0,
-          entregas_programadas_hoy: json.data.entregas_programadas_hoy || 0
-        });
-      }
-    } catch (err) {
-      console.error("fetchDashboardMetrics Error:", err);
-    }
-  };
 
   const fetchRecepciones = async () => {
     setLoading(true);
@@ -78,6 +58,13 @@ export default function ReceptionsListView({ onViewDetail }) {
 
       setRecepciones(json.data || []);
       setPagination(json.pagination || { total: 0, totalPages: 1 });
+      if (json.metricas) {
+        setMetrics({
+          recepciones_hoy: json.metricas.recepciones_hoy || 0,
+          recepciones_pendientes: json.metricas.recepciones_pendientes || 0,
+          convertidas_ot: json.metricas.convertidas_ot || 0
+        });
+      }
     } catch (err) {
       console.error("fetchRecepciones Error:", err);
       setError(err.message || "No se pudo obtener el listado de recepciones.");
@@ -109,28 +96,21 @@ export default function ReceptionsListView({ onViewDetail }) {
       value: metrics.recepciones_hoy,
       icon: Calendar,
       color: "from-emerald-500/20 to-emerald-500/5 text-emerald-400 border-emerald-500/30",
-      description: "Bicicletas ingresadas en la fecha actual"
+      description: "Bicicletas ingresadas durante el día de hoy"
     },
     {
-      title: "Órdenes de Trabajo Activas",
-      value: metrics.ordenes_activas,
-      icon: Wrench,
-      color: "from-blue-500/20 to-blue-500/5 text-blue-400 border-blue-500/30",
-      description: "Unidades actualmente en mantenimiento"
-    },
-    {
-      title: "Pendientes de Aprobación",
-      value: metrics.pendientes_aprobacion,
+      title: "Recepciones Pendientes",
+      value: metrics.recepciones_pendientes,
       icon: Clock,
       color: "from-amber-500/20 to-amber-500/5 text-amber-400 border-amber-500/30",
-      description: "Presupuestos esperando confirmación"
+      description: "Ingresos pendientes de completar o convertir en OT"
     },
     {
-      title: "Entregas Programadas Hoy",
-      value: metrics.entregas_programadas_hoy,
-      icon: CheckCircle2,
-      color: "from-purple-500/20 to-purple-500/5 text-purple-400 border-purple-500/30",
-      description: "Órdenes listas para salida al cliente"
+      title: "Convertidas a OT",
+      value: metrics.convertidas_ot,
+      icon: Wrench,
+      color: "from-[#bfce7f]/20 to-[#bfce7f]/5 text-[#bfce7f] border-[#bfce7f]/30",
+      description: "Recepciones que generaron una orden de trabajo"
     }
   ];
 
@@ -164,7 +144,7 @@ export default function ReceptionsListView({ onViewDetail }) {
       </div>
 
       {/* KPI Cards Grid (Recovered from Original Dashboard) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {kpis.map((kpi, idx) => {
           const Icon = kpi.icon;
           return (

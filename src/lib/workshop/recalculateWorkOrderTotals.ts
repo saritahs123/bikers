@@ -27,7 +27,8 @@ export type QueryExecutor = {
 
 export async function recalculateWorkOrderTotals(
   executor: QueryExecutor,
-  ordenId: number
+  ordenId: number,
+  usuarioId?: number
 ): Promise<FinancialSummary> {
   const calcSql = `
     WITH servicios_totales AS (
@@ -92,7 +93,26 @@ export async function recalculateWorkOrderTotals(
     total_orden: parseFloat(row?.total_orden || "0"),
   };
 
-  await executor.query(`
+  const timeRes = await executor.query(`
+    SELECT COALESCE(SUM(COALESCE(os.tiempo_transcurrido, 0)), 0)::bigint AS total_segundos
+    FROM admin.orden_servicios os
+    WHERE os.orden_trabajo_id = $1
+      AND os.activo IS DISTINCT FROM false
+  `, [ordenId]);
+
+  const timeRow = timeRes.rows ? timeRes.rows[0] : (Array.isArray(timeRes) ? timeRes[0] : null);
+  const totalSegundos = parseInt(timeRow?.total_segundos || "0", 10);
+
+  const params = [
+    summary.subtotal_servicios,
+    summary.subtotal_productos,
+    summary.subtotal_bruto,
+    summary.total_orden,
+    totalSegundos,
+    ordenId
+  ];
+
+  let updateSql = `
     UPDATE admin.ordenes_trabajo
     SET 
       subtotal_servicios = $1,
@@ -100,15 +120,18 @@ export async function recalculateWorkOrderTotals(
       subtotal_general = $3,
       impuesto = 0.00,
       total_orden = $4,
+      total_tiempo_transcurrido = $5,
       fecha_actualizacion = NOW()
-    WHERE orden_trabajo_id = $5
-  `, [
-    summary.subtotal_servicios,
-    summary.subtotal_productos,
-    summary.subtotal_bruto,
-    summary.total_orden,
-    ordenId
-  ]);
+  `;
+
+  if (usuarioId !== undefined) {
+    updateSql += `, usuario_actualizacion = $7`;
+    params.push(usuarioId);
+  }
+
+  updateSql += ` WHERE orden_trabajo_id = $6`;
+
+  await executor.query(updateSql, params);
 
   return summary;
 }
