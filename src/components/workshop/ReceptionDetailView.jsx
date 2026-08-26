@@ -165,9 +165,20 @@ export default function ReceptionDetailView({ recepcionId, onBack }) {
     setError("");
     try {
       const res = await fetch(`/api/taller/recepciones/${recepcionId}`);
-      const json = await res.json();
+      if (res.status === 401) {
+        if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+          window.location.replace("/login");
+        }
+        return;
+      }
+      let json = null;
+      try {
+        json = await res.json();
+      } catch {
+        throw new Error(res.ok ? "Respuesta inválida del servidor." : `Error del servidor (${res.status})`);
+      }
       if (!res.ok) {
-        throw new Error(json.message || json.error || "No fue posible cargar el detalle de la recepción.");
+        throw new Error(json?.message || json?.error || "No fue posible cargar el detalle de la recepción.");
       }
       setData(json.data);
     } catch (err) {

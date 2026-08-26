@@ -1,583 +1,692 @@
 "use client";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import {
-  ListFilter,
-  Wrench,
   Clock,
-  User,
-  Bike,
-  Plus,
-  Loader2,
-  AlertCircle,
-  Eye,
+  Wrench,
   CheckCircle2,
-  ArrowRight,
-  Move,
+  ClipboardCheck,
+  RotateCcw,
+  Maximize,
+  Minimize,
+  Bike,
+  User,
+  AlertCircle,
+  Loader2,
+  Calendar,
+  DollarSign,
+  AlertTriangle,
+  ChevronRight,
+  Sparkles,
   X
 } from "lucide-react";
 
+const PERIOD_OPTIONS = [
+  { id: "hoy", label: "Hoy" },
+  { id: "7d", label: "7 días" },
+  { id: "30d", label: "30 días" },
+  { id: "custom", label: "Personalizado" }
+];
+
+const KANBAN_COLUMNS = [
+  {
+    key: "RECIBIDAS",
+    codigo: "RECIBIDA",
+    estado_id: 1,
+    title: "RECIBIDAS",
+    subtitle: "Pendientes de inicio",
+    icon: Clock,
+    headerColor: "text-sky-400",
+    badgeBg: "bg-sky-500/15 text-sky-300 border-sky-500/30",
+    borderTop: "border-t-sky-500",
+    ringColor: "ring-sky-500/20"
+  },
+  {
+    key: "REPARACION",
+    codigo: "REPARACION",
+    estado_id: 5,
+    title: "EN REPARACIÓN",
+    subtitle: "Trabajo técnico activo",
+    icon: Wrench,
+    headerColor: "text-amber-400",
+    badgeBg: "bg-amber-500/15 text-amber-300 border-amber-500/30",
+    borderTop: "border-t-amber-500",
+    ringColor: "ring-amber-500/20"
+  },
+  {
+    key: "LISTA_ENTREGA",
+    codigo: "LISTA_ENTREGA",
+    estado_id: 7,
+    title: "LISTAS PARA ENTREGA",
+    subtitle: "Listas para cliente",
+    icon: ClipboardCheck,
+    headerColor: "text-emerald-400",
+    badgeBg: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
+    borderTop: "border-t-emerald-500",
+    ringColor: "ring-emerald-500/20"
+  },
+  {
+    key: "ENTREGADAS",
+    codigo: "ENTREGADA",
+    estado_id: 8,
+    title: "ENTREGADAS",
+    subtitle: "Completadas",
+    icon: CheckCircle2,
+    headerColor: "text-slate-300",
+    badgeBg: "bg-slate-700/40 text-slate-300 border-slate-600/40",
+    borderTop: "border-t-slate-500",
+    ringColor: "ring-slate-500/20"
+  }
+];
+
 export default function WorkOrdersKanbanView({ onViewDetail, onOpenNewModal, onToggleList }) {
+  const containerRef = useRef(null);
   const [orders, setOrders] = useState([]);
-  const [estados, setEstados] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState(null);
+  const [selectedPeriod, setSelectedPeriod] = useState("hoy");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+  const [showCustomModal, setShowCustomModal] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
-  // Drag & Drop State
-  const [draggedOrder, setDraggedOrder] = useState(null);
-  const [dragOverStatusId, setDragOverStatusId] = useState(null);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
-  // Status Change Confirmation Modal State
-  const [confirmModalOpen, setConfirmModalOpen] = useState(false);
-  const [pendingMoveOrder, setPendingMoveOrder] = useState(null);
-  const [targetStatusId, setTargetStatusId] = useState(null);
-  const [changeNotes, setChangeNotes] = useState("");
-  const [updating, setUpdating] = useState(false);
-  const [successMessage, setSuccessMessage] = useState("");
+  // Fullscreen event listener
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
 
-  const fetchKanbanData = async () => {
-    setLoading(true);
-    setError(null);
+  const toggleFullscreen = async () => {
     try {
-      const res = await fetch("/api/taller/ordenes?limit=100");
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Error al cargar órdenes de trabajo.");
-
-      setOrders(data.data || []);
-      const operationalEstados = [
-        { estado_orden_id: 1, codigo: "RECIBIDA", nombre: "Recibida" },
-        { estado_orden_id: 5, codigo: "REPARACION", nombre: "En Reparación" },
-        { estado_orden_id: 7, codigo: "LISTA_ENTREGA", nombre: "Lista para Entrega" },
-        { estado_orden_id: 8, codigo: "ENTREGADA", nombre: "Entregada" }
-      ];
-      if (data.catalogs?.estados) {
-        const operationalIds = [1, 5, 7, 8];
-        const filtered = data.catalogs.estados.filter(e => operationalIds.includes(e.estado_orden_id));
-        setEstados(filtered.length > 0 ? filtered : operationalEstados);
+      if (!document.fullscreenElement) {
+        if (containerRef.current?.requestFullscreen) {
+          await containerRef.current.requestFullscreen();
+        }
       } else {
-        setEstados(operationalEstados);
+        if (document.exitFullscreen) {
+          await document.exitFullscreen();
+        }
       }
     } catch (err) {
-      console.error("fetchKanbanData Error:", err);
+      console.error("Error al cambiar modo de pantalla completa:", err);
+    }
+  };
+
+  // Fetch orders from PostgreSQL with timezone and period
+  const fetchOrders = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
+    setIsRefreshing(true);
+    setError(null);
+
+    try {
+      const params = new URLSearchParams();
+      params.set("limit", "100");
+
+      if (selectedPeriod === "custom") {
+        if (customFrom) params.set("from", customFrom);
+        if (customTo) params.set("to", customTo);
+      } else {
+        params.set("period", selectedPeriod);
+      }
+
+      const res = await fetch(`/api/taller/ordenes?${params.toString()}`);
+      if (res.status === 401) {
+        if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+          window.location.replace("/login");
+        }
+        return;
+      }
+      let data = null;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(res.ok ? "Respuesta inválida del servidor." : `Error del servidor (${res.status})`);
+      }
+
+      if (!res.ok) {
+        throw new Error(data?.message || data?.error || "Error al consultar las órdenes del taller.");
+      }
+
+      setOrders(data.data || []);
+      setLastUpdated(new Date());
+    } catch (err) {
+      console.error("fetchOrders Kanban Error:", err);
       setError(err.message);
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
-  };
+  }, [selectedPeriod, customFrom, customTo]);
 
+  // Initial load and on period change
   useEffect(() => {
-    fetchKanbanData();
-  }, []);
+    fetchOrders(false);
+  }, [fetchOrders]);
 
-  // HTML5 Drag & Drop Handlers
-  const handleDragStart = (e, order) => {
-    setDraggedOrder(order);
-    e.dataTransfer.setData("application/json", JSON.stringify(order));
-    e.dataTransfer.effectAllowed = "move";
-  };
+  // Auto-refresh every 30 seconds for live monitor
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchOrders(true);
+    }, 30000);
 
-  const handleDragOver = (e, statusId) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-    if (dragOverStatusId !== statusId) {
-      setDragOverStatusId(statusId);
+    return () => clearInterval(interval);
+  }, [fetchOrders]);
+
+  const handlePeriodChange = (periodId) => {
+    if (periodId === "custom") {
+      setShowCustomModal(true);
+    } else {
+      setSelectedPeriod(periodId);
     }
   };
 
-  const handleDragLeave = (e, statusId) => {
-    e.preventDefault();
-    if (dragOverStatusId === statusId) {
-      setDragOverStatusId(null);
-    }
+  const handleApplyCustomPeriod = () => {
+    setSelectedPeriod("custom");
+    setShowCustomModal(false);
   };
 
-  const ALLOWED_KANBAN_TRANSITIONS = {
-    1: [5],     // RECIBIDA -> REPARACIÓN
-    5: [7],     // REPARACIÓN -> LISTA DE ENTREGA
-    7: [5, 8],  // LISTA DE ENTREGA -> REPARACIÓN (devolución) o ENTREGADA
-    8: []       // ENTREGADA is Read-Only
+  const formatTimeAgo = (date) => {
+    if (!date) return "";
+    return date.toLocaleTimeString("es-DO", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true
+    });
   };
 
-  const handleDrop = (e, targetId) => {
-    e.preventDefault();
-    setDragOverStatusId(null);
-    let orderToMove = draggedOrder;
-
-    if (!orderToMove) {
-      try {
-        const dataStr = e.dataTransfer.getData("application/json");
-        if (dataStr) orderToMove = JSON.parse(dataStr);
-      } catch (err) {
-        console.error("Drop Data Parse Error:", err);
-      }
-    }
-
-    if (!orderToMove) return;
-    const currentId = orderToMove.estado_orden_id;
-
-    if (currentId === targetId) {
-      setDraggedOrder(null);
-      return;
-    }
-
-    if (currentId === 8) {
-      setError("La orden ya fue ENTREGADA y está en modo de solo lectura. No se puede mover.");
-      setDraggedOrder(null);
-      return;
-    }
-
-    if (!ALLOWED_KANBAN_TRANSITIONS[currentId]?.includes(targetId)) {
-      setError(`Transición no permitida: no puede mover directamente de "${getNombreEstado(currentId)}" a "${getNombreEstado(targetId)}".`);
-      setDraggedOrder(null);
-      return;
-    }
-
-    setPendingMoveOrder(orderToMove);
-    setTargetStatusId(targetId);
-    setChangeNotes("");
-    setConfirmModalOpen(true);
-    setDraggedOrder(null);
-  };
-
-  const handleDragEnd = () => {
-    setDraggedOrder(null);
-    setDragOverStatusId(null);
-  };
-
-  const getNombreEstado = (id) => {
-    const found = estados.find(e => e.estado_orden_id === id);
-    return found ? found.nombre : `Estado #${id}`;
-  };
-
-  // Accessible Fallback Select Move
-  const handleSelectMove = (order, newStatusId) => {
-    const targetId = parseInt(newStatusId, 10);
-    const currentId = order.estado_orden_id;
-    if (currentId === targetId) return;
-
-    if (currentId === 8) {
-      setError("La orden ya fue ENTREGADA y está en modo de solo lectura.");
-      return;
-    }
-
-    if (!ALLOWED_KANBAN_TRANSITIONS[currentId]?.includes(targetId)) {
-      setError(`Transición no permitida de "${getNombreEstado(currentId)}" a "${getNombreEstado(targetId)}".`);
-      return;
-    }
-
-    setPendingMoveOrder(order);
-    setTargetStatusId(targetId);
-    setChangeNotes("");
-    setConfirmModalOpen(true);
-  };
-
-  // Confirm Status Change API Call
-  const handleConfirmStatusChange = async (e) => {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-    if (!pendingMoveOrder || !targetStatusId) return;
-
-    const targetId = pendingMoveOrder.orden_id || pendingMoveOrder.orden_trabajo_id;
-    if (!targetId) {
-      setError("Error: ID de la orden no especificado.");
-      return;
-    }
-
-    // Require persona_recibe for delivery (7 -> 8)
-    if (pendingMoveOrder.estado_orden_id === 7 && targetStatusId === 8) {
-      if (!changeNotes || !changeNotes.trim()) {
-        setError("Debe indicar obligatoriamente el nombre de la persona que recibe la bicicleta al entregar.");
-        return;
-      }
-    }
-
-    // Require motivo for return to repair (7 -> 5)
-    if (pendingMoveOrder.estado_orden_id === 7 && targetStatusId === 5) {
-      if (!changeNotes || !changeNotes.trim()) {
-        setError("Debe indicar obligatoriamente el motivo de devolución a reparación.");
-        return;
-      }
-    }
-
-    setUpdating(true);
-    setError(null);
+  const formatOrderDate = (dateString) => {
+    if (!dateString) return "";
     try {
-      const payload = {
-        estado_orden_id: targetStatusId,
-        estado_anterior_esperado_id: pendingMoveOrder.estado_orden_id,
-        confirmar_entrega: targetStatusId === 8 ? true : undefined,
-        persona_recibe: targetStatusId === 8 ? changeNotes.trim() : undefined,
-        motivo_devolucion: (pendingMoveOrder.estado_orden_id === 7 && targetStatusId === 5) ? changeNotes.trim() : undefined,
-        observacion_interna: changeNotes || "Movimiento en Tablero Kanban"
-      };
-
-      const res = await fetch(`/api/taller/ordenes/${targetId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
+      const d = new Date(dateString);
+      return d.toLocaleDateString("es-DO", {
+        day: "2-digit",
+        month: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true
       });
-
-      const json = await res.json();
-
-      if (!res.ok) {
-        if (res.status === 403 || json.error === "FORBIDDEN") {
-          throw new Error("No tienes permiso para realizar esta acción.");
-        }
-        if (res.status === 409) {
-          throw new Error(json.message || "Conflicto: La orden o sus servicios se encuentran en un estado incompatible.");
-        }
-        throw new Error(json.message || json.error || "Error al actualizar el estado de la orden.");
-      }
-
-      setConfirmModalOpen(false);
-      const targetStateObj = estados.find(s => s.estado_orden_id === targetStatusId);
-      setSuccessMessage(`Orden ${pendingMoveOrder.codigo_orden} movida exitosamente a "${targetStateObj?.nombre || 'nuevo estado'}".`);
-      
-      setTimeout(() => setSuccessMessage(""), 4000);
-      setPendingMoveOrder(null);
-      setTargetStatusId(null);
-      await fetchKanbanData();
-    } catch (err) {
-      setError(err.message || "No tienes permiso para realizar esta acción.");
-      await fetchKanbanData();
-    } finally {
-      setUpdating(false);
+    } catch {
+      return dateString;
     }
   };
 
-  const getPrioridadBadge = (nombre, color) => {
-    const colorStyle = color ? { color: color, borderColor: `${color}40`, backgroundColor: `${color}15` } : {};
-    return (
-      <span
-        className="px-2 py-0.5 rounded-md text-[11px] font-semibold border flex items-center gap-1 w-fit select-none"
-        style={colorStyle}
-      >
-        <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color || "#64748B" }}></span>
-        {nombre}
-      </span>
-    );
-  };
-
-  // Divide states into 2 rows of 4 columns each for 100% width fit
-  const row1States = estados.slice(0, 4);
-  const row2States = estados.slice(4, 8);
-
-  const renderColumn = (estado) => {
-    const columnOrders = orders.filter(o => o.estado_orden_id === estado.estado_orden_id);
-    const isDragTarget = dragOverStatusId === estado.estado_orden_id;
-
-    return (
-      <div
-        key={estado.estado_orden_id}
-        onDragOver={(e) => handleDragOver(e, estado.estado_orden_id)}
-        onDragLeave={(e) => handleDragLeave(e, estado.estado_orden_id)}
-        onDrop={(e) => handleDrop(e, estado.estado_orden_id)}
-        className={`flex flex-col bg-slate-900/60 border rounded-2xl p-3.5 transition-all min-h-[220px] ${
-          isDragTarget
-            ? "border-emerald-400 bg-emerald-500/10 shadow-lg shadow-emerald-500/10 ring-2 ring-emerald-500/30 scale-[1.01]"
-            : "border-slate-800"
-        }`}
-      >
-        {/* Column Header */}
-        <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-800/80 shrink-0 min-h-[42px]">
-          <div className="flex items-center gap-2 flex-1 min-w-0 pr-1">
-            <span
-              className="w-2.5 h-2.5 rounded-full shrink-0"
-              style={{ backgroundColor: estado.color_estado || estado.color || "#64748B" }}
-            ></span>
-            <h3 className="text-xs font-bold text-slate-200 tracking-wide font-sans leading-tight whitespace-normal break-words flex-1">
-              {estado.nombre}
-            </h3>
-          </div>
-          <span className="text-[11px] font-mono font-bold px-2 py-0.5 bg-slate-800 text-slate-300 border border-slate-700 rounded-full shrink-0">
-            {columnOrders.length}
-          </span>
-        </div>
-
-        {/* Drop Target Hint indicator when dragging */}
-        {isDragTarget && (
-          <div className="mb-3 p-2 bg-emerald-500/20 border border-dashed border-emerald-400/50 rounded-xl text-[11px] text-emerald-300 text-center font-medium animate-pulse">
-            Soltar aquí para mover a {estado.nombre}
-          </div>
-        )}
-
-        {/* Column Cards Container */}
-        <div className="flex-1 space-y-3 max-h-[380px] overflow-y-auto pr-1 custom-scrollbar overflow-x-hidden">
-          {columnOrders.length === 0 ? (
-            <div className="h-28 flex flex-col items-center justify-center border border-dashed border-slate-800 rounded-xl text-slate-600 text-center p-3">
-              <span className="text-[11px]">Sin órdenes en este estado</span>
-            </div>
-          ) : (
-            columnOrders.map((ord) => {
-              const isBeingDragged = draggedOrder?.orden_id === ord.orden_id;
-              return (
-                <div
-                  key={ord.orden_id}
-                  draggable="true"
-                  onDragStart={(e) => handleDragStart(e, ord)}
-                  onDragEnd={handleDragEnd}
-                  className={`bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-xl p-3 space-y-2.5 transition-all shadow-md group cursor-grab active:cursor-grabbing select-none relative overflow-x-hidden ${
-                    isBeingDragged ? "opacity-40 border-dashed border-emerald-400 scale-95" : ""
-                  }`}
-                >
-                  {/* Top Bar inside Card */}
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="text-xs font-mono font-extrabold text-emerald-400 flex items-center gap-1">
-                      <Move className="w-3 h-3 text-slate-500 group-hover:text-emerald-400 transition-colors" />
-                      {ord.codigo_orden}
-                    </span>
-                    {getPrioridadBadge(ord.prioridad_nombre, ord.prioridad_color)}
-                  </div>
-
-                  {/* Customer & Bike Info */}
-                  <div className="space-y-1 text-xs">
-                    <div className="flex items-center gap-1.5 text-slate-200 font-medium truncate">
-                      <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      <span className="truncate">{ord.cliente_nombre}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-slate-400 text-[11px] truncate">
-                      <Bike className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                      <span className="truncate">{ord.bicicleta_marca} {ord.bicicleta_modelo}</span>
-                    </div>
-                  </div>
-
-                  {/* Financial & Reception */}
-                  <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] font-mono text-slate-400">
-                    <span className="bg-slate-900 px-2 py-0.5 rounded border border-slate-800 text-slate-400">
-                      {ord.codigo_recepcion}
-                    </span>
-                    <span className="font-bold text-slate-200">
-                      ${parseFloat(ord.total_estimado || 0).toLocaleString("es-DO", { minimumFractionDigits: 0 })}
-                    </span>
-                  </div>
-
-                  {/* Bottom Actions: View Detail + Accessible Move Dropdown */}
-                  <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between gap-1.5 flex-wrap">
-                    <button
-                      onClick={() => onViewDetail(ord.orden_id)}
-                      className="text-[11px] text-slate-400 hover:text-emerald-400 flex items-center gap-1 transition-colors shrink-0"
-                      title="Ver detalle"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                      Detalle
-                    </button>
-
-                    {/* Accessible Move Select Fallback */}
-                    <select
-                      value={ord.estado_orden_id}
-                      onChange={(e) => handleSelectMove(ord, e.target.value)}
-                      className="text-[10px] bg-slate-900 border border-slate-800 text-slate-300 rounded px-1.5 py-1 focus:outline-none focus:border-emerald-500 max-w-[120px] truncate"
-                    >
-                      {estados.map(s => (
-                        <option key={s.estado_orden_id} value={s.estado_orden_id}>
-                          {s.nombre}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
-    );
-  };
-
-  const getTargetStateObj = () => {
-    return estados.find(s => s.estado_orden_id === targetStatusId);
-  };
-
-  const getPreviousStateObj = () => {
-    if (!pendingMoveOrder) return null;
-    return estados.find(s => s.estado_orden_id === pendingMoveOrder.estado_orden_id);
+  // Group orders by column
+  const getOrdersForColumn = (column) => {
+    return orders.filter((o) => {
+      if (o.estado_codigo) {
+        return o.estado_codigo === column.codigo;
+      }
+      return o.estado_orden_id === column.estado_id;
+    });
   };
 
   return (
-    <div className="space-y-6">
-      {/* Breadcrumb */}
-      <div className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
-        <span className="hover:text-slate-300 transition-colors cursor-pointer" onClick={onToggleList}>Taller</span>
-        <span>/</span>
-        <span className="hover:text-slate-300 transition-colors cursor-pointer" onClick={onToggleList}>Órdenes de Trabajo</span>
-        <span>/</span>
-        <span className="text-emerald-400 font-semibold">Vista Kanban</span>
+    <div
+      ref={containerRef}
+      className={`w-full flex flex-col space-y-4 font-sans text-slate-100 ${
+        isFullscreen ? "bg-[#0c0f14] p-6 min-h-screen overflow-y-auto" : ""
+      }`}
+    >
+      {/* 1. ENCABEZADO SIMPLE SIN TARJETA */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-2 border-b border-[#2d3748]/50">
+        {/* Lado Izquierdo */}
+        <div>
+          <div className="text-xs text-slate-500 font-mono flex items-center gap-1.5 mb-1">
+            <span
+              className="hover:text-slate-300 transition-colors cursor-pointer"
+              onClick={onToggleList}
+            >
+              Taller
+            </span>
+            <span>/</span>
+            <span
+              className="hover:text-slate-300 transition-colors cursor-pointer"
+              onClick={onToggleList}
+            >
+              Órdenes de Trabajo
+            </span>
+            <span>/</span>
+            <span className="text-[#bfce7f] font-bold">Vista Kanban</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl md:text-3xl font-black text-slate-100 tracking-tight font-sans">
+              Monitoreo de Órdenes
+            </h1>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-[#bfce7f]/15 border border-[#bfce7f]/30 text-[#bfce7f]">
+              <span className="w-2 h-2 rounded-full bg-[#bfce7f] animate-pulse" />
+              {orders.length} Órdenes
+            </span>
+          </div>
+          <p className="text-xs text-slate-400 mt-0.5 font-medium">
+            Seguimiento operativo del taller en tiempo real
+          </p>
+        </div>
+
+        {/* Lado Derecho: Controles Operativos */}
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Selector de Período Segmentado */}
+          <div className="bg-[#161a21] border border-[#2d3748] p-1 rounded-xl flex items-center shadow-inner">
+            {PERIOD_OPTIONS.map((opt) => {
+              const isActive = selectedPeriod === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  onClick={() => handlePeriodChange(opt.id)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer whitespace-nowrap ${
+                    isActive
+                      ? "bg-[#bfce7f] text-slate-950 shadow-sm"
+                      : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
+                  }`}
+                >
+                  {opt.label}
+                  {opt.id === "custom" && customFrom && customTo && selectedPeriod === "custom" && (
+                    <span className="ml-1 text-[10px] opacity-80">({customFrom})</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Indicador de Última Actualización */}
+          {lastUpdated && (
+            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-[#161a21] border border-[#2d3748] rounded-xl text-[11px] font-mono text-slate-400">
+              <Clock className="w-3.5 h-3.5 text-[#bfce7f]" />
+              <span>{formatTimeAgo(lastUpdated)}</span>
+            </div>
+          )}
+
+          {/* Botón Compacto de Actualizar */}
+          <button
+            onClick={() => fetchOrders(false)}
+            disabled={isRefreshing}
+            className="p-2.5 bg-[#161a21] hover:bg-slate-800 border border-[#2d3748] text-slate-300 hover:text-[#bfce7f] rounded-xl transition-all shadow-sm cursor-pointer disabled:opacity-50"
+            title="Actualizar datos ahora"
+          >
+            <RotateCcw className={`w-4 h-4 ${isRefreshing ? "animate-spin text-[#bfce7f]" : ""}`} />
+          </button>
+
+          {/* Botón de Pantalla Completa para Proyección en TV */}
+          <button
+            onClick={toggleFullscreen}
+            className="flex items-center gap-1.5 px-3 py-2 bg-[#161a21] hover:bg-slate-800 border border-[#2d3748] text-slate-300 hover:text-white rounded-xl transition-all shadow-sm text-xs font-mono font-bold cursor-pointer"
+            title={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa para TV / Monitor"}
+          >
+            {isFullscreen ? (
+              <>
+                <Minimize className="w-4 h-4 text-amber-400" />
+                <span className="hidden md:inline">Salir</span>
+              </>
+            ) : (
+              <>
+                <Maximize className="w-4 h-4 text-[#bfce7f]" />
+                <span className="hidden md:inline">Pantalla Completa</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
-      {/* Header Bar Actions */}
-      <div className="flex flex-wrap items-center justify-between gap-4 bg-slate-900/60 p-4 border border-slate-800 rounded-2xl">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400">
-            <Wrench className="w-5 h-5" />
-          </div>
-          <div>
-            <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
-              Vista Kanban
-              <span className="text-xs px-2.5 py-0.5 bg-slate-800 text-emerald-400 border border-slate-700 rounded-full font-mono font-medium">
-                {orders.length} Órdenes
-              </span>
-            </h2>
-            <p className="text-xs text-slate-400">
-              Arrastra las tarjetas entre columnas para actualizar el flujo de reparación en tiempo real.
-            </p>
-          </div>
-        </div>
+      {/* Modal para Período Personalizado mediante Portal a document.body */}
+      {mounted && showCustomModal && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              style={{
+                position: "fixed",
+                inset: 0,
+                zIndex: 999999,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "16px",
+                backgroundColor: "rgba(0, 0, 0, 0.8)",
+                backdropFilter: "blur(6px)"
+              }}
+              onClick={(e) => {
+                if (e.target === e.currentTarget) setShowCustomModal(false);
+              }}
+            >
+              <div
+                style={{
+                  width: "440px",
+                  maxWidth: "95vw",
+                  minWidth: "320px",
+                  backgroundColor: "#161a21",
+                  border: "1px solid #2d3748",
+                  borderRadius: "16px",
+                  padding: "24px",
+                  boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.7)",
+                  color: "#f8fafc",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "20px",
+                  flexShrink: 0
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Header */}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    borderBottom: "1px solid #2d3748",
+                    paddingBottom: "14px"
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <div
+                      style={{
+                        padding: "8px",
+                        borderRadius: "10px",
+                        backgroundColor: "rgba(191, 206, 127, 0.15)",
+                        border: "1px solid rgba(191, 206, 127, 0.3)",
+                        color: "#bfce7f",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center"
+                      }}
+                    >
+                      <Calendar className="w-4 h-4" />
+                    </div>
+                    <h3
+                      style={{
+                        fontSize: "14px",
+                        fontWeight: "700",
+                        color: "#f8fafc",
+                        fontFamily: "monospace",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.05em",
+                        margin: 0
+                      }}
+                    >
+                      Rango de Fecha Personalizado
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowCustomModal(false)}
+                    style={{
+                      padding: "6px",
+                      borderRadius: "8px",
+                      background: "transparent",
+                      border: "none",
+                      color: "#94a3b8",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center"
+                    }}
+                    title="Cerrar"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
 
-        <div className="flex items-center gap-2.5">
-          <button
-            onClick={onToggleList}
-            className="flex items-center gap-2 px-3.5 py-2 text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition-all shadow-sm"
-          >
-            <ListFilter className="w-4 h-4 text-emerald-400" />
-            Vista Tabla
-          </button>
-          <button
-            onClick={onOpenNewModal}
-            className="flex items-center gap-2 px-4 py-2 text-xs font-semibold text-slate-950 bg-emerald-400 hover:bg-emerald-300 rounded-xl transition-all shadow-lg shadow-emerald-400/20"
-          >
-            <Plus className="w-4 h-4" />
-            Nueva orden de trabajo
-          </button>
-        </div>
-      </div>
+                {/* Inputs en 2 columnas */}
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: "16px"
+                  }}
+                >
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <label
+                      style={{
+                        fontSize: "11px",
+                        fontFamily: "monospace",
+                        fontWeight: "700",
+                        color: "#94a3b8",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.05em"
+                      }}
+                    >
+                      Desde
+                    </label>
+                    <input
+                      type="date"
+                      value={customFrom}
+                      onChange={(e) => setCustomFrom(e.target.value)}
+                      style={{
+                        width: "100%",
+                        backgroundColor: "#0a0c10",
+                        border: "1px solid #2d3748",
+                        borderRadius: "10px",
+                        padding: "10px 12px",
+                        fontSize: "12px",
+                        color: "#f1f5f9",
+                        outline: "none",
+                        fontFamily: "monospace",
+                        colorScheme: "dark",
+                        boxSizing: "border-box"
+                      }}
+                    />
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <label
+                      style={{
+                        fontSize: "11px",
+                        fontFamily: "monospace",
+                        fontWeight: "700",
+                        color: "#94a3b8",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.05em"
+                      }}
+                    >
+                      Hasta
+                    </label>
+                    <input
+                      type="date"
+                      value={customTo}
+                      onChange={(e) => setCustomTo(e.target.value)}
+                      style={{
+                        width: "100%",
+                        backgroundColor: "#0a0c10",
+                        border: "1px solid #2d3748",
+                        borderRadius: "10px",
+                        padding: "10px 12px",
+                        fontSize: "12px",
+                        color: "#f1f5f9",
+                        outline: "none",
+                        fontFamily: "monospace",
+                        colorScheme: "dark",
+                        boxSizing: "border-box"
+                      }}
+                    />
+                  </div>
+                </div>
 
-      {/* Alert Messages */}
-      {successMessage && (
-        <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-xs flex items-center justify-between shadow-sm animate-in fade-in duration-200">
-          <div className="flex items-center gap-2.5">
-            <CheckCircle2 className="w-4 h-4 shrink-0" />
-            <span className="font-medium">{successMessage}</span>
-          </div>
-        </div>
-      )}
+                {/* Footer Buttons */}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "flex-end",
+                    gap: "12px",
+                    borderTop: "1px solid #2d3748",
+                    paddingTop: "16px"
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setShowCustomModal(false)}
+                    style={{
+                      padding: "8px 16px",
+                      borderRadius: "10px",
+                      fontSize: "12px",
+                      fontFamily: "monospace",
+                      fontWeight: "700",
+                      color: "#94a3b8",
+                      backgroundColor: "transparent",
+                      border: "1px solid transparent",
+                      cursor: "pointer"
+                    }}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleApplyCustomPeriod}
+                    disabled={!customFrom || !customTo}
+                    style={{
+                      padding: "8px 20px",
+                      backgroundColor: !customFrom || !customTo ? "#2d3748" : "#bfce7f",
+                      color: !customFrom || !customTo ? "#64748b" : "#0f172a",
+                      fontFamily: "monospace",
+                      fontWeight: "700",
+                      borderRadius: "10px",
+                      fontSize: "12px",
+                      border: "none",
+                      cursor: !customFrom || !customTo ? "not-allowed" : "pointer",
+                      boxShadow: !customFrom || !customTo ? "none" : "0 4px 12px rgba(191, 206, 127, 0.25)"
+                    }}
+                  >
+                    Aplicar Filtro
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
 
-      {loading ? (
-        <div className="p-12 flex flex-col items-center justify-center bg-slate-900/40 border border-slate-800 rounded-2xl text-slate-400 gap-3">
-          <Loader2 className="w-7 h-7 animate-spin text-emerald-400" />
-          <span className="text-xs font-medium">Cargando tablero Kanban...</span>
+      {/* 2. TABLERO KANBAN — 4 COLUMNAS SIMULTÁNEAS OPTIMIZADAS PARA PANTALLA GRANDE */}
+      {loading && !orders.length ? (
+        <div className="p-16 flex flex-col items-center justify-center bg-[#161a21]/60 border border-[#2d3748] rounded-2xl text-slate-400 gap-3 min-h-[400px]">
+          <Loader2 className="w-8 h-8 animate-spin text-[#bfce7f]" />
+          <span className="text-sm font-mono tracking-wide">Cargando tablero operativo en tiempo real...</span>
         </div>
       ) : error ? (
-        <div className="p-6 bg-rose-500/10 border border-rose-500/20 rounded-2xl text-rose-400 text-xs flex items-center gap-3">
-          <AlertCircle className="w-5 h-5 shrink-0" />
-          <div>
-            <span className="font-semibold block">Error al cargar datos</span>
-            <span className="text-rose-300/80">{error}</span>
-          </div>
+        <div className="p-8 bg-rose-500/10 border border-rose-500/30 rounded-2xl text-rose-300 text-sm font-mono text-center space-y-3">
+          <AlertCircle className="w-8 h-8 mx-auto text-rose-400" />
+          <p>{error}</p>
+          <button
+            onClick={() => fetchOrders(false)}
+            className="px-4 py-2 bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 rounded-xl font-bold transition-all cursor-pointer"
+          >
+            Reintentar
+          </button>
         </div>
       ) : (
-        <div className="space-y-6">
-          {/* Row 1: States 1 to 4 */}
-          <div>
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 block">
-              Fase Inicial (1 a 4)
-            </span>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 w-full">
-              {row1States.map(renderColumn)}
-            </div>
-          </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 xl:gap-5 w-full items-start">
+          {KANBAN_COLUMNS.map((col) => {
+            const colOrders = getOrdersForColumn(col);
+            const IconComponent = col.icon;
 
-          {/* Row 2: States 5 to 8 */}
-          <div>
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 block">
-              Fase Final & Entrega (5 a 8)
-            </span>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 w-full">
-              {row2States.map(renderColumn)}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Drag & Drop State Change Confirmation Modal */}
-      {confirmModalOpen && pendingMoveOrder && targetStatusId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl min-w-[420px] max-w-lg w-full p-6 shadow-2xl space-y-5">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
-                <Move className="w-4 h-4 text-emerald-400" />
-                Confirmar Transición de Estado
-              </h3>
-              <button
-                onClick={() => setConfirmModalOpen(false)}
-                className="text-slate-400 hover:text-slate-200 p-1 rounded-lg"
+            return (
+              <div
+                key={col.key}
+                className={`bg-[#12161f] border border-[#2d3748] rounded-2xl flex flex-col overflow-hidden shadow-xl ${col.borderTop} border-t-4 transition-all`}
               >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs bg-slate-950 p-4 rounded-xl border border-slate-800">
-              <div className="flex justify-between items-center">
-                <span className="text-slate-400">Orden de Trabajo:</span>
-                <span className="font-mono font-bold text-emerald-400">{pendingMoveOrder.codigo_orden}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-400">Cliente / Bicicleta:</span>
-                <span className="text-slate-200 font-medium truncate max-w-[200px]">
-                  {pendingMoveOrder.cliente_nombre} • {pendingMoveOrder.bicicleta_marca}
-                </span>
-              </div>
-              <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2">
-                <div className="text-center">
-                  <span className="text-[10px] text-slate-500 block">Estado Anterior</span>
-                  <span className="px-2 py-0.5 bg-slate-800 text-slate-300 rounded font-semibold text-[11px]">
-                    {getPreviousStateObj()?.nombre || 'Estado Origen'}
+                {/* Encabezado de Columna */}
+                <div className="p-4 bg-[#161a21]/90 border-b border-[#2d3748] flex items-center justify-between sticky top-0 z-10">
+                  <div className="flex items-center gap-2.5">
+                    <div className={`p-2 rounded-xl bg-slate-900 border border-[#2d3748] ${col.headerColor}`}>
+                      <IconComponent className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h2 className={`font-mono text-xs md:text-sm font-extrabold tracking-wider uppercase ${col.headerColor}`}>
+                        {col.title}
+                      </h2>
+                      <p className="text-[10px] text-slate-400 font-sans">{col.subtitle}</p>
+                    </div>
+                  </div>
+                  <span className={`font-mono text-xs font-extrabold px-2.5 py-1 rounded-full border ${col.badgeBg}`}>
+                    {colOrders.length}
                   </span>
                 </div>
-                <ArrowRight className="w-4 h-4 text-emerald-400 shrink-0" />
-                <div className="text-center">
-                  <span className="text-[10px] text-slate-500 block">Estado Nuevo</span>
-                  <span
-                    className="px-2 py-0.5 rounded font-semibold text-[11px] text-slate-950 font-bold"
-                    style={{ backgroundColor: getTargetStateObj()?.color_estado || "#10B981" }}
-                  >
-                    {getTargetStateObj()?.nombre || 'Estado Destino'}
-                  </span>
+
+                {/* Lista de Tarjetas Operativas */}
+                <div className="p-3 space-y-3 max-h-[calc(100vh-230px)] overflow-y-auto custom-scrollbar min-h-[180px]">
+                  {colOrders.length === 0 ? (
+                    <div className="py-10 px-4 text-center text-slate-500 text-xs font-mono border-2 border-dashed border-slate-800/60 rounded-xl">
+                      Sin órdenes en esta etapa
+                    </div>
+                  ) : (
+                    colOrders.map((ord) => {
+                      const totalNum = parseFloat(ord.total_orden || ord.total_estimado || 0);
+                      const priorityColor =
+                        ord.prioridad_codigo === "URGENTE"
+                          ? "bg-rose-500/20 text-rose-300 border-rose-500/40"
+                          : ord.prioridad_codigo === "ALTA"
+                          ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                          : "bg-slate-800 text-slate-400 border-slate-700";
+
+                      return (
+                        <div
+                          key={ord.orden_id || ord.orden_trabajo_id}
+                          onClick={() => onViewDetail && onViewDetail(ord.orden_id || ord.orden_trabajo_id)}
+                          className="bg-[#161a21] hover:bg-[#1a202c] border border-[#2d3748] hover:border-[#bfce7f]/60 rounded-xl p-3.5 space-y-2.5 transition-all shadow-md cursor-pointer group hover:shadow-lg relative overflow-hidden"
+                        >
+                          {/* Línea Superior: Código y Prioridad */}
+                          <div className="flex items-center justify-between">
+                            <span className="font-mono text-sm font-black text-slate-100 group-hover:text-[#bfce7f] transition-colors tracking-wide">
+                              {ord.codigo_orden}
+                            </span>
+                            {ord.prioridad_nombre && (
+                              <span
+                                className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border uppercase tracking-wider ${priorityColor}`}
+                              >
+                                {ord.prioridad_nombre}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Cliente */}
+                          <div className="text-xs md:text-sm font-bold text-slate-200 truncate">
+                            {ord.cliente_nombre || "Cliente Sin Nombre"}
+                          </div>
+
+                          {/* Bicicleta / Vehículo */}
+                          {(ord.bicicleta_marca || ord.bicicleta_modelo) && (
+                            <div className="flex items-center gap-1.5 text-[11px] text-slate-400 truncate">
+                              <Bike className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                              <span className="truncate">
+                                {ord.bicicleta_marca} {ord.bicicleta_modelo}
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Mecánico Asignado */}
+                          <div className="flex items-center gap-1.5 text-[11px]">
+                            <User className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                            <span
+                              className={`truncate font-medium ${
+                                ord.mecanico_asignado ? "text-amber-300/90" : "text-slate-500 italic"
+                              }`}
+                            >
+                              {ord.mecanico_asignado ? ord.mecanico_asignado : "Mecánico por asignar"}
+                            </span>
+                          </div>
+
+                          {/* Línea Inferior: Total y Fecha */}
+                          <div className="pt-2 border-t border-[#2d3748]/60 flex items-center justify-between font-mono text-xs">
+                            <span className="font-extrabold text-[#bfce7f]">
+                              RD$ {totalNum.toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                            <span className="text-[10px] text-slate-500">
+                              {formatOrderDate(ord.fecha_registro)}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
               </div>
-            </div>
-
-            {/* Motivo / Observación Field */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-slate-300 block">
-                Motivo / Observación del Cambio <span className="text-slate-500">(Opcional)</span>:
-              </label>
-              <textarea
-                rows={2}
-                value={changeNotes}
-                onChange={(e) => setChangeNotes(e.target.value)}
-                placeholder="Ej. Diagnóstico finalizado, cliente aprueba reparación..."
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500 resize-none"
-              />
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-800">
-              <button
-                type="button"
-                onClick={() => setConfirmModalOpen(false)}
-                disabled={updating}
-                className="px-4 py-2 text-xs font-medium text-slate-400 hover:text-slate-200 bg-slate-800 hover:bg-slate-700 rounded-xl transition-all"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmStatusChange}
-                disabled={updating}
-                className="flex items-center gap-2 px-5 py-2 text-xs font-semibold text-slate-950 bg-emerald-400 hover:bg-emerald-300 rounded-xl transition-all shadow-md shadow-emerald-400/20 disabled:opacity-50"
-              >
-                {updating ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    Procesando...
-                  </>
-                ) : (
-                  "Confirmar Transición"
-                )}
-              </button>
-            </div>
-          </div>
+            );
+          })}
         </div>
       )}
     </div>
