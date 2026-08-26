@@ -17,7 +17,9 @@ import {
   Loader2,
   Search,
   CheckCircle2,
-  ChevronDown
+  ChevronDown,
+  Sparkles,
+  PackagePlus
 } from "lucide-react";
 import ReceptionChecklistModal from "./ReceptionChecklistModal";
 
@@ -32,7 +34,9 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
     prioridades: [],
     mecanicos: [],
     items_checklist: [],
-    estados_checklist: []
+    estados_checklist: [],
+    categorias_componente: [],
+    estados_componente: []
   });
   const [clients, setClients] = useState([]);
   const [error, setError] = useState("");
@@ -56,36 +60,46 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
   // Multi-Service State & Draft Validation Errors
   const [serviciosList, setServiciosList] = useState([]);
   const [currentServicioId, setCurrentServicioId] = useState("");
-  const [currentDiagnostico, setCurrentDiagnostico] = useState("");
   const [currentPrecio, setCurrentPrecio] = useState("");
   const [currentBicicletaComponenteId, setCurrentBicicletaComponenteId] = useState("");
   const [editingTempId, setEditingTempId] = useState(null);
   const [addingServiceProcessing, setAddingServiceProcessing] = useState(false);
   const [serviceSuccessMsg, setServiceSuccessMsg] = useState("");
 
+  // Inline New Component Draft State
+  const [isAddingNewComponent, setIsAddingNewComponent] = useState(false);
+  const [attachedNewComponent, setAttachedNewComponent] = useState(null);
+  const [newComponentDraft, setNewComponentDraft] = useState({
+    categoria_componente_id: "",
+    estado_componente_id: "1",
+    marca: "",
+    numero_serie: ""
+  });
+  const [newComponentErrors, setNewComponentErrors] = useState({
+    categoria_componente_id: "",
+    estado_componente_id: "",
+    numero_serie: ""
+  });
+
   const [serviceDraftErrors, setServiceDraftErrors] = useState({
     tipo_servicio_id: "",
-    precio_estimado: "",
-    diagnostico_preliminar: ""
+    precio_estimado: ""
   });
 
   // Refs for service sub-form focus & validation
   const selectTypeRef = useRef(null);
   const inputPriceRef = useRef(null);
-  const textDiagRef = useRef(null);
 
   // General Reception Notes & Budget
-  const [observacionesCliente, setObservacionesCliente] = useState("");
-  const [observacionesRecepcion, setObservacionesRecepcion] = useState("");
   const [presupuestoEstimado, setPresupuestoEstimado] = useState("0.00");
   const [requiereAprobacion, setRequiereAprobacion] = useState(true);
 
-  // Work Order Auto-Creation State (No fechaPrometida per instructions)
+  // Work Order Auto-Creation State
   const [generarOrdenTrabajo, setGenerarOrdenTrabajo] = useState(true);
   const [prioridadId, setPrioridadId] = useState("");
   const [observacionesOT, setObservacionesOT] = useState("");
 
-  // Sub-modals State (Checklist only; Signature disabled visually)
+  // Sub-modals State
   const [checklistState, setChecklistState] = useState([]);
   const [isChecklistOpen, setIsChecklistOpen] = useState(false);
 
@@ -129,7 +143,9 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
         prioridades: catObj.prioridades || [],
         mecanicos: catObj.mecanicos || [],
         items_checklist: catObj.items_checklist || [],
-        estados_checklist: catObj.estados_checklist || []
+        estados_checklist: catObj.estados_checklist || [],
+        categorias_componente: catObj.categorias_componente || [],
+        estados_componente: catObj.estados_componente || []
       });
 
       if (catObj.prioridades?.length > 0) {
@@ -153,6 +169,8 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
     setClientBicycles([]);
     setBikeComponents([]);
     setCurrentBicicletaComponenteId("");
+    setAttachedNewComponent(null);
+    setIsAddingNewComponent(false);
 
     if (!clientObj) return;
 
@@ -178,6 +196,8 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
     setSelectedBike(bikeObj);
     setBikeComponents([]);
     setCurrentBicicletaComponenteId("");
+    setAttachedNewComponent(null);
+    setIsAddingNewComponent(false);
 
     if (!bikeObj) return;
 
@@ -204,6 +224,8 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
     setClientBicycles([]);
     setBikeComponents([]);
     setCurrentBicicletaComponenteId("");
+    setAttachedNewComponent(null);
+    setIsAddingNewComponent(false);
     setIsDropdownOpen(false);
     if (searchInputRef.current) {
       searchInputRef.current.focus();
@@ -281,6 +303,73 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
     }
   };
 
+  // Handle attaching inline component draft to service
+  const handleAttachNewComponentToService = (e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
+    const errors = {
+      categoria_componente_id: "",
+      estado_componente_id: "",
+      numero_serie: ""
+    };
+
+    if (!newComponentDraft.categoria_componente_id) {
+      errors.categoria_componente_id = "Seleccione una categoría para el componente.";
+    } else {
+      // Check if this category already exists on the bike
+      const alreadyOnBike = bikeComponents.some(
+        (c) => String(c.categoria_componente_id) === String(newComponentDraft.categoria_componente_id)
+      );
+      if (alreadyOnBike) {
+        errors.categoria_componente_id = "Ya existe un componente de esta categoría en la bicicleta.";
+      }
+
+      // Check if this category is already in another service draft in the current list
+      const alreadyInList = serviciosList.some(
+        (s) =>
+          s.nuevo_componente &&
+          String(s.nuevo_componente.categoria_componente_id) === String(newComponentDraft.categoria_componente_id) &&
+          s.tempId !== editingTempId
+      );
+      if (alreadyInList) {
+        errors.categoria_componente_id = "Ya agregaste un nuevo componente con esta categoría en la lista.";
+      }
+    }
+
+    if (!newComponentDraft.estado_componente_id) {
+      errors.estado_componente_id = "Seleccione un estado de uso para el componente.";
+    }
+
+    if (errors.categoria_componente_id || errors.estado_componente_id) {
+      setNewComponentErrors(errors);
+      return;
+    }
+
+    const catObj = catalogs.categorias_componente.find(
+      (c) => String(c.categoria_componente_id) === String(newComponentDraft.categoria_componente_id)
+    );
+    const estObj = catalogs.estados_componente.find(
+      (e) => String(e.estado_componente_id) === String(newComponentDraft.estado_componente_id)
+    );
+
+    const preparedDraft = {
+      categoria_componente_id: Number(newComponentDraft.categoria_componente_id),
+      categoria_nombre: catObj ? catObj.nombre : "Componente",
+      estado_componente_id: Number(newComponentDraft.estado_componente_id || 1),
+      estado_nombre: estObj ? estObj.nombre : "Bueno",
+      marca: (newComponentDraft.marca || "").trim(),
+      numero_serie: (newComponentDraft.numero_serie || "").trim()
+    };
+
+    setAttachedNewComponent(preparedDraft);
+    setCurrentBicicletaComponenteId("");
+    setIsAddingNewComponent(false);
+    setNewComponentErrors({ categoria_componente_id: "", estado_componente_id: "", numero_serie: "" });
+  };
+
   // Add or Update service item in list with component linkage
   const handleAddOrUpdateService = (event) => {
     if (event) {
@@ -292,11 +381,9 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
 
     const errors = {
       tipo_servicio_id: "",
-      precio_estimado: "",
-      diagnostico_preliminar: ""
+      precio_estimado: ""
     };
 
-    // 1. Validations in strict order
     if (!Number(currentServicioId)) {
       errors.tipo_servicio_id = "Selecciona un tipo de servicio.";
     }
@@ -306,21 +393,20 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
       errors.precio_estimado = "El precio debe ser un número mayor o igual a cero.";
     }
 
-    if (!currentDiagnostico.trim()) {
-      errors.diagnostico_preliminar = "Escribe un diagnóstico preliminar para el servicio.";
-    }
-
+    // Check duplicate service with same component
     const isDuplicate = serviciosList.some(
       (s) =>
         String(s.tipo_servicio_id) === String(currentServicioId) &&
         String(s.bicicleta_componente_id || "") === String(currentBicicletaComponenteId || "") &&
+        !s.nuevo_componente &&
+        !attachedNewComponent &&
         s.tempId !== editingTempId
     );
     if (isDuplicate) {
       errors.tipo_servicio_id = "Este tipo de servicio con el mismo componente ya fue agregado a la lista.";
     }
 
-    if (errors.tipo_servicio_id || errors.precio_estimado || errors.diagnostico_preliminar) {
+    if (errors.tipo_servicio_id || errors.precio_estimado) {
       setServiceDraftErrors(errors);
       return;
     }
@@ -330,18 +416,31 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
     const typeObj = catalogs.tipos_servicio.find((t) => String(t.tipo_servicio_id) === String(currentServicioId));
     const serviceName = typeObj ? typeObj.nombre : "Servicio de Taller";
 
-    const compObj = bikeComponents.find((c) => String(c.bicicleta_componente_id || c.id) === String(currentBicicletaComponenteId));
-    const componentName = compObj
-      ? `${compObj.categoria_nombre || compObj.categoria || "Componente"} ${compObj.marca || ""} ${compObj.modelo || ""}`.trim()
-      : "Servicio general";
+    let compId = null;
+    let nuevoComp = null;
+    let componentName = "Servicio general";
+
+    if (attachedNewComponent) {
+      compId = null;
+      nuevoComp = { ...attachedNewComponent };
+      componentName = `Nuevo: ${attachedNewComponent.categoria_nombre}${attachedNewComponent.marca ? ` — ${attachedNewComponent.marca}` : ""}`;
+    } else if (currentBicicletaComponenteId) {
+      compId = Number(currentBicicletaComponenteId);
+      nuevoComp = null;
+      const compObj = bikeComponents.find((c) => String(c.bicicleta_componente_id || c.id) === String(currentBicicletaComponenteId));
+      componentName = compObj
+        ? `${compObj.categoria_nombre || compObj.categoria || "Componente"} ${compObj.marca || ""} ${compObj.modelo || ""}`.trim()
+        : "Componente";
+    }
 
     const newServiceItem = {
       tempId: editingTempId || Date.now(),
       tipo_servicio_id: currentServicioId,
       nombre: serviceName,
       precio_estimado: numPrecio.toFixed(2),
-      diagnostico_preliminar: currentDiagnostico.trim(),
-      bicicleta_componente_id: currentBicicletaComponenteId ? Number(currentBicicletaComponenteId) : null,
+      diagnostico_preliminar: null,
+      bicicleta_componente_id: compId,
+      nuevo_componente: nuevoComp,
       componente_nombre: componentName
     };
 
@@ -360,13 +459,15 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
 
     // Clear sub-form input state
     setCurrentServicioId("");
-    setCurrentDiagnostico("");
     setCurrentPrecio("");
     setCurrentBicicletaComponenteId("");
+    setAttachedNewComponent(null);
+    setIsAddingNewComponent(false);
+    setNewComponentDraft({ categoria_componente_id: "", estado_componente_id: "1", marca: "", numero_serie: "" });
+    setNewComponentErrors({ categoria_componente_id: "", estado_componente_id: "", numero_serie: "" });
     setServiceDraftErrors({
       tipo_servicio_id: "",
-      precio_estimado: "",
-      diagnostico_preliminar: ""
+      precio_estimado: ""
     });
 
     setAddingServiceProcessing(false);
@@ -376,13 +477,18 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
   const handleEditServiceClick = (item) => {
     setEditingTempId(item.tempId);
     setCurrentServicioId(String(item.tipo_servicio_id));
-    setCurrentDiagnostico(item.diagnostico_preliminar || "");
     setCurrentPrecio(String(item.precio_estimado || ""));
-    setCurrentBicicletaComponenteId(item.bicicleta_componente_id ? String(item.bicicleta_componente_id) : "");
+    if (item.nuevo_componente) {
+      setAttachedNewComponent({ ...item.nuevo_componente });
+      setCurrentBicicletaComponenteId("");
+    } else {
+      setAttachedNewComponent(null);
+      setCurrentBicicletaComponenteId(item.bicicleta_componente_id ? String(item.bicicleta_componente_id) : "");
+    }
+    setIsAddingNewComponent(false);
     setServiceDraftErrors({
       tipo_servicio_id: "",
-      precio_estimado: "",
-      diagnostico_preliminar: ""
+      precio_estimado: ""
     });
     setServiceSuccessMsg("");
   };
@@ -394,9 +500,10 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
     if (editingTempId === tempId) {
       setEditingTempId(null);
       setCurrentServicioId("");
-      setCurrentDiagnostico("");
       setCurrentPrecio("");
       setCurrentBicicletaComponenteId("");
+      setAttachedNewComponent(null);
+      setIsAddingNewComponent(false);
     }
   };
 
@@ -433,12 +540,17 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
         bicicleta_id: selectedBike.id || selectedBike.bicicleta_id,
         servicios: serviciosList.map((s) => ({
           tipo_servicio_id: parseInt(s.tipo_servicio_id, 10),
-          diagnostico_preliminar: s.diagnostico_preliminar,
           precio_estimado: parseFloat(s.precio_estimado || "0"),
-          bicicleta_componente_id: s.bicicleta_componente_id ? parseInt(s.bicicleta_componente_id, 10) : null
+          bicicleta_componente_id: s.bicicleta_componente_id ? parseInt(s.bicicleta_componente_id, 10) : null,
+          nuevo_componente: s.nuevo_componente
+            ? {
+                categoria_componente_id: parseInt(s.nuevo_componente.categoria_componente_id, 10),
+                estado_componente_id: parseInt(s.nuevo_componente.estado_componente_id || 1, 10),
+                marca: s.nuevo_componente.marca || null,
+                numero_serie: s.nuevo_componente.numero_serie || null
+              }
+            : null
         })),
-        observaciones_cliente: observacionesCliente,
-        observaciones_recepcion: observacionesRecepcion,
         presupuesto_estimado: parseFloat(presupuestoEstimado || "0"),
         requiere_aprobacion: requiereAprobacion,
         checklist: checklistState.map((c) => ({
@@ -695,7 +807,6 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
                     <span>3. Servicios Solicitados & Diagnóstico Preliminar</span>
                     <span className="text-[11px] font-normal text-slate-400 font-mono">({serviciosList.length} agregados)</span>
                   </label>
-                  {/* Button 'Generar OT automática' moved next to section header */}
                   <button
                     type="button"
                     onClick={() => setGenerarOrdenTrabajo(!generarOrdenTrabajo)}
@@ -720,7 +831,7 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
 
                   <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
                     {/* Tipo de servicio */}
-                    <div className="md:col-span-5">
+                    <div className="md:col-span-4">
                       <label className="text-[11px] text-slate-400 mb-1 block">Tipo de Servicio *</label>
                       <select
                         ref={selectTypeRef}
@@ -757,15 +868,11 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
                         step="0.01"
                         placeholder="0.00"
                         value={currentPrecio}
-                        onChange={(e) => {
-                          setCurrentPrecio(e.target.value);
-                          setServiceDraftErrors((prev) => ({ ...prev, precio_estimado: "" }));
-                          setServiceSuccessMsg("");
-                        }}
-                        className={`w-full text-xs bg-slate-900 border rounded-xl px-3 py-2.5 text-slate-200 focus:outline-none font-mono transition-colors ${
+                        readOnly
+                        className={`w-full text-xs bg-slate-900/60 border rounded-xl px-3 py-2.5 text-slate-300 focus:outline-none font-mono transition-colors cursor-not-allowed opacity-90 ${
                           serviceDraftErrors.precio_estimado
-                            ? "border-rose-500/80 bg-rose-500/10 focus:border-rose-500"
-                            : "border-slate-800 focus:border-slate-700"
+                            ? "border-rose-500/80 bg-rose-500/10"
+                            : "border-slate-800"
                         }`}
                       />
                       {serviceDraftErrors.precio_estimado && (
@@ -776,63 +883,232 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
                       )}
                     </div>
 
-                    {/* Componente afectado (Sustituye a Mecánico Asignado) */}
-                    <div className="md:col-span-4">
-                      <label className="text-[11px] text-slate-400 mb-1 block">Componente afectado</label>
-                      <select
-                        value={currentBicicletaComponenteId}
-                        disabled={!selectedBike || loadingComponents}
-                        onChange={(e) => {
-                          setCurrentBicicletaComponenteId(e.target.value);
-                          setServiceSuccessMsg("");
-                        }}
-                        className="w-full text-xs bg-slate-900 border border-slate-800 text-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:border-slate-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-                      >
-                        <option value="">— Seleccione un componente de la bicicleta —</option>
-                        <option value="">Sin componente específico (Servicio General)</option>
-                        {bikeComponents.map((c) => {
-                          const cid = c.bicicleta_componente_id || c.id;
-                          const cName = `${c.categoria_nombre || c.categoria || "Componente"} ${c.marca || ""} ${c.modelo || ""}`.trim();
-                          const snText = c.numero_serie ? ` (SN: ${c.numero_serie})` : "";
-                          const stText = c.estado_nombre ? ` [${c.estado_nombre}]` : "";
-                          return (
-                            <option key={cid} value={cid}>
-                              {cName}{snText}{stText}
-                            </option>
-                          );
-                        })}
-                      </select>
-                      {selectedBike && !loadingComponents && bikeComponents.length === 0 && (
-                        <p className="text-[11px] text-amber-400/90 mt-1 font-mono">
-                          Esta bicicleta no tiene componentes registrados.
-                        </p>
-                      )}
-                    </div>
+                    {/* Componente afectado & Inline New Component Feature */}
+                    <div className="md:col-span-5 space-y-2">
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[11px] text-slate-400 font-semibold block">
+                          Componente afectado
+                        </label>
+                        {selectedBike && !loadingComponents && !editingTempId && !attachedNewComponent && !isAddingNewComponent && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsAddingNewComponent(true);
+                              setNewComponentDraft({ categoria_componente_id: "", estado_componente_id: "1", marca: "", numero_serie: "" });
+                              setNewComponentErrors({ categoria_componente_id: "", estado_componente_id: "", numero_serie: "" });
+                            }}
+                            className="text-[11px] text-emerald-400 hover:text-emerald-300 hover:underline cursor-pointer flex items-center gap-1 font-semibold"
+                          >
+                            <Plus size={12} />
+                            <span>Agregar Nuevo</span>
+                          </button>
+                        )}
+                      </div>
 
-                    {/* Diagnóstico Preliminar */}
-                    <div className="md:col-span-12">
-                      <label className="text-[11px] text-slate-400 mb-1 block">Diagnóstico Preliminar del Servicio *</label>
-                      <textarea
-                        ref={textDiagRef}
-                        rows={2}
-                        value={currentDiagnostico}
-                        onChange={(e) => {
-                          setCurrentDiagnostico(e.target.value);
-                          setServiceDraftErrors((prev) => ({ ...prev, diagnostico_preliminar: "" }));
-                          setServiceSuccessMsg("");
-                        }}
-                        placeholder="Diagnóstico preliminar o trabajo específico a realizar para este servicio..."
-                        className={`w-full text-xs bg-slate-900 border rounded-xl p-3 text-slate-200 placeholder-slate-600 focus:outline-none transition-colors ${
-                          serviceDraftErrors.diagnostico_preliminar
-                            ? "border-rose-500/80 bg-rose-500/10 focus:border-rose-500"
-                            : "border-slate-800 focus:border-slate-700"
-                        }`}
-                      />
-                      {serviceDraftErrors.diagnostico_preliminar && (
-                        <p className="text-[11px] text-rose-400 mt-1 flex items-center gap-1">
-                          <AlertCircle className="w-3 h-3 shrink-0" />
-                          <span>{serviceDraftErrors.diagnostico_preliminar}</span>
-                        </p>
+                      {/* State A: An inline component draft is currently attached */}
+                      {attachedNewComponent ? (
+                        <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-1.5 font-mono text-xs animate-in fade-in duration-150">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-amber-400 text-[10px] uppercase tracking-wider flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                              NUEVO COMPONENTE — PENDIENTE DE GUARDAR
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setNewComponentDraft({
+                                    categoria_componente_id: String(attachedNewComponent.categoria_componente_id),
+                                    estado_componente_id: String(attachedNewComponent.estado_componente_id),
+                                    marca: attachedNewComponent.marca || "",
+                                    numero_serie: attachedNewComponent.numero_serie || ""
+                                  });
+                                  setAttachedNewComponent(null);
+                                  setIsAddingNewComponent(true);
+                                }}
+                                className="text-[11px] text-amber-300 hover:underline cursor-pointer font-bold"
+                              >
+                                Editar borrador
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setAttachedNewComponent(null)}
+                                className="text-[11px] text-rose-400 hover:underline cursor-pointer font-bold"
+                              >
+                                Quitar borrador
+                              </button>
+                            </div>
+                          </div>
+                          <div className="text-[11px] text-slate-200">
+                            <p>
+                              <strong>Categoría:</strong> {attachedNewComponent.categoria_nombre} • <strong>Estado:</strong> {attachedNewComponent.estado_nombre}
+                            </p>
+                            {(attachedNewComponent.marca || attachedNewComponent.numero_serie) && (
+                              <p className="text-slate-400">
+                                {attachedNewComponent.marca ? `Marca: ${attachedNewComponent.marca}` : ""}
+                                {attachedNewComponent.marca && attachedNewComponent.numero_serie ? " • " : ""}
+                                {attachedNewComponent.numero_serie ? `SN: ${attachedNewComponent.numero_serie}` : ""}
+                              </p>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-amber-400/80 pt-1 border-t border-amber-500/20 italic">
+                            El componente se registrará al confirmar la recepción y generar la orden de trabajo.
+                          </p>
+                        </div>
+                      ) : isAddingNewComponent ? (
+                        /* State B: Inline creation form for a new component draft */
+                        <div className="p-3 bg-slate-900 border border-emerald-500/40 rounded-xl space-y-3 font-mono text-xs animate-in slide-in-from-top-2 duration-150">
+                          <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                            <span className="font-bold text-emerald-400 text-[11px] flex items-center gap-1.5">
+                              <PackagePlus size={14} />
+                              Nuevo Componente para esta Bicicleta
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsAddingNewComponent(false);
+                                setNewComponentErrors({ categoria_componente_id: "", estado_componente_id: "", numero_serie: "" });
+                              }}
+                              className="text-[11px] text-slate-400 hover:text-white cursor-pointer"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+
+                          <div className="space-y-2">
+                            {/* Categoría */}
+                            <div>
+                              <label className="text-[10px] text-slate-300 block mb-0.5">Categoría del Componente *</label>
+                              <select
+                                value={newComponentDraft.categoria_componente_id}
+                                onChange={(e) => {
+                                  setNewComponentDraft((prev) => ({ ...prev, categoria_componente_id: e.target.value }));
+                                  setNewComponentErrors((prev) => ({ ...prev, categoria_componente_id: "" }));
+                                }}
+                                className={`w-full text-xs bg-slate-950 border rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none ${
+                                  newComponentErrors.categoria_componente_id
+                                    ? "border-rose-500/80 bg-rose-500/10"
+                                    : "border-slate-800 focus:border-emerald-500/50"
+                                }`}
+                              >
+                                <option value="">Seleccione categoría...</option>
+                                {catalogs.categorias_componente.map((cat) => {
+                                  const alreadyExists = bikeComponents.some(
+                                    (bc) => String(bc.categoria_componente_id) === String(cat.categoria_componente_id)
+                                  );
+                                  return (
+                                    <option
+                                      key={cat.categoria_componente_id}
+                                      value={cat.categoria_componente_id}
+                                      disabled={alreadyExists}
+                                    >
+                                      {cat.nombre} {alreadyExists ? "(Ya existe en la bicicleta)" : ""}
+                                    </option>
+                                  );
+                                })}
+                              </select>
+                              {newComponentErrors.categoria_componente_id && (
+                                <p className="text-[10px] text-rose-400 mt-0.5">{newComponentErrors.categoria_componente_id}</p>
+                              )}
+                            </div>
+
+                            {/* Estado actual */}
+                            <div>
+                              <label className="text-[10px] text-slate-300 block mb-0.5">Estado Actual *</label>
+                              <select
+                                value={newComponentDraft.estado_componente_id}
+                                onChange={(e) => {
+                                  setNewComponentDraft((prev) => ({ ...prev, estado_componente_id: e.target.value }));
+                                  setNewComponentErrors((prev) => ({ ...prev, estado_componente_id: "" }));
+                                }}
+                                className="w-full text-xs bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-emerald-500/50"
+                              >
+                                {catalogs.estados_componente.map((st) => (
+                                  <option key={st.estado_componente_id} value={st.estado_componente_id}>
+                                    {st.nombre}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            {/* Marca y Serie (opcionales) */}
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="text-[10px] text-slate-400 block mb-0.5">Marca (Opcional)</label>
+                                <input
+                                  type="text"
+                                  placeholder="Ej. Shimano, Fox..."
+                                  value={newComponentDraft.marca}
+                                  onChange={(e) => setNewComponentDraft((prev) => ({ ...prev, marca: e.target.value }))}
+                                  className="w-full text-xs bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-emerald-500/50"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-slate-400 block mb-0.5">Nº de Serie (Opcional)</label>
+                                <input
+                                  type="text"
+                                  placeholder="SN-12345"
+                                  value={newComponentDraft.numero_serie}
+                                  onChange={(e) => setNewComponentDraft((prev) => ({ ...prev, numero_serie: e.target.value }))}
+                                  className="w-full text-xs bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-emerald-500/50"
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-800">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsAddingNewComponent(false);
+                                setNewComponentErrors({ categoria_componente_id: "", estado_componente_id: "", numero_serie: "" });
+                              }}
+                              className="px-2.5 py-1 text-xs text-slate-400 hover:text-white bg-slate-800 rounded-lg cursor-pointer"
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleAttachNewComponentToService}
+                              className="px-3 py-1 text-xs font-semibold bg-emerald-500 text-slate-950 rounded-lg hover:bg-emerald-400 transition-colors cursor-pointer"
+                            >
+                              Agregar componente al servicio
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        /* State C: Standard select with link to add new component */
+                        <div>
+                          <select
+                            value={currentBicicletaComponenteId}
+                            disabled={!selectedBike || loadingComponents}
+                            onChange={(e) => {
+                              setCurrentBicicletaComponenteId(e.target.value);
+                              setServiceSuccessMsg("");
+                            }}
+                            className="w-full text-xs bg-slate-900 border border-slate-800 text-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:border-slate-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                          >
+                            <option value="">— Seleccione un componente de la bicicleta —</option>
+                            <option value="">Sin componente específico (Servicio General)</option>
+                            {bikeComponents.map((c) => {
+                              const cid = c.bicicleta_componente_id || c.id;
+                              const cName = `${c.categoria_nombre || c.categoria || "Componente"} ${c.marca || ""} ${c.modelo || ""}`.trim();
+                              const snText = c.numero_serie ? ` (SN: ${c.numero_serie})` : "";
+                              const stText = c.estado_nombre ? ` [${c.estado_nombre}]` : "";
+                              return (
+                                <option key={cid} value={cid}>
+                                  {cName}{snText}{stText}
+                                </option>
+                              );
+                            })}
+                          </select>
+
+                          {selectedBike && !loadingComponents && bikeComponents.length === 0 && (
+                            <p className="mt-1.5 text-[11px] text-amber-400/90 font-mono">
+                              Esta bicicleta no tiene componentes registrados.
+                            </p>
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>
@@ -854,13 +1130,13 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
                             e.stopPropagation();
                             setEditingTempId(null);
                             setCurrentServicioId("");
-                            setCurrentDiagnostico("");
                             setCurrentPrecio("");
                             setCurrentBicicletaComponenteId("");
+                            setAttachedNewComponent(null);
+                            setIsAddingNewComponent(false);
                             setServiceDraftErrors({
                               tipo_servicio_id: "",
-                              precio_estimado: "",
-                              diagnostico_preliminar: ""
+                              precio_estimado: ""
                             });
                             setServiceSuccessMsg("");
                           }}
@@ -889,7 +1165,6 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
                       <thead className="bg-slate-900/80 text-slate-400 border-b border-slate-800 font-semibold uppercase text-[10px]">
                         <tr>
                           <th className="py-2.5 px-3">Servicio</th>
-                          <th className="py-2.5 px-3">Diagnóstico Preliminar</th>
                           <th className="py-2.5 px-3">Componente Afectado</th>
                           <th className="py-2.5 px-3 text-right">Precio Est.</th>
                           <th className="py-2.5 px-3 text-center">Acciones</th>
@@ -899,8 +1174,18 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
                         {serviciosList.map((srv) => (
                           <tr key={srv.tempId} className="hover:bg-slate-800/40 transition-colors">
                             <td className="py-2.5 px-3 font-semibold text-emerald-400">{srv.nombre}</td>
-                            <td className="py-2.5 px-3 text-slate-300 max-w-xs truncate">{srv.diagnostico_preliminar || "—"}</td>
-                            <td className="py-2.5 px-3 text-slate-300 font-mono">{srv.componente_nombre || "Servicio general"}</td>
+                            <td className="py-2.5 px-3 font-mono">
+                              <div className="flex items-center gap-2">
+                                <span className={srv.nuevo_componente ? "text-amber-300" : "text-slate-300"}>
+                                  {srv.componente_nombre || "Servicio general"}
+                                </span>
+                                {srv.nuevo_componente && (
+                                  <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[9px] font-bold border border-amber-500/40 uppercase tracking-wider">
+                                    PENDIENTE DE CREAR
+                                  </span>
+                                )}
+                              </div>
+                            </td>
                             <td className="py-2.5 px-3 text-right font-mono text-slate-100">RD$ {Number(srv.precio_estimado || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                             <td className="py-2.5 px-3 text-center">
                               <div className="flex items-center justify-center gap-1">
@@ -930,30 +1215,8 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
                 )}
 
                 {/* General Observations & Total Budget */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs text-slate-400 mb-1 block">Motivo de Ingreso / Obs. Cliente</label>
-                    <textarea
-                      rows={2}
-                      value={observacionesCliente}
-                      onChange={(e) => setObservacionesCliente(e.target.value)}
-                      placeholder="Lo que declara o reporta el cliente..."
-                      className="w-full text-xs bg-slate-950 border border-slate-800 rounded-xl p-3 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-slate-700"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-xs text-slate-400 mb-1 block">Observaciones Internas de Recepción</label>
-                    <textarea
-                      rows={2}
-                      value={observacionesRecepcion}
-                      onChange={(e) => setObservacionesRecepcion(e.target.value)}
-                      placeholder="Detalles sobre estado estético, rayones previos, etc..."
-                      className="w-full text-xs bg-slate-950 border border-slate-800 rounded-xl p-3 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-slate-700"
-                    />
-                  </div>
-
-                  <div className="md:col-span-2 flex items-center justify-between p-3.5 bg-slate-950 border border-slate-800 rounded-xl">
+                <div className="grid grid-cols-1 gap-4">
+                  <div className="flex items-center justify-between p-3.5 bg-slate-950 border border-slate-800 rounded-xl">
                     <div>
                       <p className="text-xs font-semibold text-slate-200">Presupuesto Estimado Total</p>
                       <p className="text-[11px] text-slate-400">Suma total calculada de los servicios incluidos</p>
@@ -972,7 +1235,7 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
                   </div>
                 </div>
 
-                {/* Work Order Fields (Prioridad and Observaciones OT only - Fecha Prometida removed) */}
+                {/* Work Order Fields */}
                 {generarOrdenTrabajo && (
                   <div className="p-4 bg-slate-950/80 border border-emerald-500/20 rounded-xl space-y-4 animate-in fade-in duration-150">
                     <div className="flex items-center gap-2 text-emerald-400 text-xs font-semibold uppercase tracking-wider">
@@ -1010,7 +1273,7 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
                 )}
               </div>
 
-              {/* Step 4: Triggers for Checklist & Signature (Signature visually disabled per requirements) */}
+              {/* Step 4: Triggers for Checklist & Signature */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-800">
                 <button
                   id="btn-checklist-inspeccion"
@@ -1038,7 +1301,7 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
                   {checklistState.length > 0 && <Check className="w-4 h-4 text-emerald-400" />}
                 </button>
 
-                {/* Signature Card Disabled Visually per Section 3.D */}
+                {/* Signature Card Disabled Visually */}
                 <div
                   id="btn-firma-digital"
                   aria-disabled="true"
@@ -1048,13 +1311,8 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
                   <div className="flex items-center gap-3">
                     <FileSignature className="w-5 h-5 text-slate-500" />
                     <div>
-                      <div className="flex items-center gap-2">
-                        <p className="text-xs font-semibold text-slate-400">Firma Digital del Cliente</p>
-                        <span className="px-2 py-0.5 text-[10px] font-mono font-bold bg-slate-800 text-slate-400 border border-slate-700 rounded">
-                          Temporalmente deshabilitada
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-500">No requerida para este ingreso</p>
+                      <p className="text-xs font-semibold">Firma Digital del Cliente</p>
+                      <p className="text-[11px] text-slate-500">Módulo no requerido en esta fase</p>
                     </div>
                   </div>
                 </div>
@@ -1063,49 +1321,60 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
           )}
         </div>
 
-        {/* Modal Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-800 bg-slate-950/50">
-          <div className="text-xs text-slate-400 font-mono">
+        {/* Footer */}
+        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-800 bg-slate-950/60">
+          <div className="text-xs text-slate-400">
             {selectedBike ? (
-              <span>Bicicleta: <strong className="text-slate-200">{selectedBike.marca} {selectedBike.modelo}</strong></span>
+              <span>
+                Bicicleta: <strong className="text-slate-200">{selectedBike.marca} {selectedBike.modelo}</strong>
+              </span>
             ) : (
-              <span>Sin bicicleta seleccionada</span>
+              <span>Seleccione un cliente y una bicicleta para continuar</span>
             )}
           </div>
+
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
+              disabled={submitting}
+              className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-slate-200 bg-slate-800/80 hover:bg-slate-800 rounded-xl transition-colors cursor-pointer disabled:opacity-50"
             >
               Cancelar
             </button>
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={submitting || loadingInit}
-              className="flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-slate-950 bg-emerald-400 hover:bg-emerald-300 rounded-xl transition-all shadow-lg cursor-pointer disabled:opacity-50"
+              disabled={submitting || !selectedClient || !selectedBike || loadingInit}
+              className="flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-slate-950 bg-emerald-400 hover:bg-emerald-300 rounded-xl transition-all shadow-lg shadow-emerald-500/20 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {submitting && <Loader2 className="w-4 h-4 animate-spin text-slate-950" />}
-              <span>{generarOrdenTrabajo ? "Confirmar & Generar Orden de Trabajo" : "Guardar Recepción"}</span>
+              {submitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Procesando...</span>
+                </>
+              ) : (
+                <span>Confirmar & Generar Orden de Trabajo</span>
+              )}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Sub-Modal for Inspection Checklist */}
-      <ReceptionChecklistModal
-        isOpen={isChecklistOpen}
-        onClose={() => setIsChecklistOpen(false)}
-        itemsCatalog={catalogs.items_checklist}
-        estadosCatalog={catalogs.estados_checklist}
-        value={checklistState}
-        onChange={(updatedChecklist) => setChecklistState(updatedChecklist)}
-        onSave={(updatedChecklist) => {
-          setChecklistState(updatedChecklist);
-          setIsChecklistOpen(false);
-        }}
-      />
+      {/* Checklist Sub-Modal */}
+      {isChecklistOpen && (
+        <ReceptionChecklistModal
+          isOpen={isChecklistOpen}
+          onClose={() => setIsChecklistOpen(false)}
+          itemsCatalog={catalogs.items_checklist}
+          estadosCatalog={catalogs.estados_checklist}
+          initialChecklist={checklistState}
+          onSave={(updatedList) => {
+            setChecklistState(updatedList);
+            setIsChecklistOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

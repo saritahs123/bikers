@@ -16,7 +16,6 @@ import {
   Package,
   History,
   ClipboardList,
-  Printer,
   Edit,
   RotateCcw,
   Check,
@@ -24,7 +23,8 @@ import {
   ShieldCheck,
   AlertTriangle,
   Plus,
-  X
+  X,
+  Info
 } from "lucide-react";
 import WorkOrderServicesView from "./WorkOrderServicesView";
 import WorkOrderHistoryView from "./WorkOrderHistoryView";
@@ -56,6 +56,62 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  const [baseVivo, setBaseVivo] = useState(0);
+  const [receivedAtMonotonic, setReceivedAtMonotonic] = useState(0);
+  const [tickerTimestamp, setTickerTimestamp] = useState(0);
+
+  const hasActiveService = React.useMemo(() => {
+    if (order?.tiempo_total_confiable === false) {
+      return false;
+    }
+    return (order?.servicios || []).some(
+      (s) => s.estado_servicio_codigo === "EN_PROCESO" || Number(s.estado_servicio_id) === 2
+    );
+  }, [order?.servicios, order?.tiempo_total_confiable]);
+
+  useEffect(() => {
+    if (!hasActiveService) return;
+
+    const interval = setInterval(() => {
+      setTickerTimestamp(performance.now());
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [hasActiveService]);
+
+  const segundosEnVivo = React.useMemo(() => {
+    if (!hasActiveService) {
+      return Number(order?.total_tiempo_transcurrido_vivo ?? 0);
+    }
+    const elapsedAfterResponse = Math.max(0, Math.floor((tickerTimestamp - receivedAtMonotonic) / 1000));
+    return baseVivo + elapsedAfterResponse;
+  }, [baseVivo, receivedAtMonotonic, hasActiveService, tickerTimestamp, order?.total_tiempo_transcurrido_vivo]);
+
+  const formatFriendlyDuration = (totalSeconds) => {
+    const secs = Number(totalSeconds || 0);
+    if (secs <= 0) return "0 s";
+
+    const hours = Math.floor(secs / 3600);
+    const minutes = Math.floor((secs % 3600) / 60);
+    const remainingSeconds = secs % 60;
+
+    if (hours > 0) {
+      if (minutes > 0) {
+        return `${hours} h ${minutes} min`;
+      }
+      return `${hours} h`;
+    }
+
+    if (minutes > 0) {
+      if (remainingSeconds > 0) {
+        return `${minutes} min ${remainingSeconds} s`;
+      }
+      return `${minutes} min`;
+    }
+
+    return `${remainingSeconds} s`;
+  };
   const [activeTab, setActiveTab] = useState("resumen"); // 'resumen' | 'servicios' | 'historial'
 
   // Change status & edit order modal state
@@ -136,6 +192,10 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
       }
 
       setOrder(orderData);
+      setBaseVivo(Number(orderData.total_tiempo_transcurrido_vivo || 0));
+      const monotonicNow = performance.now();
+      setReceivedAtMonotonic(monotonicNow);
+      setTickerTimestamp(monotonicNow);
       setNewStatusId(String(orderData.estado_orden_id));
       let mecId = orderData.mecanico_usuario_id ? String(orderData.mecanico_usuario_id) : "";
       setNewMecanicoId(mecId);
@@ -213,16 +273,25 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
   }, [ordenId, fetchOrderDetail]);
 
   const [toast, setToast] = useState(null);
-  const showToast = (msg, type = "success") => {
+  const toastTimeoutRef = useRef(null);
+
+  const showToast = (msg, type = "success", title = null, duration = 4500, subtext = null) => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+    }
     if (typeof msg === "object" && msg !== null && msg.text) {
       setToast(msg);
+      toastTimeoutRef.current = setTimeout(() => setToast(null), msg.duration || duration);
     } else {
-      setToast({ text: String(msg || ""), type });
+      setToast({ text: String(msg || ""), type, title, subtext });
+      toastTimeoutRef.current = setTimeout(() => setToast(null), duration);
     }
-    setTimeout(() => setToast(null), 4500);
   };
-  const showErrorToast = (msg) => showToast(msg, "error");
-  const showSuccessToast = (msg) => showToast(msg, "success");
+
+  const showErrorToast = (msg, title = "Error u Operación", duration = 5000) => showToast(msg, "error", title, duration);
+  const showWarningToast = (msg, title = "Aviso de Operación", duration = 6500, subtext = null) => showToast(msg, "warning", title, duration, subtext);
+  const showInfoToast = (msg, title = "Información", duration = 7500, subtext = null) => showToast(msg, "info", title, duration, subtext);
+  const showSuccessToast = (msg, title = "Confirmación", duration = 4500) => showToast(msg, "success", title, duration);
 
   const [loadingStateChange, setLoadingStateChange] = useState(false);
 
@@ -242,8 +311,35 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
       });
       const data = await res.json();
       if (!res.ok) {
+        const errorKey = data.error;
         const msg = data.message || data.title || "No se pudo cambiar el estado de la orden.";
-        showErrorToast(msg);
+
+        if (errorKey === "ORDER_HAS_INCOMPLETE_SERVICES" || errorKey === "ORDER_NOT_READY_FOR_DELIVERY") {
+          const incompletos = data?.data?.servicios_incompletos || data?.servicios_incompletos || [];
+          const codes = incompletos.map(s => s.codigo_servicio).filter(Boolean).join(", ");
+          const subtext = codes ? `Servicios pendientes: ${codes}` : null;
+          showInfoToast(
+            "Para marcar la orden como lista para entrega, primero debes completar todos los servicios pendientes, en proceso o pausados.",
+            "ORDEN CON SERVICIOS PENDIENTES",
+            8000,
+            subtext
+          );
+        } else if (errorKey === "ORDER_NOT_IN_REPAIR") {
+          showInfoToast(
+            data.message || "La orden debe estar en Reparación para modificar sus servicios o repuestos.",
+            "ORDEN NO ESTÁ EN REPARACIÓN",
+            6500
+          );
+        } else if (errorKey === "INVALID_SERVICE_TRANSITION" || errorKey === "TRANSITION_NOT_ALLOWED") {
+          showInfoToast(
+            data.message || "La transición de estado solicitada no está permitida en este momento.",
+            "RESTRICCIÓN DE PROCESO",
+            6500
+          );
+        } else {
+          showErrorToast(msg);
+        }
+
         setModalError({ title: "No se pudo cambiar el estado", description: msg });
         return;
       }
@@ -263,6 +359,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
     setUpdatingStatus(true);
     setModalError(null);
     try {
+      const parsedStatus = parseInt(newStatusId, 10);
       const isReopening = Number(order.estado_orden_id) === 7 && parsedStatus === 5;
       const payload = {
         accion: parsedStatus === 7 ? "MARCAR_LISTA_ENTREGA" : (isReopening ? "REABRIR_ORDEN" : undefined),
@@ -284,6 +381,32 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
       const data = await res.json();
 
       if (!res.ok) {
+        const errorKey = data.error;
+
+        if (errorKey === "ORDER_HAS_INCOMPLETE_SERVICES" || errorKey === "ORDER_NOT_READY_FOR_DELIVERY") {
+          const incompletos = data?.data?.servicios_incompletos || data?.servicios_incompletos || [];
+          const codes = incompletos.map(s => s.codigo_servicio).filter(Boolean).join(", ");
+          const subtext = codes ? `Servicios pendientes: ${codes}` : null;
+          showInfoToast(
+            "Para marcar la orden como lista para entrega, primero debes completar todos los servicios pendientes, en proceso o pausados.",
+            "ORDEN CON SERVICIOS PENDIENTES",
+            8000,
+            subtext
+          );
+        } else if (errorKey === "ORDER_NOT_IN_REPAIR") {
+          showInfoToast(
+            data.message || "La orden debe estar en Reparación para modificar sus servicios o repuestos.",
+            "ORDEN NO ESTÁ EN REPARACIÓN",
+            6500
+          );
+        } else if (errorKey === "INVALID_SERVICE_TRANSITION" || errorKey === "TRANSITION_NOT_ALLOWED") {
+          showInfoToast(
+            data.message || "La transición de estado solicitada no está permitida en este momento.",
+            "RESTRICCIÓN DE PROCESO",
+            6500
+          );
+        }
+
         let errTitle = data.title || "No pudimos guardar los cambios";
         let errDesc = data.message || "Inténtalo nuevamente en unos momentos.";
 
@@ -334,11 +457,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
     setShowAddTaskInput(false);
   };
 
-  const handlePrint = () => {
-    if (typeof window !== "undefined") {
-      window.print();
-    }
-  };
+
 
   if (loading || (!order && !error)) {
     return (
@@ -501,17 +620,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
     Math.max(0, Number(order.progreso?.porcentaje ?? order.progreso_porcentaje ?? 0))
   );
 
-  const horasRegistradasVal = Number(
-    order.progreso?.horas_registradas ?? order.horas_registradas ?? 0
-  );
-
-  const segundosTrabajadosVal = Number(
-    order.progreso?.segundos_trabajados ?? order.segundos_trabajados ?? 0
-  );
-
-  const horasRegistradasText = segundosTrabajadosVal > 0
-    ? `${horasRegistradasVal.toFixed(1)} h (${formatDuration(segundosTrabajadosVal)})`
-    : `${horasRegistradasVal.toFixed(1)} h`;
+  const horasRegistradasText = formatFriendlyDuration(segundosEnVivo);
 
   const horasEstimadasText = order.horas_estimadas !== undefined && order.horas_estimadas !== null
     ? `${Number(order.horas_estimadas).toFixed(1)} h`
@@ -535,23 +644,36 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
           className={`p-4 rounded-xl shadow-2xl font-mono text-xs flex items-start gap-3 border backdrop-blur-md transition-all animate-in fade-in slide-in-from-top-3 ${
             toast.type === "error"
               ? "bg-rose-950/95 border-rose-500 text-rose-100 shadow-rose-950/50"
+              : toast.type === "warning"
+              ? "bg-amber-950/95 border-amber-500 text-amber-100 shadow-amber-950/50"
+              : toast.type === "info"
+              ? "bg-[#081e36]/95 border-cyan-500/80 text-cyan-100 shadow-cyan-950/60"
               : "bg-emerald-950/95 border-emerald-500 text-emerald-100 shadow-emerald-950/50"
           }`}
         >
           {toast.type === "error" ? (
             <AlertTriangle className="w-5 h-5 shrink-0 text-rose-400 mt-0.5" />
+          ) : toast.type === "warning" ? (
+            <AlertTriangle className="w-5 h-5 shrink-0 text-amber-400 mt-0.5" />
+          ) : toast.type === "info" ? (
+            <Info className="w-5 h-5 shrink-0 text-cyan-400 mt-0.5" />
           ) : (
             <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-400 mt-0.5" />
           )}
           <div className="flex-1 min-w-0">
-            <span className="font-bold block text-xs uppercase tracking-wider mb-0.5 font-mono">
-              {toast.type === "error" ? "Error u Operación" : "Confirmación"}
+            <span className="font-bold block text-xs uppercase tracking-wider mb-1 font-mono text-slate-100">
+              {toast.title || (toast.type === "error" ? "Error u Operación" : toast.type === "warning" ? "Aviso de Operación" : toast.type === "info" ? "Información" : "Confirmación")}
             </span>
             <span className="leading-relaxed font-sans text-xs block text-slate-200">{toast.text}</span>
+            {toast.subtext && (
+              <span className="leading-relaxed font-sans text-[11px] block text-cyan-300 mt-2 font-medium bg-cyan-950/50 border border-cyan-500/30 px-2.5 py-1 rounded-lg">
+                {toast.subtext}
+              </span>
+            )}
           </div>
           <button
             onClick={() => setToast(null)}
-            className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors ml-1 shrink-0"
+            className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors ml-1 shrink-0 cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -648,13 +770,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
             </span>
           )}
 
-          <button
-            onClick={handlePrint}
-            className="flex items-center gap-2 px-4 py-2 bg-[#161a21] border border-[#2d3748] text-slate-200 rounded-xl hover:border-slate-500 transition-colors font-mono text-xs font-semibold uppercase tracking-wider shadow-sm"
-          >
-            <Printer className="w-4 h-4 text-slate-400" />
-            IMPRIMIR
-          </button>
+
           <button
             onClick={() => {
               setNewStatusId(String(order.estado_orden_id || 1));
@@ -849,9 +965,18 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
               <div className="flex flex-wrap gap-6 pt-2 text-xs font-mono text-slate-400">
                 <div className="flex items-center gap-1.5">
                   <Clock className="w-4 h-4 text-[#bfce7f]" />
-                  <span>Tiempo transcurrido total: <strong className="text-slate-200">{horasRegistradasText}</strong></span>
+                  <span>Tiempo transcurrido total: <strong aria-live="polite" className="text-slate-200">{horasRegistradasText}</strong></span>
                 </div>
               </div>
+              {order?.tiempo_total_confiable === false && (
+                <div className="mt-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-400 flex items-start gap-2 max-w-xl font-mono text-[11px] leading-relaxed">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block uppercase tracking-wider mb-0.5">Inconsistencia de Sesiones Detectada</span>
+                    <span className="text-slate-300">Hay múltiples temporizadores activos simultáneamente para el mismo servicio (IDs: {JSON.stringify(order?.servicios_con_sesiones_duplicadas)}). Se ha congelado el cálculo del tiempo en vivo para evitar valores erróneos.</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Row 3: Financial Summary Table */}
@@ -1164,7 +1289,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                     className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-[#bfce7f] font-mono text-xs disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <option value="1">1 - Recibida</option>
-                    {Number(order.estado_orden_id) !== 7 && <option value="5">5 - En Reparación</option>}
+                    {(Number(order.estado_orden_id) !== 7 || newStatusId === "5") && <option value="5">5 - En Reparación</option>}
                     <option value="7">7 - Lista para Entrega</option>
                     <option value="8">8 - Entregada</option>
                   </select>

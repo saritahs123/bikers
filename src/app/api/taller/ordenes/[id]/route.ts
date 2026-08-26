@@ -129,6 +129,7 @@ export async function GET(
         ot.impuesto,
         ot.total_orden,
         ot.mecanico_id,
+        ot.total_tiempo_transcurrido,
         COALESCE(NULLIF(TRIM(CONCAT_WS(' ', ui_mec.nombre, ui_mec.apellido)), ''), ui_mec.correo_electronico, ('Mecánico #' || u_mec.usuario_id::text)) AS mecanico_nombre,
         c_mec.nombre AS mecanico_cargo,
         tu_mec.nombre AS mecanico_tipo,
@@ -308,6 +309,45 @@ export async function GET(
     // Recalculate financial summary
     const summary = await recalculateWorkOrderTotals({ query }, ordenId);
 
+    // Query all active open timer sessions grouped by service, calculating live seconds since start
+    const openSessions = await query<any>(`
+      SELECT
+          osm.orden_servicio_id,
+          COUNT(*)::integer AS sesiones_abiertas,
+          MIN(osm.fecha_inicio) AS fecha_inicio_abierta,
+          EXTRACT(EPOCH FROM (NOW() - MIN(osm.fecha_inicio)))::bigint AS segundos_abiertos
+      FROM admin.orden_servicio_mano_obra osm
+      JOIN admin.orden_servicios os ON os.orden_servicio_id = osm.orden_servicio_id
+      JOIN admin.estado_orden_servicio eos ON eos.estado_orden_servicio_id = os.estado_orden_servicio_id
+      WHERE os.orden_trabajo_id = $1
+        AND os.activo IS DISTINCT FROM false
+        AND eos.codigo = 'EN_PROCESO'
+        AND osm.fecha_finalizacion IS NULL
+        AND osm.activo IS DISTINCT FROM false
+        AND (osm.detalle_mano_obra IS NULL OR BTRIM(osm.detalle_mano_obra) = '')
+        AND (osm.observacion IS NULL OR BTRIM(osm.observacion) = '')
+      GROUP BY osm.orden_servicio_id
+    `, [ordenId]);
+
+    const duplicados: number[] = [];
+    let segundosAbiertosSum = 0;
+    let tiempoTotalConfiable = true;
+
+    for (const row of openSessions) {
+      if (row.sesiones_abiertas > 1) {
+        duplicados.push(row.orden_servicio_id);
+        tiempoTotalConfiable = false;
+      } else if (tiempoTotalConfiable) {
+        segundosAbiertosSum += Number(row.segundos_abiertos || 0);
+      }
+    }
+
+    const totalPersistido = Number(order.total_tiempo_transcurrido || 0);
+    const totalVivo = tiempoTotalConfiable ? (totalPersistido + segundosAbiertosSum) : totalPersistido;
+
+    const nowRes = await query<any>(`SELECT NOW() AS calculado_en`);
+    const calculadoEn = nowRes[0]?.calculado_en || new Date();
+
     const resumen_financiero = {
       servicios: (servRes || []).map((s: any) => ({
         servicio_id: s.servicio_id,
@@ -382,6 +422,18 @@ export async function GET(
       success: true,
       data: {
         ...order,
+        total_tiempo_transcurrido: totalPersistido,
+        total_tiempo_transcurrido_vivo: totalVivo,
+        tiempo_total_calculado_en: new Date(calculadoEn).toISOString(),
+        tiempo_total_confiable: tiempoTotalConfiable,
+        servicios_con_sesiones_duplicadas: duplicados,
+        tiempo_total: {
+          segundos_persistidos: totalPersistido,
+          segundos_en_vivo: totalVivo,
+          calculado_en: new Date(calculadoEn).toISOString(),
+          tiempo_total_confiable: tiempoTotalConfiable,
+          servicios_con_sesiones_duplicadas: duplicados
+        },
         bicicleta_id: Number(order.bicicleta_id || 0),
         bicicleta: order.bicicleta_id ? {
           bicicleta_id: Number(order.bicicleta_id),
@@ -650,23 +702,26 @@ export async function PUT(
         );
       }
 
-      // Check service completion
-      const servAggRes = await client.query(`
+      // Query incomplete services
+      const incompleteRes = await client.query(`
         SELECT 
-          COUNT(*)::int AS total_aplicables,
-          COUNT(*) FILTER (WHERE eos.codigo = 'COMPLETADO')::int AS completados,
-          COUNT(*) FILTER (WHERE eos.codigo = 'PENDIENTE')::int AS pendientes,
-          COUNT(*) FILTER (WHERE eos.codigo = 'EN_PROCESO')::int AS en_proceso,
-          COUNT(*) FILTER (WHERE eos.codigo IN ('PAUSADO', 'SUSPENDIDO'))::int AS pausados
+          os.orden_servicio_id AS servicio_id,
+          os.codigo_servicio,
+          eos.codigo AS estado
         FROM admin.orden_servicios os
         JOIN admin.estado_orden_servicio eos ON os.estado_orden_servicio_id = eos.estado_orden_servicio_id
-        WHERE os.orden_trabajo_id = $1 
+        WHERE os.orden_trabajo_id = $1
           AND (os.activo IS DISTINCT FROM false)
-          AND eos.codigo NOT IN ('CANCELADO', 'ANULADO', 'INACTIVO')
+          AND eos.codigo NOT IN ('COMPLETADO', 'CANCELADO', 'ANULADO', 'INACTIVO')
+        ORDER BY os.orden_servicio_id;
       `, [ordenId]);
 
-      const openTimerRes = await client.query(`
-        SELECT COUNT(*)::int AS sesiones_abiertas
+      // Query active timer sessions
+      const activeTimersRes = await client.query(`
+        SELECT
+          os.orden_servicio_id AS servicio_id,
+          os.codigo_servicio,
+          'CON_SESION_ACTIVA' AS estado
         FROM admin.orden_servicio_mano_obra mo
         JOIN admin.orden_servicios os ON mo.orden_servicio_id = os.orden_servicio_id
         WHERE os.orden_trabajo_id = $1
@@ -675,38 +730,44 @@ export async function PUT(
           AND mo.fecha_inicio IS NOT NULL
           AND mo.fecha_finalizacion IS NULL
           AND (mo.activo IS DISTINCT FROM false)
+          AND (os.activo IS DISTINCT FROM false);
       `, [ordenId]);
 
-      const stats = servAggRes.rows[0] || {};
-      const totalAplicables = Number(stats.total_aplicables || 0);
-      const completados = Number(stats.completados || 0);
-      const pendientes = Number(stats.pendientes || 0);
-      const enProceso = Number(stats.en_proceso || 0);
-      const pausados = Number(stats.pausados || 0);
-      const sesionesAbiertas = Number(openTimerRes.rows[0]?.sesiones_abiertas || 0);
+      const incompleteList = incompleteRes.rows || [];
+      const activeTimersList = activeTimersRes.rows || [];
 
-      const isReadyForDelivery = (
-        totalAplicables > 0 &&
-        completados === totalAplicables &&
-        pendientes === 0 &&
-        enProceso === 0 &&
-        pausados === 0 &&
-        sesionesAbiertas === 0
-      );
+      // Combine both
+      const combinedIncomplete: any[] = [];
+      const serviceIdSet = new Set<number>();
 
-      if (!isReadyForDelivery) {
+      for (const s of incompleteList) {
+        combinedIncomplete.push({
+          servicio_id: Number(s.servicio_id),
+          codigo_servicio: s.codigo_servicio,
+          estado: s.estado
+        });
+        serviceIdSet.add(Number(s.servicio_id));
+      }
+
+      for (const s of activeTimersList) {
+        if (!serviceIdSet.has(Number(s.servicio_id))) {
+          combinedIncomplete.push({
+            servicio_id: Number(s.servicio_id),
+            codigo_servicio: s.codigo_servicio,
+            estado: "EN_PROCESO"
+          });
+        }
+      }
+
+      if (combinedIncomplete.length > 0) {
         await client.query("ROLLBACK");
         return NextResponse.json(
           {
-            error: "ORDER_NOT_READY_FOR_DELIVERY",
-            message: "Completa todos los servicios antes de marcar la orden como lista para entrega.",
-            details: {
-              total_aplicables: totalAplicables,
-              completados,
-              pendientes,
-              en_proceso: enProceso,
-              pausados,
-              sesiones_abiertas: sesionesAbiertas
+            success: false,
+            error: "ORDER_HAS_INCOMPLETE_SERVICES",
+            message: "No puedes marcar la orden como lista para entrega mientras existan servicios pendientes, en proceso o pausados.",
+            data: {
+              servicios_incompletos: combinedIncomplete
             }
           },
           { status: 409 }

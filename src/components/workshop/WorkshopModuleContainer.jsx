@@ -147,6 +147,7 @@ export default function WorkshopModuleContainer() {
           onNavigateList={() => setActiveTab("recepciones")}
           onNavigateWorkOrders={() => setActiveTab("work_orders")}
           onViewDetail={(id) => handleNavigateRecepcionDetail(id)}
+          onViewOrderDetail={(oid) => handleNavigateOrderDetail(oid)}
         />
       ) : activeTab === "recepciones" ? (
         <ReceptionsListView onViewDetail={(id) => handleNavigateRecepcionDetail(id)} />

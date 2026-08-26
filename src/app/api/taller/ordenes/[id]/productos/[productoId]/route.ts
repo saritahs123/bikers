@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
 import { getWorkshopSession } from "@/lib/workshop-session";
 import { recalculateWorkOrderTotals } from "@/lib/workshop/recalculateWorkOrderTotals";
+import { validateOrderInRepair } from "@/lib/workshop/validateOrderState";
 
 export async function PUT(
   req: Request,
@@ -41,6 +42,13 @@ export async function PUT(
     }
 
     await client.query("BEGIN");
+
+    // Enforce order state machine check
+    const orderStateCheck = await validateOrderInRepair(client, ordenId, session.empresa_id, "EDITAR_PRODUCTO");
+    if (!orderStateCheck.isValid) {
+      await client.query("ROLLBACK");
+      return orderStateCheck.response;
+    }
 
     // Lock orden_productos record
     const opRes = await client.query(
@@ -157,6 +165,13 @@ export async function DELETE(
     }
 
     await client.query("BEGIN");
+
+    // Enforce order state machine check
+    const orderStateCheck = await validateOrderInRepair(client, ordenId, session.empresa_id, "ELIMINAR_PRODUCTO");
+    if (!orderStateCheck.isValid) {
+      await client.query("ROLLBACK");
+      return orderStateCheck.response;
+    }
 
     // Lock and verify
     const opRes = await client.query(
