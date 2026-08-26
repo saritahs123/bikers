@@ -17,7 +17,8 @@ import {
   Pause,
   ArrowLeft,
   Layers,
-  Sparkles
+  Sparkles,
+  Info
 } from "lucide-react";
 import { getServiceStateRules } from "@/lib/workshop-state-machine";
 
@@ -210,17 +211,19 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
     return "idx-" + Math.random().toString(36).substring(2, 15) + "-" + Date.now();
   };
 
-  const showToast = (msg, type = "success") => {
+  const showToast = (msg, type = "success", title = null, duration = 4500, subtext = null) => {
     if (typeof msg === "object" && msg !== null && msg.text) {
       setToast(msg);
     } else {
-      setToast({ text: String(msg || ""), type });
+      setToast({ text: String(msg || ""), type, title, subtext });
     }
-    setTimeout(() => setToast(null), 4500);
+    setTimeout(() => setToast(null), duration);
   };
 
-  const showErrorToast = (msg) => showToast(msg, "error");
-  const showSuccessToast = (msg) => showToast(msg, "success");
+  const showErrorToast = (msg, title = "Error u Operación", duration = 5000) => showToast(msg, "error", title, duration);
+  const showWarningToast = (msg, title = "Aviso de Operación", duration = 6500, subtext = null) => showToast(msg, "warning", title, duration, subtext);
+  const showInfoToast = (msg, title = "Información", duration = 7500, subtext = null) => showToast(msg, "info", title, duration, subtext);
+  const showSuccessToast = (msg, title = "Confirmación", duration = 4500) => showToast(msg, "success", title, duration);
 
   const askConfirmation = (title, message, onConfirm, type = "delete") => {
     setConfirmModalTitle(title);
@@ -521,8 +524,17 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
 
   const isOrderRecibida = Number(order?.estado_orden_id || order?.estado_id || 1) === 1;
 
+  const orderStateCode = String(
+    order?.estado_codigo ||
+    order?.estado_orden_codigo ||
+    ""
+  ).trim().toUpperCase();
+
+  const isOrderInRepair = orderStateCode === "REPARACION";
+
   // Open Unified Modal for Add Item
   const handleOpenAddItem = () => {
+    if (!isOrderInRepair) return;
     setIsEditing(false);
     setEditingItem(null);
     setItemType("SERVICIO");
@@ -547,6 +559,7 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
 
   // Open Unified Modal for Edit Item
   const handleOpenEditItem = (item, type = "SERVICIO") => {
+    if (!isOrderInRepair) return;
     const isService = String(type || "").trim().toUpperCase() === "SERVICIO" || String(type || "").trim().toUpperCase() === "SERVICE";
 
     const normalizedEditingItem = isService ? {
@@ -596,6 +609,10 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
   // Unified Item Form Submission
   const handleSubmitItemForm = async (e) => {
     e.preventDefault();
+    if (!isOrderInRepair) {
+      setModalError("La orden debe estar en Reparación para realizar cambios.");
+      return;
+    }
     setModalError(null);
 
     const parsedQty = parseFloat(formCantidad);
@@ -861,8 +878,20 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
 
   // Handle Operative Action Execution (Iniciar, Pausar, Reanudar, Finalizar)
   const executeOperativeAction = async (svc, actionCode, extraBody = {}) => {
-    if (isOrderRecibida) {
-      showErrorToast("Primero debes iniciar la reparación de la orden.");
+    if (!isOrderInRepair) {
+      if (orderStateCode === "LISTA_ENTREGA") {
+        showInfoToast(
+          "La orden está en estado Lista para Entrega. Reabre la reparación para modificar servicios o repuestos.",
+          "ORDEN EN LISTA PARA ENTREGA",
+          6500
+        );
+      } else {
+        showInfoToast(
+          "La orden debe estar en Reparación para realizar cambios.",
+          "ORDEN NO ESTÁ EN REPARACIÓN",
+          6500
+        );
+      }
       return;
     }
 
@@ -889,7 +918,11 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
       const json = await res.json();
       if (!res.ok) {
         if (res.status === 409) {
-          showErrorToast(json.message || "Primero debes iniciar la reparación de la orden.");
+          showInfoToast(
+            json.message || "Primero debes iniciar la reparación de la orden.",
+            "RESTRICCIÓN DE PROCESO",
+            6500
+          );
         } else if (res.status === 400 && json.code === "COMPONENT_RESULT_STATUS_REQUIRED") {
           setCompleteTargetService(svc);
           setSelectedFinalStateId(String(svc.nuevo_estado_componente_id || ""));
@@ -912,8 +945,20 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
 
   // Handle Finish Service Trigger
   const handleFinishServiceTrigger = (svc) => {
-    if (isOrderRecibida) {
-      showErrorToast("Primero debes iniciar la reparación de la orden.");
+    if (!isOrderInRepair) {
+      if (orderStateCode === "LISTA_ENTREGA") {
+        showInfoToast(
+          "La orden está en estado Lista para Entrega. Reabre la reparación para modificar servicios o repuestos.",
+          "ORDEN EN LISTA PARA ENTREGA",
+          6500
+        );
+      } else {
+        showInfoToast(
+          "La orden debe estar en Reparación para realizar cambios.",
+          "ORDEN NO ESTÁ EN REPARACIÓN",
+          6500
+        );
+      }
       return;
     }
 
@@ -953,7 +998,7 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
   const handleSaveCompleteComponentStatus = async (e) => {
     e.preventDefault();
     if (!selectedFinalStateId) {
-      showErrorToast("Por favor selecciona el estado resultante del componente.");
+      showWarningToast("Por favor selecciona el estado resultante del componente.", "CAMPO REQUERIDO");
       return;
     }
     if (!completeTargetService) return;
@@ -966,6 +1011,22 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
 
   // Delete Service
   const handleDeleteService = (svc) => {
+    if (!isOrderInRepair) {
+      if (orderStateCode === "LISTA_ENTREGA") {
+        showInfoToast(
+          "La orden está en estado Lista para Entrega. Reabre la reparación para modificar servicios o repuestos.",
+          "ORDEN EN LISTA PARA ENTREGA",
+          6500
+        );
+      } else {
+        showInfoToast(
+          "La orden debe estar en Reparación para realizar cambios.",
+          "ORDEN NO ESTÁ EN REPARACIÓN",
+          6500
+        );
+      }
+      return;
+    }
     askConfirmation(
       "Eliminar Servicio",
       `¿Deseas eliminar el servicio '${svc.tipo_servicio_nombre}' de esta orden?`,
@@ -976,7 +1037,11 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
           });
           const json = await res.json();
           if (!res.ok) {
-            showErrorToast(json.message || json.error || "No se pudo eliminar el servicio.");
+            if (res.status === 409) {
+              showInfoToast(json.message || "No se puede eliminar el servicio en el estado actual de la orden.", "RESTRICCIÓN DE PROCESO", 6500);
+            } else {
+              showErrorToast(json.message || json.error || "No se pudo eliminar el servicio.");
+            }
             return;
           }
           showSuccessToast("Servicio eliminado de la orden.");
@@ -991,6 +1056,22 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
 
   // Delete Product
   const handleDeleteProduct = (prod) => {
+    if (!isOrderInRepair) {
+      if (orderStateCode === "LISTA_ENTREGA") {
+        showInfoToast(
+          "La orden está en estado Lista para Entrega. Reabre la reparación para modificar servicios o repuestos.",
+          "ORDEN EN LISTA PARA ENTREGA",
+          6500
+        );
+      } else {
+        showInfoToast(
+          "La orden debe estar en Reparación para realizar cambios.",
+          "ORDEN NO ESTÁ EN REPARACIÓN",
+          6500
+        );
+      }
+      return;
+    }
     askConfirmation(
       "Eliminar Repuesto",
       `¿Deseas eliminar el repuesto '${prod.nombre || prod.producto_nombre}' de esta orden?`,
@@ -1001,7 +1082,11 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
           });
           const json = await res.json();
           if (!res.ok) {
-            showErrorToast(json.message || json.error || "No se pudo eliminar el repuesto.");
+            if (res.status === 409) {
+              showInfoToast(json.message || "No se puede eliminar el repuesto en el estado actual de la orden.", "RESTRICCIÓN DE PROCESO", 6500);
+            } else {
+              showErrorToast(json.message || json.error || "No se pudo eliminar el repuesto.");
+            }
             return;
           }
           showSuccessToast("Repuesto eliminado de la orden.");
@@ -1026,24 +1111,37 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
             top: "24px",
             right: "24px",
             zIndex: 999999,
-            width: "min(380px, calc(100vw - 32px))"
+            width: "min(420px, calc(100vw - 32px))"
           }}
           className={`p-4 rounded-xl shadow-2xl font-mono text-xs flex items-start gap-3 border backdrop-blur-md transition-all ${
             toast.type === "error"
               ? "bg-rose-950/95 border-rose-500 text-rose-100 shadow-rose-950/50"
+              : toast.type === "warning"
+              ? "bg-amber-950/95 border-amber-500 text-amber-100 shadow-amber-950/50"
+              : toast.type === "info"
+              ? "bg-[#081e36]/95 border-cyan-500/80 text-cyan-100 shadow-cyan-950/60"
               : "bg-emerald-950/95 border-emerald-500 text-emerald-100 shadow-emerald-950/50"
           }`}
         >
           {toast.type === "error" ? (
             <AlertTriangle className="w-5 h-5 shrink-0 text-rose-400 mt-0.5" />
+          ) : toast.type === "warning" ? (
+            <AlertTriangle className="w-5 h-5 shrink-0 text-amber-400 mt-0.5" />
+          ) : toast.type === "info" ? (
+            <Info className="w-5 h-5 shrink-0 text-cyan-400 mt-0.5" />
           ) : (
             <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-400 mt-0.5" />
           )}
           <div className="flex-1 min-w-0">
-            <span className="font-bold block text-xs uppercase tracking-wider mb-0.5 font-mono">
-              {toast.type === "error" ? "Error u Operación" : "Confirmación"}
+            <span className="font-bold block text-xs uppercase tracking-wider mb-1 font-mono text-slate-100">
+              {toast.title || (toast.type === "error" ? "Error u Operación" : toast.type === "warning" ? "Aviso de Operación" : toast.type === "info" ? "Información" : "Confirmación")}
             </span>
             <span className="leading-relaxed font-sans text-xs block text-slate-200">{toast.text}</span>
+            {toast.subtext && (
+              <span className="leading-relaxed font-sans text-[11px] block text-cyan-300 mt-2 font-medium bg-cyan-950/50 border border-cyan-500/30 px-2.5 py-1 rounded-lg">
+                {toast.subtext}
+              </span>
+            )}
           </div>
           <button
             type="button"
@@ -1078,14 +1176,16 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
         </div>
 
         {/* Action Button "AGREGAR REPUESTO O SERVICIO" */}
-        <button
-          type="button"
-          onClick={handleOpenAddItem}
-          className="flex items-center gap-2 px-4 py-2 bg-[#bfce7f] hover:bg-[#aab86e] text-slate-950 font-bold rounded-xl text-xs shadow-lg transition-all cursor-pointer font-mono uppercase"
-        >
-          <Plus className="w-4 h-4 stroke-[3]" />
-          <span>AGREGAR REPUESTO O SERVICIO</span>
-        </button>
+        {isOrderInRepair && (
+          <button
+            type="button"
+            onClick={handleOpenAddItem}
+            className="flex items-center gap-2 px-4 py-2 bg-[#bfce7f] hover:bg-[#aab86e] text-slate-950 font-bold rounded-xl text-xs shadow-lg transition-all cursor-pointer font-mono uppercase"
+          >
+            <Plus className="w-4 h-4 stroke-[3]" />
+            <span>AGREGAR REPUESTO O SERVICIO</span>
+          </button>
+        )}
       </div>
 
       {/* Banner for Order in RECIBIDA state */}
@@ -1109,6 +1209,21 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
               INICIAR REPARACIÓN
             </button>
           )}
+        </div>
+      )}
+
+      {/* Banner for Order in LISTA_ENTREGA state */}
+      {orderStateCode === "LISTA_ENTREGA" && (
+        <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-between gap-4 font-mono text-xs text-amber-300">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 shrink-0 text-amber-400" />
+            <div>
+              <p className="font-bold">Orden Lista para Entrega</p>
+              <p className="text-[11px] text-amber-400/80 font-sans">
+                La orden está en estado Lista para Entrega. Reabre la reparación para modificar servicios o repuestos.
+              </p>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1246,7 +1361,7 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
                               <button
                                 type="button"
                                 onClick={() => executeOperativeAction(svc, "INICIAR")}
-                                disabled={isOrderRecibida || isProcessing}
+                                disabled={isOrderRecibida || isProcessing || !isOrderInRepair}
                                 className="p-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                                 title="Iniciar servicio"
                                 aria-label="Iniciar servicio"
@@ -1261,8 +1376,8 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
                                 <button
                                   type="button"
                                   onClick={() => executeOperativeAction(svc, "PAUSAR")}
-                                  disabled={isProcessing}
-                                  className="p-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 rounded-lg transition-colors cursor-pointer disabled:opacity-40"
+                                  disabled={isProcessing || !isOrderInRepair}
+                                  className="p-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                                   title="Pausar servicio"
                                   aria-label="Pausar servicio"
                                 >
@@ -1271,8 +1386,8 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
                                 <button
                                   type="button"
                                   onClick={() => handleFinishServiceTrigger(svc)}
-                                  disabled={isProcessing}
-                                  className="p-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 rounded-lg transition-colors cursor-pointer disabled:opacity-40"
+                                  disabled={isProcessing || !isOrderInRepair}
+                                  className="p-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                                   title="Finalizar servicio"
                                   aria-label="Finalizar servicio"
                                 >
@@ -1287,8 +1402,8 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
                                 <button
                                   type="button"
                                   onClick={() => executeOperativeAction(svc, "REANUDAR")}
-                                  disabled={isProcessing}
-                                  className="p-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 rounded-lg transition-colors cursor-pointer disabled:opacity-40"
+                                  disabled={isProcessing || !isOrderInRepair}
+                                  className="p-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                                   title="Reanudar servicio"
                                   aria-label="Reanudar servicio"
                                 >
@@ -1297,8 +1412,8 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
                                 <button
                                   type="button"
                                   onClick={() => handleFinishServiceTrigger(svc)}
-                                  disabled={isProcessing}
-                                  className="p-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 rounded-lg transition-colors cursor-pointer disabled:opacity-40"
+                                  disabled={isProcessing || !isOrderInRepair}
+                                  className="p-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                                   title="Finalizar servicio"
                                   aria-label="Finalizar servicio"
                                 >
@@ -1311,7 +1426,12 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
                             <button
                               type="button"
                               onClick={() => handleOpenEditItem(svc, "SERVICIO")}
-                              className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors cursor-pointer border border-slate-700"
+                              disabled={!isOrderInRepair}
+                              className={`p-1.5 bg-slate-800 text-slate-300 rounded-lg border border-slate-700 transition-colors ${
+                                !isOrderInRepair
+                                  ? "opacity-40 cursor-not-allowed"
+                                  : "hover:bg-slate-700 cursor-pointer"
+                              }`}
                               title="Editar servicio"
                               aria-label="Editar servicio"
                             >
@@ -1323,7 +1443,12 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
                               <button
                                 type="button"
                                 onClick={() => handleDeleteService(svc)}
-                                className="p-1.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 rounded-lg transition-colors cursor-pointer"
+                                disabled={!isOrderInRepair}
+                                className={`p-1.5 bg-rose-500/10 border border-rose-500/30 text-rose-400 rounded-lg transition-colors ${
+                                  !isOrderInRepair
+                                    ? "opacity-40 cursor-not-allowed"
+                                    : "hover:bg-rose-500/20 cursor-pointer"
+                                }`}
                                 title="Eliminar servicio"
                                 aria-label="Eliminar servicio"
                               >
@@ -1389,7 +1514,12 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
                             <button
                               type="button"
                               onClick={() => handleOpenEditItem(prod, "PRODUCTO")}
-                              className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors cursor-pointer border border-slate-700"
+                              disabled={!isOrderInRepair}
+                              className={`p-1.5 bg-slate-800 text-slate-300 rounded-lg border border-slate-700 transition-colors ${
+                                !isOrderInRepair
+                                  ? "opacity-40 cursor-not-allowed"
+                                  : "hover:bg-slate-700 cursor-pointer"
+                              }`}
                               title="Editar repuesto"
                               aria-label="Editar repuesto"
                             >
@@ -1398,7 +1528,12 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
                             <button
                               type="button"
                               onClick={() => handleDeleteProduct(prod)}
-                              className="p-1.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 rounded-lg transition-colors cursor-pointer"
+                              disabled={!isOrderInRepair}
+                              className={`p-1.5 bg-rose-500/10 border border-rose-500/30 text-rose-400 rounded-lg transition-colors ${
+                                !isOrderInRepair
+                                  ? "opacity-40 cursor-not-allowed"
+                                  : "hover:bg-rose-500/20 cursor-pointer"
+                              }`}
                               title="Eliminar repuesto"
                               aria-label="Eliminar repuesto"
                             >

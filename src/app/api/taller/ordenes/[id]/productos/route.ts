@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getPool, query } from "@/lib/db";
 import { getWorkshopSession } from "@/lib/workshop-session";
 import { recalculateWorkOrderTotals } from "@/lib/workshop/recalculateWorkOrderTotals";
+import { validateOrderInRepair } from "@/lib/workshop/validateOrderState";
 
 export async function POST(
   req: Request,
@@ -48,18 +49,12 @@ export async function POST(
 
     await client.query("BEGIN");
 
-    // Check order existence and status
-    const otRes = await client.query(
-      `SELECT orden_trabajo_id, estado_orden_id FROM admin.ordenes_trabajo WHERE orden_trabajo_id = $1 FOR UPDATE`,
-      [ordenId]
-    );
-
-    if (!otRes.rows || otRes.rows.length === 0) {
+    // Enforce order state machine check
+    const orderStateCheck = await validateOrderInRepair(client, ordenId, session.empresa_id, "AGREGAR_PRODUCTO");
+    if (!orderStateCheck.isValid) {
       await client.query("ROLLBACK");
-      return NextResponse.json(
-        { success: false, error: "NOT_FOUND", message: "La orden de trabajo no existe." },
-        { status: 404 }
-      );
+      // Mapear el helper response al formato exacto del endpoint si difiere, pero el helper ya retorna NextResponse.json compatible
+      return orderStateCheck.response;
     }
 
     // Resolve catalog price from DB (ignore client sent price)
@@ -152,7 +147,7 @@ export async function POST(
       `,
       [
         ordenId,
-        otRes.rows[0].estado_orden_id,
+        orderStateCheck.order.estado_orden_id,
         session.usuario_id,
         `Producto agregado a la orden: ${prod.nombre} (Cant: ${cantidad}, Precio Unit: RD$ ${precioUnitario.toLocaleString("es-DO", { minimumFractionDigits: 2 })})`
       ]

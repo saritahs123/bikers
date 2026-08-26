@@ -3,6 +3,7 @@ import { getPool, query } from "@/lib/db";
 import { recalculateWorkOrderTotals } from "@/lib/workshop/recalculateWorkOrderTotals";
 import { getCronometroStatus } from "@/lib/workshop/getCronometroStatus";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { validateOrderInRepair } from "@/lib/workshop/validateOrderState";
 
 // GET /api/taller/ordenes/[id]/servicios/[servicioId]
 export async function GET(
@@ -208,27 +209,16 @@ export async function PUT(
 
     await client.query("BEGIN");
 
-    // Lock Order Row Exclusively
-    const orderRes = await client.query(`
-      SELECT orden_trabajo_id, estado_orden_id, bicicleta_id
-      FROM admin.ordenes_trabajo
-      WHERE orden_trabajo_id = $1 AND activo = true
-      FOR UPDATE OF ordenes_trabajo
-    `, [ordenId]);
-
-    if (orderRes.rows.length === 0) {
+    // Enforce order state machine check
+    const orderStateCheck = await validateOrderInRepair(client, ordenId, session.empresa_id, "EDITAR_SERVICIO");
+    if (!orderStateCheck.isValid) {
       await client.query("ROLLBACK");
-      return NextResponse.json({ error: "Orden de trabajo no encontrada." }, { status: 404 });
+      return orderStateCheck.response;
     }
 
-    const currentOrder = orderRes.rows[0];
+    const currentOrder = orderStateCheck.order;
     const estadoOrdenId = currentOrder.estado_orden_id;
     const bicicletaId = currentOrder.bicicleta_id;
-
-    if (estadoOrdenId === 8) {
-      await client.query("ROLLBACK");
-      return NextResponse.json({ error: "READ_ONLY_ORDER", message: "La orden se encuentra ENTREGADA y está en solo lectura." }, { status: 409 });
-    }
 
     // Lock Service Row
     const servRes = await client.query(`
@@ -714,7 +704,7 @@ export async function PUT(
       ]);
     }
 
-    await recalculateWorkOrderTotals(client, ordenId);
+    await recalculateWorkOrderTotals(client, ordenId, sessionUserId);
 
     await client.query("COMMIT");
 
@@ -773,24 +763,14 @@ export async function DELETE(
   try {
     await client.query("BEGIN");
 
-    // Lock Order Row Exclusively
-    const orderRes = await client.query(`
-      SELECT orden_trabajo_id, estado_orden_id
-      FROM admin.ordenes_trabajo
-      WHERE orden_trabajo_id = $1 AND activo = true
-      FOR UPDATE OF ordenes_trabajo
-    `, [ordenId]);
-
-    if (orderRes.rows.length === 0) {
+    // Enforce order state machine check
+    const orderStateCheck = await validateOrderInRepair(client, ordenId, session.empresa_id, "ELIMINAR_SERVICIO");
+    if (!orderStateCheck.isValid) {
       await client.query("ROLLBACK");
-      return NextResponse.json({ error: "NOT_FOUND", message: "Orden de trabajo no encontrada." }, { status: 404 });
+      return orderStateCheck.response;
     }
 
-    const estadoOrdenId = orderRes.rows[0].estado_orden_id;
-    if (estadoOrdenId === 8) {
-      await client.query("ROLLBACK");
-      return NextResponse.json({ error: "READ_ONLY_ORDER", message: "La orden se encuentra ENTREGADA y está en solo lectura." }, { status: 409 });
-    }
+    const estadoOrdenId = orderStateCheck.order.estado_orden_id;
 
     // Lock Service Row
     const servRes = await client.query(`
@@ -844,7 +824,7 @@ export async function DELETE(
     ]);
 
     // Recalculate financial totals
-    await recalculateWorkOrderTotals(client, ordenId);
+    await recalculateWorkOrderTotals(client, ordenId, sessionUserId);
 
     await client.query("COMMIT");
 
