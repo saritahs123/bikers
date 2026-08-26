@@ -23,9 +23,11 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const search = searchParams.get("search") || "";
+    const estado = searchParams.get("estado") || searchParams.get("estado_codigo") || "";
     const estadoId = searchParams.get("estado_id") || "";
     const prioridadId = searchParams.get("prioridad_id") || "";
     const mecanicoId = searchParams.get("mecanico_id") || "";
+    const period = searchParams.get("period") || "";
     const from = searchParams.get("from") || "";
     const to = searchParams.get("to") || "";
     const page = parseInt(searchParams.get("page") || "1", 10);
@@ -46,17 +48,32 @@ export async function GET(req: NextRequest) {
       const idx = queryParams.length;
       whereConditions.push(`(
         ot.codigo_orden ILIKE $${idx} OR
+        ot.orden_trabajo_id::text ILIKE $${idx} OR
         r.codigo_recepcion ILIKE $${idx} OR
+        r.recepcion_id::text ILIKE $${idx} OR
+        c.nombre ILIKE $${idx} OR
+        c.apellido ILIKE $${idx} OR
         c.nombre_completo ILIKE $${idx} OR
+        c.identificacion ILIKE $${idx} OR
+        c.telefono_principal ILIKE $${idx} OR
         b.marca ILIKE $${idx} OR
         b.modelo ILIKE $${idx} OR
-        b.numero_serie_cuadro ILIKE $${idx}
+        b.numero_serie_cuadro ILIKE $${idx} OR
+        b.codigo_qr ILIKE $${idx}
       )`);
     }
 
-    if (estadoId) {
-      queryParams.push(parseInt(estadoId, 10));
-      whereConditions.push(`ot.estado_orden_id = $${queryParams.length}`);
+    if (estado) {
+      queryParams.push(estado.trim().toUpperCase());
+      whereConditions.push(`eot.codigo = $${queryParams.length}`);
+    } else if (estadoId) {
+      if (isNaN(Number(estadoId))) {
+        queryParams.push(estadoId.trim().toUpperCase());
+        whereConditions.push(`eot.codigo = $${queryParams.length}`);
+      } else {
+        queryParams.push(parseInt(estadoId, 10));
+        whereConditions.push(`ot.estado_orden_id = $${queryParams.length}`);
+      }
     }
 
     if (prioridadId) {
@@ -74,14 +91,21 @@ export async function GET(req: NextRequest) {
       )`);
     }
 
-    if (from && dateRegex.test(from)) {
-      queryParams.push(from);
-      whereConditions.push(`ot.fecha_registro::date >= $${queryParams.length}::date`);
-    }
-
-    if (to && dateRegex.test(to)) {
-      queryParams.push(to);
-      whereConditions.push(`ot.fecha_registro::date <= $${queryParams.length}::date`);
+    if (period === "hoy" || period === "today") {
+      whereConditions.push(`(ot.fecha_registro AT TIME ZONE 'America/Santo_Domingo')::date = (NOW() AT TIME ZONE 'America/Santo_Domingo')::date`);
+    } else if (period === "7d" || period === "7_dias" || period === "7dias") {
+      whereConditions.push(`(ot.fecha_registro AT TIME ZONE 'America/Santo_Domingo')::date >= ((NOW() AT TIME ZONE 'America/Santo_Domingo')::date - INTERVAL '6 days')::date AND (ot.fecha_registro AT TIME ZONE 'America/Santo_Domingo')::date <= (NOW() AT TIME ZONE 'America/Santo_Domingo')::date`);
+    } else if (period === "30d" || period === "30_dias" || period === "30dias") {
+      whereConditions.push(`(ot.fecha_registro AT TIME ZONE 'America/Santo_Domingo')::date >= ((NOW() AT TIME ZONE 'America/Santo_Domingo')::date - INTERVAL '29 days')::date AND (ot.fecha_registro AT TIME ZONE 'America/Santo_Domingo')::date <= (NOW() AT TIME ZONE 'America/Santo_Domingo')::date`);
+    } else {
+      if (from && dateRegex.test(from)) {
+        queryParams.push(from);
+        whereConditions.push(`(ot.fecha_registro AT TIME ZONE 'America/Santo_Domingo')::date >= $${queryParams.length}::date`);
+      }
+      if (to && dateRegex.test(to)) {
+        queryParams.push(to);
+        whereConditions.push(`(ot.fecha_registro AT TIME ZONE 'America/Santo_Domingo')::date <= $${queryParams.length}::date`);
+      }
     }
 
     const whereClause = `WHERE ${whereConditions.join(" AND ")}`;
@@ -91,6 +115,7 @@ export async function GET(req: NextRequest) {
       SELECT COUNT(ot.orden_trabajo_id)::int as total
       FROM admin.ordenes_trabajo ot
       JOIN admin.usuario u_ot ON u_ot.usuario_id = ot.usuario_registro
+      LEFT JOIN admin.estado_orden_trabajo eot ON ot.estado_orden_id = eot.estado_orden_id
       LEFT JOIN admin.recepciones r ON ot.recepcion_id = r.recepcion_id
       LEFT JOIN admin.clientes c ON COALESCE(ot.cliente_id, r.cliente_id) = c.cliente_id
       LEFT JOIN admin.bicicletas b ON COALESCE(ot.bicicleta_id, r.bicicleta_id) = b.bicicleta_id
@@ -173,6 +198,31 @@ export async function GET(req: NextRequest) {
       ORDER BY u.usuario_id ASC
     `, [empresaId]);
 
+    // Summary Metrics for company isolation
+    const metricsRes = await query<any>(`
+      SELECT
+        COUNT(ot.orden_trabajo_id) FILTER (WHERE (eot.codigo NOT IN ('ENTREGADA', 'CANCELADA') OR eot.codigo IS NULL) AND ot.estado_orden_id NOT IN (8, 9))::int AS abiertas,
+        COUNT(ot.orden_trabajo_id) FILTER (WHERE eot.codigo = 'RECIBIDA' OR ot.estado_orden_id = 1)::int AS recibidas,
+        COUNT(ot.orden_trabajo_id) FILTER (WHERE eot.codigo = 'REPARACION' OR ot.estado_orden_id = 5)::int AS en_proceso,
+        COUNT(ot.orden_trabajo_id) FILTER (WHERE eot.codigo = 'LISTA_ENTREGA' OR ot.estado_orden_id = 7)::int AS listas_entrega,
+        COUNT(ot.orden_trabajo_id) FILTER (WHERE eot.codigo = 'ENTREGADA' OR ot.estado_orden_id = 8)::int AS entregadas,
+        COUNT(ot.orden_trabajo_id)::int AS total
+      FROM admin.ordenes_trabajo ot
+      JOIN admin.usuario u_ot ON u_ot.usuario_id = ot.usuario_registro
+      LEFT JOIN admin.estado_orden_trabajo eot ON eot.estado_orden_id = ot.estado_orden_id
+      WHERE u_ot.empresa_id = $1
+        AND (ot.activo IS DISTINCT FROM false)
+    `, [empresaId]);
+
+    const metricsData = metricsRes[0] || {
+      abiertas: 0,
+      recibidas: 0,
+      en_proceso: 0,
+      listas_entrega: 0,
+      entregadas: 0,
+      total: 0
+    };
+
     return NextResponse.json({
       success: true,
       data: items || [],
@@ -181,6 +231,14 @@ export async function GET(req: NextRequest) {
         page,
         limit,
         total_pages: Math.ceil(total / limit) || 1
+      },
+      metrics: {
+        abiertas: Number(metricsData.abiertas || 0),
+        recibidas: Number(metricsData.recibidas || 0),
+        en_proceso: Number(metricsData.en_proceso || 0),
+        listas_entrega: Number(metricsData.listas_entrega || 0),
+        entregadas: Number(metricsData.entregadas || 0),
+        total: Number(metricsData.total || 0)
       },
       catalogs: {
         estados: estados || [],

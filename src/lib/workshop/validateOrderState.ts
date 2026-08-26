@@ -82,3 +82,85 @@ export async function validateOrderInRepair(
 
   return { isValid: true, order };
 }
+
+export const CLOSED_SERVICE_STATUS_CODES = [
+  "COMPLETADO",
+  "FINALIZADO",
+  "CANCELADO",
+  "ANULADO",
+  "INACTIVO"
+] as const;
+
+export function isServiceClosed(code: string | null | undefined): boolean {
+  if (!code) return false;
+  const trimmedUpper = String(code).trim().toUpperCase();
+  return CLOSED_SERVICE_STATUS_CODES.includes(trimmedUpper as any);
+}
+
+export async function queryIncompleteServicesAndTimers(client: PoolClient, ordenTrabajoId: number) {
+  // Query incomplete services with FOR SHARE
+  const incompleteRes = await client.query(`
+    SELECT
+        os.orden_servicio_id,
+        os.codigo_servicio,
+        eos.codigo AS estado_servicio
+    FROM admin.orden_servicios os
+    LEFT JOIN admin.estado_orden_servicio eos
+      ON eos.estado_orden_servicio_id = os.estado_orden_servicio_id
+    WHERE os.orden_trabajo_id = $1
+      AND os.activo IS DISTINCT FROM false
+      AND (
+        eos.codigo IS NULL
+        OR UPPER(TRIM(eos.codigo)) NOT IN (
+          'COMPLETADO',
+          'FINALIZADO',
+          'CANCELADO',
+          'ANULADO',
+          'INACTIVO'
+        )
+      )
+    FOR SHARE OF os;
+  `, [ordenTrabajoId]);
+
+  // Query active timer sessions
+  const activeTimersRes = await client.query(`
+    SELECT
+        os.orden_servicio_id,
+        os.codigo_servicio,
+        'CON_SESION_ACTIVA' AS estado_servicio
+    FROM admin.orden_servicio_mano_obra mo
+    JOIN admin.orden_servicios os ON mo.orden_servicio_id = os.orden_servicio_id
+    WHERE os.orden_trabajo_id = $1
+      AND mo.fecha_inicio IS NOT NULL
+      AND mo.fecha_finalizacion IS NULL
+      AND (mo.activo IS DISTINCT FROM false)
+      AND (os.activo IS DISTINCT FROM false);
+  `, [ordenTrabajoId]);
+
+  const combinedIncomplete: any[] = [];
+  const serviceIdSet = new Set<number>();
+
+  for (const s of incompleteRes.rows || []) {
+    const sId = Number(s.orden_servicio_id);
+    combinedIncomplete.push({
+      servicio_id: sId,
+      codigo_servicio: s.codigo_servicio,
+      estado: s.estado_servicio || "DESCONOCIDO"
+    });
+    serviceIdSet.add(sId);
+  }
+
+  for (const s of activeTimersRes.rows || []) {
+    const sId = Number(s.orden_servicio_id);
+    if (!serviceIdSet.has(sId)) {
+      combinedIncomplete.push({
+        servicio_id: sId,
+        codigo_servicio: s.codigo_servicio,
+        estado: "EN_PROCESO"
+      });
+      serviceIdSet.add(sId);
+    }
+  }
+
+  return combinedIncomplete;
+}

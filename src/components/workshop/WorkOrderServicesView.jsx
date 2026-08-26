@@ -527,10 +527,10 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
   const orderStateCode = String(
     order?.estado_codigo ||
     order?.estado_orden_codigo ||
-    ""
+    (Number(order?.estado_orden_id) === 5 ? "REPARACION" : Number(order?.estado_orden_id) === 7 ? "LISTA_ENTREGA" : Number(order?.estado_orden_id) === 8 ? "ENTREGADA" : Number(order?.estado_orden_id) === 1 ? "RECIBIDA" : "")
   ).trim().toUpperCase();
 
-  const isOrderInRepair = orderStateCode === "REPARACION";
+  const isOrderInRepair = orderStateCode === "REPARACION" || Number(order?.estado_orden_id || order?.estado_id) === 5;
 
   // Open Unified Modal for Add Item
   const handleOpenAddItem = () => {
@@ -1262,7 +1262,13 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
               {totalItemsCount === 0 ? (
                 <tr>
                   <td colSpan={9} className="p-8 text-center text-slate-400 text-xs italic">
-                    No hay servicios ni repuestos registrados en esta orden de trabajo. Haz clic en <strong>"AGREGAR REPUESTO O SERVICIO"</strong> para comenzar.
+                    {orderStateCode === "LISTA_ENTREGA" || Number(order?.estado_orden_id) === 7 ? (
+                      "Esta orden no tiene servicios ni repuestos registrados. Reabre la reparación para agregar elementos."
+                    ) : isOrderInRepair ? (
+                      "No hay servicios ni repuestos registrados. Agrega el primer servicio o repuesto para comenzar."
+                    ) : (
+                      "No hay servicios ni repuestos registrados en esta orden de trabajo."
+                    )}
                   </td>
                 </tr>
               ) : (

@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -70,6 +71,29 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
     );
   }, [order?.servicios, order?.tiempo_total_confiable]);
 
+  const incompleteServices = React.useMemo(() => {
+    return (order?.servicios || [])
+      .filter((s) => s.activo !== false)
+      .filter((service) => {
+        const code = String(
+          service.estado_servicio_codigo ||
+          service.estado_codigo ||
+          service.estado ||
+          ""
+        ).trim().toUpperCase();
+
+        return ![
+          "COMPLETADO",
+          "FINALIZADO",
+          "CANCELADO",
+          "ANULADO",
+          "INACTIVO"
+        ].includes(code);
+      });
+  }, [order?.servicios]);
+
+  const hasIncompleteServices = incompleteServices.length > 0;
+
   useEffect(() => {
     if (!hasActiveService) return;
 
@@ -126,6 +150,13 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
   const [confirmarEntregaCheck, setConfirmarEntregaCheck] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [modalError, setModalError] = useState(null);
+
+  // Dedicated Reopen Repair Modal State
+  const [reopenModalOpen, setReopenModalOpen] = useState(false);
+  const [reopenReason, setReopenReason] = useState("");
+  const [reopenSelectedServiceId, setReopenSelectedServiceId] = useState("");
+  const [submittingReopen, setSubmittingReopen] = useState(false);
+  const [reopenModalError, setReopenModalError] = useState(null);
 
   // Next actions checklist local state
   const [nextTasks, setNextTasks] = useState([]);
@@ -353,6 +384,65 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
     }
   };
 
+  const handleConfirmReopen = async (e) => {
+    if (e) e.preventDefault();
+    if (submittingReopen) return;
+    if (!reopenReason.trim()) {
+      setReopenModalError("El motivo de reapertura es obligatorio.");
+      return;
+    }
+
+    setSubmittingReopen(true);
+    setReopenModalError(null);
+
+    try {
+      const payload = {
+        estado_orden_id: 5,
+        accion: "REABRIR_REPARACION",
+        motivo_reapertura: reopenReason.trim(),
+        observacion: reopenReason.trim()
+      };
+
+      if (reopenSelectedServiceId) {
+        payload.orden_servicio_id = parseInt(reopenSelectedServiceId, 10);
+      }
+
+      const res = await fetch(`/api/taller/ordenes/${ordenId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      let data = null;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(res.ok ? "Respuesta inválida del servidor." : `Error del servidor (${res.status})`);
+      }
+
+      if (!res.ok) {
+        setReopenModalError(data?.message || data?.error || "No fue posible reabrir la reparación.");
+        return;
+      }
+
+      setReopenModalOpen(false);
+      setReopenReason("");
+      setReopenSelectedServiceId("");
+      await fetchOrderDetail(true);
+      setActiveTab("servicios");
+      showInfoToast(
+        "La orden volvió a Reparación. Ya puedes agregar o modificar servicios y repuestos.",
+        "REPARACIÓN REABIERTA",
+        7000
+      );
+    } catch (err) {
+      console.error("handleConfirmReopen Error:", err);
+      setReopenModalError(err.message || "Error al conectar con el servidor.");
+    } finally {
+      setSubmittingReopen(false);
+    }
+  };
+
   const handleUpdateOrderState = async (e) => {
     e.preventDefault();
     if (updatingStatus) return;
@@ -360,16 +450,12 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
     setModalError(null);
     try {
       const parsedStatus = parseInt(newStatusId, 10);
-      const isReopening = Number(order.estado_orden_id) === 7 && parsedStatus === 5;
       const payload = {
-        accion: parsedStatus === 7 ? "MARCAR_LISTA_ENTREGA" : (isReopening ? "REABRIR_ORDEN" : undefined),
-        motivo_reapertura: isReopening ? (changeNotes || undefined) : undefined,
         estado_orden_id: parsedStatus,
         prioridad_id: newPrioridadId ? parseInt(newPrioridadId, 10) : null,
         prioridad_orden_id: newPrioridadId ? parseInt(newPrioridadId, 10) : null,
         observacion_interna: changeNotes || undefined,
-        observacion_cambio_estado: changeNotes || undefined,
-        servicio_id_reabrir: selectedServiceToReopen || undefined
+        observacion_cambio_estado: changeNotes || undefined
       };
 
       const res = await fetch(`/api/taller/ordenes/${ordenId}`, {
@@ -737,11 +823,10 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
             <>
               <button
                 onClick={() => {
-                  setNewStatusId("5");
-                  setNewPrioridadId(order.prioridad_id ? String(order.prioridad_id) : "2");
-                  setChangeNotes("");
-                  setModalError(null);
-                  setStatusModalOpen(true);
+                  setReopenReason("");
+                  setReopenSelectedServiceId("");
+                  setReopenModalError(null);
+                  setReopenModalOpen(true);
                 }}
                 disabled={loadingStateChange}
                 className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-slate-950 hover:bg-amber-600 rounded-xl transition-all font-mono text-xs font-extrabold uppercase tracking-wider shadow-lg shadow-amber-500/20 disabled:opacity-50 cursor-pointer"
@@ -751,8 +836,13 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
               </button>
               <button
                 onClick={() => handleTransitionState(8)}
-                disabled={loadingStateChange}
-                className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white hover:bg-emerald-600 rounded-xl transition-all font-mono text-xs font-extrabold uppercase tracking-wider shadow-lg shadow-emerald-500/20 disabled:opacity-50 cursor-pointer"
+                disabled={loadingStateChange || hasIncompleteServices || Boolean(order.facturado)}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white hover:bg-emerald-600 rounded-xl transition-all font-mono text-xs font-extrabold uppercase tracking-wider shadow-lg shadow-emerald-500/20 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                title={
+                  hasIncompleteServices
+                    ? `La orden tiene ${incompleteServices.length} servicio(s) pendiente(s). Reabre la reparación y complétalo antes de entregar.`
+                    : "Entregar orden al cliente"
+                }
               >
                 {loadingStateChange ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -1320,55 +1410,6 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                 </div>
               </div>
 
-                    {/* Return to repair conditional field: Select service to reopen */}
-                    {String(order.estado_orden_id) === "7" && String(newStatusId) === "5" && (
-                      <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-2">
-                        <label className="block text-amber-300 font-semibold font-mono text-[11px]">
-                          * Servicio que requiere corrección y reanudación:
-                        </label>
-                        <select
-                          value={selectedServiceToReopen}
-                          onChange={(e) => setSelectedServiceToReopen(e.target.value)}
-                          required
-                          className="w-full p-2 bg-[#0a0c10] border border-[#2d3748] rounded-lg text-slate-200 text-xs focus:outline-none focus:border-[#bfce7f]"
-                        >
-                          <option value="">-- Selecciona el servicio a reabrir --</option>
-                          {(order.servicios || []).map((s, idx) => (
-                            <option key={s.orden_servicio_id || s.id || `srv-reopen-opt-${idx}`} value={String(s.orden_servicio_id || s.id || idx)}>
-                              #{s.orden_servicio_id || s.id} - {s.tipo_servicio_nombre || "Servicio"} ({s.mecanico_nombre || "Sin mecánico"})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-
-                    {/* Delivery confirmation conditional fields */}
-                    {String(order.estado_orden_id) === "7" && String(newStatusId) === "8" && (
-                      <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl space-y-3">
-                        <div>
-                          <label className="block text-emerald-300 font-semibold font-mono text-[11px] mb-1">
-                            Nombre de la persona que recibe la bicicleta:
-                          </label>
-                          <input
-                            type="text"
-                            value={personaRecibeInput}
-                            onChange={(e) => setPersonaRecibeInput(e.target.value)}
-                            placeholder={order.cliente_nombre || "Nombre del cliente / representante"}
-                            className="w-full p-2 bg-[#0a0c10] border border-[#2d3748] rounded-lg text-slate-200 text-xs focus:outline-none focus:border-emerald-400"
-                          />
-                        </div>
-                        <label className="flex items-center gap-2 text-emerald-200 font-semibold text-xs cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={confirmarEntregaCheck}
-                            onChange={(e) => setConfirmarEntregaCheck(e.target.checked)}
-                            className="w-4 h-4 rounded border-slate-700 text-emerald-500 focus:ring-emerald-400 bg-slate-900"
-                          />
-                          <span>Confirmo que la bicicleta fue entregada conforme al cliente.</span>
-                        </label>
-                      </div>
-                    )}
-
                     <div>
                       <label className="block text-slate-300 mb-1 font-semibold">Observaciones / Notas del Cambio</label>
                       <textarea
@@ -1387,14 +1428,14 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                           setStatusModalOpen(false);
                           setModalError(null);
                         }}
-                        className="px-4 py-2 bg-[#1c2129] border border-[#2d3748] text-slate-300 rounded-xl hover:bg-[#252b36] transition-colors font-mono text-xs"
+                        className="px-4 py-2 bg-[#1c2129] border border-[#2d3748] text-slate-300 rounded-xl hover:bg-[#252b36] transition-colors font-mono text-xs cursor-pointer"
                       >
                         Cancelar
                       </button>
                       <button
                         type="submit"
                         disabled={updatingStatus}
-                        className="px-5 py-2 bg-[#84924a] text-white font-bold rounded-xl hover:brightness-110 transition-all font-mono text-xs flex items-center gap-2 border-t border-[#a6b66b] disabled:opacity-50"
+                        className="px-5 py-2 bg-[#84924a] text-white font-bold rounded-xl hover:brightness-110 transition-all font-mono text-xs flex items-center gap-2 border-t border-[#a6b66b] disabled:opacity-50 cursor-pointer"
                       >
                         {updatingStatus ? (
                           <>
@@ -1409,6 +1450,182 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
             </form>
           </div>
         </div>
+      )}
+
+      {/* DEDICATED REOPEN REPAIR MODAL */}
+      {reopenModalOpen && typeof document !== "undefined" && createPortal(
+        <div
+          className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="reopen-repair-modal-title"
+        >
+          <div
+            className="fixed inset-0"
+            onClick={() => {
+              if (!submittingReopen) {
+                setReopenModalOpen(false);
+                setReopenModalError(null);
+              }
+            }}
+          />
+          <div className="relative z-10 w-full max-w-lg bg-[#161a21] border border-amber-500/30 rounded-2xl shadow-2xl overflow-hidden font-sans text-slate-100 animate-in fade-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-[#2d3748] bg-[#0a0c10]/60 flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="p-2.5 bg-amber-500/15 border border-amber-500/30 rounded-xl text-amber-400 shrink-0 mt-0.5">
+                  <RotateCcw className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 id="reopen-repair-modal-title" className="text-base font-bold text-slate-100 font-mono tracking-tight flex items-center gap-2">
+                    REABRIR REPARACIÓN
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                    La orden volverá al estado En Reparación para permitir modificaciones en sus servicios y repuestos.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!submittingReopen) {
+                    setReopenModalOpen(false);
+                    setReopenModalError(null);
+                  }
+                }}
+                className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-[#1c2129] rounded-lg transition-colors cursor-pointer"
+                title="Cerrar modal"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Error Banner */}
+            {reopenModalError && (
+              <div className="mx-5 mt-5 p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 text-xs font-sans flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
+                <div className="space-y-0.5">
+                  <span className="font-bold text-rose-200 block text-xs">Error al reabrir orden</span>
+                  <span className="text-rose-300 text-xs block leading-relaxed">{reopenModalError}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Modal Form */}
+            <form onSubmit={handleConfirmReopen} className="p-5 space-y-4 text-xs font-sans">
+              {/* Order State Transition Badges */}
+              <div className="grid grid-cols-3 gap-2 p-3 bg-[#0a0c10]/80 border border-[#2d3748] rounded-xl font-mono text-xs">
+                <div>
+                  <span className="text-[10px] text-slate-500 uppercase tracking-wider block">Orden</span>
+                  <span className="font-bold text-slate-200">{order.codigo_orden}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 uppercase tracking-wider block">Estado Actual</span>
+                  <span className="font-semibold text-emerald-400">Lista para Entrega</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 uppercase tracking-wider block">Estado Destino</span>
+                  <span className="font-semibold text-amber-400">En Reparación</span>
+                </div>
+              </div>
+
+              {/* Services Contextual Condition */}
+              {(() => {
+                const activeServices = (order?.servicios || []).filter(s => s.activo !== false);
+                const closedServices = activeServices.filter(s => {
+                  const code = String(s.estado_servicio_codigo || s.estado_codigo || s.estado || "").toUpperCase();
+                  return code === "COMPLETADO" || code === "FINALIZADO" || Number(s.estado_servicio_id) === 3;
+                });
+
+                if (activeServices.length === 0) {
+                  return (
+                    <div className="p-3.5 bg-sky-950/30 border border-sky-500/30 rounded-xl text-sky-200 text-xs flex items-start gap-2.5">
+                      <Info className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
+                      <p className="leading-relaxed font-sans text-xs">
+                        Esta orden no tiene servicios registrados. Al reabrirla podrás agregar servicios o repuestos desde la pestaña <strong>Servicios</strong>.
+                      </p>
+                    </div>
+                  );
+                }
+
+                if (closedServices.length > 0) {
+                  return (
+                    <div className="space-y-1.5 font-mono text-xs">
+                      <label className="block text-slate-300 font-semibold">
+                        Servicio que también deseas reabrir (opcional)
+                      </label>
+                      <select
+                        value={reopenSelectedServiceId}
+                        onChange={(e) => setReopenSelectedServiceId(e.target.value)}
+                        className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 text-xs focus:outline-none focus:border-[#bfce7f]"
+                      >
+                        <option value="">-- Reabrir solo la orden (sin seleccionar servicio) --</option>
+                        {closedServices.map((s, idx) => (
+                          <option key={s.orden_servicio_id || s.servicio_id || idx} value={String(s.orden_servicio_id || s.servicio_id)}>
+                            #{s.orden_servicio_id || s.servicio_id} - {s.tipo_servicio_nombre || s.descripcion_servicio || "Servicio"} ({s.mecanico_nombre || "Sin mecánico asignado"})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  );
+                }
+
+                return null;
+              })()}
+
+              {/* Motivo de reapertura (Obligatorio) */}
+              <div className="space-y-1.5">
+                <label className="block text-slate-200 font-semibold font-mono text-xs">
+                  Motivo de reapertura <span className="text-rose-400">*</span>
+                </label>
+                <textarea
+                  rows={3}
+                  value={reopenReason}
+                  onChange={(e) => {
+                    setReopenReason(e.target.value);
+                    if (reopenModalError) setReopenModalError(null);
+                  }}
+                  required
+                  placeholder="Indica por qué es necesario reabrir esta orden…"
+                  className="w-full p-3 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-amber-400 text-xs resize-none font-sans"
+                />
+              </div>
+
+              {/* Modal Actions */}
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#2d3748]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReopenModalOpen(false);
+                    setReopenModalError(null);
+                  }}
+                  disabled={submittingReopen}
+                  className="px-4 py-2 bg-[#1c2129] border border-[#2d3748] text-slate-300 rounded-xl hover:bg-[#252b36] transition-colors font-mono text-xs cursor-pointer disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingReopen || !reopenReason.trim()}
+                  className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl transition-all font-mono text-xs flex items-center gap-2 shadow-lg shadow-amber-500/20 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  {submittingReopen ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Reabriendo...
+                    </>
+                  ) : (
+                    <>
+                      <RotateCcw className="w-4 h-4" />
+                      Confirmar reapertura
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
       )}
 
       {/* Printable Document Section (Visible ONLY on print) */}

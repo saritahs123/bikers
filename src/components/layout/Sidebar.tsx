@@ -46,6 +46,7 @@ function SidebarContent({
         // { href: "/workshop?action=new", label: "NUEVA RECEPCIÓN" },
         { href: "/workshop?view=work_orders", label: "ÓRDENES DE TRABAJO" },
         { href: "/workshop?view=kanban", label: "VISTA KANBAN" },
+        { href: "/workshop?view=billing", label: "DESPACHO DE ÓRDENES" },
         // Oculto del menú: se accede desde el botón de Órdenes de Trabajo.
         // Conservar ruta y componente para posible reactivación futura.
         // { href: "/workshop?action=new_order", label: "NUEVA ORDEN DE TRABAJO" }
@@ -86,12 +87,13 @@ function SidebarContent({
     const currentAction = searchParams?.get("action");
     const currentId = searchParams?.get("id");
     const currentOrderId = searchParams?.get("order_id");
+    const currentInvoiceOrderId = searchParams?.get("invoice_order_id");
 
     if (subHref === "/workshop") {
-      return pathname === "/workshop" && !currentView && !currentAction && !currentId && !currentOrderId;
+      return pathname === "/workshop" && !currentView && !currentAction && !currentId && !currentOrderId && !currentInvoiceOrderId;
     }
     if (subHref === "/workshop?view=list") {
-      return pathname === "/workshop" && (currentView === "list" || (!!currentId && !currentOrderId));
+      return pathname === "/workshop" && (currentView === "list" || (!!currentId && !currentOrderId && !currentInvoiceOrderId));
     }
     if (subHref === "/workshop?action=new") {
       return pathname === "/workshop" && currentAction === "new";
@@ -101,6 +103,9 @@ function SidebarContent({
     }
     if (subHref === "/workshop?view=kanban") {
       return pathname === "/workshop" && currentView === "kanban";
+    }
+    if (subHref === "/workshop?view=billing") {
+      return pathname === "/workshop" && (currentView === "billing" || !!currentInvoiceOrderId);
     }
     if (subHref === "/workshop?action=new_order") {
       return pathname === "/workshop" && currentAction === "new_order";
@@ -237,10 +242,21 @@ function SidebarContent({
     <>
       {/* Desktop Fixed Sidebar */}
       <aside className="hidden md:flex fixed left-0 top-0 h-full w-64 bg-[#0e1117] border-r border-[#2d3748] flex-col p-4 z-50 font-mono">
-        <div className="mt-2 mb-6 flex justify-center items-center w-full">
-          <div className="w-[120px] h-[120px] relative shrink-0">
-            <Image src="/logo.png" alt="Bikers' Fort Logo" fill className="object-contain" priority />
-          </div>
+        <div className="w-full flex items-center justify-center pt-2 pb-5">
+          <Link
+            href="/"
+            className="flex items-center justify-center transition-transform hover:scale-[1.02] focus:outline-none"
+            title="Bikers' Fort Core"
+          >
+            <Image
+              src="/logo.png"
+              alt="Bikers' Fort Logo"
+              width={165}
+              height={112}
+              className="w-[165px] h-auto object-contain"
+              priority
+            />
+          </Link>
         </div>
 
         <div className="flex-1 overflow-y-auto custom-scrollbar -mx-2 px-2">
@@ -258,14 +274,27 @@ function SidebarContent({
             onClick={() => setMobileOpen && setMobileOpen(false)}
           />
           <aside className="relative w-64 max-w-[80vw] bg-[#0e1117] border-r border-[#2d3748] flex flex-col p-4 z-50 font-mono h-full shadow-2xl animate-in slide-in-from-left duration-200">
-            <div className="flex items-center justify-between mt-1 mb-4">
-              <div className="w-[90px] h-[50px] relative shrink-0">
-                <Image src="/logo.png" alt="Bikers' Fort Logo" fill className="object-contain" priority />
-              </div>
+            <div className="flex items-center justify-between pt-1 pb-3 mb-3 border-b border-[#2d3748]/50">
+              <Link
+                href="/"
+                onClick={() => setMobileOpen && setMobileOpen(false)}
+                className="flex items-center transition-transform hover:scale-[1.02] focus:outline-none"
+                title="Bikers' Fort Core"
+              >
+                <Image
+                  src="/logo.png"
+                  alt="Bikers' Fort Logo"
+                  width={135}
+                  height={91}
+                  className="w-[135px] h-auto object-contain"
+                  priority
+                />
+              </Link>
               <button
                 type="button"
                 onClick={() => setMobileOpen && setMobileOpen(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg border border-slate-800"
+                className="text-slate-400 hover:text-white p-1.5 rounded-lg border border-[#2d3748] hover:bg-[#161a21] transition-colors cursor-pointer"
+                aria-label="Cerrar menú"
               >
                 <span className="material-symbols-outlined text-lg">close</span>
               </button>
