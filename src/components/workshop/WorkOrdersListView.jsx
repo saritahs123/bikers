@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect, useCallback } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import {
   Search,
   Filter,
@@ -27,22 +27,41 @@ import {
   Tag
 } from "lucide-react";
 
+const STATUS_FILTERS = {
+  TOTAL: "",
+  RECIBIDAS: "RECIBIDA",
+  REPARACION: "REPARACION",
+  LISTAS_ENTREGA: "LISTA_ENTREGA",
+  ENTREGADAS: "ENTREGADA"
+};
+
 export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onToggleKanban }) {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const pathname = usePathname();
+
+  const getNormalizedStatus = (val) => {
+    if (!val) return STATUS_FILTERS.TOTAL;
+    const str = String(val).trim().toUpperCase();
+    if (str === "1" || str === "RECIBIDA") return STATUS_FILTERS.RECIBIDAS;
+    if (str === "5" || str === "REPARACION") return STATUS_FILTERS.REPARACION;
+    if (str === "7" || str === "LISTA_ENTREGA") return STATUS_FILTERS.LISTAS_ENTREGA;
+    if (str === "8" || str === "ENTREGADA") return STATUS_FILTERS.ENTREGADAS;
+    return str;
+  };
 
   // Primary URL source of truth
   const urlFrom = searchParams.get("from") || "";
   const urlTo = searchParams.get("to") || "";
   const urlSearch = searchParams.get("search") || "";
-  const urlEstado = searchParams.get("estado_id") || "";
+  const urlEstado = getNormalizedStatus(searchParams.get("estado") || searchParams.get("estado_id") || "");
   const urlPrioridad = searchParams.get("prioridad_id") || "";
   const urlMecanico = searchParams.get("mecanico_id") || "";
   const urlPage = parseInt(searchParams.get("page") || "1", 10);
 
   const [orders, setOrders] = useState([]);
   const [catalogs, setCatalogs] = useState({ estados: [], prioridades: [], mecanicos: [] });
-  const [metrics, setMetrics] = useState({ abiertas: 0, recibidas: 0, en_proceso: 0, listas_entrega: 0, entregadas: 0 });
+  const [metrics, setMetrics] = useState({ total: 0, abiertas: 0, recibidas: 0, en_proceso: 0, listas_entrega: 0, entregadas: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -81,20 +100,31 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
 
       const queryParams = new URLSearchParams();
       if (activeSearch) queryParams.set("search", activeSearch);
-      if (activeEstado) queryParams.set("estado_id", activeEstado);
+      if (activeEstado) queryParams.set("estado", activeEstado);
       if (activePrioridad) queryParams.set("prioridad_id", activePrioridad);
       if (activeMecanico) queryParams.set("mecanico_id", activeMecanico);
       if (activeFrom) queryParams.set("from", activeFrom);
       if (activeTo) queryParams.set("to", activeTo);
       queryParams.set("page", String(page));
-      queryParams.set("limit", "15");
+      queryParams.set("limit", "25");
 
       const apiUrl = `/api/taller/ordenes?${queryParams.toString()}`;
       const res = await fetch(apiUrl);
-      const data = await res.json();
+      if (res.status === 401) {
+        if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+          window.location.replace("/login");
+        }
+        return;
+      }
+      let data = null;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(res.ok ? "Respuesta inválida del servidor." : `Error del servidor (${res.status})`);
+      }
 
       if (!res.ok) {
-        throw new Error(data.error || "Error al cargar las órdenes de trabajo.");
+        throw new Error(data?.message || data?.error || "Error al cargar las órdenes de trabajo.");
       }
 
       const fetchedOrders = data.data || [];
@@ -102,20 +132,16 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
       if (data.catalogs) setCatalogs(data.catalogs);
       if (data.meta) setMeta(data.meta);
 
-      // Compute summary metrics dynamically
-      const abiertasCount = fetchedOrders.filter(o => o.estado_orden_id !== 8).length;
-      const recibidasCount = fetchedOrders.filter(o => o.estado_orden_id === 1).length;
-      const enReparacionCount = fetchedOrders.filter(o => o.estado_orden_id === 5).length;
-      const listasEntregaCount = fetchedOrders.filter(o => o.estado_orden_id === 7).length;
-      const entregadasCount = fetchedOrders.filter(o => o.estado_orden_id === 8).length;
-
-      setMetrics({
-        abiertas: abiertasCount,
-        recibidas: recibidasCount,
-        en_proceso: enReparacionCount,
-        listas_entrega: listasEntregaCount,
-        entregadas: entregadasCount
-      });
+      if (data.metrics) {
+        setMetrics({
+          total: Number(data.metrics.total || 0),
+          abiertas: Number(data.metrics.abiertas || 0),
+          recibidas: Number(data.metrics.recibidas || 0),
+          en_proceso: Number(data.metrics.en_proceso || 0),
+          listas_entrega: Number(data.metrics.listas_entrega || 0),
+          entregadas: Number(data.metrics.entregadas || 0)
+        });
+      }
     } catch (err) {
       console.error("fetchOrders Error:", err);
       setError(err.message);
@@ -130,28 +156,47 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
 
   const updateUrlParams = (newParamsObj) => {
     const params = new URLSearchParams(searchParams.toString());
+    const isExplicitPageChange = "page" in newParamsObj;
+
     Object.entries(newParamsObj).forEach(([key, val]) => {
-      if (val === null || val === "") {
+      if (val === null || val === "" || val === undefined) {
         params.delete(key);
       } else {
-        params.set(key, val);
+        params.set(key, String(val));
       }
     });
-    params.set("page", "1");
-    setPage(1);
+
+    if (!isExplicitPageChange) {
+      params.set("page", "1");
+      setPage(1);
+    } else if (newParamsObj.page) {
+      setPage(parseInt(String(newParamsObj.page), 10));
+    }
+
     const newQuery = params.toString();
-    router.push(newQuery ? `/work-orders?${newQuery}` : "/work-orders");
+    const targetUrl = newQuery ? `${pathname}?${newQuery}` : pathname;
+    router.push(targetUrl);
   };
 
   const handleClearFilters = () => {
     setSearch("");
-    setSelectedEstado("");
+    setSelectedEstado(STATUS_FILTERS.TOTAL);
     setSelectedPrioridad("");
     setSelectedMecanico("");
     setDateFrom("");
     setDateTo("");
     setPage(1);
-    router.push("/work-orders");
+
+    const currentParams = new URLSearchParams(searchParams.toString());
+    const viewParam = currentParams.get("view");
+    const newParams = new URLSearchParams();
+    if (viewParam) {
+      newParams.set("view", viewParam);
+    }
+
+    const newQuery = newParams.toString();
+    const targetUrl = newQuery ? `${pathname}?${newQuery}` : pathname;
+    router.push(targetUrl);
   };
 
   const removeFilter = (filterKey) => {
@@ -163,8 +208,8 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
       setSearch("");
       updateUrlParams({ search: null });
     } else if (filterKey === "estado") {
-      setSelectedEstado("");
-      updateUrlParams({ estado_id: null });
+      setSelectedEstado(STATUS_FILTERS.TOTAL);
+      updateUrlParams({ estado: null, estado_id: null });
     } else if (filterKey === "mecanico") {
       setSelectedMecanico("");
       updateUrlParams({ mecanico_id: null });
@@ -227,27 +272,35 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
 
       {/* Summary Bento Cards Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-4">
-        {/* Card 1: ABIERTAS */}
+        {/* Card 1: TOTAL DE ÓRDENES */}
         <div
-          onClick={() => updateUrlParams({ estado_id: null })}
-          className="bg-[#161a21] border border-[#2d3748] rounded-xl p-5 hover:border-[#4a5568] transition-all relative overflow-hidden group cursor-pointer"
+          onClick={() => updateUrlParams({ estado: null, estado_id: null })}
+          className={`bg-[#161a21] border rounded-xl p-5 transition-all relative overflow-hidden group cursor-pointer ${
+            !selectedEstado || selectedEstado === STATUS_FILTERS.TOTAL
+              ? "border-[#bfce7f] shadow-[0_0_15px_rgba(191,206,127,0.15)] ring-1 ring-[#bfce7f]/30"
+              : "border-[#2d3748] hover:border-[#4a5568]"
+          }`}
         >
           <div className="flex justify-between items-start mb-3">
-            <span className="font-mono text-xs font-bold text-slate-400 tracking-wider uppercase">ABIERTAS</span>
+            <span className="font-mono text-xs font-bold text-slate-400 tracking-wider uppercase">TOTAL DE ÓRDENES</span>
             <Inbox className="w-5 h-5 text-[#bfce7f]" />
           </div>
-          <div className="text-3xl font-extrabold text-slate-100 font-mono">{metrics.abiertas}</div>
-          <div className="text-xs text-[#bfce7f] mt-1 font-medium">En proceso / activas</div>
+          <div className="text-3xl font-extrabold text-slate-100 font-mono">{metrics.total || 0}</div>
+          <div className="text-xs text-[#bfce7f] mt-1 font-medium">Todas las órdenes registradas</div>
         </div>
 
         {/* Card 2: RECIBIDAS */}
         <div
-          onClick={() => updateUrlParams({ estado_id: "1" })}
-          className="bg-[#161a21] border border-[#2d3748] rounded-xl p-5 hover:border-[#4a5568] transition-all relative overflow-hidden group cursor-pointer"
+          onClick={() => updateUrlParams({ estado: STATUS_FILTERS.RECIBIDAS, estado_id: null })}
+          className={`bg-[#161a21] border rounded-xl p-5 transition-all relative overflow-hidden group cursor-pointer ${
+            selectedEstado === STATUS_FILTERS.RECIBIDAS
+              ? "border-sky-400 shadow-[0_0_15px_rgba(56,189,248,0.15)] ring-1 ring-sky-400/30"
+              : "border-[#2d3748] hover:border-[#4a5568]"
+          }`}
         >
           <div className="flex justify-between items-start mb-3">
             <span className="font-mono text-xs font-bold text-slate-400 tracking-wider uppercase">RECIBIDAS</span>
-            <Clock className="w-5 h-5 text-slate-400" />
+            <Clock className="w-5 h-5 text-sky-400" />
           </div>
           <div className="text-3xl font-extrabold text-slate-100 font-mono">{metrics.recibidas || 0}</div>
           <div className="text-xs text-slate-400 mt-1 font-medium">Pendientes de inicio</div>
@@ -255,124 +308,83 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
 
         {/* Card 3: EN REPARACIÓN */}
         <div
-          onClick={() => updateUrlParams({ estado_id: "5" })}
-          className="bg-[#161a21] border border-[#2d3748] rounded-xl p-5 hover:border-[#4a5568] transition-all relative overflow-hidden group cursor-pointer"
+          onClick={() => updateUrlParams({ estado: STATUS_FILTERS.REPARACION, estado_id: null })}
+          className={`bg-[#161a21] border rounded-xl p-5 transition-all relative overflow-hidden group cursor-pointer ${
+            selectedEstado === STATUS_FILTERS.REPARACION
+              ? "border-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.15)] ring-1 ring-amber-400/30"
+              : "border-[#2d3748] hover:border-[#4a5568]"
+          }`}
         >
           <div className="flex justify-between items-start mb-3">
             <span className="font-mono text-xs font-bold text-slate-400 tracking-wider uppercase">EN REPARACIÓN</span>
-            <Wrench className="w-5 h-5 text-[#bfce7f]" />
+            <Wrench className="w-5 h-5 text-amber-400" />
           </div>
-          <div className="text-3xl font-extrabold text-slate-100 font-mono">{metrics.en_proceso}</div>
+          <div className="text-3xl font-extrabold text-slate-100 font-mono">{metrics.en_proceso || 0}</div>
           <div className="text-xs text-slate-400 mt-1 font-medium">Trabajo técnico activo</div>
         </div>
 
         {/* Card 4: LISTAS PARA ENTREGA */}
         <div
-          onClick={() => updateUrlParams({ estado_id: "7" })}
-          className="bg-[#161a21] border border-amber-500/30 rounded-xl p-5 hover:border-amber-500/50 transition-all relative overflow-hidden group cursor-pointer"
+          onClick={() => updateUrlParams({ estado: STATUS_FILTERS.LISTAS_ENTREGA, estado_id: null })}
+          className={`bg-[#161a21] border rounded-xl p-5 transition-all relative overflow-hidden group cursor-pointer ${
+            selectedEstado === STATUS_FILTERS.LISTAS_ENTREGA
+              ? "border-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.2)] ring-1 ring-emerald-400/40"
+              : "border-amber-500/30 hover:border-amber-500/50"
+          }`}
         >
           <div className="flex justify-between items-start mb-3">
-            <span className="font-mono text-xs font-bold text-amber-400 tracking-wider uppercase">LISTAS PARA ENTREGA</span>
-            <ClipboardList className="w-5 h-5 text-amber-400" />
+            <span className="font-mono text-xs font-bold text-emerald-400 tracking-wider uppercase">LISTAS PARA ENTREGA</span>
+            <ClipboardList className="w-5 h-5 text-emerald-400" />
           </div>
-          <div className="text-3xl font-extrabold text-amber-400 font-mono">{metrics.listas_entrega || 0}</div>
-          <div className="text-xs text-amber-400/80 mt-1 font-medium">Listas para cliente</div>
+          <div className="text-3xl font-extrabold text-emerald-400 font-mono">{metrics.listas_entrega || 0}</div>
+          <div className="text-xs text-emerald-400/80 mt-1 font-medium">Listas para cliente</div>
         </div>
 
         {/* Card 5: ENTREGADAS */}
         <div
-          onClick={() => updateUrlParams({ estado_id: "8" })}
-          className="bg-[#161a21] border border-emerald-500/30 rounded-xl p-5 hover:border-emerald-500/50 transition-all relative overflow-hidden group cursor-pointer"
+          onClick={() => updateUrlParams({ estado: STATUS_FILTERS.ENTREGADAS, estado_id: null })}
+          className={`bg-[#161a21] border rounded-xl p-5 transition-all relative overflow-hidden group cursor-pointer ${
+            selectedEstado === STATUS_FILTERS.ENTREGADAS
+              ? "border-slate-400 shadow-[0_0_15px_rgba(148,163,184,0.15)] ring-1 ring-slate-400/30"
+              : "border-emerald-500/30 hover:border-emerald-500/50"
+          }`}
         >
           <div className="flex justify-between items-start mb-3">
-            <span className="font-mono text-xs font-bold text-emerald-400 tracking-wider uppercase">ENTREGADAS</span>
-            <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+            <span className="font-mono text-xs font-bold text-slate-400 tracking-wider uppercase">ENTREGADAS</span>
+            <CheckCircle2 className="w-5 h-5 text-slate-400" />
           </div>
-          <div className="text-3xl font-extrabold text-emerald-400 font-mono">{metrics.entregadas || 0}</div>
-          <div className="text-xs text-emerald-400/80 mt-1 font-medium">Completadas / entregadas</div>
+          <div className="text-3xl font-extrabold text-slate-300 font-mono">{metrics.entregadas || 0}</div>
+          <div className="text-xs text-slate-400 mt-1 font-medium">Completadas / entregadas</div>
         </div>
       </div>
 
       {/* Filters & Search Bar */}
       <div className="space-y-3">
-        <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-[#1c2129] border border-[#2d3748] p-4 rounded-xl">
-          {/* Status Quick Filter Pills */}
-          <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0 custom-scrollbar">
-            <button
-              onClick={() => updateUrlParams({ estado_id: null })}
-              className={`px-3 py-1.5 rounded font-mono text-xs font-bold tracking-wider uppercase transition-colors whitespace-nowrap ${
-                selectedEstado === ""
-                  ? "bg-[#2d3748] text-white border border-slate-600"
-                  : "text-slate-400 hover:bg-[#2d3748]/50 hover:text-white border border-transparent"
-              }`}
-            >
-              Todas
-            </button>
-            <button
-              onClick={() => updateUrlParams({ estado_id: "1" })}
-              className={`px-3 py-1.5 rounded font-mono text-xs font-bold tracking-wider uppercase transition-colors whitespace-nowrap ${
-                selectedEstado === "1"
-                  ? "bg-[#2d3748] text-[#bfce7f] border border-slate-600"
-                  : "text-slate-400 hover:bg-[#2d3748]/50 hover:text-white border border-transparent"
-              }`}
-            >
-              Recibidas
-            </button>
-            <button
-              onClick={() => updateUrlParams({ estado_id: "5" })}
-              className={`px-3 py-1.5 rounded font-mono text-xs font-bold tracking-wider uppercase transition-colors whitespace-nowrap ${
-                selectedEstado === "5"
-                  ? "bg-[#2d3748] text-[#bfce7f] border border-slate-600"
-                  : "text-slate-400 hover:bg-[#2d3748]/50 hover:text-white border border-transparent"
-              }`}
-            >
-              En Reparación
-            </button>
-            <button
-              onClick={() => updateUrlParams({ estado_id: "7" })}
-              className={`px-3 py-1.5 rounded font-mono text-xs font-bold tracking-wider uppercase transition-colors whitespace-nowrap ${
-                selectedEstado === "7"
-                  ? "bg-[#2d3748] text-amber-400 border border-slate-600"
-                  : "text-slate-400 hover:bg-[#2d3748]/50 hover:text-white border border-transparent"
-              }`}
-            >
-              Listas para Entrega
-            </button>
-            <button
-              onClick={() => updateUrlParams({ estado_id: "8" })}
-              className={`px-3 py-1.5 rounded font-mono text-xs font-bold tracking-wider uppercase transition-colors whitespace-nowrap ${
-                selectedEstado === "8"
-                  ? "bg-[#2d3748] text-emerald-400 border border-slate-600"
-                  : "text-slate-400 hover:bg-[#2d3748]/50 hover:text-white border border-transparent"
-              }`}
-            >
-              Entregadas
-            </button>
+        <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-[#1c2129] border border-[#2d3748] p-3.5 rounded-xl">
+          {/* Search Bar */}
+          <div className="relative w-full sm:flex-1">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                updateUrlParams({ search: e.target.value || null });
+              }}
+              placeholder="Buscar código, cliente, bicicleta, serie..."
+              className="w-full bg-[#0a0c10] border border-[#2d3748] rounded-xl py-2.5 pl-10 pr-4 text-xs text-slate-200 placeholder-slate-500 focus:border-[#bfce7f] outline-none font-sans transition-all"
+            />
           </div>
 
-          {/* Search & Select Filters */}
-          <div className="flex flex-wrap md:flex-nowrap gap-3 w-full md:w-auto items-center">
-            <div className="relative flex-1 md:w-64">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  updateUrlParams({ search: e.target.value || null });
-                }}
-                placeholder="Buscar código, cliente, bicicleta..."
-                className="w-full bg-[#0a0c10] border border-[#2d3748] rounded-lg py-2 pl-10 pr-4 text-xs text-slate-200 placeholder-slate-500 focus:border-[#bfce7f] outline-none"
-              />
-            </div>
-
+          {/* Mechanic Filter & Reset */}
+          <div className="flex items-center gap-2.5 w-full sm:w-auto">
             <select
               value={selectedMecanico}
               onChange={(e) => {
                 setSelectedMecanico(e.target.value);
                 updateUrlParams({ mecanico_id: e.target.value || null });
               }}
-              className="bg-[#0a0c10] border border-[#2d3748] rounded-lg py-2 px-3 text-xs text-slate-200 focus:border-[#bfce7f] outline-none"
+              className="w-full sm:w-auto bg-[#0a0c10] border border-[#2d3748] rounded-xl py-2.5 px-3.5 text-xs text-slate-200 focus:border-[#bfce7f] outline-none font-sans transition-all cursor-pointer"
             >
               <option value="">Todos los Mecánicos</option>
               {catalogs.mecanicos?.map((m) => (
@@ -384,7 +396,7 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
 
             <button
               onClick={handleClearFilters}
-              className="p-2 bg-[#0a0c10] border border-[#2d3748] text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+              className="p-2.5 bg-[#0a0c10] border border-[#2d3748] text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
               title="Limpiar Filtros"
             >
               <RotateCcw className="w-4 h-4" />
@@ -433,10 +445,16 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
             )}
 
             {/* Estado Tag */}
-            {selectedEstado && (
+            {selectedEstado && selectedEstado !== STATUS_FILTERS.TOTAL && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-400 font-bold">
-                Estado #{selectedEstado}
-                <button onClick={() => removeFilter("estado")} className="hover:text-white ml-0.5">
+                Estado: {
+                  selectedEstado === STATUS_FILTERS.RECIBIDAS ? "Recibida" :
+                  selectedEstado === STATUS_FILTERS.REPARACION ? "En Reparación" :
+                  selectedEstado === STATUS_FILTERS.LISTAS_ENTREGA ? "Lista para Entrega" :
+                  selectedEstado === STATUS_FILTERS.ENTREGADAS ? "Entregada" :
+                  catalogs.estados?.find(e => e.codigo === selectedEstado)?.nombre || selectedEstado
+                }
+                <button onClick={() => removeFilter("estado")} className="hover:text-white ml-0.5 cursor-pointer">
                   <X size={12} />
                 </button>
               </span>

@@ -3,6 +3,7 @@ import { getPool, query } from "@/lib/db";
 import { recalculateWorkOrderTotals } from "@/lib/workshop/recalculateWorkOrderTotals";
 import { getCronometroStatus } from "@/lib/workshop/getCronometroStatus";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { queryIncompleteServicesAndTimers } from "@/lib/workshop/validateOrderState";
 
 // Helper for cleaning dates safely
 function cleanFecha(val: any) {
@@ -538,6 +539,7 @@ export async function PUT(
     const orderRes = await client.query(`
       SELECT 
         ot.orden_trabajo_id, 
+        ot.codigo_orden,
         ot.estado_orden_id, 
         ot.prioridad_orden_id, 
         ot.fecha_entrega_estimada, 
@@ -545,6 +547,10 @@ export async function PUT(
         ot.observacion_interna,
         ot.usuario_registro,
         ot.mecanico_id,
+        ot.facturado,
+        ot.fecha_facturacion,
+        ot.usuario_facturacion_id,
+        COALESCE(ot.total_orden, ot.subtotal_general, 0) AS total_orden,
         u_ot.empresa_id AS empresa_id
       FROM admin.ordenes_trabajo ot
       JOIN admin.usuario u_ot ON u_ot.usuario_id = ot.usuario_registro
@@ -615,7 +621,7 @@ export async function PUT(
     let requestedStateId: number | undefined = undefined;
     if (accion === "MARCAR_LISTA_ENTREGA") {
       requestedStateId = estadoListaEntregaId;
-    } else if (accion === "INICIAR_REPARACION") {
+    } else if (accion === "INICIAR_REPARACION" || accion === "REABRIR_REPARACION") {
       requestedStateId = estadoReparacionId;
     } else if (estado_orden_id !== undefined && estado_orden_id !== null && estado_orden_id !== "") {
       requestedStateId = parseInt(String(estado_orden_id), 10);
@@ -686,10 +692,10 @@ export async function PUT(
 
     // Permission Checks
     if (targetStateId === estadoReparacionId) {
-      if (!perms.puede_mover && !perms.puede_editar && !perms.puede_crear) {
+      if (!perms.puede_mover && !perms.puede_editar && !perms.puede_crear && !perms.puede_reabrir) {
         await client.query("ROLLBACK");
         return NextResponse.json(
-          { error: "FORBIDDEN", message: "No tienes permiso para iniciar la reparación de esta orden." },
+          { error: "FORBIDDEN", message: "No tienes permiso para reanudar o reabrir la reparación de esta orden." },
           { status: 403 }
         );
       }
@@ -702,62 +708,28 @@ export async function PUT(
         );
       }
 
-      // Query incomplete services
-      const incompleteRes = await client.query(`
+      // Check if order has at least one active item (services or products)
+      const itemsCountRes = await client.query(`
         SELECT 
-          os.orden_servicio_id AS servicio_id,
-          os.codigo_servicio,
-          eos.codigo AS estado
-        FROM admin.orden_servicios os
-        JOIN admin.estado_orden_servicio eos ON os.estado_orden_servicio_id = eos.estado_orden_servicio_id
-        WHERE os.orden_trabajo_id = $1
-          AND (os.activo IS DISTINCT FROM false)
-          AND eos.codigo NOT IN ('COMPLETADO', 'CANCELADO', 'ANULADO', 'INACTIVO')
-        ORDER BY os.orden_servicio_id;
+          (SELECT COUNT(*)::int FROM admin.orden_servicios WHERE orden_trabajo_id = $1 AND (activo IS DISTINCT FROM false)) AS total_servicios,
+          (SELECT COUNT(*)::int FROM admin.orden_productos WHERE orden_trabajo_id = $1) AS total_productos
       `, [ordenId]);
 
-      // Query active timer sessions
-      const activeTimersRes = await client.query(`
-        SELECT
-          os.orden_servicio_id AS servicio_id,
-          os.codigo_servicio,
-          'CON_SESION_ACTIVA' AS estado
-        FROM admin.orden_servicio_mano_obra mo
-        JOIN admin.orden_servicios os ON mo.orden_servicio_id = os.orden_servicio_id
-        WHERE os.orden_trabajo_id = $1
-          AND (mo.detalle_mano_obra IS NULL OR BTRIM(mo.detalle_mano_obra) = '')
-          AND (mo.observacion IS NULL OR BTRIM(mo.observacion) = '')
-          AND mo.fecha_inicio IS NOT NULL
-          AND mo.fecha_finalizacion IS NULL
-          AND (mo.activo IS DISTINCT FROM false)
-          AND (os.activo IS DISTINCT FROM false);
-      `, [ordenId]);
-
-      const incompleteList = incompleteRes.rows || [];
-      const activeTimersList = activeTimersRes.rows || [];
-
-      // Combine both
-      const combinedIncomplete: any[] = [];
-      const serviceIdSet = new Set<number>();
-
-      for (const s of incompleteList) {
-        combinedIncomplete.push({
-          servicio_id: Number(s.servicio_id),
-          codigo_servicio: s.codigo_servicio,
-          estado: s.estado
-        });
-        serviceIdSet.add(Number(s.servicio_id));
+      const totalItems = Number(itemsCountRes.rows[0]?.total_servicios || 0) + Number(itemsCountRes.rows[0]?.total_productos || 0);
+      if (totalItems === 0) {
+        await client.query("ROLLBACK");
+        return NextResponse.json(
+          {
+            success: false,
+            error: "ORDER_WITHOUT_ITEMS",
+            message: "La orden debe tener al menos un servicio o repuesto antes de marcarse como lista para entrega."
+          },
+          { status: 409 }
+        );
       }
 
-      for (const s of activeTimersList) {
-        if (!serviceIdSet.has(Number(s.servicio_id))) {
-          combinedIncomplete.push({
-            servicio_id: Number(s.servicio_id),
-            codigo_servicio: s.codigo_servicio,
-            estado: "EN_PROCESO"
-          });
-        }
-      }
+      // Check incomplete services and active timers
+      const combinedIncomplete = await queryIncompleteServicesAndTimers(client, ordenId);
 
       if (combinedIncomplete.length > 0) {
         await client.query("ROLLBACK");
@@ -783,37 +755,7 @@ export async function PUT(
       }
     }
 
-    // Execute Order State Update: Assign authenticated session.usuario_id as mecanico_id when NULL upon entering REPARACION
-    await client.query(`
-      UPDATE admin.ordenes_trabajo
-      SET 
-        estado_orden_id = $1::integer,
-        mecanico_id = CASE
-          WHEN mecanico_id IS NULL THEN $5::integer
-          ELSE mecanico_id
-        END,
-        prioridad_orden_id = COALESCE($2::integer, prioridad_orden_id),
-        observacion_interna = COALESCE($3, observacion_interna),
-        fecha_inicio_trabajo = COALESCE(fecha_inicio_trabajo, CASE WHEN $1::integer = $7::integer THEN NOW() ELSE NULL END),
-        fecha_finalizacion = CASE WHEN $1::integer = $8::integer THEN NOW() WHEN $1::integer = $7::integer THEN NULL ELSE fecha_finalizacion END,
-        fecha_entrega_real = CASE WHEN $1::integer = $9::integer THEN NOW() ELSE fecha_entrega_real END,
-        observacion_entrega = CASE WHEN $1::integer = $9::integer THEN COALESCE($4, observacion_entrega) ELSE observacion_entrega END,
-        fecha_actualizacion = NOW(),
-        usuario_actualizacion = $5::integer
-      WHERE orden_trabajo_id = $6::integer
-    `, [
-      targetStateId,
-      targetPrioridadId ? parseInt(targetPrioridadId, 10) : null,
-      observacion_interna !== undefined ? observacion_interna : null,
-      observacion_cambio_estado !== undefined ? observacion_cambio_estado : null,
-      session.usuario_id,
-      ordenId,
-      estadoReparacionId,
-      estadoListaEntregaId,
-      estadoEntregadaId
-    ]);
-
-    // Query assigned mechanic details for response
+    // Query assigned mechanic/user details for history & response
     const effectiveMecanicoId = currentOrder.mecanico_id || session.usuario_id;
     const mecRes = await client.query(`
       SELECT
@@ -823,12 +765,255 @@ export async function PUT(
       LEFT JOIN admin.usuario_identidad ui ON u.usuario_id = ui.usuario_id
       LEFT JOIN admin.cargo c ON c.cargo_id = ui.cargo_id
       WHERE u.usuario_id = $1
-    `, [effectiveMecanicoId]);
+    `, [session.usuario_id]);
 
-    const mecanicoNombre = mecRes.rows[0]?.nombre_completo || `Usuario #${effectiveMecanicoId}`;
+    const sessionUserName = mecRes.rows[0]?.nombre_completo || `Usuario #${session.usuario_id}`;
+    const mecanicoNombre = sessionUserName;
     const mecanicoCargo = mecRes.rows[0]?.cargo_nombre || "Técnico de Taller";
 
-    // Insert Single History Record
+    let historyComment = "";
+
+    if (targetStateId === estadoEntregadaId) {
+      // ATOMIC DELIVERY & INVOICING
+      // Validations:
+      if (currentStateId !== estadoListaEntregaId) {
+        await client.query("ROLLBACK");
+        return NextResponse.json(
+          {
+            success: false,
+            error: "ORDER_NOT_READY_FOR_DELIVERY",
+            title: "Orden aún no disponible para entrega",
+            message: "La orden debe estar lista para entrega antes de entregarla al cliente."
+          },
+          { status: 409 }
+        );
+      }
+
+      if (currentOrder.facturado || currentOrder.fecha_facturacion || currentOrder.usuario_facturacion_id) {
+        await client.query("ROLLBACK");
+        return NextResponse.json(
+          {
+            success: false,
+            error: "ORDER_ALREADY_INVOICED",
+            title: "Orden ya procesada",
+            message: "Esta orden ya fue entregada y facturada."
+          },
+          { status: 409 }
+        );
+      }
+
+      // Check incomplete services and active timers
+      const combinedIncompleteDelivery = await queryIncompleteServicesAndTimers(client, ordenId);
+
+      if (combinedIncompleteDelivery.length > 0) {
+        await client.query("ROLLBACK");
+        return NextResponse.json(
+          {
+            success: false,
+            error: "ORDER_HAS_INCOMPLETE_SERVICES",
+            title: "Orden con servicios pendientes",
+            message: "La orden tiene servicios sin completar y no puede entregarse al cliente.",
+            data: { servicios_incompletos: combinedIncompleteDelivery }
+          },
+          { status: 409 }
+        );
+      }
+
+      const totalOrdenVal = parseFloat(currentOrder.total_orden || 0);
+      if (totalOrdenVal <= 0) {
+        await client.query("ROLLBACK");
+        return NextResponse.json(
+          {
+            success: false,
+            error: "INVALID_ORDER_TOTAL",
+            title: "Total inválido",
+            message: "El total de la orden debe ser mayor que cero para realizar la entrega y facturación."
+          },
+          { status: 409 }
+        );
+      }
+
+      const updateDelivRes = await client.query(`
+        UPDATE admin.ordenes_trabajo
+        SET
+          estado_orden_id = $1::integer,
+          fecha_entrega_real = COALESCE(fecha_entrega_real, NOW()),
+          facturado = true,
+          fecha_facturacion = NOW(),
+          usuario_facturacion_id = $2::integer,
+          fecha_actualizacion = NOW(),
+          usuario_actualizacion = $2::integer,
+          observacion_entrega = COALESCE($3, observacion_entrega)
+        WHERE orden_trabajo_id = $4::integer
+          AND estado_orden_id = $5::integer
+          AND (facturado = false OR facturado IS NULL)
+        RETURNING
+          orden_trabajo_id,
+          codigo_orden,
+          estado_orden_id,
+          fecha_entrega_real,
+          facturado,
+          fecha_facturacion,
+          usuario_facturacion_id,
+          total_orden
+      `, [
+        estadoEntregadaId,
+        session.usuario_id,
+        observacion_cambio_estado !== undefined ? observacion_cambio_estado : (observacion_interna !== undefined ? observacion_interna : null),
+        ordenId,
+        estadoListaEntregaId
+      ]);
+
+      if (updateDelivRes.rowCount !== 1) {
+        await client.query("ROLLBACK");
+        return NextResponse.json(
+          {
+            success: false,
+            error: "ORDER_ALREADY_INVOICED",
+            title: "Orden ya procesada",
+            message: "La orden no pudo entregarse porque ya fue procesada o su estado cambió."
+          },
+          { status: 409 }
+        );
+      }
+
+      const formattedTotal = Number(currentOrder.total_orden || 0).toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      historyComment = `Orden entregada al cliente y marcada como facturada por ${sessionUserName}. Total: RD$ ${formattedTotal}.`;
+
+    } else if (targetStateId === estadoReparacionId && currentStateId === estadoListaEntregaId) {
+      // REOPENING FROM LISTA_ENTREGA TO REPARACION (REABRIR REPARACION)
+      if (currentOrder.facturado || currentOrder.fecha_facturacion || currentOrder.usuario_facturacion_id) {
+        await client.query("ROLLBACK");
+        return NextResponse.json(
+          {
+            success: false,
+            error: "ORDER_ALREADY_INVOICED",
+            title: "Orden ya facturada",
+            message: "No se puede reabrir una orden que ya fue facturada y entregada."
+          },
+          { status: 409 }
+        );
+      }
+
+      const motivoReapertura = (body.motivo_reapertura || body.observacion || observacion_cambio_estado || observacion_interna || "").trim();
+
+      await client.query(`
+        UPDATE admin.ordenes_trabajo
+        SET
+          estado_orden_id = $1::integer,
+          fecha_finalizacion = NULL,
+          prioridad_orden_id = COALESCE($2::integer, prioridad_orden_id),
+          observacion_interna = COALESCE($3, observacion_interna),
+          fecha_actualizacion = NOW(),
+          usuario_actualizacion = $4::integer
+        WHERE orden_trabajo_id = $5::integer
+          AND estado_orden_id = $6::integer
+          AND (facturado = false OR facturado IS NULL)
+      `, [
+        estadoReparacionId,
+        targetPrioridadId ? parseInt(targetPrioridadId, 10) : null,
+        motivoReapertura ? motivoReapertura : (observacion_interna !== undefined ? observacion_interna : null),
+        session.usuario_id,
+        ordenId,
+        estadoListaEntregaId
+      ]);
+
+      // If an optional service was selected to be reopened
+      const targetServiceId = body.orden_servicio_id || body.servicio_id_reabrir;
+      let reopenedServiceCode = null;
+
+      if (targetServiceId !== undefined && targetServiceId !== null && targetServiceId !== "" && !isNaN(Number(targetServiceId))) {
+        const srvId = parseInt(String(targetServiceId), 10);
+        if (srvId > 0) {
+          const srvCheck = await client.query(`
+            SELECT os.orden_servicio_id, os.codigo_servicio, os.estado_orden_servicio_id, UPPER(eos.codigo) AS estado_codigo
+            FROM admin.orden_servicios os
+            LEFT JOIN admin.estado_orden_servicio eos ON os.estado_orden_servicio_id = eos.estado_orden_servicio_id
+            WHERE os.orden_servicio_id = $1
+              AND os.orden_trabajo_id = $2
+              AND (os.activo IS DISTINCT FROM false)
+            FOR UPDATE OF os
+          `, [srvId, ordenId]);
+
+          if (srvCheck.rows.length === 0) {
+            await client.query("ROLLBACK");
+            return NextResponse.json(
+              {
+                success: false,
+                error: "SERVICE_NOT_FOUND",
+                message: "El servicio seleccionado no pertenece a esta orden o no está activo."
+              },
+              { status: 404 }
+            );
+          }
+
+          const srvRow = srvCheck.rows[0];
+          if (srvRow.estado_codigo !== "COMPLETADO" && srvRow.estado_codigo !== "FINALIZADO" && Number(srvRow.estado_orden_servicio_id) !== 3) {
+            await client.query("ROLLBACK");
+            return NextResponse.json(
+              {
+                success: false,
+                error: "SERVICE_NOT_CLOSED",
+                message: "El servicio seleccionado no se encuentra en un estado completado/cerrado que permita reapertura."
+              },
+              { status: 409 }
+            );
+          }
+
+          await client.query(`
+            UPDATE admin.orden_servicios
+            SET
+              estado_orden_servicio_id = 1,
+              fecha_finalizacion = NULL,
+              fecha_actualizacion = NOW(),
+              usuario_actualizacion = $1::integer
+            WHERE orden_servicio_id = $2::integer
+          `, [session.usuario_id, srvId]);
+
+          reopenedServiceCode = srvRow.codigo_servicio || `#${srvId}`;
+        }
+      }
+
+      if (reopenedServiceCode) {
+        historyComment = `Orden reabierta para reparación por ${sessionUserName}. También se reabrió el servicio ${reopenedServiceCode}. Motivo: ${motivoReapertura || "Ajustes técnicos"}.`;
+      } else {
+        historyComment = `Orden reabierta para reparación por ${sessionUserName}. Motivo: ${motivoReapertura || "Ajustes técnicos"}.`;
+      }
+
+    } else {
+      // Normal state update (e.g. RECIBIDA -> REPARACION or REPARACION -> LISTA_ENTREGA)
+      await client.query(`
+        UPDATE admin.ordenes_trabajo
+        SET
+          estado_orden_id = $1::integer,
+          mecanico_id = CASE
+            WHEN mecanico_id IS NULL THEN $2::integer
+            ELSE mecanico_id
+          END,
+          prioridad_orden_id = COALESCE($3::integer, prioridad_orden_id),
+          observacion_interna = COALESCE($4, observacion_interna),
+          fecha_inicio_trabajo = COALESCE(fecha_inicio_trabajo, CASE WHEN $1::integer = $5::integer THEN NOW() ELSE NULL END),
+          fecha_finalizacion = CASE WHEN $1::integer = $6::integer THEN NOW() WHEN $1::integer = $5::integer THEN NULL ELSE fecha_finalizacion END,
+          fecha_actualizacion = NOW(),
+          usuario_actualizacion = $2::integer
+        WHERE orden_trabajo_id = $7::integer
+      `, [
+        targetStateId,
+        session.usuario_id,
+        targetPrioridadId ? parseInt(targetPrioridadId, 10) : null,
+        observacion_interna !== undefined ? observacion_interna : null,
+        estadoReparacionId,
+        estadoListaEntregaId,
+        ordenId
+      ]);
+
+      historyComment = targetStateId === estadoReparacionId
+        ? `Reparación iniciada por ${sessionUserName}`
+        : (body.motivo_reapertura || observacion_cambio_estado || observacion_interna || "Cambio de estado de la orden");
+    }
+
+    // Insert Single History Record with table lock to prevent concurrent duplicate IDs
+    await client.query(`LOCK TABLE admin.orden_historial_estado IN EXCLUSIVE MODE`);
     await client.query(`
       INSERT INTO admin.orden_historial_estado (
         orden_historial_estado_id, orden_trabajo_id, estado_anterior_id, estado_nuevo_id,
@@ -842,9 +1027,7 @@ export async function PUT(
       currentStateId,
       targetStateId,
       session.usuario_id,
-      targetStateId === estadoReparacionId
-        ? `Reparación iniciada por ${mecanicoNombre}`
-        : (body.motivo_reapertura || observacion_cambio_estado || observacion_interna || "Cambio de estado de la orden")
+      historyComment
     ]);
 
     await client.query("COMMIT");

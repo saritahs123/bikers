@@ -51,9 +51,20 @@ export default function ReceptionsListView({ onViewDetail }) {
       if (search.trim()) queryParams.set("search", search.trim());
 
       const res = await fetch(`/api/taller/recepciones?${queryParams.toString()}`);
-      const json = await res.json();
+      if (res.status === 401) {
+        if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+          window.location.replace("/login");
+        }
+        return;
+      }
+      let json = null;
+      try {
+        json = await res.json();
+      } catch {
+        throw new Error(res.ok ? "Respuesta inválida del servidor." : `Error del servidor (${res.status})`);
+      }
       if (!res.ok) {
-        throw new Error(json.message || json.error || "Error al cargar listado de recepciones.");
+        throw new Error(json?.message || json?.error || "Error al cargar listado de recepciones.");
       }
 
       setRecepciones(json.data || []);

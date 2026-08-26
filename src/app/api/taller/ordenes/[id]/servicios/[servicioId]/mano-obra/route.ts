@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
 import { recalculateWorkOrderTotals } from "@/lib/workshop/recalculateWorkOrderTotals";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { validateOrderInRepair } from "@/lib/workshop/validateOrderState";
 
 // GET /api/taller/ordenes/[id]/servicios/[servicioId]/mano-obra
 export async function GET(
@@ -108,23 +109,11 @@ export async function POST(
 
     await client.query("BEGIN");
 
-    // Lock Order Row Exclusively
-    const orderRes = await client.query(`
-      SELECT orden_trabajo_id, estado_orden_id
-      FROM admin.ordenes_trabajo
-      WHERE orden_trabajo_id = $1 AND activo = true
-      FOR UPDATE OF ordenes_trabajo
-    `, [ordenId]);
-
-    if (orderRes.rows.length === 0) {
+    // Lock Order Row and enforce order state machine check
+    const orderStateCheck = await validateOrderInRepair(client, ordenId, session.empresa_id, "AGREGAR_MANO_OBRA");
+    if (!orderStateCheck.isValid) {
       await client.query("ROLLBACK");
-      return NextResponse.json({ error: "Orden de trabajo no encontrada." }, { status: 404 });
-    }
-
-    const estadoOrdenId = orderRes.rows[0].estado_orden_id;
-    if (estadoOrdenId === 8 || estadoOrdenId === 7) {
-      await client.query("ROLLBACK");
-      return NextResponse.json({ error: "ORDER_LOCKED", message: "No se puede agregar mano de obra en el estado actual de la orden." }, { status: 409 });
+      return orderStateCheck.response;
     }
 
     // Verify service exists

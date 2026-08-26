@@ -10,13 +10,16 @@ import WorkOrdersListView from "./WorkOrdersListView";
 import WorkOrdersKanbanView from "./WorkOrdersKanbanView";
 import WorkOrderDetailView from "./WorkOrderDetailView";
 import NewWorkOrderModal from "./NewWorkOrderModal";
+import BillingKanbanView from "./BillingKanbanView";
+import BillingOrderDetailView from "./BillingOrderDetailView";
 
 export default function WorkshopModuleContainer() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState("dashboard"); // 'dashboard' | 'recepciones' | 'work_orders' | 'kanban'
+  const [activeTab, setActiveTab] = useState("dashboard"); // 'dashboard' | 'recepciones' | 'work_orders' | 'kanban' | 'billing'
   const [selectedRecepcionId, setSelectedRecepcionId] = useState(null);
   const [selectedOrderId, setSelectedOrderId] = useState(null);
+  const [selectedInvoiceOrderId, setSelectedInvoiceOrderId] = useState(null);
   const [isNewReceptionModalOpen, setIsNewReceptionModalOpen] = useState(false);
   const [isNewOrderModalOpen, setIsNewOrderModalOpen] = useState(false);
 
@@ -25,6 +28,7 @@ export default function WorkshopModuleContainer() {
     const actionParam = searchParams.get("action");
     const idParam = searchParams.get("id");
     const orderIdParam = searchParams.get("order_id");
+    const invoiceOrderIdParam = searchParams.get("invoice_order_id");
 
     if (idParam) {
       const id = parseInt(idParam, 10);
@@ -46,6 +50,16 @@ export default function WorkshopModuleContainer() {
       setSelectedOrderId(null);
     }
 
+    if (invoiceOrderIdParam) {
+      const ioid = parseInt(invoiceOrderIdParam, 10);
+      if (!isNaN(ioid)) {
+        setSelectedInvoiceOrderId(ioid);
+        setActiveTab("billing");
+      }
+    } else {
+      setSelectedInvoiceOrderId(null);
+    }
+
     // Modal action params
     if (actionParam === "new") {
       setIsNewReceptionModalOpen(true);
@@ -62,7 +76,9 @@ export default function WorkshopModuleContainer() {
       setActiveTab("work_orders");
     } else if (viewParam === "kanban") {
       setActiveTab("kanban");
-    } else if (viewParam === "dashboard" || (!viewParam && !idParam && !orderIdParam)) {
+    } else if (viewParam === "billing") {
+      setActiveTab("billing");
+    } else if (viewParam === "dashboard" || (!viewParam && !idParam && !orderIdParam && !invoiceOrderIdParam)) {
       setActiveTab("dashboard");
     }
   }, [searchParams]);
@@ -95,6 +111,38 @@ export default function WorkshopModuleContainer() {
     }
   };
 
+  const handleNavigateInvoiceDetail = (orderId) => {
+    setSelectedInvoiceOrderId(orderId);
+    setSelectedOrderId(null);
+    setSelectedRecepcionId(null);
+    setActiveTab("billing");
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      params.set("view", "billing");
+      params.set("invoice_order_id", String(orderId));
+      params.delete("order_id");
+      params.delete("id");
+      const newQuery = params.toString();
+      const newUrl = window.location.pathname + (newQuery ? `?${newQuery}` : "");
+      window.history.replaceState(null, "", newUrl);
+    }
+  };
+
+  const handleBackFromBillingDetail = () => {
+    setSelectedInvoiceOrderId(null);
+    setActiveTab("billing");
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      params.set("view", "billing");
+      params.delete("invoice_order_id");
+      params.delete("order_id");
+      params.delete("id");
+      const newQuery = params.toString();
+      const newUrl = window.location.pathname + (newQuery ? `?${newQuery}` : "");
+      window.history.replaceState(null, "", newUrl);
+    }
+  };
+
   const handleBackFromDetail = () => {
     const returnTo = searchParams ? searchParams.get("return_to") : null;
     const isSafeInternalReturn =
@@ -110,10 +158,12 @@ export default function WorkshopModuleContainer() {
 
     setSelectedRecepcionId(null);
     setSelectedOrderId(null);
+    setSelectedInvoiceOrderId(null);
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       params.delete("id");
       params.delete("order_id");
+      params.delete("invoice_order_id");
       params.delete("return_to");
       const newQuery = params.toString();
       const newUrl = window.location.pathname + (newQuery ? `?${newQuery}` : "");
@@ -135,13 +185,15 @@ export default function WorkshopModuleContainer() {
 
   return (
     <div className="max-w-[1440px] mx-auto space-y-6">
-      {/* Main Container Views - Single contextual header rendered per view */}
-
       {/* Main Container Views */}
-      {selectedRecepcionId ? (
+      {selectedInvoiceOrderId ? (
+        <BillingOrderDetailView ordenId={selectedInvoiceOrderId} onBack={handleBackFromBillingDetail} />
+      ) : selectedRecepcionId ? (
         <ReceptionDetailView recepcionId={selectedRecepcionId} onBack={handleBackFromDetail} />
       ) : selectedOrderId ? (
         <WorkOrderDetailView ordenId={selectedOrderId} onBack={handleBackFromDetail} />
+      ) : activeTab === "billing" ? (
+        <BillingKanbanView onViewInvoiceDetail={(oid) => handleNavigateInvoiceDetail(oid)} />
       ) : activeTab === "dashboard" ? (
         <WorkshopDashboardView
           onNavigateList={() => setActiveTab("recepciones")}
