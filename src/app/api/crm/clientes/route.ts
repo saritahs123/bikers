@@ -1,13 +1,25 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
 
 // GET /api/crm/clientes
 export async function GET() {
   try {
+    const session = await getWorkshopSession();
+    if (!session || !session.empresa_id) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("CRM", session.usuario_id);
+    if (!perms.puede_ver) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para consultar clientes." }, { status: 403 });
+    }
+
     const sql = `
       SELECT 
         c.cliente_id AS id,
         c.cliente_id,
+        c.empresa_id,
         c.nombre,
         c.apellido,
         c.nombre_completo,
@@ -35,15 +47,16 @@ export async function GET() {
         c.fecha_modificacion,
         c.usuario_modificacion
       FROM admin.clientes c
-      WHERE c.fecha_eliminacion IS NULL
+      WHERE c.empresa_id = $1 AND c.fecha_eliminacion IS NULL
       ORDER BY c.cliente_id DESC
     `;
 
-    const rows = await query(sql);
+    const rows = await query(sql, [session.empresa_id]);
 
     const mapped = (rows || []).map((r: any) => ({
       id: r.cliente_id,
       cliente_id: r.cliente_id,
+      empresa_id: r.empresa_id,
       nombre: r.nombre || '',
       apellido: r.apellido || '',
       nombre_completo: r.nombre_completo || `${r.nombre || ''} ${r.apellido || ''}`.trim(),
@@ -79,6 +92,16 @@ export async function GET() {
 // POST /api/crm/clientes
 export async function POST(req: Request) {
   try {
+    const session = await getWorkshopSession();
+    if (!session || !session.empresa_id) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("CRM", session.usuario_id);
+    if (!perms.puede_crear) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para registrar nuevos clientes." }, { status: 403 });
+    }
+
     const body = await req.json();
 
     const nombre = (body.nombre || '').trim();
@@ -118,27 +141,26 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, message: "La Ciudad no puede exceder los 100 caracteres.", field: "ciudad" }, { status: 400 });
     }
 
-    // Check duplicate email if provided
+    // Check duplicate email scoped by company
     if (correo) {
       const existing = await query(`
         SELECT cliente_id FROM admin.clientes
-        WHERE LOWER(correo) = $1 AND fecha_eliminacion IS NULL
-      `, [correo]);
+        WHERE LOWER(correo) = $1 AND empresa_id = $2 AND fecha_eliminacion IS NULL
+      `, [correo, session.empresa_id]);
       if (existing && existing.length > 0) {
         return NextResponse.json({ success: false, message: "Ya existe un cliente registrado con este correo electrónico", field: "correo_electronico" }, { status: 409 });
       }
     }
 
-    // Clean identificacion digits for storage and duplicate check
+    // Clean identificacion digits for storage and duplicate check scoped by company
     const cleanIdentificacion = identificacion ? identificacion.replace(/\D/g, "") : null;
-
-    // Check duplicate identificacion if provided
     if (cleanIdentificacion) {
       const existingIdent = await query(`
         SELECT cliente_id FROM admin.clientes
         WHERE (identificacion = $1 OR identificacion = $2 OR regexp_replace(identificacion, '[^0-9]', '', 'g') = $2)
+          AND empresa_id = $3
           AND fecha_eliminacion IS NULL
-      `, [identificacion, cleanIdentificacion]);
+      `, [identificacion, cleanIdentificacion, session.empresa_id]);
       if (existingIdent && existingIdent.length > 0) {
         return NextResponse.json({ success: false, message: "Ya existe un cliente registrado con esta Cédula / RNC", field: "identificacion" }, { status: 409 });
       }
@@ -151,23 +173,24 @@ export async function POST(req: Request) {
 
     const sql = `
       INSERT INTO admin.clientes (
-        cliente_id, nombre, apellido, nombre_completo, tipo_cliente, identificacion,
+        cliente_id, empresa_id, nombre, apellido, nombre_completo, tipo_cliente, identificacion,
         telefono_principal, telefono_secundario, correo, direccion, ciudad,
         provincia, pais, fecha_nacimiento, genero, contacto_whatsapp,
         contacto_email, notas, cantidad_bicicletas, total_gastado_taller,
-        total_gastado_tienda, activo, fecha_creacion
+        total_gastado_tienda, activo, fecha_creacion, usuario_creacion
       ) VALUES (
-        $1, $2, $3, $4, $5, $6,
-        $7, $8, $9, $10, $11,
-        $12, $13, CASE WHEN $14::text IS NULL OR $14::text = '' THEN NULL ELSE $14::date END, $15, $16::boolean,
-        $17::boolean, $18, 0, 0.00,
-        0.00, true, NOW()
+        $1, $2, $3, $4, $5, $6, $7,
+        $8, $9, $10, $11, $12,
+        $13, $14, CASE WHEN $15::text IS NULL OR $15::text = '' THEN NULL ELSE $15::date END, $16, $17::boolean,
+        $18::boolean, $19, 0, 0.00,
+        0.00, true, NOW(), $20
       )
       RETURNING *
     `;
 
     const params = [
       nextId,
+      session.empresa_id,
       nombre,
       apellido || null,
       nombre_completo,
@@ -184,7 +207,8 @@ export async function POST(req: Request) {
       genero || null,
       contacto_whatsapp,
       contacto_email,
-      notas || null
+      notas || null,
+      session.usuario_id
     ];
 
     const result = await query(sql, params);
@@ -193,6 +217,7 @@ export async function POST(req: Request) {
     const clientData = {
       id: r.cliente_id || nextId,
       cliente_id: r.cliente_id || nextId,
+      empresa_id: session.empresa_id,
       nombre: r.nombre || nombre,
       apellido: r.apellido || apellido,
       nombre_completo: r.nombre_completo || nombre_completo,

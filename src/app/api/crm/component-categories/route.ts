@@ -1,34 +1,36 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
 
 // GET /api/crm/component-categories
 export async function GET() {
   try {
-    let rows: any[] = [];
-    try {
-      rows = await query(`
-        SELECT 
-          categoria_componente_id AS id,
-          categoria_componente_id,
-          codigo,
-          nombre,
-          descripcion,
-          orden_visual,
-          activo,
-          fecha_creacion,
-          fecha_modificacion
-        FROM admin.categoria_componente
-        WHERE fecha_eliminacion IS NULL
-        ORDER BY orden_visual ASC, categoria_componente_id ASC
-      `);
-    } catch (e) {
-      console.warn("Fallback query for GET admin.categoria_componente:", e);
-      try {
-        rows = await query(`SELECT * FROM admin.categoria_componente WHERE fecha_eliminacion IS NULL ORDER BY 1 ASC`);
-      } catch (e2) {
-        console.error("Could not query admin.categoria_componente:", e2);
-      }
+    const session = await getWorkshopSession();
+    if (!session || !session.empresa_id) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
     }
+
+    const permsBici = await getModulePermissions("BICICLETA", session.usuario_id);
+    const permsCrm = await getModulePermissions("CRM", session.usuario_id);
+    if (!permsBici.puede_ver && !permsCrm.puede_ver) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para ver las categorías de componentes." }, { status: 403 });
+    }
+
+    const rows = await query(`
+      SELECT 
+        categoria_componente_id AS id,
+        categoria_componente_id,
+        codigo,
+        nombre,
+        descripcion,
+        orden_visual,
+        activo,
+        fecha_creacion,
+        fecha_modificacion
+      FROM admin.categoria_componente
+      WHERE fecha_eliminacion IS NULL
+      ORDER BY orden_visual ASC, categoria_componente_id ASC
+    `);
 
     const mapped = (rows || []).map((r: any) => ({
       id: r.categoria_componente_id ?? r.id,
@@ -53,6 +55,16 @@ export async function GET() {
 // POST /api/crm/component-categories
 export async function POST(req: Request) {
   try {
+    const session = await getWorkshopSession();
+    if (!session || !session.empresa_id) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("CRM", session.usuario_id);
+    if (!perms.puede_crear) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para crear categorías de componentes." }, { status: 403 });
+    }
+
     const body = await req.json();
     const codigo = (body.codigo || '').trim().toUpperCase();
     const nombre = (body.nombre || '').trim();

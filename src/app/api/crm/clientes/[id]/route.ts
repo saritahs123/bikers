@@ -1,9 +1,20 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
 
 // GET /api/crm/clientes/[id]
 export async function GET(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
+    const session = await getWorkshopSession();
+    if (!session || !session.empresa_id) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("CRM", session.usuario_id);
+    if (!perms.puede_ver) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para consultar este cliente." }, { status: 403 });
+    }
+
     const { id } = await context.params;
     const clienteId = parseInt(id, 10);
 
@@ -13,8 +24,8 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
 
     const clienteRows = await query(`
       SELECT * FROM admin.clientes
-      WHERE cliente_id = $1 AND fecha_eliminacion IS NULL
-    `, [clienteId]);
+      WHERE cliente_id = $1 AND empresa_id = $2 AND fecha_eliminacion IS NULL
+    `, [clienteId, session.empresa_id]);
 
     if (!clienteRows || clienteRows.length === 0) {
       return NextResponse.json({ error: "Cliente no encontrado." }, { status: 404 });
@@ -227,6 +238,16 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
 // PUT /api/crm/clientes/[id]
 export async function PUT(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
+    const session = await getWorkshopSession();
+    if (!session || !session.empresa_id) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("CRM", session.usuario_id);
+    if (!perms.puede_editar) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para modificar este cliente." }, { status: 403 });
+    }
+
     const { id } = await context.params;
     const clienteId = parseInt(id, 10);
 
@@ -269,25 +290,27 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
       return NextResponse.json({ success: false, message: "La Ciudad no puede exceder los 100 caracteres.", field: "ciudad" }, { status: 400 });
     }
 
-    // Duplicate email check
+    // Duplicate email check scoped by company
     if (correo) {
       const existing = await query(`
         SELECT cliente_id FROM admin.clientes
-        WHERE LOWER(correo) = $1 AND cliente_id <> $2 AND fecha_eliminacion IS NULL
-      `, [correo, clienteId]);
+        WHERE LOWER(correo) = $1 AND cliente_id <> $2 AND empresa_id = $3 AND fecha_eliminacion IS NULL
+      `, [correo, clienteId, session.empresa_id]);
       if (existing && existing.length > 0) {
         return NextResponse.json({ success: false, message: "Ya existe un cliente registrado con este correo electrónico", field: "correo_electronico" }, { status: 409 });
       }
     }
 
-    // Duplicate identificacion check
+    // Duplicate identificacion check scoped by company
     const cleanIdentificacion = identificacion ? identificacion.replace(/\D/g, "") : null;
     if (cleanIdentificacion) {
       const existingIdent = await query(`
         SELECT cliente_id FROM admin.clientes
         WHERE (identificacion = $1 OR identificacion = $2 OR regexp_replace(identificacion, '[^0-9]', '', 'g') = $2)
-          AND cliente_id <> $3 AND fecha_eliminacion IS NULL
-      `, [identificacion, cleanIdentificacion, clienteId]);
+          AND cliente_id <> $3 
+          AND empresa_id = $4
+          AND fecha_eliminacion IS NULL
+      `, [identificacion, cleanIdentificacion, clienteId, session.empresa_id]);
       if (existingIdent && existingIdent.length > 0) {
         return NextResponse.json({ success: false, message: "Ya existe un cliente registrado con esta Cédula / RNC", field: "identificacion" }, { status: 409 });
       }
@@ -314,8 +337,9 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
         contacto_whatsapp = $15::boolean,
         contacto_email = $16::boolean,
         notas = $17,
-        fecha_modificacion = NOW()
-      WHERE cliente_id = $18::integer AND fecha_eliminacion IS NULL
+        fecha_modificacion = NOW(),
+        usuario_modificacion = $18
+      WHERE cliente_id = $19::integer AND empresa_id = $20::integer AND fecha_eliminacion IS NULL
       RETURNING *
     `;
 
@@ -337,12 +361,14 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
       contacto_whatsapp,
       contacto_email,
       notas || null,
-      clienteId
+      session.usuario_id,
+      clienteId,
+      session.empresa_id
     ];
 
     const result = await query(sql, params);
     if (!result || result.length === 0) {
-      return NextResponse.json({ success: false, message: "No se pudo actualizar el cliente." }, { status: 404 });
+      return NextResponse.json({ success: false, message: "Cliente no encontrado o no pertenece a su empresa." }, { status: 404 });
     }
 
     const r = result[0];
@@ -375,6 +401,16 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
 // DELETE /api/crm/clientes/[id]
 export async function DELETE(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
+    const session = await getWorkshopSession();
+    if (!session || !session.empresa_id) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("CRM", session.usuario_id);
+    if (!perms.puede_eliminar) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para eliminar clientes." }, { status: 403 });
+    }
+
     const { id } = await context.params;
     const clienteId = parseInt(id, 10);
 
@@ -382,7 +418,16 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
       return NextResponse.json({ success: false, message: "ID de cliente inválido." }, { status: 400 });
     }
 
-    // 1. Check if client has assigned bicycles in admin.bicicletas
+    // 1. Verify existence & ownership in company
+    const clientOwnership = await query(`
+      SELECT cliente_id FROM admin.clientes WHERE cliente_id = $1 AND empresa_id = $2 AND fecha_eliminacion IS NULL
+    `, [clienteId, session.empresa_id]);
+
+    if (!clientOwnership || clientOwnership.length === 0) {
+      return NextResponse.json({ success: false, message: "Cliente no encontrado." }, { status: 404 });
+    }
+
+    // 2. Check if client has assigned bicycles in admin.bicicletas
     const bikeCheck = await query(`
       SELECT COUNT(*)::integer AS total FROM admin.bicicletas
       WHERE cliente_id = $1 AND fecha_eliminacion IS NULL
@@ -396,15 +441,28 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
       }, { status: 409 });
     }
 
-    // 2. Perform physical DELETE directly
+    // 3. Check if client has work orders in admin.ordenes_trabajo
+    const otCheck = await query(`
+      SELECT COUNT(*)::integer AS total FROM admin.ordenes_trabajo
+      WHERE cliente_id = $1 AND (activo = true OR activo IS NULL)
+    `, [clienteId]);
+
+    const hasOrders = Number(otCheck[0]?.total || 0) > 0;
+    if (hasOrders) {
+      return NextResponse.json({
+        success: false,
+        message: "No se puede eliminar el cliente porque tiene órdenes de trabajo registradas."
+      }, { status: 409 });
+    }
+
+    // 4. Perform physical DELETE directly
     const deleteSql = `
       DELETE FROM admin.clientes
-      WHERE cliente_id = $1
+      WHERE cliente_id = $1 AND empresa_id = $2
       RETURNING cliente_id
     `;
-    const deleteResult = await query(deleteSql, [clienteId]);
+    const deleteResult = await query(deleteSql, [clienteId, session.empresa_id]);
 
-    // 3. If no rows returned, client does not exist
     if (!deleteResult || deleteResult.length === 0) {
       return NextResponse.json({
         success: false,
@@ -420,16 +478,14 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
   } catch (error: any) {
     console.error("Error in DELETE /api/crm/clientes/[id]:", error);
 
-    // 6. Detect 23503 using exact code check without text includes()
     const errorCode = error?.code || error?.cause?.code;
     if (errorCode === "23503") {
       return NextResponse.json({
         success: false,
-        message: "No se puede eliminar el cliente porque tiene bicicletas asignadas."
+        message: "No se puede eliminar el cliente porque tiene registros asociados en el sistema."
       }, { status: 409 });
     }
 
-    // 5. Any other SQL error returns HTTP 500 without soft-delete fallback
     return NextResponse.json({
       success: false,
       message: "No fue posible eliminar el cliente. Inténtalo nuevamente."

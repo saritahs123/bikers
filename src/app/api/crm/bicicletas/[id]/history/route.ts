@@ -1,14 +1,40 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+
+async function verifyBikeOwnership(bicicletaId: number, empresaId: number) {
+  const rows = await query(`
+    SELECT b.bicicleta_id
+    FROM admin.bicicletas b
+    JOIN admin.clientes c ON b.cliente_id = c.cliente_id
+    WHERE b.bicicleta_id = $1 AND c.empresa_id = $2 AND b.fecha_eliminacion IS NULL
+  `, [bicicletaId, empresaId]);
+  return rows && rows.length > 0;
+}
 
 // GET /api/crm/bicicletas/[id]/history
 export async function GET(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
+    const session = await getWorkshopSession();
+    if (!session || !session.empresa_id) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("BICICLETA", session.usuario_id);
+    if (!perms.puede_ver) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para ver el historial técnico de bicicletas." }, { status: 403 });
+    }
+
     const { id } = await context.params;
     const bicicletaId = parseInt(id, 10);
 
     if (isNaN(bicicletaId)) {
       return NextResponse.json({ error: "ID de bicicleta inválido." }, { status: 400 });
+    }
+
+    const isOwned = await verifyBikeOwnership(bicicletaId, session.empresa_id);
+    if (!isOwned) {
+      return NextResponse.json({ error: "Bicicleta no encontrada." }, { status: 404 });
     }
 
     // 1. Fetch work orders
@@ -143,11 +169,26 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
 // POST /api/crm/bicicletas/[id]/history
 export async function POST(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
+    const session = await getWorkshopSession();
+    if (!session || !session.empresa_id) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("BICICLETA", session.usuario_id);
+    if (!perms.puede_crear && !perms.puede_editar) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para registrar servicios técnicos en bicicletas." }, { status: 403 });
+    }
+
     const { id } = await context.params;
     const bicicletaId = parseInt(id, 10);
 
     if (isNaN(bicicletaId)) {
       return NextResponse.json({ error: "ID de bicicleta inválido." }, { status: 400 });
+    }
+
+    const isOwned = await verifyBikeOwnership(bicicletaId, session.empresa_id);
+    if (!isOwned) {
+      return NextResponse.json({ error: "Bicicleta no encontrada o no pertenece a su empresa." }, { status: 404 });
     }
 
     const body = await req.json();
@@ -179,8 +220,8 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
       await query(`
         UPDATE admin.bicicleta_componentes
         SET estado_componente_id = $2::integer, fecha_modificacion = NOW()
-        WHERE bicicleta_componente_id = $1::integer
-      `, [bicicleta_componente_id, nuevo_estado_componente_id]);
+        WHERE bicicleta_componente_id = $1::integer AND bicicleta_id = $3::integer
+      `, [bicicleta_componente_id, nuevo_estado_componente_id, bicicletaId]);
     } 
     // Multi-Component Mode -> Update components
     else if (modo_registro === "GENERAL_MULTI" && subServicios.length > 0) {
@@ -191,8 +232,8 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
           await query(`
             UPDATE admin.bicicleta_componentes
             SET estado_componente_id = $2::integer, fecha_modificacion = NOW()
-            WHERE bicicleta_componente_id = $1::integer
-          `, [compId, stateId]);
+            WHERE bicicleta_componente_id = $1::integer AND bicicleta_id = $3::integer
+          `, [compId, stateId, bicicletaId]);
         }
       }
     }
@@ -209,7 +250,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
       ? Math.round(Number(healthRows[0].salud)) 
       : 80;
 
-    // Insert Parent Work Order with kilometraje_ingreso
+    // Insert Parent Work Order
     const sql = `
       INSERT INTO admin.ordenes_trabajo (
         orden_trabajo_id, codigo_orden, recepcion_id, cliente_id, bicicleta_id,
@@ -305,6 +346,16 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
 // DELETE /api/crm/bicicletas/[id]/history
 export async function DELETE(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
+    const session = await getWorkshopSession();
+    if (!session || !session.empresa_id) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("BICICLETA", session.usuario_id);
+    if (!perms.puede_eliminar) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para eliminar órdenes de trabajo." }, { status: 403 });
+    }
+
     const { id } = await context.params;
     const bicicletaId = parseInt(id, 10);
     const { searchParams } = new URL(req.url);
@@ -312,6 +363,11 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
 
     if (isNaN(bicicletaId) || !historyIdParam) {
       return NextResponse.json({ error: "ID de bicicleta u orden inválido." }, { status: 400 });
+    }
+
+    const isOwned = await verifyBikeOwnership(bicicletaId, session.empresa_id);
+    if (!isOwned) {
+      return NextResponse.json({ error: "Bicicleta no encontrada o no pertenece a su empresa." }, { status: 404 });
     }
 
     const ordenId = parseInt(historyIdParam, 10);

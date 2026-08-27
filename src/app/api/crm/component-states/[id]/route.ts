@@ -1,9 +1,21 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
 
 // GET /api/crm/component-states/[id]
 export async function GET(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
+    const session = await getWorkshopSession();
+    if (!session || !session.empresa_id) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const permsBici = await getModulePermissions("BICICLETA", session.usuario_id);
+    const permsCrm = await getModulePermissions("CRM", session.usuario_id);
+    if (!permsBici.puede_ver && !permsCrm.puede_ver) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para ver estados de componentes." }, { status: 403 });
+    }
+
     const { id } = await context.params;
     const stateId = parseInt(id, 10);
 
@@ -40,6 +52,16 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
 // PUT /api/crm/component-states/[id]
 export async function PUT(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
+    const session = await getWorkshopSession();
+    if (!session || !session.empresa_id) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("CRM", session.usuario_id);
+    if (!perms.puede_editar) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para modificar estados de componentes." }, { status: 403 });
+    }
+
     const { id } = await context.params;
     const stateId = parseInt(id, 10);
 
@@ -127,11 +149,33 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
 // DELETE /api/crm/component-states/[id]
 export async function DELETE(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
+    const session = await getWorkshopSession();
+    if (!session || !session.empresa_id) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("CRM", session.usuario_id);
+    if (!perms.puede_eliminar) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para eliminar estados de componentes." }, { status: 403 });
+    }
+
     const { id } = await context.params;
     const stateId = parseInt(id, 10);
 
     if (isNaN(stateId)) {
       return NextResponse.json({ error: "ID de estado inválido." }, { status: 400 });
+    }
+
+    // Check if any bicycle component is currently using this state
+    const usageCheck = await query(`
+      SELECT COUNT(*)::int as count FROM admin.bicicleta_componentes
+      WHERE estado_componente_id = $1 AND fecha_eliminacion IS NULL
+    `, [stateId]);
+
+    if (parseInt(usageCheck[0]?.count || "0", 10) > 0) {
+      return NextResponse.json({
+        error: "No se puede eliminar el estado porque está siendo utilizado por componentes de bicicletas."
+      }, { status: 409 });
     }
 
     const sql = `

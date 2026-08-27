@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
 
 const cleanFecha = (val: any) => {
   if (!val) return null;
@@ -11,14 +12,39 @@ const cleanFecha = (val: any) => {
   }
 };
 
+async function verifyBikeOwnership(bicicletaId: number, empresaId: number) {
+  const rows = await query(`
+    SELECT b.bicicleta_id
+    FROM admin.bicicletas b
+    JOIN admin.clientes c ON b.cliente_id = c.cliente_id
+    WHERE b.bicicleta_id = $1 AND c.empresa_id = $2 AND b.fecha_eliminacion IS NULL
+  `, [bicicletaId, empresaId]);
+  return rows && rows.length > 0;
+}
+
 // GET /api/crm/bicicletas/[id]/components
 export async function GET(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
+    const session = await getWorkshopSession();
+    if (!session || !session.empresa_id) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("BICICLETA", session.usuario_id);
+    if (!perms.puede_ver) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para ver componentes de bicicletas." }, { status: 403 });
+    }
+
     const { id } = await context.params;
     const bicicletaId = parseInt(id, 10);
 
     if (isNaN(bicicletaId)) {
       return NextResponse.json({ error: "ID de bicicleta inválido." }, { status: 400 });
+    }
+
+    const isOwned = await verifyBikeOwnership(bicicletaId, session.empresa_id);
+    if (!isOwned) {
+      return NextResponse.json({ error: "Bicicleta no encontrada." }, { status: 404 });
     }
 
     const rows = await query(`
@@ -85,6 +111,16 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
 // POST /api/crm/bicicletas/[id]/components
 export async function POST(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
+    const session = await getWorkshopSession();
+    if (!session || !session.empresa_id) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("BICICLETA", session.usuario_id);
+    if (!perms.puede_crear && !perms.puede_editar) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para agregar componentes a bicicletas." }, { status: 403 });
+    }
+
     const { id } = await context.params;
     const bicicletaId = parseInt(id, 10);
 
@@ -94,6 +130,15 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
         error: "INVALID_BIKE_ID",
         message: "ID de bicicleta inválido."
       }, { status: 400 });
+    }
+
+    const isOwned = await verifyBikeOwnership(bicicletaId, session.empresa_id);
+    if (!isOwned) {
+      return NextResponse.json({
+        success: false,
+        error: "NOT_FOUND",
+        message: "Bicicleta no encontrada o no pertenece a su empresa."
+      }, { status: 404 });
     }
 
     const body = await req.json();
@@ -220,11 +265,26 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
 // PUT /api/crm/bicicletas/[id]/components
 export async function PUT(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
+    const session = await getWorkshopSession();
+    if (!session || !session.empresa_id) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("BICICLETA", session.usuario_id);
+    if (!perms.puede_editar) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para modificar componentes de bicicletas." }, { status: 403 });
+    }
+
     const { id } = await context.params;
     const bicicletaId = parseInt(id, 10);
 
     if (isNaN(bicicletaId)) {
       return NextResponse.json({ error: "ID de bicicleta inválido." }, { status: 400 });
+    }
+
+    const isOwned = await verifyBikeOwnership(bicicletaId, session.empresa_id);
+    if (!isOwned) {
+      return NextResponse.json({ error: "Bicicleta no encontrada o no pertenece a su empresa." }, { status: 404 });
     }
 
     const body = await req.json();
@@ -303,6 +363,16 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
 // DELETE /api/crm/bicicletas/[id]/components
 export async function DELETE(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
+    const session = await getWorkshopSession();
+    if (!session || !session.empresa_id) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("BICICLETA", session.usuario_id);
+    if (!perms.puede_eliminar && !perms.puede_editar) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para eliminar componentes de bicicletas." }, { status: 403 });
+    }
+
     const { id } = await context.params;
     const bicicletaId = parseInt(id, 10);
     const { searchParams } = new URL(req.url);
@@ -310,6 +380,11 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
 
     if (isNaN(bicicletaId) || !componentIdParam) {
       return NextResponse.json({ error: "ID de bicicleta o componente inválido." }, { status: 400 });
+    }
+
+    const isOwned = await verifyBikeOwnership(bicicletaId, session.empresa_id);
+    if (!isOwned) {
+      return NextResponse.json({ error: "Bicicleta no encontrada o no pertenece a su empresa." }, { status: 404 });
     }
 
     const componentId = parseInt(componentIdParam, 10);
