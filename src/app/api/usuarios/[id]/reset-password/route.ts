@@ -172,13 +172,18 @@ export async function POST(
 
     // 12. Register audit log
     const masked = maskEmail(recoveryEmail);
+    const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "127.0.0.1";
+    const userAgent = req.headers.get("user-agent") || "Navegador Web";
+
     await query(
       `INSERT INTO admin.usuario_auditoria
        (auditoria_id, usuario_id, admin_id, fecha_hora, accion, valor_anterior, valor_nuevo, motivo, resultado, direccion_ip, dispositivo)
-       VALUES ((SELECT COALESCE(MAX(auditoria_id), 0) + 1 FROM admin.usuario_auditoria), $1, 1, NOW(), 'RESET_PASSWORD', 'Estado: Anterior', $2, 'Restablecimiento forzado de contraseña por administrador', 'COMPLETADO', '127.0.0.1', 'Navegador Web')`,
+       VALUES ((SELECT COALESCE(MAX(auditoria_id), 0) + 1 FROM admin.usuario_auditoria), $1, 1, NOW(), 'RESET_PASSWORD', 'Estado: Anterior', $2, 'Restablecimiento forzado de contraseña por administrador', 'COMPLETADO', $3, $4)`,
       [
         userId,
-        `Destinatario: ${masked} | Expiración: ${expiresAtISO}`
+        `Destinatario: ${masked} | Expiración: ${expiresAtISO}`,
+        clientIp,
+        userAgent
       ]
     );
 

@@ -539,6 +539,39 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       fecha_ultima_invitacion: updatedRow.fecha_ultima_invitacion ?? null
     } : null;
 
+    // Record real audit log in admin.usuario_auditoria
+    try {
+      const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "127.0.0.1";
+      const userAgent = req.headers.get("user-agent") || "Navegador Web";
+      let auditAction = 'UPDATE_USER';
+      let auditMotivo = 'Actualización de datos del usuario';
+
+      if (body.estado && body.estado !== current.estado) {
+        auditAction = body.estado === 'ACTIVO' ? 'ACTIVATE_USER' : (body.estado === 'INACTIVO' ? 'DEACTIVATE_USER' : 'STATUS_CHANGE');
+        auditMotivo = body.motivo_bloqueo || `Cambio de estado a ${body.estado}`;
+      } else if (body.roleId || body.rol_id) {
+        auditAction = 'ROLE_CHANGE';
+        auditMotivo = 'Actualización de rol y permisos';
+      }
+
+      await query(`
+        INSERT INTO admin.usuario_auditoria 
+        (auditoria_id, usuario_id, admin_id, fecha_hora, accion, valor_anterior, valor_nuevo, motivo, resultado, direccion_ip, dispositivo)
+        VALUES ((SELECT COALESCE(MAX(auditoria_id), 0) + 1 FROM admin.usuario_auditoria), $1, $2, NOW(), $3, $4, $5, $6, 'COMPLETADO', $7, $8)
+      `, [
+        targetUserId,
+        authUserId || 1,
+        auditAction,
+        `Estado: ${current.estado || '—'} | Rol: ${current.rol_principal_id || '—'}`,
+        `Estado: ${updatedRow?.estado || '—'} | Rol: ${updatedRow?.role || '—'}`,
+        auditMotivo,
+        clientIp,
+        userAgent
+      ]);
+    } catch (auditErr) {
+      console.warn("Could not insert usuario_auditoria record:", auditErr);
+    }
+
     return NextResponse.json({
       success: true,
       message: "Usuario actualizado correctamente.",

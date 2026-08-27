@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { 
   Building2, 
   Boxes, 
@@ -30,23 +30,74 @@ export default function CatalogsSecurityView() {
   const [newItemName, setNewItemName] = useState("");
   const [toastMessage, setToastMessage] = useState(null);
 
-  // Mock catalog counters & initial stats
+  // Real catalog counters & live stats
   const [stats, setStats] = useState({
-    empresas: 24,
-    tiposEmpresa: 8,
-    tiposUsuario: 12,
-    departamentos: 15,
-    areas: 42,
-    cargos: 56
+    empresas: 0,
+    tiposEmpresa: 0,
+    tiposUsuario: 0,
+    departamentos: 0,
+    areas: 0,
+    cargos: 0
   });
 
-  const [activityLogs, setActivityLogs] = useState([
-    { id: 1, date: "2026-07-29 14:22", user: "Admin_Rodriguez", catalog: "Empresas", action: "Actualización: Sucursal Norte", status: "COMPLETADO" },
-    { id: 2, date: "2026-07-29 13:05", user: "Sys_Auto_Task", catalog: "Cargos", action: "Sincronización masiva (12 items)", status: "COMPLETADO" },
-    { id: 3, date: "2026-07-29 11:45", user: "User_Manager_HQ", catalog: "Áreas", action: "Nuevo registro: I+D Suspensión", status: "COMPLETADO" },
-    { id: 4, date: "2026-07-29 09:12", user: "Admin_Rodriguez", catalog: "Tipos de Empresa", action: "Baja lógica: Consorcio Temporal", status: "REVERTIDO" },
-    { id: 5, date: "2026-07-29 08:30", user: "Sys_Auto_Task", catalog: "Departamentos", action: "Auditoría de integridad estructural", status: "COMPLETADO" }
-  ]);
+  const [activityLogs, setActivityLogs] = useState([]);
+
+  useEffect(() => {
+    fetchLiveStatsAndActivity();
+  }, []);
+
+  const fetchLiveStatsAndActivity = async () => {
+    try {
+      setLoading(true);
+      const [empRes, tiposEmpRes, tiposUsuRes, depRes, areasRes, cargosRes, auditsRes] = await Promise.allSettled([
+        fetch('/api/empresas').then(r => r.ok ? r.json() : []),
+        fetch('/api/tipos-empresa').then(r => r.ok ? r.json() : []),
+        fetch('/api/tipos-usuario').then(r => r.ok ? r.json() : []),
+        fetch('/api/departamentos').then(r => r.ok ? r.json() : []),
+        fetch('/api/areas').then(r => r.ok ? r.json() : []),
+        fetch('/api/cargos').then(r => r.ok ? r.json() : []),
+        fetch('/api/usuarios/1/auditoria?pageSize=5').then(r => r.ok ? r.json() : { items: [] })
+      ]);
+
+      const getCount = (res) => {
+        if (res.status !== 'fulfilled' || !res.value) return 0;
+        const v = res.value;
+        if (Array.isArray(v)) return v.length;
+        if (Array.isArray(v.data)) return v.data.length;
+        if (Array.isArray(v.items)) return v.items.length;
+        return 0;
+      };
+
+      setStats({
+        empresas: getCount(empRes),
+        tiposEmpresa: getCount(tiposEmpRes),
+        tiposUsuario: getCount(tiposUsuRes),
+        departamentos: getCount(depRes),
+        areas: getCount(areasRes),
+        cargos: getCount(cargosRes)
+      });
+
+      if (auditsRes.status === 'fulfilled' && auditsRes.value) {
+        const auditData = auditsRes.value;
+        const items = Array.isArray(auditData.items) ? auditData.items : (Array.isArray(auditData) ? auditData : []);
+        const mapped = items.map((a, idx) => ({
+          id: a.auditoria_id || a.id || idx,
+          date: a.fecha_hora ? new Date(a.fecha_hora).toLocaleString('es-DO', { dateStyle: 'short', timeStyle: 'short' }) : '—',
+          user: a.admin_nombre || a.nombre || 'Administrador',
+          catalog: a.modulo || 'Seguridad',
+          action: a.accion ? `${a.accion}${a.motivo ? `: ${a.motivo}` : ''}` : 'Actualización',
+          status: a.resultado || 'COMPLETADO'
+        }));
+        setActivityLogs(mapped);
+      } else {
+        setActivityLogs([]);
+      }
+    } catch (err) {
+      console.error('Error loading catalogs stats:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const catalogDefinitions = [
     {
@@ -356,23 +407,31 @@ export default function CatalogsSecurityView() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border text-foreground-secondary">
-              {activityLogs.map((log) => (
-                <tr key={log.id} className="hover:bg-hover transition-colors font-medium">
-                  <td className="px-6 py-3.5 font-mono text-foreground-muted text-[11px]">{log.date}</td>
-                  <td className="px-6 py-3.5 font-bold text-foreground">{log.user}</td>
-                  <td className="px-6 py-3.5 font-semibold text-primary">{log.catalog}</td>
-                  <td className="px-6 py-3.5 text-foreground-secondary">{log.action}</td>
-                  <td className="px-6 py-3.5 text-right">
-                    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9.5px] font-mono font-bold border ${
-                      log.status === "COMPLETADO" 
-                        ? "bg-success/15 text-success border-success/30"
-                        : "bg-error/15 text-error border-error/30"
-                    }`}>
-                      {log.status}
-                    </span>
+              {activityLogs.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-8 text-center text-foreground-muted font-sans text-xs italic">
+                    No hay registros de actividad reciente en los catálogos.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                activityLogs.map((log) => (
+                  <tr key={log.id} className="hover:bg-hover transition-colors font-medium">
+                    <td className="px-6 py-3.5 font-mono text-foreground-muted text-[11px]">{log.date}</td>
+                    <td className="px-6 py-3.5 font-bold text-foreground">{log.user}</td>
+                    <td className="px-6 py-3.5 font-semibold text-primary">{log.catalog}</td>
+                    <td className="px-6 py-3.5 text-foreground-secondary">{log.action}</td>
+                    <td className="px-6 py-3.5 text-right">
+                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9.5px] font-mono font-bold border ${
+                        log.status === "COMPLETADO" 
+                          ? "bg-success/15 text-success border-success/30"
+                          : "bg-error/15 text-error border-error/30"
+                      }`}>
+                        {log.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

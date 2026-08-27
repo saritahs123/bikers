@@ -236,7 +236,9 @@ export async function POST(
 
     const userId = authResult.targetUserId;
     const adminId = authResult.authUserId;
-    const body = await req.json();
+    const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "127.0.0.1";
+    const userAgent = req.headers.get("user-agent") || "Navegador Web";
+    const body = await req.json().catch(() => ({}));
 
     const { 
       accion = 'Modificación de Perfil', 
@@ -244,8 +246,8 @@ export async function POST(
       valor_nuevo = '—', 
       motivo = 'Actualización administrativa', 
       resultado = 'EXITOSO', 
-      direccion_ip = '127.0.0.1', 
-      dispositivo = 'Navegador Web' 
+      direccion_ip = clientIp, 
+      dispositivo = userAgent 
     } = body;
 
     await query(`

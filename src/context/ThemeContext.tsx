@@ -29,9 +29,22 @@ function applyThemeToDocument(theme: Theme) {
     root.classList.add("light");
     root.classList.remove("dark");
   }
+
+  // Keep cookie in sync for Server-Side rendering on next requests / F5 / tabs
+  try {
+    document.cookie = `${STORAGE_KEY}=${theme}; path=/; max-age=31536000; SameSite=Lax`;
+  } catch {
+    // Cookie restricted
+  }
 }
 
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
+export function ThemeProvider({ 
+  children, 
+  initialTheme = DEFAULT_THEME 
+}: { 
+  children: React.ReactNode;
+  initialTheme?: Theme;
+}) {
   const [theme, setThemeState] = useState<Theme>(() => {
     if (typeof window !== "undefined") {
       try {
@@ -40,13 +53,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
           return saved;
         }
       } catch {
-        // Fallback to default
+        // Fallback to initialTheme
       }
     }
-    return DEFAULT_THEME;
+    return initialTheme;
   });
 
-  // Keep DOM and localStorage synchronized
+  // Keep DOM, localStorage and cookie synchronized
   useEffect(() => {
     applyThemeToDocument(theme);
     try {

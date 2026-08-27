@@ -11,9 +11,6 @@ import {
 } from 'lucide-react';
 import { validateRNC, validatePhoneDR, formatPhoneDR, validateEmail } from '@/lib/validations';
 import { usersService } from '@/services/usersService';
-import { catalogosService } from '@/services/catalogosService';
-import { INITIAL_USERS_DATA, USER_ROLES, DATA_SCOPES, USER_TYPES, INITIAL_ACTIVITY_DATA, INITIAL_AUDIT_DATA, PREDEFINED_JOB_TITLES, PREDEFINED_DEPARTMENTS, PREDEFINED_AGENCIES, INITIAL_DEPARTMENTS_DATA, INITIAL_AREAS_DATA } from '@/config/catalogs/usersCatalog';
-import { INITIAL_COMPANIES_DATA } from '@/config/catalogs/companiesCatalog';
 import SecurityConfirmDialog from '@/components/security/SecurityConfirmDialog';
 
 const ALL_ACTIONS = [
@@ -89,8 +86,8 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
   const [data, setData] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [profileLoadError, setProfileLoadError] = useState(null);
-  const [activities, setActivities] = useState(() => (typeof window !== 'undefined' ? window.activitiesData : null) || INITIAL_ACTIVITY_DATA);
-  const [audits, setAudits] = useState(() => (typeof window !== 'undefined' ? window.auditData : null) || INITIAL_AUDIT_DATA);
+  const [activities, setActivities] = useState([]);
+  const [audits, setAudits] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [areas, setAreas] = useState([]);
@@ -756,21 +753,23 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
   const filteredJobTitles = useMemo(() => {
     const query = (wizardData?.job_title || '').toLowerCase();
-    if (!query) return PREDEFINED_JOB_TITLES;
-    return PREDEFINED_JOB_TITLES.filter(title => title.toLowerCase().includes(query));
-  }, [wizardData?.job_title]);
+    const cargoNames = (cargos || []).map(c => c.nombre || c.name || '').filter(Boolean);
+    if (!query) return cargoNames;
+    return cargoNames.filter(title => title.toLowerCase().includes(query));
+  }, [wizardData?.job_title, cargos]);
 
   const filteredUserTypes = useMemo(() => {
     const query = (wizardData?.user_type || '').toLowerCase();
     if (!query) return userTypes;
-    return userTypes.filter(type => type.name.toLowerCase().includes(query));
+    return (userTypes || []).filter(type => (type.nombre || type.name || '').toLowerCase().includes(query));
   }, [wizardData?.user_type, userTypes]);
 
   const filteredDepartments = useMemo(() => {
     const query = (wizardData?.department || '').toLowerCase();
-    if (!query) return PREDEFINED_DEPARTMENTS;
-    return PREDEFINED_DEPARTMENTS.filter(dept => dept.toLowerCase().includes(query));
-  }, [wizardData?.department]);
+    const deptNames = (departments || []).map(d => d.nombre || d.name || '').filter(Boolean);
+    if (!query) return deptNames;
+    return deptNames.filter(dept => dept.toLowerCase().includes(query));
+  }, [wizardData?.department, departments]);
 
   const handleViewDetail = async (item, tab = 'resumen') => {
     const targetTab = tab === 'activacion' ? 'resumen' : tab;
@@ -931,43 +930,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
   const syncData = (newData) => {
     setData(newData);
-  };
-
-  const syncAudits = (newAudits) => {
-    setAudits(newAudits);
-    if (typeof window !== 'undefined') window.auditData = newAudits;
-  };
-
-  const addAuditLog = (userId, action, entity, before, after, reason) => {
-    const newLog = {
-      id: `AUD-NEW-${Date.now()}`,
-      user_id: userId,
-      action,
-      entity,
-      before_value: before,
-      after_value: after,
-      performed_by: 'Admin',
-      performed_at: new Date().toISOString(),
-      reason: reason || 'Acción administrativa ordinaria',
-      ip_address: '186.6.14.99',
-      result: 'Exitoso'
-    };
-    const updated = [newLog, ...audits];
-    syncAudits(updated);
-  };
-
-  const addActivityLog = (userId, event, desc) => {
-    const newAct = {
-      id: `ACT-NEW-${Date.now()}`,
-      user_id: userId,
-      event,
-      desc,
-      timestamp: new Date().toISOString(),
-      ip: '186.6.14.99'
-    };
-    const updated = [newAct, ...activities];
-    setActivities(updated);
-    if (typeof window !== 'undefined') window.activitiesData = updated;
   };
 
   // Filters matching logic
@@ -2849,13 +2811,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     (firstLoginFilter !== 'Todos' ? 1 : 0);
 
   // Auto-calculated variables for steps
-
-  // Territories Mock DB
-  const DOMINICAN_REGIONS = ['Metropolitana', 'Norte (Cibao)', 'Sur', 'Este'];
-  const DOMINICAN_PROVINCES = ['Santo Domingo', 'Distrito Nacional', 'Santiago', 'La Altagracia', 'San Cristóbal'];
-  const DOMINICAN_MUNICIPIOS = ['Santo Domingo Este', 'Santo Domingo Oeste', 'Santiago de los Caballeros', 'Higüey', 'San Cristóbal', 'Distrito Nacional'];
-  const DOMINICAN_DISTRITOS_MUNICIPALES = ['Hato Nuevo', 'San Luis', 'La Caleta', 'Pantoja', 'Hato Damas', 'Palmarejo-Villa Linda'];
-  const DOMINICAN_SECTORES = ['Piantini', 'Naco', 'Bella Vista', 'Gazcue', 'Los Mina', 'Gurabo', 'Pueblo Nuevo'];
 
   const renderDropdownItems = (item) => {
     const accessMethod = item.activation?.access_method || 'EMAIL';
