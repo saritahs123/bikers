@@ -28,6 +28,8 @@ export function parseAndValidateUserId(paramId: string): number | null {
  * - Permission Matrix Check (SEGURIDAD module with canView: puede_ver OR puede_editar) across effective roles (rol_principal_id UNION usuario_rol_adicional)
  * - Company Scope Check (HTTP 403 if users belong to different non-null companies)
  */
+import { validateAndTouchSession } from "@/lib/sessionLifecycle";
+
 export async function authorizeUserAccess(paramId: string): Promise<AuthResult> {
   const targetUserId = parseAndValidateUserId(paramId);
   if (targetUserId === null) {
@@ -51,26 +53,29 @@ export async function authorizeUserAccess(paramId: string): Promise<AuthResult> 
     };
   }
 
-  const sessionRows = await query<{ usuario_id: number; empresa_id: number | null }>(
-    `SELECT s.usuario_id, u.empresa_id
-     FROM admin.usuario_sesion s
-     JOIN admin.usuario u ON s.usuario_id = u.usuario_id
-     WHERE s.token_identificador = $1 AND s.estado = 'ACTIVA'
-     LIMIT 1`,
-    [sessionToken]
-  );
-
-  if (!sessionRows || sessionRows.length === 0) {
+  const validation = await validateAndTouchSession(sessionToken);
+  if (!validation.valid) {
+    const errorMap: Record<string, string> = {
+      REVOKED: "Su sesión fue revocada. Por favor, vuelva a iniciar sesión.",
+      CLOSED: "La sesión ha sido cerrada.",
+      EXPIRED: "La sesión ha expirado por límite de tiempo.",
+      NOT_FOUND: "Sesión inválida o expirada."
+    };
     return {
       success: false,
       status: 401,
-      error: "UNAUTHORIZED",
-      message: "Sesión inválida o expirada."
+      error: validation.reason === "REVOKED" ? "SESSION_REVOKED" : (validation.reason === "EXPIRED" ? "SESSION_EXPIRED" : "UNAUTHORIZED"),
+      message: errorMap[validation.reason] || "Sesión inválida o expirada."
     };
   }
 
-  const authUserId = sessionRows[0].usuario_id;
-  const authUserCompanyId = sessionRows[0].empresa_id;
+  const authUserId = validation.userId;
+
+  const authUserRows = await query<{ empresa_id: number | null }>(
+    `SELECT empresa_id FROM admin.usuario WHERE usuario_id = $1 LIMIT 1`,
+    [authUserId]
+  );
+  const authUserCompanyId = authUserRows?.[0]?.empresa_id ?? null;
 
   // 1. Self profile access -> Always allowed
   if (targetUserId === authUserId) {
@@ -170,26 +175,29 @@ export async function authorizeUserUpdate(paramId: string): Promise<AuthUpdateRe
     };
   }
 
-  const sessionRows = await query<{ usuario_id: number; empresa_id: number | null }>(
-    `SELECT s.usuario_id, u.empresa_id
-     FROM admin.usuario_sesion s
-     JOIN admin.usuario u ON s.usuario_id = u.usuario_id
-     WHERE s.token_identificador = $1 AND s.estado = 'ACTIVA'
-     LIMIT 1`,
-    [sessionToken]
-  );
-
-  if (!sessionRows || sessionRows.length === 0) {
+  const validation = await validateAndTouchSession(sessionToken);
+  if (!validation.valid) {
+    const errorMap: Record<string, string> = {
+      REVOKED: "Su sesión fue revocada. Por favor, vuelva a iniciar sesión.",
+      CLOSED: "La sesión ha sido cerrada.",
+      EXPIRED: "La sesión ha expirado por límite de tiempo.",
+      NOT_FOUND: "Sesión inválida o expirada."
+    };
     return {
       success: false,
       status: 401,
-      error: "UNAUTHORIZED",
-      message: "Sesión inválida o expirada."
+      error: validation.reason === "REVOKED" ? "SESSION_REVOKED" : (validation.reason === "EXPIRED" ? "SESSION_EXPIRED" : "UNAUTHORIZED"),
+      message: errorMap[validation.reason] || "Sesión inválida o expirada."
     };
   }
 
-  const authUserId = sessionRows[0].usuario_id;
-  const authUserCompanyId = sessionRows[0].empresa_id;
+  const authUserId = validation.userId;
+
+  const authUserRows = await query<{ empresa_id: number | null }>(
+    `SELECT empresa_id FROM admin.usuario WHERE usuario_id = $1 LIMIT 1`,
+    [authUserId]
+  );
+  const authUserCompanyId = authUserRows?.[0]?.empresa_id ?? null;
 
   const targetUserRows = await query<{ usuario_id: number; empresa_id: number | null }>(
     `SELECT usuario_id, empresa_id FROM admin.usuario WHERE usuario_id = $1`,

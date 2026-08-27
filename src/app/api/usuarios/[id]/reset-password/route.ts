@@ -4,6 +4,7 @@ import { generateSecurePassword, hashPassword, maskEmail } from "@/lib/auth";
 import { sendResetPasswordEmail } from "@/lib/email";
 import { validateEmail, validatePasswordPolicy } from "@/lib/validations";
 import { authorizeUserUpdate } from "@/lib/userAuth";
+import { recordUserActivity, recordUserAudit } from "@/lib/auditLogger";
 
 const parseNum = (val: any) => {
   if (val === null || val === undefined || val === '') return null;
@@ -55,8 +56,6 @@ export async function POST(
 
     const body = await req.json().catch(() => ({}));
     const mode = body.mode === 'manual' ? 'manual' : (body.newPassword ? 'manual' : 'automatic');
-    const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "127.0.0.1";
-    const userAgent = req.headers.get("user-agent") || "Navegador Web";
 
     // ----------------------------------------------------
     // MODE A: MANUAL PASSWORD RESET BY ADMINISTRATOR
@@ -118,12 +117,26 @@ export async function POST(
       }
 
       // Register audit in admin.usuario_auditoria with authentic admin_id
-      await query(
-        `INSERT INTO admin.usuario_auditoria
-         (auditoria_id, usuario_id, admin_id, fecha_hora, accion, valor_anterior, valor_nuevo, motivo, resultado, direccion_ip, dispositivo)
-         VALUES ((SELECT COALESCE(MAX(auditoria_id), 0) + 1 FROM admin.usuario_auditoria), $1, $2, NOW(), 'RESET_PASSWORD_MANUAL', 'Clave anterior modificada', 'Nueva clave establecida manualmente', 'Restablecimiento manual de credenciales por administrador', 'COMPLETADO', $3, $4)`,
-        [targetUserId, authUserId, clientIp, userAgent]
-      );
+      await recordUserAudit({
+        userId: targetUserId,
+        adminId: authUserId,
+        accion: 'PASSWORD_RESET_MANUAL',
+        valorAnterior: 'Credencial de acceso previa',
+        valorNuevo: 'Credencial restablecida manualmente',
+        motivo: 'Restablecimiento manual de credenciales por administrador',
+        resultado: 'COMPLETADO',
+        req
+      });
+
+      // Register activity in admin.usuario_actividad
+      await recordUserActivity({
+        userId: targetUserId,
+        modulo: 'Seguridad',
+        evento: 'RESET_PASSWORD_MANUAL',
+        descripcion: 'Restablecimiento manual de contraseña por administrador',
+        resultado: 'Exitoso',
+        req
+      });
 
       return NextResponse.json({
         success: true,
@@ -221,19 +234,26 @@ export async function POST(
 
     const masked = maskEmail(recoveryEmail);
 
-    // Register audit in admin.usuario_auditoria with authentic admin_id
-    await query(
-      `INSERT INTO admin.usuario_auditoria
-       (auditoria_id, usuario_id, admin_id, fecha_hora, accion, valor_anterior, valor_nuevo, motivo, resultado, direccion_ip, dispositivo)
-       VALUES ((SELECT COALESCE(MAX(auditoria_id), 0) + 1 FROM admin.usuario_auditoria), $1, $2, NOW(), 'RESET_PASSWORD', 'Estado: Anterior', $3, 'Restablecimiento forzado de contraseña por administrador', 'COMPLETADO', $4, $5)`,
-      [
-        targetUserId,
-        authUserId,
-        `Destinatario: ${masked} | Expiración: ${expiresAtISO}`,
-        clientIp,
-        userAgent
-      ]
-    );
+    // Register audit and activity with authentic admin_id
+    await recordUserAudit({
+      userId: targetUserId,
+      adminId: authUserId,
+      accion: 'PASSWORD_RESET_EMAIL',
+      valorAnterior: 'Credencial previa',
+      valorNuevo: `Contraseña temporal enviada a ${masked}`,
+      motivo: 'Restablecimiento de contraseña por correo electrónico',
+      resultado: 'COMPLETADO',
+      req
+    });
+
+    await recordUserActivity({
+      userId: targetUserId,
+      modulo: 'Seguridad',
+      evento: 'RESET_PASSWORD_EMAIL',
+      descripcion: `Envío de contraseña temporal por correo a ${masked}`,
+      resultado: 'Exitoso',
+      req
+    });
 
     return NextResponse.json({
       success: true,

@@ -3,6 +3,7 @@ import { query } from "@/lib/db";
 import { generateSecurePassword, hashPassword, maskEmail } from "@/lib/auth";
 import { sendResetPasswordEmail } from "@/lib/email";
 import { validateEmail } from "@/lib/validations";
+import { recordUserActivity, recordUserAudit } from "@/lib/auditLogger";
 
 const parseNum = (val: any) => {
   if (val === null || val === undefined || val === '') return null;
@@ -318,17 +319,30 @@ export async function POST(req: Request) {
       }
     }
 
-    // 8. Register audit log
+    // 8. Register audit log and user activity
     try {
       const masked = maskEmail(email);
-      await query(
-        `INSERT INTO admin.usuario_auditoria
-         (auditoria_id, usuario_id, admin_id, fecha_hora, accion, valor_anterior, valor_nuevo, motivo, resultado, direccion_ip, dispositivo)
-         VALUES ((SELECT COALESCE(MAX(auditoria_id), 0) + 1 FROM admin.usuario_auditoria), $1, 1, NOW(), 'CREAR_USUARIO', 'Sin registro previo', $2, 'Creación de nuevo usuario desde asistente IAM', 'COMPLETADO', '127.0.0.1', 'Navegador Web')`,
-        [nextUserId, `Email: ${masked} | Empresa: ${companyId} | Rol: ${rolId}`]
-      );
+      await recordUserAudit({
+        userId: nextUserId,
+        adminId: null,
+        accion: 'CREATE_USER',
+        valorAnterior: 'Sin registro previo',
+        valorNuevo: `Email: ${masked} | Empresa: ${companyId} | Rol: ${rolId}`,
+        motivo: 'Creación de nuevo usuario desde asistente IAM',
+        resultado: 'COMPLETADO',
+        req
+      });
+
+      await recordUserActivity({
+        userId: nextUserId,
+        modulo: 'Seguridad',
+        evento: 'CREAR_USUARIO',
+        descripcion: `Creación de cuenta para ${firstName} ${lastName}`,
+        resultado: 'Exitoso',
+        req
+      });
     } catch (e) {
-      console.warn("Could not insert audit log:", e);
+      console.warn("Could not insert audit/activity log:", e);
     }
 
     return NextResponse.json({

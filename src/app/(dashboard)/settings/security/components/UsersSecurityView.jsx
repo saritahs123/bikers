@@ -2265,6 +2265,16 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
   };
 
   const [realUserActivity, setRealUserActivity] = useState([]);
+  const [activityTotalRecords, setActivityTotalRecords] = useState(0);
+  const [activityTotalPages, setActivityTotalPages] = useState(1);
+  const [activitySummaryStats, setActivitySummaryStats] = useState({
+    total_eventos: 0,
+    eventos_hoy: 0,
+    eventos_7dias: 0,
+    eventos_error: 0,
+    eventos_exito: 0
+  });
+  const [activityAvailableModules, setActivityAvailableModules] = useState([]);
   const [isLoadingActivity, setIsLoadingActivity] = useState(false);
   const [sortConfigActividad, setSortConfigActividad] = useState({ key: 'timestamp', direction: 'desc' });
   const [selectedActivityDetail, setSelectedActivityDetail] = useState(null);
@@ -2294,17 +2304,43 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     setSortConfigActividad({ key, direction });
   };
 
-  const fetchUserActivity = async (userId) => {
+  const fetchUserActivity = async (userId, customParams = {}) => {
+    if (!userId) return;
     setIsLoadingActivity(true);
     try {
       if (typeof usersService?.getUserActivity === 'function') {
-        const data = await usersService.getUserActivity(userId);
-        setRealUserActivity(data || []);
+        const queryParams = {
+          page: customParams.page !== undefined ? customParams.page : activityCurrentPage,
+          pageSize: customParams.pageSize !== undefined ? customParams.pageSize : activityPageSize,
+          fechaDesde: customParams.fechaDesde !== undefined ? customParams.fechaDesde : activityDateFrom,
+          fechaHasta: customParams.fechaHasta !== undefined ? customParams.fechaHasta : activityDateTo,
+          modulo: customParams.modulo !== undefined ? customParams.modulo : activityModuleFilter,
+          evento: customParams.evento !== undefined ? customParams.evento : activityActionTypeFilter,
+          resultado: customParams.resultado !== undefined ? customParams.resultado : activityResultFilter,
+          search: customParams.search !== undefined ? customParams.search : activitySearchText
+        };
+        const res = await usersService.getUserActivity(userId, queryParams);
+        if (res && Array.isArray(res.items)) {
+          setRealUserActivity(res.items);
+          setActivityTotalRecords(res.total || 0);
+          setActivityTotalPages(res.totalPages || 1);
+          if (res.summaryStats) setActivitySummaryStats(res.summaryStats);
+          if (Array.isArray(res.availableModules)) setActivityAvailableModules(res.availableModules);
+        } else if (Array.isArray(res)) {
+          setRealUserActivity(res);
+          setActivityTotalRecords(res.length);
+          setActivityTotalPages(1);
+        } else {
+          setRealUserActivity([]);
+          setActivityTotalRecords(0);
+          setActivityTotalPages(1);
+        }
       } else {
         setRealUserActivity([]);
       }
     } catch (error) {
       console.error('Error fetching activity:', error);
+      setRealUserActivity([]);
     } finally {
       setIsLoadingActivity(false);
     }
@@ -2402,7 +2438,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     if (activeTab360 === 'actividad' && detailUser?.id) {
       fetchUserActivity(detailUser.id);
     }
-  }, [activeTab360, detailUser?.id]);
+  }, [activeTab360, detailUser?.id, activityCurrentPage, activityPageSize, activityModuleFilter, activityResultFilter, activityActionTypeFilter, activityDateFrom, activityDateTo]);
 
   const [realUserAudits, setRealUserAudits] = useState([]);
   const [auditTotalRecords, setAuditTotalRecords] = useState(0);
@@ -4572,89 +4608,21 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               {(() => {
                 const userActs = realUserActivity || [];
 
-                // Metrics Calculation
-                const totalCount = userActs.length;
-                const now = new Date();
-                const todayStr = now.toISOString().split('T')[0];
-                const sevenDaysAgoMs = now.getTime() - (7 * 24 * 60 * 60 * 1000);
-                const thirtyDaysAgoMs = now.getTime() - (30 * 24 * 60 * 60 * 1000);
-
-                let todayCount = 0;
-                let last7DaysCount = 0;
-                let last30DaysCount = 0;
-                let errorCount = 0;
-                let successCount = 0;
-
-                userActs.forEach(act => {
-                  const actTime = act.timestamp || act.fecha_hora ? new Date(act.timestamp || act.fecha_hora).getTime() : 0;
-                  const actDateStr = act.timestamp || act.fecha_hora ? new Date(act.timestamp || act.fecha_hora).toISOString().split('T')[0] : '';
-
-                  if (actDateStr === todayStr) todayCount++;
-                  if (actTime >= sevenDaysAgoMs) last7DaysCount++;
-                  if (actTime >= thirtyDaysAgoMs) last30DaysCount++;
-
-                  const res = String(act.resultado || act.result || 'Exitoso').toUpperCase();
-                  if (res.includes('ERROR') || res.includes('FALLID') || res.includes('ADVERT') || res.includes('FAIL') || res.includes('WARN')) {
-                    errorCount++;
-                  } else {
-                    successCount++;
-                  }
-                });
+                // Metrics Calculation from server stats or local list
+                const todayCount = activitySummaryStats?.eventos_hoy ?? userActs.filter(act => {
+                  const actDateStr = (act.timestamp || act.fecha_hora) ? new Date(act.timestamp || act.fecha_hora).toISOString().split('T')[0] : '';
+                  return actDateStr === new Date().toISOString().split('T')[0];
+                }).length;
+                const last7DaysCount = activitySummaryStats?.eventos_7dias ?? userActs.length;
+                const errorCount = activitySummaryStats?.eventos_error ?? 0;
+                const successCount = activitySummaryStats?.eventos_exito ?? userActs.length;
 
                 // Unique Modules for filter
-                const existingModules = Array.from(new Set(userActs.map(a => a.modulo || a.module).filter(Boolean)));
-                const defaultModules = ['Todos', 'CRM', 'Seguridad', 'Inventario', 'Compras', 'Facturación', 'Taller', 'Configuración', 'Portal Cliente', 'Reportes', 'Catálogos'];
-                const allModulesList = Array.from(new Set([...defaultModules, ...existingModules]));
-
-                // Filtering & Search
-                const filteredActs = userActs.filter(act => {
-                  // Search
-                  const term = activitySearchText.trim().toLowerCase();
-                  if (term) {
-                    const matchesTerm = 
-                      (act.evento || act.event || '').toLowerCase().includes(term) ||
-                      (act.descripcion || act.desc || '').toLowerCase().includes(term) ||
-                      (act.modulo || act.module || '').toLowerCase().includes(term) ||
-                      (act.direccion_ip || act.ip || '').toLowerCase().includes(term) ||
-                      (act.dispositivo || act.device || '').toLowerCase().includes(term) ||
-                      (act.resultado || act.result || '').toLowerCase().includes(term);
-                    if (!matchesTerm) return false;
-                  }
-
-                  // Date range
-                  if (activityDateFrom) {
-                    const actDate = (act.timestamp || act.fecha_hora) ? new Date(act.timestamp || act.fecha_hora).toISOString().split('T')[0] : '';
-                    if (actDate < activityDateFrom) return false;
-                  }
-                  if (activityDateTo) {
-                    const actDate = (act.timestamp || act.fecha_hora) ? new Date(act.timestamp || act.fecha_hora).toISOString().split('T')[0] : '';
-                    if (actDate > activityDateTo) return false;
-                  }
-
-                  // Module filter
-                  if (activityModuleFilter !== 'Todos') {
-                    const mod = (act.modulo || act.module || '').toLowerCase();
-                    if (mod !== activityModuleFilter.toLowerCase()) return false;
-                  }
-
-                  // Result filter
-                  if (activityResultFilter !== 'Todos') {
-                    const res = String(act.resultado || act.result || '').toLowerCase();
-                    const target = activityResultFilter.toLowerCase();
-                    if (!res.includes(target) && !target.includes(res)) return false;
-                  }
-
-                  // Action Type filter
-                  if (activityActionTypeFilter !== 'Todos') {
-                    const actType = (act.tipo_accion || act.evento || act.event || '').toLowerCase();
-                    if (!actType.includes(activityActionTypeFilter.toLowerCase())) return false;
-                  }
-
-                  return true;
-                });
+                const defaultModules = ['Todos', 'Seguridad', 'CRM', 'Taller', 'Inventario', 'Compras', 'Facturación', 'Configuración', 'Reportes', 'Catálogos'];
+                const allModulesList = Array.from(new Set([...defaultModules, ...(activityAvailableModules || [])]));
 
                 // Sorting
-                const sortedActs = [...filteredActs].sort((a, b) => {
+                const sortedActs = [...userActs].sort((a, b) => {
                   const key = sortConfigActividad.key;
                   let aVal = a[key] || '';
                   let bVal = b[key] || '';
@@ -4667,10 +4635,10 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                   return 0;
                 });
 
-                // Pagination
-                const totalPages = Math.ceil(sortedActs.length / activityPageSize) || 1;
-                const currentPage = Math.min(activityCurrentPage, totalPages);
-                const paginatedActs = sortedActs.slice((currentPage - 1) * activityPageSize, currentPage * activityPageSize);
+                const totalPages = activityTotalPages || 1;
+                const currentPage = activityCurrentPage || 1;
+                const totalRecords = activityTotalRecords || sortedActs.length;
+                const paginatedActs = sortedActs;
 
                 return (
                   <>
@@ -4797,38 +4765,26 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                             <option value="Todos">Todos los resultados</option>
                             <option value="Exitoso">Exitoso (Verde)</option>
                             <option value="Advertencia">Advertencia (Amarillo)</option>
-                            <option value="Error">Error (Rojo)</option>
-                            <option value="Cancelado">Cancelado (Gris)</option>
-                            <option value="Información">Información (Azul)</option>
+                            <option value="Fallido">Fallido / Error (Rojo)</option>
+                            <option value="Denegado">Denegado</option>
                           </select>
                         </div>
 
-                        {/* Tipo de Acción */}
+                        {/* Evento / Acción */}
                         <div>
-                          <label className="text-[10px] text-foreground-muted font-bold uppercase tracking-wider block mb-1">Tipo de Acción</label>
+                          <label className="text-[10px] text-foreground-muted font-bold uppercase tracking-wider block mb-1">Evento</label>
                           <select
                             value={activityActionTypeFilter}
                             onChange={(e) => { setActivityActionTypeFilter(e.target.value); setActivityCurrentPage(1); }}
                             className="w-full bg-input border border-border rounded-xl px-3 py-1.5 text-foreground-secondary focus:outline-none focus:border-primary"
                           >
-                            <option value="Todos">Todas las acciones</option>
-                            <option value="Login">Login</option>
-                            <option value="Logout">Logout</option>
-                            <option value="Crear">Crear</option>
-                            <option value="Editar">Editar</option>
-                            <option value="Eliminar">Eliminar</option>
-                            <option value="Consultar">Consultar</option>
-                            <option value="Exportar">Exportar</option>
-                            <option value="Importar">Importar</option>
-                            <option value="Cambiar contraseña">Cambiar contraseña</option>
-                            <option value="Reset Password">Reset Password</option>
-                            <option value="Enviar Invitación">Enviar Invitación</option>
-                            <option value="Revocar Sesión">Revocar Sesión</option>
-                            <option value="Asignar Rol">Asignar Rol</option>
-                            <option value="Actualizar Permisos">Actualizar Permisos</option>
-                            <option value="Carga de Archivo">Carga de Archivo</option>
-                            <option value="Impresión">Impresión</option>
-                            <option value="Otros">Otros</option>
+                            <option value="Todos">Todos los eventos</option>
+                            <option value="LOGIN">LOGIN</option>
+                            <option value="LOGOUT">LOGOUT</option>
+                            <option value="EDITAR_USUARIO">EDITAR_USUARIO</option>
+                            <option value="RESET_PASSWORD_MANUAL">RESET_PASSWORD_MANUAL</option>
+                            <option value="REVOCAR_SESION">REVOCAR_SESION</option>
+                            <option value="REVOCAR_TODAS_SESIONES">REVOCAR_TODAS_SESIONES</option>
                           </select>
                         </div>
 
@@ -4895,11 +4851,11 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                             </thead>
                             <tbody className="divide-y divide-[#2d3748]">
                               {paginatedActs.map(act => {
-                                const resUpper = String(act.resultado || act.result || 'EXÍTO').toUpperCase();
+                                const resUpper = String(act.resultado || act.result || '').toUpperCase();
                                 let resultBadge = 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30';
                                 if (resUpper.includes('ERROR') || resUpper.includes('FALLID')) resultBadge = 'bg-rose-500/15 text-rose-400 border-rose-500/30';
                                 else if (resUpper.includes('ADVERT') || resUpper.includes('WARN')) resultBadge = 'bg-amber-500/15 text-amber-400 border-amber-500/30';
-                                else if (resUpper.includes('CANCEL')) resultBadge = 'bg-zinc-800 text-zinc-400 border-zinc-700';
+                                else if (resUpper.includes('CANCEL') || resUpper.includes('DENEG')) resultBadge = 'bg-zinc-800 text-zinc-400 border-zinc-700';
                                 else if (resUpper.includes('INFO')) resultBadge = 'bg-sky-500/15 text-sky-400 border-sky-500/30';
 
                                 return (
@@ -4913,29 +4869,29 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                                     </td>
                                     <td className="py-3.5 px-4 whitespace-nowrap">
                                       <span className="font-bold text-foreground text-xs block">
-                                        {act.evento || act.event || 'Actividad'}
+                                        {act.evento || act.event || '—'}
                                       </span>
                                     </td>
                                     <td className="py-3.5 px-4 max-w-xs">
                                       <span className="text-foreground-secondary text-xs block truncate" title={act.descripcion || act.desc}>
-                                        {act.descripcion || act.desc || 'Sin descripción'}
+                                        {act.descripcion || act.desc || '—'}
                                       </span>
                                     </td>
                                     <td className="py-3.5 px-4 whitespace-nowrap">
                                       <span className="px-2.5 py-1 rounded-lg bg-input border border-border text-primary font-mono text-[10px] font-bold uppercase">
-                                        {act.modulo || act.module || 'Sistema'}
+                                        {act.modulo || act.module || '—'}
                                       </span>
                                     </td>
                                     <td className="py-3.5 px-4 whitespace-nowrap">
                                       <span className={`px-2.5 py-1 rounded-lg font-mono text-[10px] font-bold uppercase tracking-wider border ${resultBadge}`}>
-                                        ● {act.resultado || act.result || 'Exitoso'}
+                                        ● {act.resultado || act.result || '—'}
                                       </span>
                                     </td>
                                     <td className="py-3.5 px-4 font-mono text-xs text-primary select-all whitespace-nowrap">
-                                      {act.direccion_ip || act.ip || '127.0.0.1'}
+                                      {act.direccion_ip || act.ip || '—'}
                                     </td>
                                     <td className="py-3.5 px-4 text-xs text-foreground-secondary whitespace-nowrap max-w-[150px] truncate" title={act.dispositivo || act.device}>
-                                      {act.dispositivo || act.device || 'Navegador Web'}
+                                      {act.dispositivo || act.device || 'No registrado'}
                                     </td>
                                     <td className="py-3.5 px-4 font-mono text-xs text-foreground-muted whitespace-nowrap">
                                       {act.duracion_ms ? `${act.duracion_ms} ms` : '—'}
@@ -4987,7 +4943,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                                 {groups[dateGroup].map(act => {
                                   const dateObj = act.timestamp || act.fecha_hora ? new Date(act.timestamp || act.fecha_hora) : new Date();
                                   const timeStr = dateObj.toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-                                  const resUpper = String(act.resultado || act.result || 'EXÍTO').toUpperCase();
+                                  const resUpper = String(act.resultado || act.result || '').toUpperCase();
                                   let nodeColor = 'bg-emerald-400 border-emerald-500/50';
                                   if (resUpper.includes('ERROR') || resUpper.includes('FALLID')) nodeColor = 'bg-rose-400 border-rose-500/50';
                                   else if (resUpper.includes('ADVERT') || resUpper.includes('WARN')) nodeColor = 'bg-amber-400 border-amber-500/50';
@@ -5003,19 +4959,19 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                                       <div className="flex items-center justify-between gap-3">
                                         <div className="flex items-center gap-2">
                                           <span className="font-mono text-xs font-bold text-primary">{timeStr}</span>
-                                          <span className="text-foreground font-bold text-xs">{act.evento || act.event || 'Actividad Operativa'}</span>
+                                          <span className="text-foreground font-bold text-xs">{act.evento || act.event || '—'}</span>
                                         </div>
                                         <span className="px-2 py-0.5 rounded bg-card border border-border text-[10px] text-primary uppercase font-bold">
-                                          {act.modulo || act.module || 'Sistema'}
+                                          {act.modulo || act.module || '—'}
                                         </span>
                                       </div>
 
                                       <p className="text-foreground-secondary text-xs leading-relaxed">
-                                        {act.descripcion || act.desc || 'Sin descripción registrada'}
+                                        {act.descripcion || act.desc || '—'}
                                       </p>
 
                                       <div className="flex items-center justify-between pt-2 border-t border-border/50 text-[10px] text-foreground-muted">
-                                        <span>IP: <strong className="text-foreground-secondary font-mono">{act.direccion_ip || act.ip || '127.0.0.1'}</strong></span>
+                                        <span>IP: <strong className="text-foreground-secondary font-mono">{act.direccion_ip || act.ip || '—'}</strong></span>
                                         <span className="text-primary font-bold group-hover:underline flex items-center gap-1">
                                           Ver detalle completo <ArrowRight size={10} />
                                         </span>
@@ -5036,7 +4992,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                         <span>Mostrando</span>
                         <span className="text-foreground font-bold">{paginatedActs.length}</span>
                         <span>de</span>
-                        <span className="text-foreground font-bold">{sortedActs.length}</span>
+                        <span className="text-foreground font-bold">{totalRecords}</span>
                         <span>actividades registradas</span>
                       </div>
 
@@ -7663,17 +7619,17 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                     <div className="grid grid-cols-2 gap-2 text-[11px] pt-1">
                       <div>
                         <span className="opacity-75 block text-[10px]">Fecha de Revocación:</span>
-                        <span className="font-bold text-foreground">{formatSafeDateTime(selectedSessionDetail.fecha_revocacion || selectedSessionDetail.ultima_actividad)}</span>
+                        <span className="font-bold text-foreground">{formatSafeDateTime(selectedSessionDetail.fecha_revocacion || selectedSessionDetail.fecha_cierre)}</span>
                       </div>
                       <div>
                         <span className="opacity-75 block text-[10px]">Administrador que Revocó:</span>
-                        <span className="font-bold text-foreground">{selectedSessionDetail.revocado_por || 'Administrador de Seguridad'}</span>
+                        <span className="font-bold text-foreground">{selectedSessionDetail.revocado_por_nombre || (selectedSessionDetail.revocado_por ? `Admin #${selectedSessionDetail.revocado_por}` : 'Administrador')}</span>
                       </div>
                     </div>
-                    {selectedSessionDetail.motivo_revocacion && (
+                    {(selectedSessionDetail.motivo_cierre || selectedSessionDetail.motivo_revocacion) && (
                       <div className="text-[11px] pt-1 border-t border-rose-500/20">
                         <span className="opacity-75 block text-[10px]">Motivo de Revocación:</span>
-                        <span className="font-medium text-foreground">{selectedSessionDetail.motivo_revocacion}</span>
+                        <span className="font-medium text-foreground">{selectedSessionDetail.motivo_cierre || selectedSessionDetail.motivo_revocacion}</span>
                       </div>
                     )}
                   </div>
@@ -7690,8 +7646,8 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                         <span className="font-bold text-foreground">{formatSafeDateTime(selectedSessionDetail.fecha_cierre || selectedSessionDetail.ultima_actividad)}</span>
                       </div>
                       <div>
-                        <span className="opacity-75 block text-[10px]">Motivo de Cierre:</span>
-                        <span className="font-bold text-foreground">{selectedSessionDetail.motivo_cierre || 'Cierre de sesión por usuario'}</span>
+                        <span className="opacity-75 block text-[10px]">Causa / Motivo:</span>
+                        <span className="font-bold text-foreground">{selectedSessionDetail.motivo_cierre || selectedSessionDetail.tipo_cierre || 'Logout voluntario'}</span>
                       </div>
                     </div>
                     {selectedSessionDetail.tipo_cierre && (
@@ -7706,18 +7662,24 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                 {selectedSessionDetail.estado === 'EXPIRADA' && (
                   <div className="p-3.5 rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-300 space-y-2">
                     <div className="font-bold flex items-center gap-1.5 text-zinc-400 text-xs">
-                      <Clock size={14} /> Sesión Expirada por Inactividad
+                      <Clock size={14} /> Sesión Expirada
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-[11px] pt-1">
                       <div>
-                        <span className="opacity-75 block text-[10px]">Expiró en:</span>
-                        <span className="font-bold text-foreground">{formatSafeDateTime(selectedSessionDetail.fecha_expiracion || selectedSessionDetail.ultima_actividad)}</span>
+                        <span className="opacity-75 block text-[10px]">Fecha de Expiración:</span>
+                        <span className="font-bold text-foreground">{formatSafeDateTime(selectedSessionDetail.fecha_cierre || selectedSessionDetail.fecha_expiracion)}</span>
                       </div>
                       <div>
                         <span className="opacity-75 block text-[10px]">Duración:</span>
-                        <span className="font-bold text-foreground">{selectedSessionDetail.duration || 'No registrada'}</span>
+                        <span className="font-bold text-foreground">{selectedSessionDetail.duration || '—'}</span>
                       </div>
                     </div>
+                    {selectedSessionDetail.motivo_cierre && (
+                      <div className="text-[11px] pt-1 border-t border-zinc-700">
+                        <span className="opacity-75 block text-[10px]">Causa:</span>
+                        <span className="font-medium text-foreground">{selectedSessionDetail.motivo_cierre}</span>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -7840,13 +7802,13 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                   <div>
                     <span className="text-[10px] text-foreground-muted block font-medium">Acción / Evento</span>
                     <span className="font-bold text-foreground block">
-                      {selectedActivityDetail.evento || selectedActivityDetail.event || 'Actividad Operativa'}
+                      {selectedActivityDetail.evento || selectedActivityDetail.event || '—'}
                     </span>
                   </div>
                   <div>
                     <span className="text-[10px] text-foreground-muted block font-medium">Módulo</span>
                     <span className="font-bold text-primary uppercase block">
-                      {selectedActivityDetail.modulo || selectedActivityDetail.module || 'Seguridad'}
+                      {selectedActivityDetail.modulo || selectedActivityDetail.module || '—'}
                     </span>
                   </div>
                 </div>
@@ -7855,7 +7817,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                   <div>
                     <span className="text-[10px] text-foreground-muted block font-medium">Descripción Completa</span>
                     <p className="text-foreground-secondary font-medium leading-relaxed bg-card p-2.5 rounded-lg border border-border">
-                      {selectedActivityDetail.descripcion || selectedActivityDetail.desc || 'Sin descripción adicional'}
+                      {selectedActivityDetail.descripcion || selectedActivityDetail.desc || '—'}
                     </p>
                   </div>
                 </div>
@@ -7882,13 +7844,13 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                   <div>
                     <span className="text-[10px] text-foreground-muted block font-medium">Dirección IP</span>
                     <span className="font-mono text-primary font-bold select-all">
-                      {selectedActivityDetail.direccion_ip || selectedActivityDetail.ip || '127.0.0.1'}
+                      {selectedActivityDetail.direccion_ip || selectedActivityDetail.ip || '—'}
                     </span>
                   </div>
                   <div>
                     <span className="text-[10px] text-foreground-muted block font-medium">Dispositivo / Agente</span>
                     <span className="text-foreground-secondary font-bold break-words">
-                      {selectedActivityDetail.dispositivo || selectedActivityDetail.device || 'Navegador Web'}
+                      {selectedActivityDetail.dispositivo || selectedActivityDetail.device || 'No registrado'}
                     </span>
                   </div>
                 </div>
@@ -7932,21 +7894,19 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                 <div className="p-4 rounded-xl bg-input border border-border space-y-3">
                   <span className="text-[11px] font-bold text-foreground-muted uppercase tracking-wider block">5. Comparativa de Cambios (Antes / Después)</span>
                   
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                    {/* ANTES */}
-                    <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 space-y-1">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-rose-400 block">Valor Anterior (ANTES)</span>
-                      <pre className="font-mono text-[11px] text-foreground-secondary whitespace-pre-wrap break-words leading-tight bg-input/80 p-2 rounded border border-rose-500/20 max-h-48 overflow-y-auto custom-scrollbar">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <span className="text-[10px] text-rose-400 font-bold uppercase tracking-wider block">Valor Previo</span>
+                      <pre className="p-3 rounded-lg bg-card border border-rose-500/20 text-rose-300 font-mono text-[11px] whitespace-pre-wrap break-all max-h-40 overflow-y-auto">
                         {typeof (selectedActivityDetail.antes || selectedActivityDetail.valor_anterior) === 'object'
                           ? JSON.stringify(selectedActivityDetail.antes || selectedActivityDetail.valor_anterior, null, 2)
                           : String(selectedActivityDetail.antes || selectedActivityDetail.valor_anterior || 'No registrado')}
                       </pre>
                     </div>
 
-                    {/* DESPUÉS */}
-                    <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 space-y-1">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 block">Valor Nuevo (DESPUÉS)</span>
-                      <pre className="font-mono text-[11px] text-foreground-secondary whitespace-pre-wrap break-words leading-tight bg-input/80 p-2 rounded border border-emerald-500/20 max-h-48 overflow-y-auto custom-scrollbar">
+                    <div className="space-y-1">
+                      <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider block">Nuevo Valor</span>
+                      <pre className="p-3 rounded-lg bg-card border border-emerald-500/20 text-emerald-300 font-mono text-[11px] whitespace-pre-wrap break-all max-h-40 overflow-y-auto">
                         {typeof (selectedActivityDetail.despues || selectedActivityDetail.valor_nuevo) === 'object'
                           ? JSON.stringify(selectedActivityDetail.despues || selectedActivityDetail.valor_nuevo, null, 2)
                           : String(selectedActivityDetail.despues || selectedActivityDetail.valor_nuevo || 'No registrado')}
@@ -8020,7 +7980,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                       ? 'bg-rose-500/15 text-rose-400 border-rose-500/30'
                       : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
                   }`}>
-                    ● {selectedAuditDetail.resultado || 'EXITOSO'}
+                    ● {selectedAuditDetail.resultado || '—'}
                   </span>
                 </div>
 
@@ -8054,7 +8014,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                   <div>
                     <span className="text-[10px] text-foreground-muted block font-medium">Ejecutado Por (Admin)</span>
                     <span className="font-bold text-foreground block">
-                      {selectedAuditDetail.admin_nombre || selectedAuditDetail.performed_by || 'Sistema'}
+                      {selectedAuditDetail.admin_nombre || selectedAuditDetail.performed_by || '—'}
                     </span>
                   </div>
                 </div>
@@ -8063,7 +8023,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                   <div>
                     <span className="text-[10px] text-foreground-muted block font-medium">Motivo / Justificación</span>
                     <p className="text-foreground-secondary font-medium leading-relaxed bg-card p-2.5 rounded-lg border border-border">
-                      {selectedAuditDetail.motivo || selectedAuditDetail.reason || 'Actualización administrativa'}
+                      {selectedAuditDetail.motivo || selectedAuditDetail.reason || '—'}
                     </p>
                   </div>
                 </div>
@@ -8077,13 +8037,13 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                   <div>
                     <span className="text-[10px] text-foreground-muted block font-medium">Dirección IP</span>
                     <span className="font-mono text-primary font-bold select-all">
-                      {selectedAuditDetail.direccion_ip || selectedAuditDetail.ip || '127.0.0.1'}
+                      {selectedAuditDetail.direccion_ip || selectedAuditDetail.ip || '—'}
                     </span>
                   </div>
                   <div>
                     <span className="text-[10px] text-foreground-muted block font-medium">Dispositivo / Agente</span>
                     <span className="text-foreground-secondary font-bold break-words">
-                      {selectedAuditDetail.dispositivo || selectedAuditDetail.device || 'Navegador Web'}
+                      {selectedAuditDetail.dispositivo || selectedAuditDetail.device || 'No registrado'}
                     </span>
                   </div>
                 </div>

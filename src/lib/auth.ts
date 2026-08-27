@@ -138,3 +138,12 @@ export function maskEmail(email: string): string {
   }
   return `${local[0]}***${local[local.length - 1]}@${domain}`;
 }
+
+/**
+ * Hashes a raw session token using SHA-256 for secure database storage.
+ * Prevents session hijacking even if database read access is compromised.
+ */
+export function hashSessionToken(token: string): string {
+  if (!token || typeof token !== 'string') return '';
+  return crypto.createHash('sha256').update(token.trim()).digest('hex');
+}

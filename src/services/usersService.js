@@ -42,14 +42,27 @@ export const usersService = {
     }
   },
 
-  getUserActivity: async (id) => {
+  getUserActivity: async (id, params = {}) => {
     try {
-      const response = await fetch(`/api/usuarios/${id}/actividad`, { cache: 'no-store' });
-      if (!response.ok) return [];
+      const searchParams = new URLSearchParams();
+      if (params.page) searchParams.set('page', String(params.page));
+      if (params.pageSize) searchParams.set('pageSize', String(params.pageSize));
+      if (params.fechaDesde) searchParams.set('fechaDesde', params.fechaDesde);
+      if (params.fechaHasta) searchParams.set('fechaHasta', params.fechaHasta);
+      if (params.modulo && params.modulo !== 'Todos') searchParams.set('modulo', params.modulo);
+      if (params.evento && params.evento !== 'Todos') searchParams.set('evento', params.evento);
+      if (params.resultado && params.resultado !== 'Todos') searchParams.set('resultado', params.resultado);
+      if (params.search) searchParams.set('search', params.search);
+      if (params.all) searchParams.set('all', 'true');
+
+      const queryString = searchParams.toString();
+      const url = `/api/usuarios/${id}/actividad${queryString ? `?${queryString}` : ''}`;
+      const response = await fetch(url, { cache: 'no-store' });
+      if (!response.ok) return { items: [], total: 0 };
       return await response.json();
     } catch (error) {
       console.error('usersService.getUserActivity error:', error);
-      return [];
+      return { items: [], total: 0 };
     }
   },
 
