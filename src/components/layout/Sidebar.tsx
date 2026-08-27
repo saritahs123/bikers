@@ -41,15 +41,9 @@ function SidebarContent({
       submenu: [
         { href: "/workshop", label: "PANEL OPERATIVO" },
         { href: "/workshop?view=list", label: "RECEPCIONES" },
-        // Oculto del menú: se accede desde el botón "+ NUEVA RECEPCIÓN" de la pantalla Recepciones.
-        // Conservar ruta y componente para posible reactivación futura.
-        // { href: "/workshop?action=new", label: "NUEVA RECEPCIÓN" },
         { href: "/workshop?view=work_orders", label: "ÓRDENES DE TRABAJO" },
         { href: "/workshop?view=kanban", label: "VISTA KANBAN" },
         { href: "/workshop?view=billing", label: "DESPACHO DE ÓRDENES" },
-        // Oculto del menú: se accede desde el botón de Órdenes de Trabajo.
-        // Conservar ruta y componente para posible reactivación futura.
-        // { href: "/workshop?action=new_order", label: "NUEVA ORDEN DE TRABAJO" }
       ]
     },
     {
@@ -140,32 +134,32 @@ function SidebarContent({
       const isGroupActive = isExpanded || hasActiveChild;
 
       return (
-        <div key={item.id} className="flex flex-col mb-2">
+        <div key={item.id} className="flex flex-col mb-2 font-mono">
           <button
             onClick={() => toggleExpand(item.id!)}
-            className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl border transition-all duration-200 w-full cursor-pointer group font-mono text-xs ${
+            className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl border transition-all duration-200 w-full cursor-pointer group text-xs ${
               isGroupActive
-                ? "bg-[#161a21] border-[#bfce7f]/40 text-[#bfce7f] font-bold shadow-[inset_4px_0_0_#bfce7f,0_4px_12px_rgba(0,0,0,0.3)]"
-                : "bg-[#161a21]/50 border-[#2d3748]/40 text-slate-400 hover:bg-[#161a21] hover:border-[#bfce7f]/30 hover:text-white"
+                ? "bg-surface-subtle border-primary/40 text-primary font-bold shadow-[inset_4px_0_0_var(--color-primary)]"
+                : "bg-surface-subtle/50 border-border text-foreground-secondary hover:bg-surface-subtle hover:border-primary/40 hover:text-foreground"
             }`}
           >
             <span
               className={`material-symbols-outlined text-[20px] transition-colors ${
-                isGroupActive ? "text-[#bfce7f]" : "text-slate-400 group-hover:text-[#bfce7f]"
+                isGroupActive ? "text-primary" : "text-foreground-muted group-hover:text-primary"
               }`}
             >
               {item.icon}
             </span>
             <span
               className={`flex-1 text-left tracking-wide font-medium uppercase ${
-                isGroupActive ? "text-white font-bold" : "text-slate-300 group-hover:text-white"
+                isGroupActive ? "text-foreground font-bold" : "text-foreground-secondary group-hover:text-foreground"
               }`}
             >
               {item.label}
             </span>
             <span
               className={`material-symbols-outlined text-sm transition-transform duration-200 ${
-                isExpanded ? "rotate-180 text-[#bfce7f]" : "text-slate-400 group-hover:text-slate-200"
+                isExpanded ? "rotate-180 text-primary" : "text-foreground-muted group-hover:text-foreground"
               }`}
             >
               expand_more
@@ -173,13 +167,13 @@ function SidebarContent({
           </button>
 
           {isExpanded && (
-            <div className="flex flex-col mt-1.5 ml-4 pl-3.5 border-l-2 border-[#2d3748] space-y-1 py-1 font-mono text-xs animate-in fade-in duration-200">
+            <div className="flex flex-col mt-1.5 ml-4 pl-3.5 border-l-2 border-border space-y-1 py-1 font-mono text-xs animate-in fade-in duration-200">
               {item.submenu.map((sub, idx) => {
                 if (sub.isHeader) {
                   return (
                     <span
                       key={idx}
-                      className="text-[10px] font-bold text-[#bfce7f] tracking-wider mt-2 mb-1 uppercase"
+                      className="text-[10px] font-bold text-primary tracking-wider mt-2 mb-1 uppercase"
                     >
                       {sub.label}
                     </span>
@@ -195,8 +189,8 @@ function SidebarContent({
                     title={sub.label}
                     className={`text-xs py-2 px-3 rounded-lg border transition-all duration-200 whitespace-nowrap truncate block uppercase ${
                       isSubActive
-                        ? "bg-[#bfce7f]/15 border-[#bfce7f]/40 text-[#bfce7f] font-bold"
-                        : "border-transparent text-slate-400 hover:text-white hover:bg-[#161a21] hover:border-[#2d3748]"
+                        ? "bg-primary/10 border-primary/40 text-primary font-bold"
+                        : "border-transparent text-foreground-muted hover:text-foreground hover:bg-hover hover:border-border"
                     }`}
                   >
                     {sub.label}
@@ -216,20 +210,20 @@ function SidebarContent({
         href={item.href!}
         className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl border transition-all duration-200 cursor-pointer group font-mono text-xs mb-2 ${
           isActive
-            ? "bg-[#161a21] border-[#bfce7f]/40 text-[#bfce7f] font-bold shadow-[inset_4px_0_0_#bfce7f,0_4px_12px_rgba(0,0,0,0.3)]"
-            : "bg-[#161a21]/50 border-[#2d3748]/40 text-slate-400 hover:bg-[#161a21] hover:border-[#bfce7f]/30 hover:text-white"
+            ? "bg-surface-subtle border-primary/40 text-primary font-bold shadow-[inset_4px_0_0_var(--color-primary)]"
+            : "bg-surface-subtle/50 border-border text-foreground-secondary hover:bg-surface-subtle hover:border-primary/40 hover:text-foreground"
         }`}
       >
         <span
           className={`material-symbols-outlined text-[20px] transition-colors ${
-            isActive ? "text-[#bfce7f]" : "text-slate-400 group-hover:text-[#bfce7f]"
+            isActive ? "text-primary" : "text-foreground-muted group-hover:text-primary"
           }`}
         >
           {item.icon}
         </span>
         <span
           className={`tracking-wide font-medium uppercase ${
-            isActive ? "text-white font-bold" : "text-slate-300 group-hover:text-white"
+            isActive ? "text-foreground font-bold" : "text-foreground-secondary group-hover:text-foreground"
           }`}
         >
           {item.label}
@@ -241,7 +235,7 @@ function SidebarContent({
   return (
     <>
       {/* Desktop Fixed Sidebar */}
-      <aside className="hidden md:flex fixed left-0 top-0 h-full w-64 bg-[#0e1117] border-r border-[#2d3748] flex-col p-4 z-50 font-mono">
+      <aside className="hidden md:flex fixed left-0 top-0 h-full w-64 bg-surface border-r border-border flex-col p-4 z-50 font-mono transition-colors">
         <div className="w-full flex items-center justify-center pt-2 pb-5">
           <Link
             href="/"
@@ -273,8 +267,8 @@ function SidebarContent({
             className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity"
             onClick={() => setMobileOpen && setMobileOpen(false)}
           />
-          <aside className="relative w-64 max-w-[80vw] bg-[#0e1117] border-r border-[#2d3748] flex flex-col p-4 z-50 font-mono h-full shadow-2xl animate-in slide-in-from-left duration-200">
-            <div className="flex items-center justify-between pt-1 pb-3 mb-3 border-b border-[#2d3748]/50">
+          <aside className="relative w-64 max-w-[80vw] bg-surface border-r border-border flex flex-col p-4 z-50 font-mono h-full shadow-2xl animate-in slide-in-from-left duration-200">
+            <div className="flex items-center justify-between pt-1 pb-3 mb-3 border-b border-border">
               <Link
                 href="/"
                 onClick={() => setMobileOpen && setMobileOpen(false)}
@@ -293,7 +287,7 @@ function SidebarContent({
               <button
                 type="button"
                 onClick={() => setMobileOpen && setMobileOpen(false)}
-                className="text-slate-400 hover:text-white p-1.5 rounded-lg border border-[#2d3748] hover:bg-[#161a21] transition-colors cursor-pointer"
+                className="text-foreground-muted hover:text-foreground p-1.5 rounded-lg border border-border hover:bg-hover transition-colors cursor-pointer"
                 aria-label="Cerrar menú"
               >
                 <span className="material-symbols-outlined text-lg">close</span>
@@ -324,9 +318,7 @@ export function Sidebar({
   return (
     <Suspense
       fallback={
-        <aside className="hidden md:flex fixed left-0 top-0 h-full w-64 bg-[#0e1117] border-r border-[#2d3748] flex-col p-4 z-50 font-mono">
-          <div className="text-xs text-slate-400 p-4">Cargando menú...</div>
-        </aside>
+        <aside className="hidden md:flex fixed left-0 top-0 h-full w-64 bg-surface border-r border-border flex-col p-4 z-50 font-mono animate-pulse" />
       }
     >
       <SidebarContent mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} />

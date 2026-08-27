@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { 
   Building2, 
   Boxes, 
@@ -14,11 +14,7 @@ import {
   X, 
   RefreshCw, 
   CheckCircle2, 
-  ShieldCheck, 
   Activity, 
-  ExternalLink,
-  Layers,
-  Edit2,
   Trash2,
   Cpu
 } from "lucide-react";
@@ -32,7 +28,6 @@ export default function CatalogsSecurityView() {
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newItemName, setNewItemName] = useState("");
-  const [newItemDesc, setNewItemDesc] = useState("");
   const [toastMessage, setToastMessage] = useState(null);
 
   // Mock catalog counters & initial stats
@@ -176,7 +171,6 @@ export default function CatalogsSecurityView() {
       [selectedCatalog.id]: (prev[selectedCatalog.id] || 0) + 1
     }));
 
-    // Add activity log
     const newLog = {
       id: Date.now(),
       date: new Date().toISOString().replace('T', ' ').substring(0, 16),
@@ -188,7 +182,6 @@ export default function CatalogsSecurityView() {
     setActivityLogs(prev => [newLog, ...prev]);
 
     setNewItemName("");
-    setNewItemDesc("");
     setIsAddModalOpen(false);
     showToast(`Registro "${newItem.name}" añadido al catálogo ${selectedCatalog.title}.`);
   };
@@ -218,69 +211,69 @@ export default function CatalogsSecurityView() {
   );
 
   return (
-    <div className="w-full space-y-8 animate-in fade-in duration-300 font-sans text-[#e4e3d9]">
+    <div className="w-full space-y-8 animate-in fade-in duration-300 font-sans text-foreground">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-[99999] bg-[#bfce7f] text-[#2b3400] px-5 py-3 rounded-xl font-bold shadow-2xl flex items-center gap-2 animate-in slide-in-from-bottom-5 duration-200">
+        <div className="fixed bottom-6 right-6 z-[99999] bg-primary text-primary-foreground px-5 py-3 rounded-xl font-bold shadow-2xl flex items-center gap-2 animate-in slide-in-from-bottom-5 duration-200">
           <CheckCircle2 size={18} />
           <span>{toastMessage}</span>
         </div>
       )}
 
       {/* Header Banner */}
-      <section className="relative overflow-hidden border border-[#2d3748] p-6 md:p-8 bg-[#161a21] rounded-2xl shadow-xl">
-        <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none text-[#bfce7f]">
+      <section className="relative overflow-hidden border border-border p-6 md:p-8 bg-card rounded-2xl shadow-sm">
+        <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none text-primary">
           <Cpu size={140} />
         </div>
 
         <div className="relative z-10 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <span className="text-[10px] font-mono tracking-widest text-[#bfce7f] uppercase font-bold">
-                SYSTEM ADMINISTRATION • BIKER'S FORT CORE
+              <span className="text-[10px] font-mono tracking-widest text-primary uppercase font-bold">
+                SYSTEM ADMINISTRATION • BIKER&apos;S FORT CORE
               </span>
-              <h2 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight mt-1">
+              <h2 className="text-2xl md:text-3xl font-extrabold text-foreground tracking-tight mt-1 font-sans">
                 Panel de Control de Catálogos
               </h2>
             </div>
             
-            <div className="flex items-center gap-3 bg-[#0e1117] border border-[#2d3748] px-3.5 py-1.5 rounded-xl text-xs font-mono">
-              <Search size={14} className="text-slate-400" />
+            <div className="flex items-center gap-3 bg-input border border-border px-3.5 py-1.5 rounded-xl text-xs font-mono">
+              <Search size={14} className="text-foreground-muted" />
               <input 
                 type="text"
                 placeholder="Buscar catálogo..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="bg-transparent text-white focus:outline-none w-36 md:w-48 text-xs"
+                className="bg-transparent text-foreground placeholder:text-foreground-disabled focus:outline-none w-36 md:w-48 text-xs font-mono"
               />
             </div>
           </div>
 
-          <p className="text-sm text-slate-300 max-w-3xl leading-relaxed">
-            Gestione la arquitectura organizacional y operativa de Biker's Fort. Configure entidades, estructuras jerárquicas y roles maestros con precisión industrial.
+          <p className="text-sm text-foreground-secondary max-w-3xl leading-relaxed font-sans">
+            Gestione la arquitectura organizacional y operativa de Biker&apos;s Fort. Configure entidades, estructuras jerárquicas y roles maestros con precisión industrial.
           </p>
 
-          <div className="pt-3 border-t border-[#2d3748]/60 flex flex-wrap items-center gap-6 text-xs font-mono">
+          <div className="pt-3 border-t border-border flex flex-wrap items-center gap-6 text-xs font-mono">
             <div className="flex flex-col">
-              <span className="text-[10px] text-[#bfce7f] font-bold tracking-wider">STATUS DEL SISTEMA</span>
+              <span className="text-[10px] text-primary font-bold tracking-wider uppercase">STATUS DEL SISTEMA</span>
               <div className="flex items-center gap-2 mt-0.5">
-                <div className="w-2 h-2 rounded-full bg-[#bfce7f] animate-pulse"></div>
-                <span className="font-bold text-white">Operacional</span>
+                <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
+                <span className="font-bold text-foreground">Operacional</span>
               </div>
             </div>
 
-            <div className="w-px h-8 bg-[#2d3748]"></div>
+            <div className="w-px h-8 bg-border" />
 
             <div className="flex flex-col">
-              <span className="text-[10px] text-[#bfce7f] font-bold tracking-wider">ÚLTIMO RESPALDO</span>
-              <span className="font-bold text-slate-200 mt-0.5">Hace 14 minutos</span>
+              <span className="text-[10px] text-primary font-bold tracking-wider uppercase">ÚLTIMO RESPALDO</span>
+              <span className="font-bold text-foreground-secondary mt-0.5">Hace 14 minutos</span>
             </div>
 
-            <div className="w-px h-8 bg-[#2d3748]"></div>
+            <div className="w-px h-8 bg-border" />
 
             <div className="flex flex-col">
-              <span className="text-[10px] text-[#bfce7f] font-bold tracking-wider">CATÁLOGOS ACTIVOS</span>
-              <span className="font-bold text-white mt-0.5">6 Módulos Maestros</span>
+              <span className="text-[10px] text-primary font-bold tracking-wider uppercase">CATÁLOGOS ACTIVOS</span>
+              <span className="font-bold text-foreground mt-0.5">6 Módulos Maestros</span>
             </div>
           </div>
         </div>
@@ -293,45 +286,46 @@ export default function CatalogsSecurityView() {
           return (
             <div 
               key={cat.id}
-              className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-6 flex flex-col justify-between hover:border-[#4a5568] hover:-translate-y-1 transition-all duration-200 shadow-lg group"
+              className="bg-card border border-border rounded-2xl p-6 flex flex-col justify-between hover:border-primary/40 hover:-translate-y-1 transition-all duration-200 shadow-sm group"
             >
               <div>
                 <div className="flex justify-between items-start mb-5">
-                  <div className="w-12 h-12 bg-[#212631] border border-[#2d3748] rounded-xl flex items-center justify-center text-[#bfce7f] group-hover:scale-110 transition-transform">
+                  <div className="w-12 h-12 bg-surface-subtle border border-border rounded-xl flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
                     <IconComp size={24} />
                   </div>
                   {cat.badge && (
-                    <span className="text-[10px] font-mono font-extrabold px-2.5 py-1 bg-[#bfce7f]/15 text-[#bfce7f] border border-[#bfce7f]/30 rounded-md tracking-wider">
+                    <span className="text-[10px] font-mono font-extrabold px-2.5 py-1 bg-primary/15 text-primary border border-primary/30 rounded-md tracking-wider">
                       {cat.badge}
                     </span>
                   )}
                 </div>
 
-                <h3 className="text-xl font-bold text-white mb-1.5 tracking-tight">
+                <h3 className="text-xl font-bold text-foreground mb-1.5 tracking-tight font-sans">
                   {cat.title}
                 </h3>
-                <p className="text-xs text-slate-400 leading-relaxed mb-6">
+                <p className="text-xs text-foreground-muted leading-relaxed mb-6 font-sans">
                   {cat.description}
                 </p>
               </div>
 
               <div className="mt-auto space-y-4">
                 <div className="flex justify-between items-end">
-                  <span className="text-[10px] font-mono font-bold tracking-widest text-slate-400">REGISTROS</span>
-                  <span className="text-2xl font-black text-white font-mono">{cat.count}</span>
+                  <span className="text-[10px] font-mono font-bold tracking-widest text-foreground-muted">REGISTROS</span>
+                  <span className="text-2xl font-black text-foreground font-mono">{cat.count}</span>
                 </div>
 
                 {/* Segmented progress bar */}
-                <div className="w-full h-1.5 bg-[#0e1117] rounded-full overflow-hidden relative">
+                <div className="w-full h-1.5 bg-surface-subtle rounded-full overflow-hidden relative">
                   <div 
-                    className="h-full bg-[#bfce7f] transition-all duration-500"
+                    className="h-full bg-primary transition-all duration-500"
                     style={{ width: `${cat.progress}%` }}
-                  ></div>
+                  />
                 </div>
 
                 <button 
+                  type="button"
                   onClick={() => handleOpenManage(cat)}
-                  className="w-full py-2.5 bg-[#bfce7f] hover:bg-[#a8b868] text-[#1d1f18] font-mono text-xs font-black rounded-xl transition-all flex items-center justify-center gap-2 shadow-md cursor-pointer"
+                  className="w-full py-2.5 bg-primary-button-bg hover:brightness-110 text-primary-foreground font-mono text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-2 shadow-sm cursor-pointer"
                 >
                   ADMINISTRAR <ArrowRight size={14} />
                 </button>
@@ -342,18 +336,18 @@ export default function CatalogsSecurityView() {
       </div>
 
       {/* Recent Activity Table Section */}
-      <section className="border border-[#2d3748] bg-[#161a21] rounded-2xl overflow-hidden shadow-xl">
-        <div className="px-6 py-4 border-b border-[#2d3748] bg-[#0e1117] flex items-center justify-between">
-          <h3 className="text-xs font-mono font-bold text-[#bfce7f] tracking-widest flex items-center gap-2">
+      <section className="border border-border bg-card rounded-2xl overflow-hidden shadow-sm">
+        <div className="px-6 py-4 border-b border-border bg-surface-subtle flex items-center justify-between">
+          <h3 className="text-xs font-mono font-bold text-primary tracking-widest flex items-center gap-2">
             <Activity size={14} /> ACTIVIDAD RECIENTE DE CATÁLOGOS
           </h3>
-          <span className="text-[11px] font-mono text-slate-400">Últimas acciones registradas</span>
+          <span className="text-[11px] font-mono text-foreground-muted">Últimas acciones registradas</span>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="bg-[#1b2029] text-slate-400 font-mono text-[10px] tracking-wider border-b border-[#2d3748]">
+              <tr className="bg-surface-subtle text-foreground-muted font-mono text-[10px] tracking-wider border-b border-border">
                 <th className="px-6 py-3">FECHA / HORA</th>
                 <th className="px-6 py-3">USUARIO</th>
                 <th className="px-6 py-3">CATÁLOGO</th>
@@ -361,18 +355,18 @@ export default function CatalogsSecurityView() {
                 <th className="px-6 py-3 text-right">ESTADO</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#2d3748]/50 text-slate-200">
+            <tbody className="divide-y divide-border text-foreground-secondary">
               {activityLogs.map((log) => (
-                <tr key={log.id} className="hover:bg-[#212631] transition-colors font-medium">
-                  <td className="px-6 py-3.5 font-mono text-slate-400 text-[11px]">{log.date}</td>
-                  <td className="px-6 py-3.5 font-bold text-white">{log.user}</td>
-                  <td className="px-6 py-3.5 font-semibold text-[#bfce7f]">{log.catalog}</td>
-                  <td className="px-6 py-3.5 text-slate-300">{log.action}</td>
+                <tr key={log.id} className="hover:bg-hover transition-colors font-medium">
+                  <td className="px-6 py-3.5 font-mono text-foreground-muted text-[11px]">{log.date}</td>
+                  <td className="px-6 py-3.5 font-bold text-foreground">{log.user}</td>
+                  <td className="px-6 py-3.5 font-semibold text-primary">{log.catalog}</td>
+                  <td className="px-6 py-3.5 text-foreground-secondary">{log.action}</td>
                   <td className="px-6 py-3.5 text-right">
                     <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9.5px] font-mono font-bold border ${
                       log.status === "COMPLETADO" 
-                        ? "bg-[#bfce7f]/10 text-[#bfce7f] border-[#bfce7f]/30"
-                        : "bg-rose-500/10 text-rose-400 border-rose-500/30"
+                        ? "bg-success/15 text-success border-success/30"
+                        : "bg-error/15 text-error border-error/30"
                     }`}>
                       {log.status}
                     </span>
@@ -387,33 +381,39 @@ export default function CatalogsSecurityView() {
       {/* MANAGE CATALOG MODAL */}
       {isManageModalOpen && selectedCatalog && (
         <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-md" onClick={() => setIsManageModalOpen(false)}></div>
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsManageModalOpen(false)} />
           
-          <div className="relative bg-[#161a21] border border-[#2d3748] rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
+          <div className="relative bg-surface-elevated border border-border rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200 text-foreground">
             {/* Header */}
-            <div className="px-6 py-4 border-b border-[#2d3748] bg-[#0e1117] flex items-center justify-between">
+            <div className="px-6 py-4 border-b border-border bg-surface-subtle flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 bg-[#212631] border border-[#2d3748] rounded-lg flex items-center justify-center text-[#bfce7f]">
+                <div className="w-9 h-9 bg-surface border border-border rounded-lg flex items-center justify-center text-primary">
                   {React.createElement(selectedCatalog.icon, { size: 18 })}
                 </div>
                 <div>
-                  <h4 className="text-base font-bold text-white">{selectedCatalog.title}</h4>
-                  <p className="text-[11px] text-slate-400 font-mono">Administración del catálogo maestro</p>
+                  <h4 className="text-base font-bold text-foreground font-sans">{selectedCatalog.title}</h4>
+                  <p className="text-[11px] text-foreground-muted font-mono">Administración del catálogo maestro</p>
                 </div>
               </div>
-              <button onClick={() => setIsManageModalOpen(false)} className="p-1.5 text-slate-400 hover:text-white rounded-lg transition-colors">
+              <button 
+                type="button"
+                onClick={() => setIsManageModalOpen(false)} 
+                className="p-1.5 text-foreground-muted hover:text-foreground rounded-lg hover:bg-hover transition-colors cursor-pointer"
+                aria-label="Cerrar modal"
+              >
                 <X size={18} />
               </button>
             </div>
 
             {/* Actions Bar */}
-            <div className="p-4 border-b border-[#2d3748] bg-[#1b2029] flex items-center justify-between gap-3">
-              <span className="text-xs font-mono text-slate-300">
-                Total de registros: <strong>{catalogItems.length}</strong>
+            <div className="p-4 border-b border-border bg-surface flex items-center justify-between gap-3">
+              <span className="text-xs font-mono text-foreground-secondary">
+                Total de registros: <strong className="text-foreground">{catalogItems.length}</strong>
               </span>
               <button 
+                type="button"
                 onClick={() => setIsAddModalOpen(true)}
-                className="px-4 py-2 bg-[#bfce7f] hover:bg-[#a8b868] text-[#1d1f18] text-xs font-bold rounded-xl shadow transition-all flex items-center gap-1.5 cursor-pointer"
+                className="px-4 py-2 bg-primary-button-bg hover:brightness-110 text-primary-foreground text-xs font-bold rounded-xl shadow transition-all flex items-center gap-1.5 cursor-pointer font-mono"
               >
                 <Plus size={14} /> Nuevo Registro
               </button>
@@ -422,27 +422,28 @@ export default function CatalogsSecurityView() {
             {/* Items List */}
             <div className="flex-1 overflow-y-auto p-6 space-y-2.5 custom-scrollbar">
               {loading ? (
-                <div className="py-12 text-center text-xs font-mono text-slate-400 flex items-center justify-center gap-2">
-                  <RefreshCw className="animate-spin text-[#bfce7f]" size={16} /> Cargando datos...
+                <div className="py-12 text-center text-xs font-mono text-foreground-muted flex items-center justify-center gap-2">
+                  <RefreshCw className="animate-spin text-primary" size={16} /> Cargando datos...
                 </div>
               ) : catalogItems.length === 0 ? (
-                <div className="py-12 text-center text-xs text-slate-400 italic">
+                <div className="py-12 text-center text-xs text-foreground-muted italic font-mono">
                   No hay registros creados en este catálogo.
                 </div>
               ) : (
                 catalogItems.map((item) => (
-                  <div key={item.id} className="p-3.5 bg-[#0e1117] border border-[#2d3748] rounded-xl flex items-center justify-between gap-3 hover:border-[#4a5568] transition-colors">
+                  <div key={item.id} className="p-3.5 bg-surface-subtle border border-border rounded-xl flex items-center justify-between gap-3 hover:border-primary/40 transition-colors">
                     <div className="flex items-center gap-3">
-                      <span className="px-2 py-1 bg-[#212631] border border-[#2d3748] rounded text-[10px] font-mono text-[#bfce7f]">
+                      <span className="px-2 py-1 bg-surface border border-border rounded text-[10px] font-mono text-primary font-bold">
                         {item.code}
                       </span>
-                      <span className="text-xs font-bold text-white">{item.name}</span>
+                      <span className="text-xs font-bold text-foreground font-sans">{item.name}</span>
                     </div>
 
                     <div className="flex items-center gap-2">
                       <button 
+                        type="button"
                         onClick={() => handleDeleteItem(item.id, item.name)}
-                        className="p-1.5 text-slate-400 hover:text-rose-400 rounded-lg transition-colors cursor-pointer"
+                        className="p-1.5 text-foreground-muted hover:text-error hover:bg-error/10 rounded-lg transition-colors cursor-pointer"
                         title="Eliminar registro"
                       >
                         <Trash2 size={14} />
@@ -454,10 +455,11 @@ export default function CatalogsSecurityView() {
             </div>
 
             {/* Footer */}
-            <div className="p-4 border-t border-[#2d3748] bg-[#0e1117] flex justify-end">
+            <div className="p-4 border-t border-border bg-surface-subtle flex justify-end">
               <button 
+                type="button"
                 onClick={() => setIsManageModalOpen(false)}
-                className="px-5 py-2 bg-[#212631] text-white text-xs font-bold rounded-xl border border-[#2d3748] hover:bg-[#2d3748] transition-all cursor-pointer"
+                className="px-5 py-2 bg-surface text-foreground text-xs font-bold rounded-xl border border-border hover:bg-hover transition-all cursor-pointer font-mono"
               >
                 Cerrar
               </button>
@@ -469,35 +471,35 @@ export default function CatalogsSecurityView() {
       {/* ADD ITEM SUBMODAL */}
       {isAddModalOpen && selectedCatalog && (
         <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setIsAddModalOpen(false)}></div>
-          <div className="relative bg-[#161a21] border border-[#2d3748] rounded-2xl shadow-2xl w-full max-w-md p-6 animate-in zoom-in-95 duration-200">
-            <h4 className="text-base font-bold text-white mb-1">Añadir a {selectedCatalog.title}</h4>
-            <p className="text-xs text-slate-400 mb-4">Ingrese los datos para registrar un nuevo elemento maestro.</p>
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setIsAddModalOpen(false)} />
+          <div className="relative bg-surface-elevated border border-border rounded-2xl shadow-2xl w-full max-w-md p-6 animate-in zoom-in-95 duration-200 text-foreground">
+            <h4 className="text-base font-bold text-foreground mb-1 font-sans">Añadir a {selectedCatalog.title}</h4>
+            <p className="text-xs text-foreground-muted mb-4 font-sans">Ingrese los datos para registrar un nuevo elemento maestro.</p>
 
             <form onSubmit={handleAddItem} className="space-y-4">
               <div>
-                <label className="block text-[10px] font-mono font-bold text-[#bfce7f] uppercase mb-1">Nombre del Registro *</label>
+                <label className="block text-[11px] font-mono font-bold text-foreground-secondary uppercase mb-1">Nombre del Registro *</label>
                 <input 
                   type="text"
                   required
                   value={newItemName}
                   onChange={(e) => setNewItemName(e.target.value)}
                   placeholder={`Ej. ${selectedCatalog.title.substring(0, selectedCatalog.title.length - 1)} Demo`}
-                  className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#bfce7f]"
+                  className="w-full bg-input border border-border rounded-xl px-3 py-2 text-xs text-foreground placeholder:text-foreground-disabled focus:outline-none focus:border-primary font-sans"
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-[#2d3748]">
+              <div className="flex justify-end gap-2 pt-2 border-t border-border">
                 <button 
                   type="button" 
                   onClick={() => setIsAddModalOpen(false)}
-                  className="px-4 py-2 bg-[#212631] text-white text-xs font-bold rounded-xl border border-[#2d3748] hover:bg-[#2d3748]"
+                  className="px-4 py-2 bg-surface text-foreground text-xs font-bold rounded-xl border border-border hover:bg-hover font-mono"
                 >
                   Cancelar
                 </button>
                 <button 
                   type="submit" 
-                  className="px-5 py-2 bg-[#bfce7f] text-[#1d1f18] text-xs font-bold rounded-xl hover:bg-[#a8b868]"
+                  className="px-5 py-2 bg-primary-button-bg text-primary-foreground text-xs font-bold rounded-xl hover:brightness-110 font-mono shadow-sm"
                 >
                   Guardar Registro
                 </button>

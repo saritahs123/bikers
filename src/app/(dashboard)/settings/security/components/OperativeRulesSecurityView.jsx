@@ -16,7 +16,7 @@ const DEFAULT_PERMISSIONS = {
   ip_allowlist_enforcement: false
 };
 
-export default function OperativeRulesSecurityView({ onOpenSidebar }) {
+export default function OperativeRulesSecurityView({ onOpenSidebar = () => {} }) {
   if (typeof window !== 'undefined' && !window.transactionalPermissions) {
     window.transactionalPermissions = { ...DEFAULT_PERMISSIONS };
   }
@@ -96,30 +96,30 @@ export default function OperativeRulesSecurityView({ onOpenSidebar }) {
       
       {/* Toast */}
       {toast && (
-        <div className="fixed bottom-6 right-6 z-50 bg-[var(--bg-elevated)] border border-primary/30 shadow-2xl p-4 rounded-xl flex items-center gap-3 animate-in slide-in-from-bottom-5">
+        <div className="fixed bottom-6 right-6 z-50 bg-card border border-primary/30 shadow-2xl p-4 rounded-xl flex items-center gap-3 animate-in slide-in-from-bottom-5">
           <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></div>
-          <span className="text-[13px] font-bold text-[var(--text-primary)]">{toast}</span>
+          <span className="text-[13px] font-bold text-foreground">{toast}</span>
         </div>
       )}
 
       {/* Header */}
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-[var(--border-color)] pb-5 shrink-0">
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-border pb-5 shrink-0">
         <div className="flex items-center gap-3">
           <button 
-            className="md:hidden p-1.5 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-color)] text-[var(--text-muted)] hover:text-primary shadow-sm"
+            className="md:hidden p-1.5 rounded-lg bg-card border border-border text-foreground-muted hover:text-primary shadow-sm"
             onClick={onOpenSidebar}
           >
             <ToggleLeft size={16} />
           </button>
           <div>
-            <div className="flex items-center gap-2 text-xs font-bold text-[var(--text-muted)] bg-[var(--bg-elevated)] border border-[var(--border-color)] w-max px-2.5 py-1 rounded-full uppercase tracking-wider">
+            <div className="flex items-center gap-2 text-xs font-bold text-foreground-muted bg-card border border-border w-max px-2.5 py-1 rounded-full uppercase tracking-wider">
               <Key size={12} className="text-primary" />
               Gobernanza y Autenticación
             </div>
-            <h1 className="text-2xl md:text-3xl font-black text-[var(--text-primary)] tracking-tight mt-1.5 flex items-center gap-2">
+            <h1 className="text-2xl md:text-3xl font-black text-foreground tracking-tight mt-1.5 flex items-center gap-2">
               Reglas Operativas
             </h1>
-            <p className="text-[13px] text-[var(--text-muted)] mt-1 font-medium">
+            <p className="text-[13px] text-foreground-muted mt-1 font-medium">
               Gestiona límites operativos, aprobaciones de doble firma y umbrales críticos de seguridad perimetral.
             </p>
           </div>
@@ -128,14 +128,14 @@ export default function OperativeRulesSecurityView({ onOpenSidebar }) {
         <div className="flex items-center gap-2.5 shrink-0 w-full md:w-auto">
           <button 
             onClick={handleReset}
-            className="flex-1 md:flex-initial bg-[var(--bg-elevated)] hover:bg-[var(--bg-color)] border border-[var(--border-color)] text-[var(--text-primary)] font-bold text-xs px-4 py-2.5 rounded-xl transition-all flex items-center justify-center gap-2"
+            className="flex-1 md:flex-initial bg-card hover:bg-input border border-border text-foreground font-bold text-xs px-4 py-2.5 rounded-xl transition-all flex items-center justify-center gap-2"
           >
-            <RotateCw size={14} className="text-[var(--text-muted)]" />
+            <RotateCw size={14} className="text-foreground-muted" />
             Restablecer Umbrales
           </button>
           <button 
             onClick={handleSave}
-            className="flex-1 md:flex-initial bg-primary text-on-primary hover:bg-primary-fixed text-on-primary font-bold text-xs px-4 py-2.5 rounded-xl shadow-sm hover:shadow transition-all flex items-center justify-center gap-2"
+            className="flex-1 md:flex-initial bg-primary-button-bg text-primary-foreground hover:brightness-110 text-primary-foreground font-bold text-xs px-4 py-2.5 rounded-xl shadow-sm hover:shadow transition-all flex items-center justify-center gap-2"
           >
             <Save size={14} />
             Guardar Configuración
@@ -147,56 +147,56 @@ export default function OperativeRulesSecurityView({ onOpenSidebar }) {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         
         {/* Category 1: Operaciones Comerciales */}
-        <div className="bg-[var(--bg-elevated)] border border-[var(--border-color)] rounded-2xl p-6 space-y-5 shadow-sm">
-          <div className="flex items-center gap-3 border-b border-[var(--border-color)] pb-3">
+        <div className="bg-card border border-border rounded-2xl p-6 space-y-5 shadow-sm">
+          <div className="flex items-center gap-3 border-b border-border pb-3">
             <div className="p-2 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-lg">
               <Coins size={18} />
             </div>
-            <h3 className="font-extrabold text-[13px] text-[var(--text-primary)] uppercase tracking-wider">Límites Comerciales</h3>
+            <h3 className="font-extrabold text-[13px] text-foreground uppercase tracking-wider">Límites Comerciales</h3>
           </div>
 
           <div className="space-y-4">
             {/* Limit 1 */}
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center justify-between">
-                <label className="text-[12.5px] font-bold text-[var(--text-primary)]">Límite Diario de Caja (DOP)</label>
+                <label className="text-[12.5px] font-bold text-foreground">Límite Diario de Caja (DOP)</label>
               </div>
-              <p className="text-[10.5px] text-[var(--text-muted)] leading-relaxed">
+              <p className="text-[10.5px] text-foreground-muted leading-relaxed">
                 Monto transaccional máximo diario permitido por terminal antes de requerir una clave de aprobación del supervisor comercial.
               </p>
               <input 
                 type="number"
                 value={settings.max_cash_limit_day}
                 onChange={(e) => handleNumberChange('max_cash_limit_day', e.target.value)}
-                className="w-full bg-[var(--bg-color)] border border-[var(--border-color)] rounded-lg px-3 py-2 text-xs font-bold text-[var(--text-primary)] focus:outline-none focus:border-primary mt-1"
+                className="w-full bg-input border border-border rounded-lg px-3 py-2 text-xs font-bold text-foreground focus:outline-none focus:border-primary mt-1"
               />
             </div>
 
             {/* Limit 2 */}
-            <div className="flex flex-col gap-1.5 pt-3 border-t border-[var(--border-color)]/50">
+            <div className="flex flex-col gap-1.5 pt-3 border-t border-border/50">
               <div className="flex items-center justify-between">
-                <label className="text-[12.5px] font-bold text-[var(--text-primary)]">Máximo de Tickets / Minuto</label>
+                <label className="text-[12.5px] font-bold text-foreground">Máximo de Tickets / Minuto</label>
               </div>
-              <p className="text-[10.5px] text-[var(--text-muted)] leading-relaxed">
+              <p className="text-[10.5px] text-foreground-muted leading-relaxed">
                 Umbral máximo de sorteos/tickets impresos por minuto en máquinas POS para prevenir transacciones fantasma o fraude automatizado.
               </p>
               <input 
                 type="number"
                 value={settings.max_tickets_per_minute}
                 onChange={(e) => handleNumberChange('max_tickets_per_minute', e.target.value)}
-                className="w-full bg-[var(--bg-color)] border border-[var(--border-color)] rounded-lg px-3 py-2 text-xs font-bold text-[var(--text-primary)] focus:outline-none focus:border-primary mt-1"
+                className="w-full bg-input border border-border rounded-lg px-3 py-2 text-xs font-bold text-foreground focus:outline-none focus:border-primary mt-1"
               />
             </div>
 
             {/* Toggle 1 */}
-            <div className="flex items-center justify-between pt-4 border-t border-[var(--border-color)]/50">
+            <div className="flex items-center justify-between pt-4 border-t border-border/50">
               <div className="flex flex-col max-w-[70%]">
-                <span className="text-[12px] font-bold text-[var(--text-primary)]">Validación Dual de Vendedoras</span>
-                <span className="text-[10px] text-[var(--text-muted)] leading-normal mt-0.5">Exige confirmación CISO para crear cuentas móviles.</span>
+                <span className="text-[12px] font-bold text-foreground">Validación Dual de Vendedoras</span>
+                <span className="text-[10px] text-foreground-muted leading-normal mt-0.5">Exige confirmación CISO para crear cuentas móviles.</span>
               </div>
               <button 
                 onClick={() => handleToggle('double_validation_vendedora')}
-                className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                className="text-foreground-muted hover:text-foreground"
               >
                 {settings.double_validation_vendedora ? (
                   <ToggleRight size={38} className="text-primary" />
@@ -209,24 +209,24 @@ export default function OperativeRulesSecurityView({ onOpenSidebar }) {
         </div>
 
         {/* Category 2: Exportaciones y Reportes */}
-        <div className="bg-[var(--bg-elevated)] border border-[var(--border-color)] rounded-2xl p-6 space-y-5 shadow-sm">
-          <div className="flex items-center gap-3 border-b border-[var(--border-color)] pb-3">
+        <div className="bg-card border border-border rounded-2xl p-6 space-y-5 shadow-sm">
+          <div className="flex items-center gap-3 border-b border-border pb-3">
             <div className="p-2 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-lg">
               <FileSpreadsheet size={18} />
             </div>
-            <h3 className="font-extrabold text-[13px] text-[var(--text-primary)] uppercase tracking-wider">Reportes y Descargas</h3>
+            <h3 className="font-extrabold text-[13px] text-foreground uppercase tracking-wider">Reportes y Descargas</h3>
           </div>
 
           <div className="space-y-4">
             {/* Toggle 2 */}
             <div className="flex items-center justify-between">
               <div className="flex flex-col max-w-[75%]">
-                <span className="text-[12px] font-bold text-[var(--text-primary)]">Aprobación para Exportar</span>
-                <span className="text-[10px] text-[var(--text-muted)] leading-normal mt-0.5">Aprobaciones secundarias obligatorias para exportar bases de usuarios o informes financieros consolidados.</span>
+                <span className="text-[12px] font-bold text-foreground">Aprobación para Exportar</span>
+                <span className="text-[10px] text-foreground-muted leading-normal mt-0.5">Aprobaciones secundarias obligatorias para exportar bases de usuarios o informes financieros consolidados.</span>
               </div>
               <button 
                 onClick={() => handleToggle('require_export_approval')}
-                className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                className="text-foreground-muted hover:text-foreground"
               >
                 {settings.require_export_approval ? (
                   <ToggleRight size={38} className="text-primary" />
@@ -237,42 +237,42 @@ export default function OperativeRulesSecurityView({ onOpenSidebar }) {
             </div>
 
             {/* Limit 3 */}
-            <div className="flex flex-col gap-1.5 pt-4 border-t border-[var(--border-color)]/50">
+            <div className="flex flex-col gap-1.5 pt-4 border-t border-border/50">
               <div className="flex items-center justify-between">
-                <label className="text-[12.5px] font-bold text-[var(--text-primary)]">Filas Máximas sin Aprobación</label>
+                <label className="text-[12.5px] font-bold text-foreground">Filas Máximas sin Aprobación</label>
               </div>
-              <p className="text-[10.5px] text-[var(--text-muted)] leading-relaxed">
+              <p className="text-[10.5px] text-foreground-muted leading-relaxed">
                 Monto máximo de registros/filas que un supervisor comercial puede descargar en formato CSV/Excel sin requerir aprobación del CISO.
               </p>
               <input 
                 type="number"
                 value={settings.max_export_rows_limit}
                 onChange={(e) => handleNumberChange('max_export_rows_limit', e.target.value)}
-                className="w-full bg-[var(--bg-color)] border border-[var(--border-color)] rounded-lg px-3 py-2 text-xs font-bold text-[var(--text-primary)] focus:outline-none focus:border-primary mt-1"
+                className="w-full bg-input border border-border rounded-lg px-3 py-2 text-xs font-bold text-foreground focus:outline-none focus:border-primary mt-1"
               />
             </div>
           </div>
         </div>
 
         {/* Category 3: Seguridad Perimetral */}
-        <div className="bg-[var(--bg-elevated)] border border-[var(--border-color)] rounded-2xl p-6 space-y-5 shadow-sm">
-          <div className="flex items-center gap-3 border-b border-[var(--border-color)] pb-3">
+        <div className="bg-card border border-border rounded-2xl p-6 space-y-5 shadow-sm">
+          <div className="flex items-center gap-3 border-b border-border pb-3">
             <div className="p-2 bg-primary/10 text-primary-fixed dark:text-primary rounded-lg">
               <Lock size={18} />
             </div>
-            <h3 className="font-extrabold text-[13px] text-[var(--text-primary)] uppercase tracking-wider">Políticas de Sesión y MFA</h3>
+            <h3 className="font-extrabold text-[13px] text-foreground uppercase tracking-wider">Políticas de Sesión y MFA</h3>
           </div>
 
           <div className="space-y-4">
             {/* Toggle 3 */}
             <div className="flex items-center justify-between">
               <div className="flex flex-col max-w-[75%]">
-                <span className="text-[12px] font-bold text-[var(--text-primary)]">MFA Obligatorio Global</span>
-                <span className="text-[10px] text-[var(--text-muted)] leading-normal mt-0.5">Fuerza el uso de autenticación de doble factor para todas las cuentas con accesos administrativos.</span>
+                <span className="text-[12px] font-bold text-foreground">MFA Obligatorio Global</span>
+                <span className="text-[10px] text-foreground-muted leading-normal mt-0.5">Fuerza el uso de autenticación de doble factor para todas las cuentas con accesos administrativos.</span>
               </div>
               <button 
                 onClick={() => handleToggle('mfa_enforcement')}
-                className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                className="text-foreground-muted hover:text-foreground"
               >
                 {settings.mfa_enforcement ? (
                   <ToggleRight size={38} className="text-primary" />
@@ -283,46 +283,46 @@ export default function OperativeRulesSecurityView({ onOpenSidebar }) {
             </div>
 
             {/* Limit 4 */}
-            <div className="flex flex-col gap-1.5 pt-4 border-t border-[var(--border-color)]/50">
+            <div className="flex flex-col gap-1.5 pt-4 border-t border-border/50">
               <div className="flex items-center justify-between">
-                <label className="text-[12.5px] font-bold text-[var(--text-primary)]">Inactividad de Sesión (Min)</label>
+                <label className="text-[12.5px] font-bold text-foreground">Inactividad de Sesión (Min)</label>
               </div>
-              <p className="text-[10.5px] text-[var(--text-muted)] leading-relaxed">
+              <p className="text-[10.5px] text-foreground-muted leading-relaxed">
                 Tiempo de espera en minutos antes de que el token JWT del usuario expire y obligue un re-login por inactividad.
               </p>
               <input 
                 type="number"
                 value={settings.session_inactivity_timeout}
                 onChange={(e) => handleNumberChange('session_inactivity_timeout', e.target.value)}
-                className="w-full bg-[var(--bg-color)] border border-[var(--border-color)] rounded-lg px-3 py-2 text-xs font-bold text-[var(--text-primary)] focus:outline-none focus:border-primary mt-1"
+                className="w-full bg-input border border-border rounded-lg px-3 py-2 text-xs font-bold text-foreground focus:outline-none focus:border-primary mt-1"
               />
             </div>
 
             {/* Limit 5 */}
-            <div className="flex flex-col gap-1.5 pt-4 border-t border-[var(--border-color)]/50">
+            <div className="flex flex-col gap-1.5 pt-4 border-t border-border/50">
               <div className="flex items-center justify-between">
-                <label className="text-[12.5px] font-bold text-[var(--text-primary)]">Intentos Fallidos de Login</label>
+                <label className="text-[12.5px] font-bold text-foreground">Intentos Fallidos de Login</label>
               </div>
-              <p className="text-[10.5px] text-[var(--text-muted)] leading-relaxed">
+              <p className="text-[10.5px] text-foreground-muted leading-relaxed">
                 Número de contraseñas/PINs erróneos consecutivos antes de bloquear la cuenta administrativamente.
               </p>
               <input 
                 type="number"
                 value={settings.max_login_failed_attempts}
                 onChange={(e) => handleNumberChange('max_login_failed_attempts', e.target.value)}
-                className="w-full bg-[var(--bg-color)] border border-[var(--border-color)] rounded-lg px-3 py-2 text-xs font-bold text-[var(--text-primary)] focus:outline-none focus:border-primary mt-1"
+                className="w-full bg-input border border-border rounded-lg px-3 py-2 text-xs font-bold text-foreground focus:outline-none focus:border-primary mt-1"
               />
             </div>
 
             {/* Toggle 4 */}
-            <div className="flex items-center justify-between pt-4 border-t border-[var(--border-color)]/50">
+            <div className="flex items-center justify-between pt-4 border-t border-border/50">
               <div className="flex flex-col max-w-[70%]">
-                <span className="text-[12px] font-bold text-[var(--text-primary)]">Restricción de IPs Corporativas</span>
-                <span className="text-[10px] text-[var(--text-muted)] leading-normal mt-0.5">Exige que las conexiones administrativas provengan del rango de IPs permitido.</span>
+                <span className="text-[12px] font-bold text-foreground">Restricción de IPs Corporativas</span>
+                <span className="text-[10px] text-foreground-muted leading-normal mt-0.5">Exige que las conexiones administrativas provengan del rango de IPs permitido.</span>
               </div>
               <button 
                 onClick={() => handleToggle('ip_allowlist_enforcement')}
-                className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                className="text-foreground-muted hover:text-foreground"
               >
                 {settings.ip_allowlist_enforcement ? (
                   <ToggleRight size={38} className="text-primary" />

@@ -10,7 +10,7 @@ import { INITIAL_COMPANIES_DATA } from '@/config/catalogs/companiesCatalog';
 import { useRouter } from 'next/navigation';
 import SecurityConfirmDialog from '@/components/security/SecurityConfirmDialog';
 
-export default function InvitationsSecurityView({ onOpenSidebar }) {
+export default function InvitationsSecurityView({ onOpenSidebar = () => {} }) {
   const router = useRouter();
   const navigate = router.push;
 
@@ -506,7 +506,7 @@ export default function InvitationsSecurityView({ onOpenSidebar }) {
 
     // Use "Estado no disponible" only when there is insufficient data to determine status
     if (!finalStatus) {
-      return <span className="px-2 py-0.5 rounded text-[10px] font-bold border border-slate-200 bg-slate-50 text-slate-500 dark:bg-slate-800 dark:text-slate-400">Estado no disponible</span>;
+      return <span className="px-2 py-0.5 rounded text-[10px] font-bold border border-slate-200 bg-slate-50 text-foreground-disabled dark:bg-card dark:text-foreground-muted">Estado no disponible</span>;
     }
 
     const isEmail = method === 'EMAIL';
@@ -515,7 +515,7 @@ export default function InvitationsSecurityView({ onOpenSidebar }) {
       switch (finalStatus) {
         case 'DRAFT':
         case 'INVITATION_PENDING':
-          return <span className="px-2 py-0.5 rounded text-[10px] font-bold border border-slate-200 bg-slate-50 text-slate-500 dark:bg-slate-800 dark:text-slate-400">Pendiente de envío</span>;
+          return <span className="px-2 py-0.5 rounded text-[10px] font-bold border border-slate-200 bg-slate-50 text-foreground-disabled dark:bg-card dark:text-foreground-muted">Pendiente de envío</span>;
         case 'INVITATION_SENT':
           return <span className="px-2 py-0.5 rounded text-[10px] font-bold border border-blue-250 bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">Invitación enviada</span>;
         case 'INVITATION_OPENED':
@@ -529,9 +529,9 @@ export default function InvitationsSecurityView({ onOpenSidebar }) {
         case 'INVITATION_BOUNCED':
           return <span className="px-2 py-0.5 rounded text-[10px] font-bold border border-rose-300 bg-rose-100 text-primary-fixed dark:bg-rose-700/10 dark:text-primary">Invitación rebotada</span>;
         case 'REVOKED':
-          return <span className="px-2 py-0.5 rounded text-[10px] font-bold border border-slate-300 bg-slate-100 text-slate-600 dark:bg-slate-700/10 dark:text-slate-400">Revocada</span>;
+          return <span className="px-2 py-0.5 rounded text-[10px] font-bold border border-slate-300 bg-slate-100 text-slate-600 dark:bg-slate-700/10 dark:text-foreground-muted">Revocada</span>;
         default:
-          return <span className="px-2 py-0.5 rounded text-[10px] font-bold border border-slate-200 bg-slate-50 text-slate-500 dark:bg-slate-800 dark:text-slate-400">Estado no disponible</span>;
+          return <span className="px-2 py-0.5 rounded text-[10px] font-bold border border-slate-200 bg-slate-50 text-foreground-disabled dark:bg-card dark:text-foreground-muted">Estado no disponible</span>;
       }
     } else {
       switch (finalStatus) {
@@ -546,9 +546,9 @@ export default function InvitationsSecurityView({ onOpenSidebar }) {
         case 'ACCESS_BLOCKED':
           return <span className="px-2 py-0.5 rounded text-[10px] font-bold border border-rose-350 bg-rose-50 text-primary-fixed dark:bg-rose-900/10 dark:text-primary">Acceso bloqueado</span>;
         case 'REVOKED':
-          return <span className="px-2 py-0.5 rounded text-[10px] font-bold border border-slate-300 bg-slate-100 text-slate-600 dark:bg-slate-700/10 dark:text-slate-400">Revocada</span>;
+          return <span className="px-2 py-0.5 rounded text-[10px] font-bold border border-slate-300 bg-slate-100 text-slate-600 dark:bg-slate-700/10 dark:text-foreground-muted">Revocada</span>;
         default:
-          return <span className="px-2 py-0.5 rounded text-[10px] font-bold border border-slate-200 bg-slate-50 text-slate-500 dark:bg-slate-800 dark:text-slate-400">Estado no disponible</span>;
+          return <span className="px-2 py-0.5 rounded text-[10px] font-bold border border-slate-200 bg-slate-50 text-foreground-disabled dark:bg-card dark:text-foreground-muted">Estado no disponible</span>;
       }
     }
   };
@@ -1121,7 +1121,7 @@ export default function InvitationsSecurityView({ onOpenSidebar }) {
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 shrink-0">
         {[
           { label: 'Enviadas', value: metrics.enviadas, sub: 'Correo despachado', color: 'border-blue-500/20 text-blue-500 bg-blue-500/5' },
-          { label: 'Pend. envío', value: metrics.pendientesEnvio, sub: 'Borrador / pendiente', color: 'border-slate-500/20 text-slate-500 bg-slate-500/5' },
+          { label: 'Pend. envío', value: metrics.pendientesEnvio, sub: 'Borrador / pendiente', color: 'border-slate-500/20 text-foreground-disabled bg-slate-500/5' },
           { label: 'Pend. registro', value: metrics.pendientesRegistro, sub: 'Sin completar registro', color: 'border-purple-500/20 text-purple-500 bg-purple-500/5' },
           { label: 'Sin primer login', value: metrics.registradosSinLogin, sub: 'Registro listo', color: 'border-cyan-500/20 text-cyan-500 bg-cyan-500/5' },
           { label: 'Acceso confirmado', value: metrics.primerLogin, sub: 'Primer login realizado', color: 'border-emerald-500/20 text-emerald-500 bg-emerald-500/5' },
@@ -1197,7 +1197,7 @@ export default function InvitationsSecurityView({ onOpenSidebar }) {
               <SlidersHorizontal size={14} />
               Filtros Avanzados
               {activeFiltersCount > 0 && (
-                <span className="w-4 h-4 rounded-full bg-primary text-on-primary font-bold font-mono text-[9px] flex items-center justify-center">
+                <span className="w-4 h-4 rounded-full bg-primary-button-bg text-primary-foreground font-bold font-mono text-[9px] flex items-center justify-center">
                   {activeFiltersCount}
                 </span>
               )}
@@ -1331,7 +1331,7 @@ export default function InvitationsSecurityView({ onOpenSidebar }) {
               </button>
               <button
                 onClick={() => setShowFiltersModal(false)}
-                className="px-4 py-2 rounded-lg bg-primary text-on-primary text-on-primary text-xs font-bold hover:bg-primary-fixed shadow-sm"
+                className="px-4 py-2 rounded-lg bg-primary-button-bg text-primary-foreground text-on-primary text-xs font-bold hover:brightness-110 shadow-sm"
               >
                 Aplicar Filtros
               </button>
@@ -1436,7 +1436,7 @@ export default function InvitationsSecurityView({ onOpenSidebar }) {
                         {act.invitation_sent_at || act.temporary_credentials_generated_at ? (
                           new Date(act.invitation_sent_at || act.temporary_credentials_generated_at).toLocaleDateString()
                         ) : (
-                          <span className="text-slate-400">—</span>
+                          <span className="text-foreground-muted">—</span>
                         )}
                       </td>
 
@@ -1445,7 +1445,7 @@ export default function InvitationsSecurityView({ onOpenSidebar }) {
                         {act.invitation_opened_at ? (
                           new Date(act.invitation_opened_at).toLocaleDateString()
                         ) : (
-                          <span className="text-slate-400">—</span>
+                          <span className="text-foreground-muted">—</span>
                         )}
                       </td>
 
@@ -1454,7 +1454,7 @@ export default function InvitationsSecurityView({ onOpenSidebar }) {
                         {act.registration_completed_at ? (
                           new Date(act.registration_completed_at).toLocaleDateString()
                         ) : (
-                          <span className="text-slate-400">—</span>
+                          <span className="text-foreground-muted">—</span>
                         )}
                       </td>
 
@@ -1463,7 +1463,7 @@ export default function InvitationsSecurityView({ onOpenSidebar }) {
                         {act.first_login_at ? (
                           new Date(act.first_login_at).toLocaleDateString()
                         ) : (
-                          <span className="text-slate-400">—</span>
+                          <span className="text-foreground-muted">—</span>
                         )}
                       </td>
 
@@ -1476,7 +1476,7 @@ export default function InvitationsSecurityView({ onOpenSidebar }) {
                             new Date(act.invitation_expires_at).toLocaleDateString()
                           )
                         ) : (
-                          <span className="text-slate-400">—</span>
+                          <span className="text-foreground-muted">—</span>
                         )}
                       </td>
 
@@ -1538,7 +1538,7 @@ export default function InvitationsSecurityView({ onOpenSidebar }) {
 
               {/* User Identity Info card inside header */}
               <div className="flex items-center gap-3 bg-[var(--bg-elevated)] p-3 rounded-xl border border-[var(--border-color)]">
-                <div className="w-11 h-11 rounded-full bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 flex items-center justify-center font-extrabold text-xs shrink-0 shadow-xs">
+                <div className="w-11 h-11 rounded-full bg-slate-100 text-slate-700 border border-slate-200 dark:bg-card dark:text-foreground-secondary dark:border-border flex items-center justify-center font-extrabold text-xs shrink-0 shadow-xs">
                   {selectedInvitation.full_name.split(' ').filter(Boolean).map(n => n[0]).join('').replace(/\./g, '').substring(0, 2).toUpperCase()}
                 </div>
                 <div className="overflow-hidden flex-1">
@@ -1658,7 +1658,7 @@ export default function InvitationsSecurityView({ onOpenSidebar }) {
                   <span className="text-[var(--text-muted)] font-semibold">Reenvíos:</span>
                   <span className="font-bold font-mono text-[var(--text-primary)]">{selectedInvitation.activation?.resend_count || 0}</span>
 
-                  <div className="col-span-2 mt-2 p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 space-y-1">
+                  <div className="col-span-2 mt-2 p-3 bg-slate-50 dark:bg-surface-subtle/50 rounded-xl border border-dashed border-slate-200 dark:border-border space-y-1">
                     <span className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider block">Resultado de envío / Detalle</span>
                     <p className="text-[11px] text-[var(--text-secondary)] font-medium leading-relaxed">
                       {((selectedInvitation.activation?.first_login_at || selectedInvitation.last_login_at) ? (
@@ -1765,9 +1765,9 @@ export default function InvitationsSecurityView({ onOpenSidebar }) {
                   }
 
                   return (
-                    <div className="relative border-l border-slate-200 dark:border-slate-800 ml-3.5 space-y-5 py-1">
+                    <div className="relative border-l border-slate-200 dark:border-border ml-3.5 space-y-5 py-1">
                       {steps.map((st, i) => {
-                        let bulletColor = 'bg-slate-100 text-slate-400 border-slate-200 dark:bg-slate-800 dark:text-slate-600 dark:border-slate-700';
+                        let bulletColor = 'bg-slate-100 text-foreground-muted border-slate-200 dark:bg-card dark:text-slate-600 dark:border-border';
                         let titleColor = 'text-[var(--text-secondary)] font-bold';
                         let textColor = 'text-[var(--text-muted)]';
 
@@ -1957,7 +1957,7 @@ export default function InvitationsSecurityView({ onOpenSidebar }) {
                         setSelectedInvitation(null);
                         navigate(`/settings/security/users?search=${selectedInvitation.full_name}&tab=auditoria`);
                       }}
-                      className="px-4 py-2 rounded-lg bg-primary text-on-primary hover:bg-primary-fixed text-on-primary font-bold text-xs shadow-xs transition-colors"
+                      className="px-4 py-2 rounded-lg bg-primary-button-bg text-primary-foreground hover:brightness-110 text-on-primary font-bold text-xs shadow-xs transition-colors"
                     >
                       Ver auditoría
                     </button>
@@ -1970,7 +1970,7 @@ export default function InvitationsSecurityView({ onOpenSidebar }) {
                     return (
                       <button
                         onClick={() => handleResendInvitationDirect(selectedInvitation)}
-                        className="px-4 py-2 rounded-lg bg-primary text-on-primary hover:bg-primary-fixed text-on-primary font-bold text-xs shadow-xs transition-colors"
+                        className="px-4 py-2 rounded-lg bg-primary-button-bg text-primary-foreground hover:brightness-110 text-on-primary font-bold text-xs shadow-xs transition-colors"
                       >
                         Reenviar invitación
                       </button>
@@ -1980,7 +1980,7 @@ export default function InvitationsSecurityView({ onOpenSidebar }) {
                     return (
                       <button
                         onClick={() => handleSendInvitationDirect(selectedInvitation)}
-                        className="px-4 py-2 rounded-lg bg-primary text-on-primary hover:bg-primary-fixed text-on-primary font-bold text-xs shadow-xs transition-colors"
+                        className="px-4 py-2 rounded-lg bg-primary-button-bg text-primary-foreground hover:brightness-110 text-on-primary font-bold text-xs shadow-xs transition-colors"
                       >
                         Enviar invitación
                       </button>
@@ -1991,7 +1991,7 @@ export default function InvitationsSecurityView({ onOpenSidebar }) {
                     return (
                       <button
                         onClick={() => handleRegenerateInvitationDirect(selectedInvitation)}
-                        className="px-4 py-2 rounded-lg bg-primary text-on-primary hover:bg-primary-fixed text-on-primary font-bold text-xs shadow-xs transition-colors"
+                        className="px-4 py-2 rounded-lg bg-primary-button-bg text-primary-foreground hover:brightness-110 text-on-primary font-bold text-xs shadow-xs transition-colors"
                       >
                         Regenerar invitación
                       </button>
@@ -2002,7 +2002,7 @@ export default function InvitationsSecurityView({ onOpenSidebar }) {
                     return (
                       <button
                         onClick={() => handleSendReminderDirect(selectedInvitation)}
-                        className="px-4 py-2 rounded-lg bg-primary text-on-primary hover:bg-primary-fixed text-on-primary font-bold text-xs shadow-xs transition-colors"
+                        className="px-4 py-2 rounded-lg bg-primary-button-bg text-primary-foreground hover:brightness-110 text-on-primary font-bold text-xs shadow-xs transition-colors"
                       >
                         Enviar recordatorio
                       </button>
@@ -2013,7 +2013,7 @@ export default function InvitationsSecurityView({ onOpenSidebar }) {
                     return (
                       <button
                         onClick={() => handleSendReminderDirect(selectedInvitation)}
-                        className="px-4 py-2 rounded-lg bg-primary text-on-primary hover:bg-primary-fixed text-on-primary font-bold text-xs shadow-xs transition-colors"
+                        className="px-4 py-2 rounded-lg bg-primary-button-bg text-primary-foreground hover:brightness-110 text-on-primary font-bold text-xs shadow-xs transition-colors"
                       >
                         Enviar recordatorio
                       </button>
@@ -2025,7 +2025,7 @@ export default function InvitationsSecurityView({ onOpenSidebar }) {
                     return (
                       <button
                         onClick={() => handleRegeneratePinDirect(selectedInvitation)}
-                        className="px-4 py-2 rounded-lg bg-primary text-on-primary hover:bg-primary-fixed text-on-primary font-bold text-xs shadow-xs transition-colors"
+                        className="px-4 py-2 rounded-lg bg-primary-button-bg text-primary-foreground hover:brightness-110 text-on-primary font-bold text-xs shadow-xs transition-colors"
                       >
                         Regenerar PIN
                       </button>
@@ -2035,7 +2035,7 @@ export default function InvitationsSecurityView({ onOpenSidebar }) {
                     return (
                       <button
                         onClick={() => handleMarkInstructionsDelivered(selectedInvitation)}
-                        className="px-4 py-2 rounded-lg bg-primary text-on-primary hover:bg-primary-fixed text-on-primary font-bold text-xs shadow-xs transition-colors"
+                        className="px-4 py-2 rounded-lg bg-primary-button-bg text-primary-foreground hover:brightness-110 text-on-primary font-bold text-xs shadow-xs transition-colors"
                       >
                         Marcar entregado
                       </button>

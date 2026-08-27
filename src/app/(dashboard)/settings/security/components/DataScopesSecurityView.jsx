@@ -192,30 +192,30 @@ export default function DataScopesSecurityView({ onOpenSidebar = () => {} }) {
       
       {/* Toast Alert */}
       {toast && (
-        <div className="fixed bottom-6 right-6 z-50 bg-[var(--bg-elevated)] border border-primary/30 shadow-2xl p-4 rounded-xl flex items-center gap-3 animate-in slide-in-from-bottom-5">
+        <div className="fixed bottom-6 right-6 z-50 bg-card border border-primary/30 shadow-2xl p-4 rounded-xl flex items-center gap-3 animate-in slide-in-from-bottom-5">
           <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></div>
-          <span className="text-[13px] font-bold text-[var(--text-primary)]">{toast}</span>
+          <span className="text-[13px] font-bold text-foreground">{toast}</span>
         </div>
       )}
 
       {/* Header */}
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-[var(--border-color)] pb-5 shrink-0">
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-border pb-5 shrink-0">
         <div className="flex items-center gap-3">
           <button 
-            className="md:hidden p-1.5 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-color)] text-[var(--text-muted)] hover:text-primary shadow-sm"
+            className="md:hidden p-1.5 rounded-lg bg-card border border-border text-foreground-muted hover:text-primary shadow-sm"
             onClick={onOpenSidebar}
           >
             <SlidersHorizontal size={16} />
           </button>
           <div>
-            <div className="flex items-center gap-2 text-xs font-bold text-[var(--text-muted)] bg-[var(--bg-elevated)] border border-[var(--border-color)] w-max px-2.5 py-1 rounded-full uppercase tracking-wider">
+            <div className="flex items-center gap-2 text-xs font-bold text-foreground-muted bg-card border border-border w-max px-2.5 py-1 rounded-full uppercase tracking-wider">
               <Building2 size={12} className="text-primary" />
               Gobernanza y Autenticación
             </div>
-            <h1 className="text-2xl md:text-3xl font-black text-[var(--text-primary)] tracking-tight mt-1.5 flex items-center gap-2">
+            <h1 className="text-2xl md:text-3xl font-black text-foreground tracking-tight mt-1.5 flex items-center gap-2">
               Alcance de Datos (Seguridad de Fila)
             </h1>
-            <p className="text-[13px] text-[var(--text-muted)] mt-1 font-medium">
+            <p className="text-[13px] text-foreground-muted mt-1 font-medium">
               Segmenta los registros de ventas, terminales y agencias que un usuario puede visualizar en la plataforma.
             </p>
           </div>
@@ -225,7 +225,7 @@ export default function DataScopesSecurityView({ onOpenSidebar = () => {} }) {
           <button 
             onClick={handleSave}
             disabled={!selectedUserId}
-            className="w-full md:w-auto bg-primary text-on-primary hover:bg-primary-fixed text-on-primary font-bold text-xs px-4 py-2.5 rounded-xl shadow-sm hover:shadow transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full md:w-auto bg-primary-button-bg text-primary-foreground hover:brightness-110 text-primary-foreground font-bold text-xs px-4 py-2.5 rounded-xl shadow-sm hover:shadow transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Save size={14} />
             Aplicar Alcance Operativo
@@ -237,18 +237,18 @@ export default function DataScopesSecurityView({ onOpenSidebar = () => {} }) {
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-0 overflow-hidden pb-6">
         
         {/* Left Column: User Selection (4 cols) */}
-        <div className="lg:col-span-4 bg-[var(--bg-elevated)] border border-[var(--border-color)] rounded-2xl p-4 flex flex-col overflow-hidden">
-          <h3 className="font-extrabold text-[12px] text-[var(--text-primary)] uppercase tracking-wider mb-3 px-2 flex items-center gap-2">
+        <div className="lg:col-span-4 bg-card border border-border rounded-2xl p-4 flex flex-col overflow-hidden">
+          <h3 className="font-extrabold text-[12px] text-foreground uppercase tracking-wider mb-3 px-2 flex items-center gap-2">
             <User size={14} className="text-primary" />
             Usuarios del Sistema
           </h3>
           
           <div className="relative mb-3 w-full">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--text-muted)]" />
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground-muted" />
             <input
               type="text"
               placeholder="Filtrar por nombre o rol..."
-              className="w-full bg-[var(--bg-color)] border border-[var(--border-color)] rounded-lg pl-8 pr-3 py-1.5 text-xs font-semibold text-[var(--text-primary)] focus:outline-none focus:border-primary"
+              className="w-full bg-input border border-border rounded-lg pl-8 pr-3 py-1.5 text-xs font-semibold text-foreground focus:outline-none focus:border-primary"
               value={searchUser}
               onChange={(e) => setSearchUser(e.target.value)}
             />
@@ -256,7 +256,7 @@ export default function DataScopesSecurityView({ onOpenSidebar = () => {} }) {
 
           <div className="space-y-1 overflow-y-auto custom-scrollbar flex-1 pr-1">
             {filteredUsers.length === 0 ? (
-              <div className="p-4 text-center text-[var(--text-muted)] text-[11px] italic">
+              <div className="p-4 text-center text-foreground-muted text-[11px] italic">
                 Sin coincidencias.
               </div>
             ) : (
@@ -269,17 +269,17 @@ export default function DataScopesSecurityView({ onOpenSidebar = () => {} }) {
                     className={`w-full text-left p-2.5 rounded-xl text-[12px] transition-all flex items-center gap-3 border ${
                       isSelected 
                         ? 'bg-primary/5 border-primary/30' 
-                        : 'border-transparent hover:bg-[var(--bg-color)] hover:text-[var(--text-primary)]'
+                        : 'border-transparent hover:bg-input hover:text-foreground'
                     }`}
                   >
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 ${
-                      isSelected ? 'bg-primary text-on-primary' : 'bg-[var(--bg-color)] text-[var(--text-secondary)] border border-[var(--border-color)]'
+                      isSelected ? 'bg-primary-button-bg text-primary-foreground' : 'bg-input text-foreground-secondary border border-border'
                     }`}>
                       {user.full_name.split(' ').filter(Boolean).map(n => n[0]).join('').replace(/\./g, '').substring(0,2).toUpperCase()}
                     </div>
                     <div className="min-w-0">
-                      <span className="font-bold text-[var(--text-primary)] block truncate">{user.full_name}</span>
-                      <span className="text-[10px] text-[var(--text-muted)] block truncate">{user.role} • {user.user_type}</span>
+                      <span className="font-bold text-foreground block truncate">{user.full_name}</span>
+                      <span className="text-[10px] text-foreground-muted block truncate">{user.role} • {user.user_type}</span>
                     </div>
                   </button>
                 );
@@ -293,24 +293,24 @@ export default function DataScopesSecurityView({ onOpenSidebar = () => {} }) {
           
           {/* Top Panel: Scope Selector */}
           {selectedUser ? (
-            <div className="bg-[var(--bg-elevated)] border border-[var(--border-color)] rounded-2xl p-5 shrink-0 space-y-4">
-              <div className="flex items-center justify-between border-b border-[var(--border-color)] pb-3">
+            <div className="bg-card border border-border rounded-2xl p-5 shrink-0 space-y-4">
+              <div className="flex items-center justify-between border-b border-border pb-3">
                 <div>
-                  <h3 className="font-black text-sm text-[var(--text-primary)]">
+                  <h3 className="font-black text-sm text-foreground">
                     Parámetros de Alcance: <span className="text-primary">{selectedUser.full_name}</span>
                   </h3>
-                  <p className="text-[11px] text-[var(--text-muted)] font-medium">Asigna el tipo de delimitación operativo para esta cuenta.</p>
+                  <p className="text-[11px] text-foreground-muted font-medium">Asigna el tipo de delimitación operativo para esta cuenta.</p>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Selector */}
                 <div>
-                  <label className="block font-bold text-[var(--text-muted)] uppercase tracking-wide mb-1.5 text-[10.5px]">Nivel de Alcance *</label>
+                  <label className="block font-bold text-foreground-muted uppercase tracking-wide mb-1.5 text-[10.5px]">Nivel de Alcance *</label>
                   <select 
                     value={scopeState.scope_type}
                     onChange={(e) => setScopeState(prev => ({ ...prev, scope_type: e.target.value, scope_entity_ids: [] }))}
-                    className="w-full bg-[var(--bg-color)] border border-[var(--border-color)] rounded-lg px-3 py-2 text-xs font-bold text-[var(--text-primary)] focus:outline-none focus:border-primary cursor-pointer"
+                    className="w-full bg-input border border-border rounded-lg px-3 py-2 text-xs font-bold text-foreground focus:outline-none focus:border-primary cursor-pointer"
                   >
                     <option value="COMPANY">Total Empresa (Sin Restricciones)</option>
                     <option value="GROUPING">Limitado por Agrupación</option>
@@ -322,14 +322,14 @@ export default function DataScopesSecurityView({ onOpenSidebar = () => {} }) {
 
                 {/* Include children toggle */}
                 {scopeState.scope_type !== 'COMPANY' && (
-                  <div className="flex items-center justify-between bg-[var(--bg-color)] border border-[var(--border-color)] px-4 py-2 rounded-xl mt-auto">
+                  <div className="flex items-center justify-between bg-input border border-border px-4 py-2 rounded-xl mt-auto">
                     <div className="flex flex-col">
-                      <span className="text-[11px] font-bold text-[var(--text-primary)]">Heredar Subordinados</span>
-                      <span className="text-[9.5px] text-[var(--text-muted)]">Ver sub-agencias asociadas</span>
+                      <span className="text-[11px] font-bold text-foreground">Heredar Subordinados</span>
+                      <span className="text-[9.5px] text-foreground-muted">Ver sub-agencias asociadas</span>
                     </div>
                     <button 
                       onClick={() => setScopeState(prev => ({ ...prev, include_children: !prev.include_children }))}
-                      className="text-xs font-bold px-3 py-1 bg-[var(--bg-elevated)] border border-[var(--border-color)] rounded-lg text-[var(--text-primary)] hover:bg-[var(--bg-color)]"
+                      className="text-xs font-bold px-3 py-1 bg-card border border-border rounded-lg text-foreground hover:bg-input"
                     >
                       {scopeState.include_children ? 'Habilitado' : 'Deshabilitado'}
                     </button>
@@ -344,8 +344,8 @@ export default function DataScopesSecurityView({ onOpenSidebar = () => {} }) {
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <div>
-                          <label className="block font-bold text-[var(--text-muted)] uppercase tracking-wide text-[10.5px]">Agencias Asignadas *</label>
-                          <span className="text-[10px] text-[var(--text-muted)] mt-0.5 block">
+                          <label className="block font-bold text-foreground-muted uppercase tracking-wide text-[10.5px]">Agencias Asignadas *</label>
+                          <span className="text-[10px] text-foreground-muted mt-0.5 block">
                             {scopeState.scope_entity_ids?.length || 0} agencias seleccionadas para este alcance.
                           </span>
                         </div>
@@ -356,16 +356,16 @@ export default function DataScopesSecurityView({ onOpenSidebar = () => {} }) {
                             setAgencyZoneFilter('');
                             setIsAgencyModalOpen(true);
                           }}
-                          className="flex items-center gap-1.5 px-3 py-1.5 text-[10.5px] font-bold bg-primary text-on-primary hover:bg-primary-fixed text-on-primary rounded-lg transition-colors shadow-sm cursor-pointer"
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-[10.5px] font-bold bg-primary-button-bg text-primary-foreground hover:brightness-110 text-primary-foreground rounded-lg transition-colors shadow-sm cursor-pointer"
                         >
                           <SlidersHorizontal size={12} />
                           Gestionar Agencias
                         </button>
                       </div>
 
-                      <div className="p-3 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl">
+                      <div className="p-3 bg-input border border-border rounded-xl">
                         {(!scopeState.scope_entity_ids || scopeState.scope_entity_ids.length === 0) ? (
-                          <div className="text-center py-4 text-[11px] text-[var(--text-muted)] italic">
+                          <div className="text-center py-4 text-[11px] text-foreground-muted italic">
                             Ninguna agencia seleccionada. Haz clic en "Gestionar Agencias" para buscarlas e incorporarlas.
                           </div>
                         ) : (
@@ -395,8 +395,8 @@ export default function DataScopesSecurityView({ onOpenSidebar = () => {} }) {
                     </div>
                   ) : (
                     <>
-                      <label className="block font-bold text-[var(--text-muted)] uppercase tracking-wide mb-2 text-[10.5px]">Entidades Asignadas (Selección Múltiple) *</label>
-                      <div className="flex flex-wrap gap-2 p-3 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl max-h-32 overflow-y-auto custom-scrollbar">
+                      <label className="block font-bold text-foreground-muted uppercase tracking-wide mb-2 text-[10.5px]">Entidades Asignadas (Selección Múltiple) *</label>
+                      <div className="flex flex-wrap gap-2 p-3 bg-input border border-border rounded-xl max-h-32 overflow-y-auto custom-scrollbar">
                         {availableEntities.map(ent => {
                           const isAssigned = scopeState.scope_entity_ids.includes(ent.id);
                           return (
@@ -407,7 +407,7 @@ export default function DataScopesSecurityView({ onOpenSidebar = () => {} }) {
                               className={`px-2.5 py-1 rounded-lg border text-[10.5px] font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
                                 isAssigned 
                                   ? 'bg-rose-50 border-rose-300 text-primary-fixed font-bold dark:bg-primary/10 dark:border-primary/20' 
-                                  : 'bg-[var(--bg-elevated)] border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                                  : 'bg-card border-border text-foreground-muted hover:text-foreground'
                               }`}
                             >
                               {isAssigned && <Check size={12} className="stroke-[2.5]" />}
@@ -422,30 +422,30 @@ export default function DataScopesSecurityView({ onOpenSidebar = () => {} }) {
               )}
             </div>
           ) : (
-            <div className="bg-[var(--bg-elevated)] border border-[var(--border-color)] rounded-2xl p-6 text-center text-[var(--text-muted)] text-[12px] italic">
+            <div className="bg-card border border-border rounded-2xl p-6 text-center text-foreground-muted text-[12px] italic">
               Por favor selecciona un usuario del panel de la izquierda para configurar su alcance operativo.
             </div>
           )}
 
           {/* Bottom Panel: Live Visibility Simulator */}
-          <div className="flex-1 bg-[var(--bg-elevated)] border border-[var(--border-color)] rounded-2xl p-5 flex flex-col overflow-hidden min-h-[250px]">
-            <div className="flex items-center justify-between border-b border-[var(--border-color)] pb-3 mb-3 shrink-0">
+          <div className="flex-1 bg-card border border-border rounded-2xl p-5 flex flex-col overflow-hidden min-h-[250px]">
+            <div className="flex items-center justify-between border-b border-border pb-3 mb-3 shrink-0">
               <div>
-                <h3 className="font-extrabold text-[12.5px] text-[var(--text-primary)] uppercase tracking-wider flex items-center gap-2">
+                <h3 className="font-extrabold text-[12.5px] text-foreground uppercase tracking-wider flex items-center gap-2">
                   <Play size={14} className="text-emerald-500 fill-emerald-500" />
                   Simulador de Visibilidad de Filas en Tiempo Real
                 </h3>
-                <p className="text-[10px] text-[var(--text-muted)] font-medium">Filtro dinámico de transacciones visible en el dashboard del usuario.</p>
+                <p className="text-[10px] text-foreground-muted font-medium">Filtro dinámico de transacciones visible en el dashboard del usuario.</p>
               </div>
               <span className="bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 px-2 py-0.5 rounded text-[10px] font-bold">
                 {visibleSimulatedRows.length} de {SIMULATED_ROWS_POOL.length} Filas Permitidas
               </span>
             </div>
 
-            <div className="flex-1 overflow-auto custom-scrollbar border border-[var(--border-color)] rounded-xl">
+            <div className="flex-1 overflow-auto custom-scrollbar border border-border rounded-xl">
               <table className="w-full text-left border-collapse text-[10.5px]">
                 <thead>
-                  <tr className="border-b border-[var(--border-color)] bg-[var(--bg-color)] font-bold text-[var(--text-muted)] uppercase tracking-wider sticky top-0">
+                  <tr className="border-b border-border bg-input font-bold text-foreground-muted uppercase tracking-wider sticky top-0">
                     <th className="py-2 px-3">ID Transacción</th>
                     <th className="py-2 px-3">Agencia</th>
                     <th className="py-2 px-3">Ruta</th>
@@ -458,19 +458,19 @@ export default function DataScopesSecurityView({ onOpenSidebar = () => {} }) {
                 <tbody className="divide-y divide-[var(--border-color)]">
                   {visibleSimulatedRows.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-10 text-center text-[var(--text-muted)] italic font-semibold">
+                      <td colSpan={7} className="py-10 text-center text-foreground-muted italic font-semibold">
                         Acceso Denegado. Ninguna transacción cumple con el alcance de datos asignado.
                       </td>
                     </tr>
                   ) : (
                     visibleSimulatedRows.map(row => (
-                      <tr key={row.id} className="hover:bg-[var(--bg-color)]/30 font-medium">
+                      <tr key={row.id} className="hover:bg-input/30 font-medium">
                         <td className="py-2 px-3 font-bold text-primary">{row.id}</td>
-                        <td className="py-2 px-3 text-[var(--text-primary)]">{row.agency}</td>
-                        <td className="py-2 px-3 text-[var(--text-secondary)]">{row.route}</td>
-                        <td className="py-2 px-3 text-[var(--text-secondary)]">{row.grouping}</td>
-                        <td className="py-2 px-3 text-[var(--text-secondary)]">{row.territory}</td>
-                        <td className="py-2 px-3 text-right font-bold text-[var(--text-primary)]">{row.amount}</td>
+                        <td className="py-2 px-3 text-foreground">{row.agency}</td>
+                        <td className="py-2 px-3 text-foreground-secondary">{row.route}</td>
+                        <td className="py-2 px-3 text-foreground-secondary">{row.grouping}</td>
+                        <td className="py-2 px-3 text-foreground-secondary">{row.territory}</td>
+                        <td className="py-2 px-3 text-right font-bold text-foreground">{row.amount}</td>
                         <td className="py-2 px-3 text-center">
                           <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
                             row.status === 'Aprobada' 
@@ -487,9 +487,9 @@ export default function DataScopesSecurityView({ onOpenSidebar = () => {} }) {
               </table>
             </div>
 
-            <div className="mt-3 p-3 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl flex items-start gap-2 shrink-0 text-[10px]">
+            <div className="mt-3 p-3 bg-input border border-border rounded-xl flex items-start gap-2 shrink-0 text-[10px]">
               <Info size={14} className="text-primary shrink-0 mt-0.5" />
-              <p className="text-[var(--text-muted)] leading-relaxed">
+              <p className="text-foreground-muted leading-relaxed">
                 Este simulador ejecuta las mismas consultas SQL que el backend de producción. Para el nivel seleccionado de alcance, el usuario <strong>{selectedUser?.full_name}</strong> verá únicamente las filas correspondientes de la tabla transaccional.
               </p>
             </div>
@@ -503,36 +503,36 @@ export default function DataScopesSecurityView({ onOpenSidebar = () => {} }) {
         <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => setIsAgencyModalOpen(false)}></div>
           
-          <div className="relative w-full max-w-3xl bg-[var(--bg-elevated)] rounded-2xl shadow-2xl border border-[var(--border-color)] overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200">
+          <div className="relative w-full max-w-3xl bg-card rounded-2xl shadow-2xl border border-border overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200">
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-color)] bg-[var(--bg-color)]/50">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-input/50">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 bg-primary/10 text-primary border border-primary/20 rounded-lg flex items-center justify-center">
                   <Building2 size={16} />
                 </div>
                 <div>
-                  <h4 className="text-sm font-black text-[var(--text-primary)]">Buscar y Asignar Agencias (RLS)</h4>
-                  <p className="text-[10px] text-[var(--text-muted)] font-medium">Asigna múltiples agencias al alcance de datos de este usuario</p>
+                  <h4 className="text-sm font-black text-foreground">Buscar y Asignar Agencias (RLS)</h4>
+                  <p className="text-[10px] text-foreground-muted font-medium">Asigna múltiples agencias al alcance de datos de este usuario</p>
                 </div>
               </div>
               <button 
                 onClick={() => setIsAgencyModalOpen(false)}
-                className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-color)] rounded-lg transition-all border-none"
+                className="p-1.5 text-foreground-muted hover:text-foreground hover:bg-input rounded-lg transition-all border-none"
               >
                 <X size={16} />
               </button>
             </div>
 
             {/* Filters Bar */}
-            <div className="p-4 bg-[var(--bg-color)]/30 border-b border-[var(--border-color)] grid grid-cols-1 sm:grid-cols-2 gap-3 shrink-0">
+            <div className="p-4 bg-input/30 border-b border-border grid grid-cols-1 sm:grid-cols-2 gap-3 shrink-0">
               <div className="relative">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-foreground-muted" />
                 <input 
                   type="text"
                   placeholder="Buscar por código, nombre, ubicación o terminal..."
                   value={agencySearchQuery}
                   onChange={(e) => setAgencySearchQuery(e.target.value)}
-                  className="w-full bg-[var(--bg-color)] border border-[var(--border-color)] rounded-lg pl-9 pr-3 py-1.5 text-[12px] font-semibold text-[var(--text-primary)] focus:outline-none focus:border-primary"
+                  className="w-full bg-input border border-border rounded-lg pl-9 pr-3 py-1.5 text-[12px] font-semibold text-foreground focus:outline-none focus:border-primary"
                 />
               </div>
 
@@ -540,7 +540,7 @@ export default function DataScopesSecurityView({ onOpenSidebar = () => {} }) {
                 <select
                   value={agencyZoneFilter}
                   onChange={(e) => setAgencyZoneFilter(e.target.value)}
-                  className="w-full bg-[var(--bg-color)] border border-[var(--border-color)] rounded-lg px-3 py-1.5 text-[12px] font-semibold text-[var(--text-primary)] focus:outline-none focus:border-primary"
+                  className="w-full bg-input border border-border rounded-lg px-3 py-1.5 text-[12px] font-semibold text-foreground focus:outline-none focus:border-primary"
                 >
                   <option value="">Todas las Zonas / Regiones</option>
                   <option value="ZON-METRO">Zona Metropolitana</option>
@@ -552,8 +552,8 @@ export default function DataScopesSecurityView({ onOpenSidebar = () => {} }) {
             </div>
 
             {/* Stats and Bulk Actions */}
-            <div className="px-6 py-2.5 bg-[var(--bg-color)]/10 border-b border-[var(--border-color)] flex flex-wrap items-center justify-between gap-3 shrink-0">
-              <div className="text-[10px] text-[var(--text-secondary)] font-bold flex items-center gap-3">
+            <div className="px-6 py-2.5 bg-input/10 border-b border-border flex flex-wrap items-center justify-between gap-3 shrink-0">
+              <div className="text-[10px] text-foreground-secondary font-bold flex items-center gap-3">
                 <span>Total: {PREDEFINED_AGENCIES.length}</span>
                 <span className="w-1 h-1 bg-[var(--border-color)] rounded-full"></span>
                 <span className="text-primary">Seleccionadas: {scopeState.scope_entity_ids?.length || 0}</span>
@@ -577,7 +577,7 @@ export default function DataScopesSecurityView({ onOpenSidebar = () => {} }) {
                     const combined = Array.from(new Set([...existing, ...visibleCodes]));
                     setScopeState(prev => ({ ...prev, scope_entity_ids: combined }));
                   }}
-                  className="px-2.5 py-1 text-[9.5px] font-bold bg-[var(--bg-color)] hover:bg-[var(--border-color)] border border-[var(--border-color)] rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-all"
+                  className="px-2.5 py-1 text-[9.5px] font-bold bg-input hover:bg-[var(--border-color)] border border-border rounded text-foreground-secondary hover:text-foreground transition-all"
                 >
                   Seleccionar visibles
                 </button>
@@ -598,7 +598,7 @@ export default function DataScopesSecurityView({ onOpenSidebar = () => {} }) {
                     const updated = existing.filter(x => !visibleCodes.includes(x));
                     setScopeState(prev => ({ ...prev, scope_entity_ids: updated }));
                   }}
-                  className="px-2.5 py-1 text-[9.5px] font-bold bg-[var(--bg-color)] hover:bg-[var(--border-color)] border border-[var(--border-color)] rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-all"
+                  className="px-2.5 py-1 text-[9.5px] font-bold bg-input hover:bg-[var(--border-color)] border border-border rounded text-foreground-secondary hover:text-foreground transition-all"
                 >
                   Deseleccionar visibles
                 </button>
@@ -612,7 +612,7 @@ export default function DataScopesSecurityView({ onOpenSidebar = () => {} }) {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 bg-[var(--bg-color)]/25 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto p-6 bg-input/25 custom-scrollbar">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {(() => {
                   const filtered = PREDEFINED_AGENCIES.filter(ag => {
@@ -627,7 +627,7 @@ export default function DataScopesSecurityView({ onOpenSidebar = () => {} }) {
 
                   if (filtered.length === 0) {
                     return (
-                      <div className="col-span-full py-12 text-center text-[12px] text-[var(--text-muted)] italic">
+                      <div className="col-span-full py-12 text-center text-[12px] text-foreground-muted italic">
                         No se encontraron agencias que coincidan con la búsqueda o filtros aplicados.
                       </div>
                     );
@@ -648,7 +648,7 @@ export default function DataScopesSecurityView({ onOpenSidebar = () => {} }) {
                         className={`p-3.5 rounded-xl border text-left flex items-start gap-3.5 cursor-pointer transition-all ${
                           isSelected 
                             ? 'bg-primary/5 border-primary shadow-sm ring-1 ring-primary/30' 
-                            : 'bg-[var(--bg-elevated)] border-[var(--border-color)] hover:border-primary'
+                            : 'bg-card border-border hover:border-primary'
                         }`}
                       >
                         <input
@@ -669,8 +669,8 @@ export default function DataScopesSecurityView({ onOpenSidebar = () => {} }) {
                               {ag.zone.replace('ZON-', '')}
                             </span>
                           </div>
-                          <h5 className="font-bold text-[12px] text-[var(--text-primary)] mt-1 truncate">{ag.name}</h5>
-                          <span className="block text-[10px] text-[var(--text-muted)] mt-0.5 truncate">{ag.loc}</span>
+                          <h5 className="font-bold text-[12px] text-foreground mt-1 truncate">{ag.name}</h5>
+                          <span className="block text-[10px] text-foreground-muted mt-0.5 truncate">{ag.loc}</span>
                           
                           {ag.terminals && ag.terminals.length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-2">
@@ -682,7 +682,7 @@ export default function DataScopesSecurityView({ onOpenSidebar = () => {} }) {
                                     className={`text-[9px] font-mono px-1.5 py-0.5 rounded border transition-colors ${
                                       isHighlighted 
                                         ? 'bg-amber-500/20 border-amber-500/30 text-amber-600 dark:text-amber-400 font-bold' 
-                                        : 'bg-[var(--bg-color)] border-[var(--border-color)] text-[var(--text-muted)]'
+                                        : 'bg-input border-border text-foreground-muted'
                                     }`}
                                   >
                                     {t}
@@ -700,22 +700,22 @@ export default function DataScopesSecurityView({ onOpenSidebar = () => {} }) {
             </div>
 
             {/* Footer */}
-            <div className="px-6 py-4 border-t border-[var(--border-color)] bg-[var(--bg-color)]/50 flex items-center justify-between shrink-0">
-              <span className="text-[11px] text-[var(--text-muted)] font-bold">
+            <div className="px-6 py-4 border-t border-border bg-input/50 flex items-center justify-between shrink-0">
+              <span className="text-[11px] text-foreground-muted font-bold">
                 {scopeState.scope_entity_ids?.length || 0} agencias seleccionadas en total.
               </span>
               <div className="flex items-center gap-3">
                 <button
                   type="button"
                   onClick={() => setIsAgencyModalOpen(false)}
-                  className="px-4 py-2 bg-[var(--bg-color)] border border-[var(--border-color)] hover:bg-[var(--border-color)] text-[var(--text-secondary)] text-xs font-bold rounded-xl transition-all"
+                  className="px-4 py-2 bg-input border border-border hover:bg-[var(--border-color)] text-foreground-secondary text-xs font-bold rounded-xl transition-all"
                 >
                   Cancelar
                 </button>
                 <button
                   type="button"
                   onClick={() => setIsAgencyModalOpen(false)}
-                  className="px-4 py-2 bg-primary text-on-primary hover:bg-primary-fixed text-on-primary text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5"
+                  className="px-4 py-2 bg-primary-button-bg text-primary-foreground hover:brightness-110 text-primary-foreground text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5"
                 >
                   <Check size={14} /> Confirmar Selección
                 </button>

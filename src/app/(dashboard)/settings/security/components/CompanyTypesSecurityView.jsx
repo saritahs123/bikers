@@ -12,11 +12,9 @@ import {
   Trash2, 
   CheckCircle2, 
   XCircle, 
-  ListFilter,
-  Save,
-  Check,
-  RefreshCw,
-  Shield,
+  Save, 
+  RefreshCw, 
+  Shield, 
   Info,
   ArrowUpDown,
   ArrowUp,
@@ -24,7 +22,6 @@ import {
   AlertCircle
 } from "lucide-react";
 import { validateRequiredText } from "@/lib/validations";
-import { validateRNC } from "@/lib/validations";
 import SecurityConfirmDialog from "@/components/security/SecurityConfirmDialog";
 
 export default function CompanyTypesSecurityView() {
@@ -124,7 +121,6 @@ export default function CompanyTypesSecurityView() {
     try {
       setIsSaving(true);
       if (editingItem) {
-        // Update DB
         const res = await fetch(`/api/tipos-empresa/${editingItem.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -137,7 +133,6 @@ export default function CompanyTypesSecurityView() {
         }
         showToast("Tipo Empresa actualizada correctamente.");
       } else {
-        // Create DB
         const res = await fetch('/api/tipos-empresa', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -150,11 +145,12 @@ export default function CompanyTypesSecurityView() {
         }
         showToast("Tipo Empresa creada correctamente.");
       }
+
       setIsDrawerOpen(false);
-      await fetchTypes();
+      fetchTypes();
     } catch (err) {
-      console.error("Error saving tipo de empresa:", err);
-      showToast("Error: " + err.message);
+      console.error("Error saving tipo empresa:", err);
+      showToast(err.message || "Error al procesar la solicitud.");
     } finally {
       setIsSaving(false);
     }
@@ -162,67 +158,75 @@ export default function CompanyTypesSecurityView() {
 
   const handleDelete = async () => {
     if (!itemToDelete) return;
-
     try {
-      const res = await fetch(`/api/tipos-empresa/${itemToDelete.id}`, { method: 'DELETE' });
+      setIsSaving(true);
+      const res = await fetch(`/api/tipos-empresa/${itemToDelete.id}`, {
+        method: 'DELETE'
+      });
+
       if (!res.ok) {
         const errData = await res.json();
-        throw new Error(errData.error || "Error al eliminar");
+        throw new Error(errData.error || "No se pudo eliminar");
       }
+
       showToast("Tipo Empresa eliminada correctamente.");
-      await fetchTypes();
-    } catch (e) {
-      console.error("Error deleting item:", e);
-      showToast("Error: " + e.message);
-    } finally {
       setIsDeletingModalOpen(false);
       setItemToDelete(null);
+      fetchTypes();
+    } catch (err) {
+      console.error("Error deleting tipo empresa:", err);
+      showToast(err.message || "Error al eliminar.");
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const handleSort = (columnKey) => {
     if (sortColumn === columnKey) {
-      setSortDirection(prev => (prev === "asc" ? "desc" : "asc"));
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
     } else {
       setSortColumn(columnKey);
-      setSortDirection("asc");
+      setSortDirection('asc');
     }
   };
 
   const exportToExcel = () => {
-    const headers = ["ID", "Nombre", "Descripción", "Estado", "Fecha de Creación", "Fecha de Actualización"];
-    const rows = sortedData.map(i => [
-      i.id,
-      `"${i.nombre}"`,
-      `"${i.descripcion || ''}"`,
-      i.estado,
-      i.fecha_creacion || '',
-      i.fecha_actualizacion || ''
+    if (!data || data.length === 0) {
+      showToast("No hay datos para exportar.");
+      return;
+    }
+
+    const headers = ["ID", "Nombre", "Descripcion", "Estado", "Fecha Creacion"];
+    const rows = filteredData.map(item => [
+      item.id,
+      `"${(item.nombre || "").replace(/"/g, '""')}"`,
+      `"${(item.descripcion || "").replace(/"/g, '""')}"`,
+      `"${item.estado || ""}"`,
+      `"${item.fecha_creacion || ""}"`
     ]);
 
     const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Tipos_de_Empresa_${new Date().toISOString().substring(0, 10)}.csv`);
+    link.setAttribute("download", `Tipos_Empresa_${new Date().toISOString().substring(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    showToast("Archivo CSV/Excel generado con éxito.");
+
+    showToast("Archivo CSV exportado correctamente.");
   };
 
-  // Filtered dataset (Searches across all fields & filters by status)
   const filteredData = data.filter(item => {
     const s = (search || "").trim().toLowerCase();
 
-    // 1. Search filter: If search is empty, allow all. Otherwise check any property
     const matchesSearch = !s || [
       item.id,
       item.nombre,
-      item.descripcion
+      item.descripcion,
+      item.estado
     ].some(val => val !== null && val !== undefined && String(val).toLowerCase().includes(s));
 
-    // 2. Status filter
     const itemStatus = (item.estado || "Activo").toString().trim().toUpperCase();
     const filterStatus = (statusFilter || "Todos").toString().trim().toUpperCase();
 
@@ -276,18 +280,18 @@ export default function CompanyTypesSecurityView() {
     return (
       <th 
         onClick={() => handleSort(columnKey)}
-        className={`px-6 py-4 cursor-pointer select-none hover:text-white transition-colors group/head ${extraClass}`}
+        className={`px-6 py-4 cursor-pointer select-none hover:text-foreground text-foreground-secondary transition-colors group/head ${extraClass}`}
       >
         <div className={`flex items-center gap-1.5 ${extraClass.includes('text-center') ? 'justify-center' : ''}`}>
           <span>{label}</span>
           {isSorted ? (
             sortDirection === 'asc' ? (
-              <ArrowUp size={13} className="text-[#bfce7f] shrink-0" />
+              <ArrowUp size={13} className="text-primary shrink-0" />
             ) : (
-              <ArrowDown size={13} className="text-[#bfce7f] shrink-0" />
+              <ArrowDown size={13} className="text-primary shrink-0" />
             )
           ) : (
-            <ArrowUpDown size={12} className="text-slate-500 group-hover/head:text-slate-300 opacity-50 shrink-0" />
+            <ArrowUpDown size={12} className="text-foreground-disabled group-hover/head:text-foreground-muted opacity-50 shrink-0" />
           )}
         </div>
       </th>
@@ -295,10 +299,10 @@ export default function CompanyTypesSecurityView() {
   };
 
   return (
-    <div className="w-full space-y-6 font-sans text-[#e4e3d9] animate-in fade-in duration-300">
+    <div className="w-full space-y-6 font-sans text-foreground animate-in fade-in duration-300">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-[999999] bg-[#bfce7f] text-[#2b3400] px-5 py-3 rounded-xl font-bold shadow-2xl flex items-center gap-2 animate-in slide-in-from-bottom-5 duration-200">
+        <div className="fixed bottom-6 right-6 z-[999999] bg-primary text-primary-foreground px-5 py-3 rounded-xl font-bold shadow-2xl flex items-center gap-2 animate-in slide-in-from-bottom-5 duration-200">
           <CheckCircle2 size={18} />
           <span>{toastMessage}</span>
         </div>
@@ -307,28 +311,28 @@ export default function CompanyTypesSecurityView() {
       {/* Page Title & Main Action Buttons */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#161a21] border border-[#2d3748] text-[#bfce7f] text-[11px] font-mono font-bold tracking-wider uppercase mb-2 shadow-sm">
-            <Shield size={12} className="text-[#bfce7f]" />
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-subtle border border-border text-primary text-[11px] font-mono font-bold tracking-wider uppercase mb-2 shadow-sm">
+            <Shield size={12} className="text-primary" />
             <span>Seguridad</span>
           </div>
-          <h1 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight">Tipos de Empresa</h1>
-          <p className="text-sm text-slate-400 mt-1">Gestión administrativa de las figuras jurídicas del sistema.</p>
+          <h1 className="text-2xl md:text-3xl font-extrabold text-foreground tracking-tight">Tipos de Empresa</h1>
+          <p className="text-sm text-foreground-muted mt-1">Clasificación estructural y modelos societarios de las organizaciones.</p>
         </div>
 
         <div className="flex items-center gap-3">
           <button 
             type="button"
             onClick={exportToExcel}
-            className="flex items-center gap-2 px-4 py-2 bg-[#161a21] hover:bg-[#212631] border border-[#2d3748] text-white font-mono text-xs rounded-xl transition-all shadow-sm cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2 bg-surface-subtle hover:bg-hover border border-border text-foreground font-mono text-xs rounded-xl transition-all shadow-sm cursor-pointer"
           >
-            <Download size={14} className="text-[#bfce7f]" />
+            <Download size={14} className="text-primary" />
             <span>Exportar Excel</span>
           </button>
 
           <button 
             type="button"
             onClick={handleOpenCreate}
-            className="flex items-center gap-2 px-5 py-2 bg-[#bfce7f] hover:bg-[#a8b868] text-[#1d1f18] font-mono text-xs font-black rounded-xl shadow-lg shadow-[#bfce7f]/20 transition-all cursor-pointer"
+            className="flex items-center gap-2 px-5 py-2 bg-primary-button-bg hover:brightness-110 text-primary-foreground font-mono text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer"
           >
             <Plus size={16} />
             <span>Crear Nuevo</span>
@@ -341,31 +345,31 @@ export default function CompanyTypesSecurityView() {
         {/* Metric 1 */}
         <div 
           onClick={() => { setStatusFilter("Todos"); setPage(1); }}
-          className={`p-6 rounded-2xl flex items-center justify-between shadow-lg cursor-pointer transition-all border ${
-            statusFilter === "Todos" ? "bg-[#1f2633] border-[#bfce7f]" : "bg-[#161a21] border-[#2d3748] hover:border-slate-600"
+          className={`p-6 rounded-2xl flex items-center justify-between shadow-sm cursor-pointer transition-all border ${
+            statusFilter === "Todos" ? "bg-primary/10 border-primary" : "bg-card border-border hover:border-primary/40"
           }`}
         >
           <div>
-            <p className="font-mono text-[11px] text-slate-400 uppercase tracking-widest font-bold">Total Tipos</p>
-            <p className="text-3xl font-black text-white font-mono mt-1">{String(totalCount).padStart(2, '0')}</p>
+            <p className="font-mono text-[11px] text-foreground-muted uppercase tracking-widest font-bold">Total Tipos</p>
+            <p className="text-3xl font-black text-foreground font-mono mt-1">{String(totalCount).padStart(2, '0')}</p>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-[#212631] border border-[#2d3748] flex items-center justify-center text-[#bfce7f]">
-            <ListFilter size={24} />
+          <div className="w-12 h-12 rounded-xl bg-surface-subtle border border-border flex items-center justify-center text-primary">
+            <Building2 size={24} />
           </div>
         </div>
 
         {/* Metric 2 */}
         <div 
           onClick={() => { setStatusFilter("Activos"); setPage(1); }}
-          className={`p-6 rounded-2xl flex items-center justify-between shadow-lg cursor-pointer transition-all border ${
-            statusFilter === "Activos" ? "bg-[#bfce7f]/10 border-[#bfce7f]" : "bg-[#161a21] border-[#2d3748] hover:border-slate-600"
+          className={`p-6 rounded-2xl flex items-center justify-between shadow-sm cursor-pointer transition-all border ${
+            statusFilter === "Activos" ? "bg-success/10 border-success" : "bg-card border-border hover:border-success/40"
           }`}
         >
           <div>
-            <p className="font-mono text-[11px] text-slate-400 uppercase tracking-widest font-bold">Activos</p>
-            <p className="text-3xl font-black text-[#bfce7f] font-mono mt-1">{String(activeCount).padStart(2, '0')}</p>
+            <p className="font-mono text-[11px] text-foreground-muted uppercase tracking-widest font-bold">Activos</p>
+            <p className="text-3xl font-black text-success font-mono mt-1">{String(activeCount).padStart(2, '0')}</p>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-[#bfce7f]/10 border border-[#bfce7f]/30 flex items-center justify-center text-[#bfce7f]">
+          <div className="w-12 h-12 rounded-xl bg-success/10 border border-success/30 flex items-center justify-center text-success">
             <CheckCircle2 size={24} />
           </div>
         </div>
@@ -373,39 +377,39 @@ export default function CompanyTypesSecurityView() {
         {/* Metric 3 */}
         <div 
           onClick={() => { setStatusFilter("Inactivos"); setPage(1); }}
-          className={`p-6 rounded-2xl flex items-center justify-between shadow-lg cursor-pointer transition-all border ${
-            statusFilter === "Inactivos" ? "bg-rose-500/10 border-rose-500" : "bg-[#161a21] border-[#2d3748] hover:border-slate-600"
+          className={`p-6 rounded-2xl flex items-center justify-between shadow-sm cursor-pointer transition-all border ${
+            statusFilter === "Inactivos" ? "bg-error/10 border-error" : "bg-card border-border hover:border-error/40"
           }`}
         >
           <div>
-            <p className="font-mono text-[11px] text-slate-400 uppercase tracking-widest font-bold">Inactivos</p>
-            <p className="text-3xl font-black text-rose-400 font-mono mt-1">{String(inactiveCount).padStart(2, '0')}</p>
+            <p className="font-mono text-[11px] text-foreground-muted uppercase tracking-widest font-bold">Inactivos</p>
+            <p className="text-3xl font-black text-error font-mono mt-1">{String(inactiveCount).padStart(2, '0')}</p>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400">
+          <div className="w-12 h-12 rounded-xl bg-error/15 border border-error/30 flex items-center justify-center text-error">
             <XCircle size={24} />
           </div>
         </div>
       </div>
 
       {/* Table Filter Bar */}
-      <div className="bg-[#161a21] border border-[#2d3748] p-4 rounded-t-2xl flex flex-wrap items-center justify-between gap-4">
+      <div className="bg-card border border-border p-4 rounded-t-2xl flex flex-wrap items-center justify-between gap-4">
         <div className="relative flex-1 max-w-2xl">
-          <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-foreground-muted" />
           <input 
             type="text"
-            placeholder="Filtrar por nombre o descripción..."
+            placeholder="Buscar por nombre, descripción o estado..."
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#bfce7f] shadow-inner"
+            className="w-full bg-input border border-border rounded-xl pl-10 pr-4 py-2.5 text-xs text-foreground placeholder:text-foreground-disabled focus:outline-none focus:border-primary shadow-inner"
           />
         </div>
 
         <div className="flex items-center gap-3">
-          <span className="font-mono text-xs text-slate-400 font-bold">Filtrar por Estado:</span>
+          <span className="font-mono text-xs text-foreground-muted font-bold">Filtrar por Estado:</span>
           <select 
             value={statusFilter}
             onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-            className="bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-1.5 text-xs font-mono text-white focus:outline-none focus:border-[#bfce7f]"
+            className="bg-input border border-border rounded-xl px-3 py-1.5 text-xs font-mono text-foreground focus:outline-none focus:border-primary"
           >
             <option value="Todos">Todos</option>
             <option value="Activos">Activos</option>
@@ -415,81 +419,80 @@ export default function CompanyTypesSecurityView() {
       </div>
 
       {/* Main Data Table */}
-      <div className="border border-[#2d3748] bg-[#0e1117] rounded-b-2xl overflow-hidden shadow-2xl">
+      <div className="border border-border bg-card rounded-b-2xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="bg-[#1b2029] border-b border-[#2d3748] font-mono text-[11px] text-[#bfce7f] tracking-wider">
+              <tr className="bg-surface-subtle border-b border-border font-mono text-[11px] text-primary tracking-wider whitespace-nowrap">
                 {renderSortableHeader("ID", "id")}
                 {renderSortableHeader("Nombre", "nombre")}
                 {renderSortableHeader("Descripción", "descripcion")}
                 {renderSortableHeader("Estado", "estado", "text-center")}
-                {renderSortableHeader("Fecha de Creación", "fecha_creacion")}
-                {renderSortableHeader("Fecha de Actualización", "fecha_actualizacion")}
-                <th className="px-6 py-4 text-right sticky right-0 bg-[#1b2029] shadow-[-8px_0_12px_rgba(0,0,0,0.6)] z-20">Acciones</th>
+                {renderSortableHeader("Fecha Creación", "fecha_creacion")}
+                <th className="px-6 py-4 text-right sticky right-0 bg-surface-subtle shadow-[-8px_0_12px_rgba(0,0,0,0.06)] z-20">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#2d3748]/50">
+            <tbody className="divide-y divide-border">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400 font-mono">
-                    <RefreshCw className="animate-spin text-[#bfce7f] mx-auto mb-2" size={24} />
+                  <td colSpan={6} className="py-12 text-center text-foreground-muted font-mono">
+                    <RefreshCw className="animate-spin text-primary mx-auto mb-2" size={24} />
                     Cargando tipos de empresa...
                   </td>
                 </tr>
               ) : paginatedData.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400 font-mono italic">
+                  <td colSpan={6} className="py-12 text-center text-foreground-muted font-mono italic">
                     No se encontraron registros de tipos de empresa.
                   </td>
                 </tr>
               ) : (
-                paginatedData.map((item, idx) => (
+                paginatedData.map((item) => (
                   <tr 
                     key={item.id} 
-                    className={`group ${idx % 2 === 0 ? 'bg-[#161a21]' : 'bg-[#1c2129]'} hover:bg-[#252c38] transition-colors`}
+                    className="group hover:bg-hover transition-colors whitespace-nowrap"
                   >
-                    <td className="px-6 py-4 font-mono text-[#bfce7f] font-bold">
+                    <td className="px-6 py-4 font-mono text-primary font-bold">
                       {item.id}
                     </td>
-                    <td className="px-6 py-4 font-bold text-white text-sm">
+                    <td className="px-6 py-4 font-bold text-foreground text-sm">
                       {item.nombre}
                     </td>
-                    <td className="px-6 py-4 text-slate-300 italic max-w-md">
-                      {item.descripcion || "Sin descripción registrada."}
+                    <td className="px-6 py-4 text-foreground-secondary max-w-xs truncate" title={item.descripcion}>
+                      {item.descripcion || "-"}
                     </td>
                     <td className="px-6 py-4 text-center">
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-mono font-bold tracking-wider uppercase border ${
                         (item.estado || "").toUpperCase() === "ACTIVO"
-                          ? "bg-[#bfce7f]/15 text-[#bfce7f] border-[#bfce7f]/40"
-                          : "bg-slate-700/40 text-slate-400 border-slate-600"
+                          ? "bg-success/15 text-success border-success/30"
+                          : "bg-surface-subtle text-foreground-muted border-border"
                       }`}>
                         {item.estado}
                       </span>
                     </td>
-                    <td className="px-6 py-4 font-mono text-slate-400">
+                    <td className="px-6 py-4 font-mono text-foreground-muted">
                       {item.fecha_creacion ? String(item.fecha_creacion).substring(0, 10) : "-"}
                     </td>
-                    <td className="px-6 py-4 font-mono text-slate-400">
-                      {item.fecha_actualizacion ? String(item.fecha_actualizacion).substring(0, 10) : "-"}
-                    </td>
-                    <td className={`px-6 py-4 text-right sticky right-0 ${idx % 2 === 0 ? 'bg-[#161a21]' : 'bg-[#1c2129]'} group-hover:bg-[#252c38] shadow-[-8px_0_12px_rgba(0,0,0,0.6)] z-10 transition-colors`}>
+                    <td className="px-6 py-4 text-right sticky right-0 bg-card group-hover:bg-hover shadow-[-8px_0_12px_rgba(0,0,0,0.06)] z-10 transition-colors">
                       <div className="flex items-center justify-end gap-2">
                         <button 
                           type="button"
                           onClick={() => handleOpenEdit(item)}
-                          className="p-2 bg-[#212631] hover:bg-[#bfce7f]/20 text-slate-300 hover:text-[#bfce7f] border border-[#2d3748] hover:border-[#bfce7f]/40 rounded-lg transition-all cursor-pointer"
+                          className="p-2 bg-surface hover:bg-primary/20 text-foreground-secondary hover:text-primary border border-border hover:border-primary/40 rounded-lg transition-all cursor-pointer"
                           title="Editar"
                         >
-                          <Edit2 size={15} />
+                          <Edit2 size={14} />
                         </button>
                         <button 
                           type="button"
-                          onClick={() => { setItemToDelete(item); setIsDeletingModalOpen(true); }}
-                          className="p-2 bg-[#212631] hover:bg-rose-500/20 text-slate-300 hover:text-rose-400 border border-[#2d3748] hover:border-rose-500/40 rounded-lg transition-all cursor-pointer"
+                          onClick={() => {
+                            setItemToDelete(item);
+                            setIsDeletingModalOpen(true);
+                          }}
+                          className="p-2 bg-surface hover:bg-error/20 text-foreground-secondary hover:text-error border border-border hover:border-error/40 rounded-lg transition-all cursor-pointer"
                           title="Eliminar"
                         >
-                          <Trash2 size={15} />
+                          <Trash2 size={14} />
                         </button>
                       </div>
                     </td>
@@ -500,40 +503,40 @@ export default function CompanyTypesSecurityView() {
           </table>
         </div>
 
-        {/* Pagination Footer */}
-        <div className="bg-[#161a21] p-4 border-t border-[#2d3748] flex items-center justify-between font-mono text-xs">
-          <p className="text-slate-400 text-[11px]">
-            Mostrando {paginatedData.length} de {filteredData.length} registros
+        {/* Pagination Bar */}
+        <div className="p-4 border-t border-border bg-surface-subtle flex flex-wrap items-center justify-between gap-4 font-mono text-xs">
+          <p className="text-foreground-muted">
+            Mostrando <span className="text-foreground font-bold">{paginatedData.length}</span> de <span className="text-foreground font-bold">{filteredData.length}</span> registros
           </p>
-
-          <div className="flex gap-1.5">
+          
+          <div className="flex items-center gap-1.5">
             <button 
               type="button"
               disabled={page === 1}
               onClick={() => setPage(p => Math.max(1, p - 1))}
-              className="px-3 py-1 bg-[#0e1117] border border-[#2d3748] text-slate-300 rounded hover:bg-[#212631] disabled:opacity-40 cursor-pointer"
+              className="px-3 py-1.5 rounded-lg border border-border bg-surface text-foreground-secondary hover:text-foreground hover:bg-hover disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
             >
               Prev
             </button>
-            {Array.from({ length: totalPages }, (_, i) => (
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
               <button 
+                key={p}
                 type="button"
-                key={i + 1}
-                onClick={() => setPage(i + 1)}
-                className={`px-3 py-1 border rounded text-xs cursor-pointer ${
-                  page === i + 1
-                    ? "border-[#bfce7f] bg-[#bfce7f]/20 text-[#bfce7f] font-bold"
-                    : "border-[#2d3748] bg-[#0e1117] text-slate-400 hover:bg-[#212631]"
+                onClick={() => setPage(p)}
+                className={`w-8 h-8 rounded-lg font-bold transition-all cursor-pointer ${
+                  page === p 
+                    ? "bg-primary text-primary-foreground" 
+                    : "border border-border bg-surface text-foreground-secondary hover:bg-hover hover:text-foreground"
                 }`}
               >
-                {i + 1}
+                {p}
               </button>
             ))}
             <button 
               type="button"
-              disabled={page >= totalPages}
+              disabled={page === totalPages}
               onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-              className="px-3 py-1 bg-[#0e1117] border border-[#2d3748] text-slate-300 rounded hover:bg-[#212631] disabled:opacity-40 cursor-pointer"
+              className="px-3 py-1.5 rounded-lg border border-border bg-surface text-foreground-secondary hover:text-foreground hover:bg-hover disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
             >
               Next
             </button>
@@ -541,12 +544,12 @@ export default function CompanyTypesSecurityView() {
         </div>
       </div>
 
-      {/* PORTAL FOR SIDE DRAWER MODAL (CREATE / EDIT) */}
+      {/* PORTAL FOR SIDE DRAWER MODAL */}
       {mounted && isDrawerOpen && typeof document !== 'undefined' && createPortal(
         <div style={{ position: 'fixed', inset: 0, zIndex: 999999, display: 'flex', justifyContent: 'flex-end' }}>
-          {/* Dark Overlay Backdrop */}
+          {/* Overlay backdrop */}
           <div 
-            style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(4px)' }} 
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
             onClick={() => setIsDrawerOpen(false)}
           />
           
@@ -554,79 +557,79 @@ export default function CompanyTypesSecurityView() {
           <div 
             style={{ 
               position: 'relative', 
-              width: '450px', 
-              maxWidth: '90vw', 
+              width: '540px', 
+              maxWidth: '95vw', 
               height: '100vh', 
-              backgroundColor: '#161a21', 
-              borderLeft: '1px solid #2d3748', 
-              boxShadow: '-10px 0 30px rgba(0,0,0,0.6)', 
               display: 'flex', 
               flexDirection: 'column', 
               zIndex: 1000000 
             }}
-            className="font-sans"
+            className="font-sans bg-surface-elevated border-l border-border shadow-2xl text-foreground"
           >
             {/* Drawer Header */}
-            <div className="p-6 border-b border-[#2d3748] bg-[#0e1117] flex items-start justify-between">
+            <div className="p-5 border-b border-border bg-surface-subtle flex items-start justify-between">
               <div>
-                <h2 className="text-lg font-bold text-white tracking-tight">
+                <h2 className="text-lg font-bold font-sans text-foreground tracking-tight">
                   {editingItem ? "Editar Tipo de Empresa" : "Nuevo Tipo de Empresa"}
                 </h2>
-                <p className="text-xs text-slate-400 mt-1">
-                  {editingItem ? "Modifica los campos para actualizar el registro." : "Completa los campos para añadir un registro."}
+                <p className="text-xs text-foreground-muted mt-0.5 font-sans">
+                  {editingItem ? "Modifica los datos del modelo empresarial seleccionado." : "Completa los campos para registrar un nuevo modelo societario."}
                 </p>
               </div>
               <button 
                 type="button" 
                 onClick={() => setIsDrawerOpen(false)} 
-                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-[#212631] transition-colors cursor-pointer"
+                className="p-1.5 text-foreground-muted hover:text-foreground rounded-lg hover:bg-hover transition-colors cursor-pointer"
+                aria-label="Cerrar drawer"
               >
                 <X size={20} />
               </button>
             </div>
 
             {/* Drawer Form Body */}
-            <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
-              {/* NOMBRE DEL TIPO */}
-              <div className="space-y-2">
-                <label className="font-mono text-[11px] text-slate-300 font-bold tracking-wider uppercase block">
-                  NOMBRE DEL TIPO *
+            <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
+              {/* NOMBRE */}
+              <div className="space-y-1">
+                <label className="font-mono text-[11px] text-foreground-secondary font-bold tracking-wider uppercase block">
+                  NOMBRE DEL TIPO DE EMPRESA *
                 </label>
                 <input 
                   type="text"
                   required
+                  maxLength={100}
                   value={formData.nombre}
                   onChange={(e) => handleNameChange(e.target.value)}
-                  placeholder="Ej. Sociedad Anónima"
-                  className={`w-full bg-[#0e1117] border rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none transition-all ${
-                    nameError ? "border-rose-500 focus:border-rose-500" : "border-[#2d3748] focus:border-[#bfce7f]"
+                  placeholder="Ej. Sociedad Anónima (S.A.), SRL, EIRL"
+                  className={`w-full bg-input border rounded-xl px-3 py-2.5 text-xs text-foreground placeholder:text-foreground-disabled focus:outline-none transition-all ${
+                    nameError ? "border-error focus:border-error text-error" : "border-border focus:border-primary"
                   }`}
                 />
                 {nameError && (
-                  <div className="flex items-center gap-1.5 mt-1 text-xs text-rose-400 font-mono">
-                    <AlertCircle size={14} className="shrink-0" />
+                  <div className="flex items-center gap-1 mt-1 text-[11px] text-error font-mono">
+                    <AlertCircle size={12} className="shrink-0 text-error" />
                     <span>{nameError}</span>
                   </div>
                 )}
               </div>
 
               {/* DESCRIPCIÓN */}
-              <div className="space-y-2">
-                <label className="font-mono text-[11px] text-slate-300 font-bold tracking-wider uppercase block">
+              <div className="space-y-1">
+                <label className="font-mono text-[11px] text-foreground-secondary font-bold tracking-wider uppercase block">
                   DESCRIPCIÓN
                 </label>
                 <textarea 
-                  rows={4}
+                  rows={3}
+                  maxLength={255}
                   value={formData.descripcion}
                   onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
-                  placeholder="Breve descripción de las características legales..."
-                  className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#bfce7f] resize-none transition-all"
+                  placeholder="Detalles sobre el marco societario, límites de responsabilidad o propósito..."
+                  className="w-full bg-input border border-border rounded-xl px-3 py-2.5 text-xs text-foreground placeholder:text-foreground-disabled focus:outline-none focus:border-primary transition-all resize-none"
                 />
               </div>
 
-              {/* ESTADO INICIAL / ESTADO DEL REGISTRO */}
-              <div className="space-y-2">
-                <label className="font-mono text-[11px] text-slate-300 font-bold tracking-wider uppercase block">
+              {/* ESTADO INICIAL */}
+              <div className="space-y-1 pt-2">
+                <label className="font-mono text-[11px] text-foreground-secondary font-bold tracking-wider uppercase block">
                   ESTADO INICIAL
                 </label>
                 
@@ -634,68 +637,68 @@ export default function CompanyTypesSecurityView() {
                   {/* Activo Option */}
                   <div 
                     onClick={() => setFormData({ ...formData, estado: "Activo" })}
-                    className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center gap-3 ${
-                      (formData.estado || "").toUpperCase() === "ACTIVO" 
-                        ? "bg-[#bfce7f]/15 border-2 border-[#bfce7f]" 
-                        : "bg-[#0e1117] border-[#2d3748] hover:border-slate-600"
+                    className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center gap-2.5 ${
+                      formData.estado === "Activo" 
+                        ? "bg-primary/10 border-2 border-primary" 
+                        : "bg-input border-border hover:border-primary/40"
                     }`}
                   >
                     <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                      (formData.estado || "").toUpperCase() === "ACTIVO" 
-                        ? "border-[#bfce7f]" 
-                        : "border-slate-500"
+                      formData.estado === "Activo" 
+                        ? "border-primary" 
+                        : "border-foreground-muted"
                     }`}>
-                      {(formData.estado || "").toUpperCase() === "ACTIVO" && (
-                        <div className="w-2 h-2 rounded-full bg-[#bfce7f]"></div>
+                      {formData.estado === "Activo" && (
+                        <div className="w-2 h-2 rounded-full bg-primary" />
                       )}
                     </div>
                     <div>
-                      <p className="text-xs font-bold text-white leading-tight">Activo</p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">Visible en catálogos</p>
+                      <p className="text-xs font-bold text-foreground leading-tight">Activo</p>
+                      <p className="text-[10px] text-foreground-muted mt-0.5">Habilitado para empresas</p>
                     </div>
                   </div>
 
                   {/* Inactivo Option */}
                   <div 
                     onClick={() => setFormData({ ...formData, estado: "Inactivo" })}
-                    className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center gap-3 ${
-                      (formData.estado || "").toUpperCase() === "INACTIVO" 
-                        ? "bg-rose-500/15 border-2 border-rose-400" 
-                        : "bg-[#0e1117] border-[#2d3748] hover:border-slate-600"
+                    className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center gap-2.5 ${
+                      formData.estado === "Inactivo" 
+                        ? "bg-error/10 border-2 border-error" 
+                        : "bg-input border-border hover:border-error/40"
                     }`}
                   >
                     <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                      (formData.estado || "").toUpperCase() === "INACTIVO" 
-                        ? "border-rose-400" 
-                        : "border-slate-500"
+                      formData.estado === "Inactivo" 
+                        ? "border-error" 
+                        : "border-foreground-muted"
                     }`}>
-                      {(formData.estado || "").toUpperCase() === "INACTIVO" && (
-                        <div className="w-2 h-2 rounded-full bg-rose-400"></div>
+                      {formData.estado === "Inactivo" && (
+                        <div className="w-2 h-2 rounded-full bg-error" />
                       )}
                     </div>
                     <div>
-                      <p className="text-xs font-bold text-white leading-tight">Inactivo</p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">Oculto temporalmente</p>
+                      <p className="text-xs font-bold text-foreground leading-tight">Inactivo</p>
+                      <p className="text-[10px] text-foreground-muted mt-0.5">Oculto temporalmente</p>
                     </div>
                   </div>
                 </div>
               </div>
 
               {/* Info Notice Box */}
-              <div className="p-3.5 bg-[#0e1117] border border-[#2d3748] rounded-xl flex items-start gap-3">
-                <Info size={18} className="text-[#bfce7f] shrink-0 mt-0.5" />
-                <p className="text-xs text-slate-300 leading-relaxed">
-                  Asegúrese de que el nombre sea único en el sistema para evitar duplicados en la base de datos de catálogos maestros.
+              <div className="p-3 bg-surface-subtle border border-border rounded-xl flex items-center gap-2.5 mt-4">
+                <Info size={16} className="text-primary shrink-0" />
+                <p className="text-[11px] text-foreground-secondary leading-tight font-sans">
+                  Los tipos de empresa definen la figura legal disponible en la creación de nuevas entidades.
                 </p>
               </div>
             </form>
 
             {/* Drawer Footer */}
-            <div className="p-5 border-t border-[#2d3748] bg-[#0e1117] flex gap-3">
+            <div className="p-4 border-t border-border bg-surface-subtle flex gap-3">
               <button 
                 type="button"
                 onClick={() => setIsDrawerOpen(false)}
-                className="flex-1 py-3 border border-[#2d3748] bg-[#161a21] text-white hover:bg-[#212631] transition-all font-mono text-xs font-bold rounded-xl cursor-pointer"
+                className="flex-1 py-2.5 border border-border bg-surface text-foreground hover:bg-hover transition-all font-mono text-xs font-bold rounded-xl cursor-pointer"
               >
                 Cancelar
               </button>
@@ -703,7 +706,7 @@ export default function CompanyTypesSecurityView() {
                 type="button"
                 onClick={handleSave}
                 disabled={isSaving || !!nameError || !formData.nombre.trim()}
-                className="flex-1 py-3 bg-[#bfce7f] hover:bg-[#a8b868] disabled:opacity-50 disabled:cursor-not-allowed text-[#1d1f18] font-mono text-xs font-black rounded-xl transition-all shadow-lg shadow-[#bfce7f]/20 flex items-center justify-center gap-1.5 cursor-pointer"
+                className="flex-1 py-2.5 bg-primary-button-bg hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed text-primary-foreground font-mono text-xs font-bold rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Save size={14} />
                 <span>{isSaving ? "Guardando..." : "Guardar Cambios"}</span>
@@ -721,16 +724,15 @@ export default function CompanyTypesSecurityView() {
         onConfirm={handleDelete}
         variant="danger"
         title="¿Eliminar Tipo de Empresa?"
-        description={`¿Está seguro que desea eliminar permanentemente el tipo "${itemToDelete?.nombre || itemToDelete?.tipo_empresa || ''}"? Esta acción es irreversible.`}
+        description={`¿Está seguro que desea eliminar permanentemente el tipo de empresa "${itemToDelete?.nombre || ''}"? Esta acción es irreversible.`}
         confirmLabel="Eliminar"
         isLoading={isSaving}
         loadingLabel="Eliminando..."
         details={itemToDelete ? [
-          { label: 'Tipo de Empresa', value: itemToDelete.nombre || itemToDelete.tipo_empresa },
-          { label: 'Código', value: itemToDelete.codigo, isCode: true }
+          { label: 'Tipo de Empresa', value: itemToDelete.nombre },
+          { label: 'ID', value: itemToDelete.id, isCode: true }
         ] : null}
       />
     </div>
   );
 }
-
