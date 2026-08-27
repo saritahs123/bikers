@@ -80,9 +80,27 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     }
 
     const u = usersRes[0];
+    const primaryAccessValue = u.identificador_principal || u.correo_acceso || u.email || u.document_number || (u.id ? `ID #${u.id}` : '—');
     const fullNameComputed = (u.first_name || u.last_name)
       ? `${u.first_name || ''} ${u.last_name || ''}`.trim()
-      : null;
+      : (u.email || u.identificador_principal || (u.id ? `Usuario #${u.id}` : 'Usuario'));
+
+    const scopeRes = await query(`SELECT usuario_alcance_id, nivel_alcance, incluir_herencia_jerarquica FROM admin.usuario_alcance WHERE usuario_id = $1`, [requestedUserId]);
+    let scopeType = 'COMPANY';
+    let includeChildren = true;
+    let scopeEntityIds: number[] = [];
+
+    if (scopeRes && scopeRes.length > 0) {
+      const dbNivel = scopeRes[0].nivel_alcance;
+      if (dbNivel === 'POR_AGRUPACION' || dbNivel === 'POR_DEPARTAMENTO' || dbNivel === 'DEPARTMENT') scopeType = 'DEPARTMENT';
+      else if (dbNivel === 'POR_TERRITORIO' || dbNivel === 'POR_AREA' || dbNivel === 'AREA') scopeType = 'AREA';
+      else if (dbNivel === 'POR_AGENCIA' || dbNivel === 'POR_SUCURSAL' || dbNivel === 'BRANCH' || dbNivel === 'SUCURSAL') scopeType = 'BRANCH';
+      else scopeType = 'COMPANY';
+
+      includeChildren = scopeRes[0].incluir_herencia_jerarquica ?? true;
+      const scopeDetailRes = await query(`SELECT referencia_id FROM admin.usuario_alcance_detalle WHERE usuario_alcance_id = $1`, [scopeRes[0].usuario_alcance_id]);
+      scopeEntityIds = (scopeDetailRes || []).map((r: any) => Number(r.referencia_id));
+    }
 
     const mappedUser = {
       id: u.id,
@@ -103,9 +121,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       role: u.role ?? null,
       user_type: u.user_type ?? null,
       primary_access_type: u.primary_access_type ?? 'EMAIL',
-      login_identifiers: u.identificador_principal
-        ? [{ is_primary: true, identifier_value: u.identificador_principal }]
-        : [],
+      identificador_principal: primaryAccessValue,
+      login_identifiers: [
+        {
+          is_primary: true,
+          identifier_type: u.primary_access_type || (primaryAccessValue.includes('@') ? 'EMAIL' : 'DOCUMENT'),
+          identifier_value: primaryAccessValue
+        }
+      ],
       last_login_at: u.last_login_at ?? null,
       mfaEnabled: Boolean(u.mfaEnabled),
       mfa_method: u.mfa_method ?? null,
@@ -131,7 +154,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       fecha_activacion: u.fecha_activacion ?? null,
       fecha_ultima_invitacion: u.fecha_ultima_invitacion ?? null,
       permissionsOverride: false,
-      scope_type: 'GLOBAL'
+      scope_type: scopeType,
+      include_children: includeChildren,
+      scope_entity_ids: scopeEntityIds
     };
 
     return NextResponse.json(mappedUser);
@@ -431,6 +456,56 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
          SELECT COALESCE(MAX(usuario_seguridad_id), 0) + 1, $1, $2, $3, $4 FROM admin.usuario_seguridad`,
         [targetUserId, String(updatedIdioma), String(updatedZona), String(updatedFormato)]
       );
+    }
+
+    // 5. Update admin.usuario_alcance and admin.usuario_alcance_detalle if scope fields are provided
+    if (body.scope_type !== undefined || body.nivel_alcance !== undefined || body.scope_entity_ids !== undefined) {
+      const rawScope = body.scope_type || body.nivel_alcance || 'COMPANY';
+      let dbNivel = 'TODA_EMPRESA';
+      if (rawScope === 'POR_AGRUPACION' || rawScope === 'DEPARTMENT' || rawScope === 'POR_DEPARTAMENTO') dbNivel = 'POR_AGRUPACION';
+      else if (rawScope === 'POR_TERRITORIO' || rawScope === 'AREA' || rawScope === 'POR_AREA') dbNivel = 'POR_TERRITORIO';
+      else if (rawScope === 'POR_AGENCIA' || rawScope === 'BRANCH' || rawScope === 'POR_SUCURSAL' || rawScope === 'SUCURSAL') dbNivel = 'POR_AGENCIA';
+      else dbNivel = 'TODA_EMPRESA';
+
+      const includeChildren = body.include_children !== undefined ? Boolean(body.include_children) : true;
+      const entityIds = Array.isArray(body.scope_entity_ids) ? body.scope_entity_ids.map(Number).filter((n: number) => !isNaN(n)) : [];
+
+      const currentScope = await query(`SELECT usuario_alcance_id FROM admin.usuario_alcance WHERE usuario_id = $1`, [targetUserId]);
+      let scopeId: number;
+
+      if (currentScope && currentScope.length > 0) {
+        scopeId = currentScope[0].usuario_alcance_id;
+        await query(
+          `UPDATE admin.usuario_alcance
+           SET nivel_alcance = $1, incluir_herencia_jerarquica = $2
+           WHERE usuario_alcance_id = $3`,
+          [dbNivel, includeChildren, scopeId]
+        );
+      } else {
+        const nextScopeRes = await query(`SELECT COALESCE(MAX(usuario_alcance_id), 0) + 1 AS next_id FROM admin.usuario_alcance`);
+        scopeId = Number(nextScopeRes[0].next_id);
+        await query(
+          `INSERT INTO admin.usuario_alcance (usuario_alcance_id, usuario_id, nivel_alcance, incluir_herencia_jerarquica)
+           VALUES ($1, $2, $3, $4)`,
+          [scopeId, targetUserId, dbNivel, includeChildren]
+        );
+      }
+
+      await query(`DELETE FROM admin.usuario_alcance_detalle WHERE usuario_alcance_id = $1`, [scopeId]);
+
+      if (dbNivel !== 'TODA_EMPRESA' && entityIds.length > 0) {
+        let detalleTipo = 'AGRUPACION';
+        if (dbNivel === 'POR_TERRITORIO') detalleTipo = 'TERRITORIO';
+        if (dbNivel === 'POR_AGENCIA') detalleTipo = 'AGENCIA';
+
+        for (const refId of entityIds) {
+          await query(
+            `INSERT INTO admin.usuario_alcance_detalle (usuario_alcance_detalle_id, usuario_alcance_id, alcance, referencia_id)
+             VALUES ((SELECT COALESCE(MAX(usuario_alcance_detalle_id), 0) + 1 FROM admin.usuario_alcance_detalle), $1, $2, $3)`,
+            [scopeId, detalleTipo, refId]
+          );
+        }
+      }
     }
 
     // Re-query updated real data and construct usuarioActualizado

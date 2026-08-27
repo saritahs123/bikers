@@ -169,15 +169,16 @@ export const usersService = {
     }
   },
 
-  resetPassword: async (id) => {
+  resetPassword: async (id, payload = {}) => {
     try {
       const response = await fetch(`/api/usuarios/${id}/reset-password`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
       });
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.error || 'Error al restablecer la contraseña');
+        throw new Error(data.message || data.error || 'Error al restablecer la contraseña');
       }
       return data;
     } catch (error) {

@@ -70,16 +70,27 @@ export default function DataScopesSecurityView({ onOpenSidebar = () => {} }) {
     return users.find(u => u.id === selectedUserId) || users[0] || null;
   }, [users, selectedUserId]);
 
-  // Keep scope state synchronized when selected user changes
+  // Keep scope state synchronized directly from database when selected user changes
   useEffect(() => {
-    if (selectedUser) {
-      setScopeState({
-        scope_type: selectedUser.scope_type || 'COMPANY',
-        scope_entity_ids: Array.isArray(selectedUser.scope_entity_ids) ? selectedUser.scope_entity_ids : [],
-        include_children: selectedUser.include_children ?? true
-      });
+    if (selectedUserId) {
+      loadUserScope(selectedUserId);
     }
-  }, [selectedUserId, selectedUser]);
+  }, [selectedUserId]);
+
+  const loadUserScope = async (userId) => {
+    try {
+      const full = await usersService.getUserById(userId);
+      if (full) {
+        setScopeState({
+          scope_type: full.scope_type || 'COMPANY',
+          scope_entity_ids: Array.isArray(full.scope_entity_ids) ? full.scope_entity_ids : [],
+          include_children: full.include_children ?? true
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching user scope from DB:', err);
+    }
+  };
 
   const filteredUsers = useMemo(() => {
     if (!searchUser.trim()) return users;
@@ -437,9 +448,9 @@ export default function DataScopesSecurityView({ onOpenSidebar = () => {} }) {
                 <div className="p-4 bg-surface-subtle/80 border border-border rounded-xl flex items-start gap-3">
                   <Info size={16} className="text-primary shrink-0 mt-0.5" />
                   <div className="text-xs text-foreground-secondary font-sans leading-relaxed">
-                    <p className="font-semibold text-foreground">Gobernanza de Seguridad a Nivel de Fila (Row-Level Security):</p>
+                    <p className="font-semibold text-foreground">Gobernanza y Persistencia de Alcance Operativo (admin.usuario_alcance):</p>
                     <p className="text-foreground-muted mt-0.5">
-                      Las consultas en los módulos de Taller, Órdenes de Trabajo, Recepciones, Facturación y Clientes filtran automáticamente los registros según la empresa y el alcance configurado para este usuario.
+                      Los parámetros configurados definen el alcance territorial y departamental del usuario en PostgreSQL. La aplicación de filtrado estricto en reportes y vistas operativas se encuentra en proceso de integración gradual por módulo.
                     </p>
                   </div>
                 </div>

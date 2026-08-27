@@ -6,10 +6,10 @@ import {
   Users, UserPlus, Download, Edit2, ShieldAlert,
   MoreVertical, X, Save, Search, Check, CheckCircle2, AlertCircle, 
   RotateCw, RefreshCw, ChevronLeft, ChevronRight, ChevronDown, Filter, SlidersHorizontal, ToggleLeft, ToggleRight,
-  ShieldCheck, Shield, Key, Trash2, Mail, Phone, Building2, Eye, EyeOff, PanelLeftOpen, LayoutGrid, List,
+  ShieldCheck, Shield, Key, KeyRound, Trash2, Mail, Phone, Building2, Eye, EyeOff, PanelLeftOpen, LayoutGrid, List,
   FileText, Calendar, Clock, Laptop, ShieldX, CheckSquare, Square, Info, AlertTriangle, ArrowRight, Settings, Printer
 } from 'lucide-react';
-import { validateRNC, validatePhoneDR, formatPhoneDR, validateEmail } from '@/lib/validations';
+import { validateRNC, validatePhoneDR, formatPhoneDR, validateEmail, validatePasswordPolicy } from '@/lib/validations';
 import { usersService } from '@/services/usersService';
 import SecurityConfirmDialog from '@/components/security/SecurityConfirmDialog';
 
@@ -127,6 +127,136 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
   const [cargosError, setCargosError] = useState(null);
   const [departamentosError, setDepartamentosError] = useState(null);
   const [areasError, setAreasError] = useState(null);
+
+  // Manual Reset Password Modal State
+  const [isResetPasswordModalOpen, setIsResetPasswordModalOpen] = useState(false);
+  const [resetPasswordUser, setResetPasswordUser] = useState(null);
+  const [resetNewPassword, setResetNewPassword] = useState('');
+  const [resetConfirmPassword, setResetConfirmPassword] = useState('');
+  const [showResetNewPassword, setShowResetNewPassword] = useState(false);
+  const [showResetConfirmPassword, setShowResetConfirmPassword] = useState(false);
+  const [resetForceChange, setResetForceChange] = useState(true);
+  const [resetPasswordError, setResetPasswordError] = useState('');
+  const [isManualResetting, setIsManualResetting] = useState(false);
+
+  const getLoginAccessIdentifier = (u) => {
+    if (!u) return '—';
+    if (Array.isArray(u.login_identifiers) && u.login_identifiers.length > 0) {
+      const prim = u.login_identifiers.find(id => id.is_primary) || u.login_identifiers[0];
+      if (prim?.identifier_value && String(prim.identifier_value).trim()) {
+        return String(prim.identifier_value).trim();
+      }
+    }
+    if (typeof u.login_identifiers === 'string' && u.login_identifiers.trim()) {
+      return u.login_identifiers.trim();
+    }
+    if (u.identificador_principal && String(u.identificador_principal).trim()) {
+      return String(u.identificador_principal).trim();
+    }
+    if (u.correo_acceso && String(u.correo_acceso).trim()) {
+      return String(u.correo_acceso).trim();
+    }
+    if (u.email && String(u.email).trim()) {
+      return String(u.email).trim();
+    }
+    if (u.document_number && String(u.document_number).trim()) {
+      return String(u.document_number).trim();
+    }
+    if (u.phone && String(u.phone).trim()) {
+      return String(u.phone).trim();
+    }
+    return u.id ? `ID #${u.id}` : '—';
+  };
+
+  const getUserDisplayName = (u) => {
+    if (!u) return 'Usuario';
+    const computedName = `${u.first_name || ''} ${u.last_name || ''}`.trim();
+    if (computedName) return computedName;
+    if (u.full_name && u.full_name !== 'Desconocido' && u.full_name.trim()) {
+      return u.full_name.trim();
+    }
+    const access = getLoginAccessIdentifier(u);
+    if (access && !access.startsWith('ID #') && access !== '—') {
+      return access;
+    }
+    return u.id ? `Usuario #${u.id}` : 'Usuario';
+  };
+
+  const handleOpenResetPasswordModal = async (user) => {
+    setResetPasswordUser(user);
+    setResetNewPassword('');
+    setResetConfirmPassword('');
+    setShowResetNewPassword(false);
+    setShowResetConfirmPassword(false);
+    setResetForceChange(true);
+    setResetPasswordError('');
+    setIsManualResetting(false);
+    setIsResetPasswordModalOpen(true);
+
+    try {
+      const full = await usersService.getUserById(user.id);
+      if (full) {
+        setResetPasswordUser(prev => ({ ...(prev || {}), ...full }));
+      }
+    } catch (e) {
+      console.warn('Could not fetch full user detail for reset password modal:', e);
+    }
+  };
+
+  const handleCloseResetPasswordModal = () => {
+    if (isManualResetting) return;
+    setIsResetPasswordModalOpen(false);
+    setResetPasswordUser(null);
+    setResetNewPassword('');
+    setResetConfirmPassword('');
+    setResetPasswordError('');
+  };
+
+  const handleSubmitManualResetPassword = async (e) => {
+    if (e) e.preventDefault();
+    setResetPasswordError('');
+
+    if (!resetNewPassword) {
+      setResetPasswordError('Debe ingresar una nueva contraseña.');
+      return;
+    }
+
+    if (resetNewPassword !== resetConfirmPassword) {
+      setResetPasswordError('Las contraseñas no coinciden.');
+      return;
+    }
+
+    const policy = validatePasswordPolicy(resetNewPassword);
+    if (!policy.isValid) {
+      setResetPasswordError(policy.message);
+      return;
+    }
+
+    setIsManualResetting(true);
+    try {
+      await usersService.resetPassword(resetPasswordUser.id, {
+        mode: 'manual',
+        newPassword: resetNewPassword,
+        confirmPassword: resetConfirmPassword,
+        forceChangeOnNextLogin: resetForceChange
+      });
+
+      handleCloseResetPasswordModal();
+      showToastNotification(
+        'Contraseña Restablecida',
+        `La contraseña para "${resetPasswordUser.full_name || resetPasswordUser.email}" ha sido actualizada exitosamente.`,
+        'success'
+      );
+      await fetchUsers();
+      if (detailUser && detailUser.id === resetPasswordUser.id) {
+        fetchUserAudits(resetPasswordUser.id);
+      }
+    } catch (err) {
+      setResetPasswordError(err.message || 'Error al restablecer la contraseña.');
+    } finally {
+      setIsManualResetting(false);
+    }
+  };
 
   const fetchUsers = async () => {
     try {
@@ -587,10 +717,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
       setIsEditing360(false);
       setWizardData(null);
-
-      addAuditLog(updatedUser.id, 'Modificación de Usuario', 'users', 'Perfil anterior', 'Perfil actualizado', 'Cambios guardados por administrador desde Editar Usuario');
-      addActivityLog(updatedUser.id, 'Cuenta Actualizada', 'Información del perfil de usuario modificada correctamente.');
-
       setToastNotification({
         type: 'success',
         title: 'Cambios guardados',
@@ -1166,8 +1292,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     const updated = data.map(u => {
       if (selectedIds.includes(u.id)) {
         const newStatus = u.status === 'Activo' ? 'Inactivo' : 'Activo';
-        addAuditLog(u.id, 'Cambio de Estado Masivo', 'users', `Estado: ${u.status}`, `Estado: ${newStatus}`, 'Rotación de estado masiva');
-        addActivityLog(u.id, 'Estado Modificado (Masivo)', `Estado cambiado a ${newStatus} por lote.`);
         return { ...u, status: newStatus, updatedAt: timestamp };
       }
       return u;
@@ -1286,7 +1410,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       const rId = sourceUser.role_id || sourceUser.rol_principal_id || sourceUser.rol_id || matchedRoleObj?.id || (roles && roles[0] ? roles[0].id : 1);
       const rName = sourceUser.role_name || sourceUser.role || sourceUser.rol || matchedRoleObj?.name || matchedRoleObj?.nombre || 'Administrador General';
 
-      const compId = sourceUser.companyId || sourceUser.empresa_id || (empresas && empresas.length > 0 ? empresas[0].id : 1);
+      const compId = sourceUser.companyId || sourceUser.empresa_id || (companies && companies.length > 0 ? (companies[0].id || companies[0].empresa_id) : 1);
       const userTypeId = sourceUser.tipo_usuario_id || (userTypes && userTypes.length > 0 ? userTypes[0].id : 1);
 
       return {
@@ -1357,7 +1481,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     }
     if (!firstName) firstName = 'Usuario';
 
-    const companyId = wizardData.companyId || wizardData.empresa_id || (empresas && empresas[0] ? empresas[0].id : 1);
+    const companyId = wizardData.companyId || wizardData.empresa_id || (companies && companies[0] ? (companies[0].id || companies[0].empresa_id) : 1);
     const roleName = wizardData.role || wizardData.role_name || 'Administrador General';
     const roleId = wizardData.rol_id || wizardData.role_id || (roles.find(r => (r.name || r.nombre) === roleName)?.id) || 1;
 
@@ -1408,8 +1532,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       if (activeTab360 === 'auditoria') {
         fetchUserAudits(finalUser.id);
       }
-      addAuditLog(finalUser.id, 'Edición de Cuenta', 'user_account', 'Datos Anteriores', 'Datos Actualizados', 'Modificación de perfil mediante formulario inline.');
-      addActivityLog(finalUser.id, 'Perfil Actualizado', 'Se guardaron cambios al perfil y parámetros de seguridad del usuario.');
       setIsEditing360(false);
       setWizardData(null);
       setEdit360Error('');
@@ -1744,8 +1866,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         setIsSaving(false);
         fetchUsers();
         handleCancel();
-        addAuditLog(res.usuario_id || cleanUser.id, 'Creación de Usuario', 'users', '—', `Cuenta creada con rol ${cleanUser.role || 'Asignado'}.`, `Creación de cuenta en IAM`);
-        addActivityLog(res.usuario_id || cleanUser.id, 'Cuenta Creada', `Usuario creado por administrador.`);
         setSuccessWizardMessage(res.message || 'El usuario ha sido creado correctamente en la base de datos.');
         setShowSuccessWizardModal(true);
         showToast(res.emailSent ? 'Usuario creado y correo enviado con éxito.' : 'Usuario creado con éxito.');
@@ -1772,10 +1892,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         if (originalUser.status !== cleanUser.status) changeDesc.push(`Estado: ${originalUser.status} -> ${cleanUser.status}`);
         
         const desc = changeDesc.length > 0 ? 'Modificaciones: ' + changeDesc.join(', ') : 'Perfil editado';
-
-        addAuditLog(cleanUser.id, 'Modificación de Usuario', 'users', JSON.stringify(originalUser), JSON.stringify(cleanUser), 'Actualización de perfil');
-        addActivityLog(cleanUser.id, 'Cuenta Actualizada', desc);
-
         setSuccessWizardMessage('Los cambios en el perfil del usuario han sido guardados correctamente en la base de datos.');
         setShowSuccessWizardModal(true);
         showToast('Usuario actualizado con éxito.');
@@ -1821,9 +1937,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
         updatedUsers = data.map(u => u.id === userId ? { ...u, status: afterStatus, estado: afterEstado, updatedAt: timestamp } : u);
         syncData(updatedUsers);
-
-        addAuditLog(userId, 'Cambio de Estado', 'users', `Estado: ${beforeStatus}`, `Estado: ${afterEstado}`, reasonText);
-        addActivityLog(userId, 'Estado Modificado', `Estado cambiado de ${beforeStatus} a ${afterEstado}. Motivo: ${reasonText}`);
         showToast(`Estado de usuario cambiado a ${afterEstado}.`);
       } 
     
@@ -1835,9 +1948,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
       updatedUsers = data.map(u => u.id === userId ? { ...u, role: afterRole, updatedAt: timestamp } : u);
       syncData(updatedUsers);
-
-      addAuditLog(userId, 'Cambio de Rol', 'users', `Rol: ${beforeRole}`, `Rol: ${afterRole}`, reasonText);
-      addActivityLog(userId, 'Rol Modificado', `Rol cambiado de ${beforeRole} a ${afterRole}. Motivo: ${reasonText}`);
       showToast(`Rol principal cambiado a ${afterRole}.`);
     }
 
@@ -1857,9 +1967,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         updatedAt: timestamp 
       } : u);
       syncData(updatedUsers);
-
-      addAuditLog(userId, 'Cambio de Alcance', 'user_operational_scope', `Alcance: ${beforeScope}`, `Alcance: ${afterScope}`, reasonText);
-      addActivityLog(userId, 'Alcance Modificado', `Alcance modificado de ${beforeScope} a ${afterScope}. Motivo: ${reasonText}`);
       showToast(`Alcance operativo actualizado con éxito.`);
     }
 
@@ -1892,8 +1999,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         const tempPass = generateRandomPassword(isDocAccess);
         setTempPassword(tempPass);
         setShowPassModal(true);
-        addAuditLog(user.id, 'Restablecer Contraseña', 'user_access', 'must_change_password: false', 'must_change_password: true', 'Restablecimiento forzado de contraseña por administrador');
-        addActivityLog(user.id, 'Contraseña Restablecida', 'Administrador forzó la renovación de credenciales.');
         showToast(isDocAccess ? 'PIN temporal restablecido.' : 'Contraseña temporal restablecida.');
       }
     });
@@ -1904,7 +2009,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
       navigator.clipboard.writeText(link);
       showToast('Enlace de activación copiado al portapapeles.');
-      addActivityLog(user.id, 'Enlace Copiado', 'Se copió el enlace de activación manualmente.');
     } else {
       showToast('Error al copiar al portapapeles.', 'error');
     }
@@ -1930,8 +2034,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       return u;
     });
     syncData(updated);
-    addAuditLog(user.id, 'Envío de Invitación', 'users', 'activation_status: INVITATION_PENDING', 'activation_status: INVITATION_SENT', 'Invitación enviada por el administrador.');
-    addActivityLog(user.id, 'Invitación Enviada', 'Correo electrónico de invitación despachado.');
     showToast('Invitación enviada con éxito.');
   };
 
@@ -1954,7 +2056,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       return u;
     });
     syncData(updated);
-    addActivityLog(user.id, 'Invitación Reenviada', 'Correo electrónico de invitación reenviado.');
     showToast('Invitación reenviada con éxito.');
   };
 
@@ -1990,8 +2091,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
           return u;
         });
         syncData(updated);
-        addAuditLog(user.id, 'Revocación de Invitación', 'users', 'Invitación Activa', 'Borrador / Inactivo', 'Invitación revocada por administrador.');
-        addActivityLog(user.id, 'Invitación Revocada', 'Invitación anulada y cuenta convertida a borrador.');
         showToast('Invitación revocada. El usuario ha sido inhabilitado.');
       }
     });
@@ -2017,8 +2116,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       return u;
     });
     syncData(updated);
-    addAuditLog(user.id, 'Regeneración de Invitación', 'users', 'activation_status: INVITATION_EXPIRED', 'activation_status: INVITATION_SENT', 'Invitación regenerada tras expirar.');
-    addActivityLog(user.id, 'Invitación Regenerada', 'Enlace de invitación renovado con expiración extendida.');
     showToast('Invitación regenerada y enviada.');
   };
 
@@ -2038,7 +2135,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       return u;
     });
     syncData(updated);
-    addActivityLog(user.id, 'Recordatorio Enviado', 'Recordatorio de inicio de sesión enviado.');
     showToast('Recordatorio de onboarding enviado.');
   };
 
@@ -2074,7 +2170,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         syncData(updated);
         setTempPassword(newCred);
         setShowPassModal(true);
-        addActivityLog(user.id, 'PIN Regenerado', 'Nuevo PIN generado manualmente por administrador.');
         showToast('PIN regenerado exitosamente.');
       }
     });
@@ -2096,7 +2191,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       return u;
     });
     syncData(updated);
-    addActivityLog(user.id, 'Instrucciones Entregadas', 'Se marcaron las credenciales temporales como entregadas físicamente.');
     showToast('Instrucciones marcadas como entregadas.');
   };
 
@@ -2137,8 +2231,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     try {
       await usersService.revokeAllUserSessions(userToRevokeAll, keepCurrentSessionOnRevokeAll);
       fetchUserSessions(userToRevokeAll);
-      addAuditLog(userToRevokeAll, 'Revocación de Sesiones', 'user_sessions', 'Sesiones Activas', 'Sesiones Expiradas', 'Revocación forzada por administrador.');
-      addActivityLog(userToRevokeAll, 'Sesiones Revocadas', 'Sesiones web/móvil terminadas forzosamente.');
       setShowRevokeAllConfirmModal(false);
       showToast('Sesiones revocadas con éxito.');
     } catch (error) {
@@ -2825,10 +2917,17 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     items.push(
       <button 
         key="edit-profile"
-        className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5" 
+        className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5 cursor-pointer" 
         onClick={() => handleStartEdit360(item, 'resumen')}
       >
         <Edit2 size={13} className="text-[var(--text-muted)]" /> Editar perfil
+      </button>,
+      <button 
+        key="reset-password-manual"
+        className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5 cursor-pointer" 
+        onClick={() => handleOpenResetPasswordModal(item)}
+      >
+        <KeyRound size={13} className="text-primary" /> Restablecer contraseña
       </button>
     );
 
@@ -8111,6 +8210,171 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
             >
               <X className="w-4 h-4" />
             </button>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* MANUAL RESET PASSWORD MODAL */}
+      {isResetPasswordModalOpen && resetPasswordUser && typeof window !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4 font-sans">
+          <div 
+            className="fixed inset-0 bg-black/75 backdrop-blur-sm transition-opacity" 
+            onClick={handleCloseResetPasswordModal} 
+          />
+          
+          <div 
+            role="dialog"
+            aria-modal="true"
+            className="relative w-[480px] max-w-[calc(100vw-32px)] min-w-[320px] bg-surface-elevated border border-border rounded-2xl shadow-2xl z-10 overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 text-foreground shrink-0"
+          >
+            
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-border bg-surface-subtle flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 bg-primary/10 border border-primary/30 rounded-xl flex items-center justify-center text-primary">
+                  <KeyRound size={18} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-foreground font-sans">Restablecer contraseña</h3>
+                  <p className="text-[11px] text-foreground-muted font-sans">Asigna una nueva contraseña para este usuario.</p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={handleCloseResetPasswordModal}
+                disabled={isManualResetting}
+                className="p-1.5 text-foreground-muted hover:text-foreground rounded-lg hover:bg-hover transition-colors cursor-pointer disabled:opacity-50"
+                aria-label="Cerrar modal"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleSubmitManualResetPassword} className="p-6 space-y-4 font-sans">
+              
+              {/* User Context Badge */}
+              <div className="p-3 bg-surface-subtle border border-border rounded-xl flex flex-col gap-1.5 text-xs">
+                <div className="flex justify-between items-center">
+                  <span className="text-[10.5px] font-mono font-bold text-foreground-muted uppercase tracking-wider">Usuario:</span>
+                  <span className="font-bold text-foreground truncate max-w-[240px]">
+                    {getUserDisplayName(resetPasswordUser)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-[10.5px] font-mono font-bold text-foreground-muted uppercase tracking-wider">Dato de Acceso (Login):</span>
+                  <span className="font-mono font-bold text-primary truncate max-w-[240px]">
+                    {getLoginAccessIdentifier(resetPasswordUser)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Error Message */}
+              {resetPasswordError && (
+                <div className="p-3 bg-error/10 border border-error/30 rounded-xl flex items-start gap-2.5 text-error text-xs">
+                  <AlertCircle size={15} className="shrink-0 mt-0.5" />
+                  <span className="leading-relaxed">{resetPasswordError}</span>
+                </div>
+              )}
+
+              {/* New Password Field */}
+              <div>
+                <label className="block text-[11px] font-bold text-foreground uppercase tracking-wider mb-1.5 font-mono">
+                  Nueva contraseña *
+                </label>
+                <div className="relative">
+                  <input
+                    type={showResetNewPassword ? "text" : "password"}
+                    value={resetNewPassword}
+                    onChange={(e) => setResetNewPassword(e.target.value)}
+                    placeholder="Mínimo 8 caracteres, mayúscula, minúscula, número y símbolo"
+                    disabled={isManualResetting}
+                    className="w-full bg-input border border-border rounded-xl pl-3.5 pr-10 py-2.5 text-xs text-foreground placeholder:text-foreground-disabled focus:outline-none focus:border-primary transition-colors font-mono"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowResetNewPassword(!showResetNewPassword)}
+                    tabIndex={-1}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground-muted hover:text-foreground cursor-pointer"
+                  >
+                    {showResetNewPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Confirm Password Field */}
+              <div>
+                <label className="block text-[11px] font-bold text-foreground uppercase tracking-wider mb-1.5 font-mono">
+                  Confirmar contraseña *
+                </label>
+                <div className="relative">
+                  <input
+                    type={showResetConfirmPassword ? "text" : "password"}
+                    value={resetConfirmPassword}
+                    onChange={(e) => setResetConfirmPassword(e.target.value)}
+                    placeholder="Repita la nueva contraseña"
+                    disabled={isManualResetting}
+                    className="w-full bg-input border border-border rounded-xl pl-3.5 pr-10 py-2.5 text-xs text-foreground placeholder:text-foreground-disabled focus:outline-none focus:border-primary transition-colors font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowResetConfirmPassword(!showResetConfirmPassword)}
+                    tabIndex={-1}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground-muted hover:text-foreground cursor-pointer"
+                  >
+                    {showResetConfirmPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Policy note */}
+              <p className="text-[11px] text-foreground-muted font-sans">
+                La contraseña debe cumplir la política de seguridad del sistema (8+ caracteres, mayúscula, minúscula, número y símbolo).
+              </p>
+
+              {/* Force change checkbox */}
+              <label className="flex items-center gap-2.5 pt-1 cursor-pointer select-none text-xs text-foreground font-medium">
+                <input
+                  type="checkbox"
+                  checked={resetForceChange}
+                  onChange={(e) => setResetForceChange(e.target.checked)}
+                  disabled={isManualResetting}
+                  className="w-4 h-4 rounded border-border text-primary focus:ring-primary/20 accent-primary cursor-pointer"
+                />
+                <span>Solicitar cambio de contraseña en el próximo inicio de sesión</span>
+              </label>
+
+              {/* Modal Buttons */}
+              <div className="pt-3 border-t border-border flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={handleCloseResetPasswordModal}
+                  disabled={isManualResetting}
+                  className="px-4 py-2.5 text-xs font-semibold text-foreground-secondary hover:text-foreground bg-surface-subtle hover:bg-hover border border-border rounded-xl transition-all cursor-pointer disabled:opacity-50 font-sans"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isManualResetting || !resetNewPassword || !resetConfirmPassword}
+                  className="px-5 py-2.5 bg-primary-button-bg hover:brightness-110 text-primary-foreground text-xs font-bold rounded-xl shadow transition-all flex items-center gap-2 cursor-pointer font-mono disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isManualResetting ? (
+                    <>
+                      <RefreshCw size={14} className="animate-spin" />
+                      Restableciendo...
+                    </>
+                  ) : (
+                    <>
+                      <KeyRound size={14} />
+                      Restablecer contraseña
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>,
         document.body

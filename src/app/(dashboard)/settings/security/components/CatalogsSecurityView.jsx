@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { 
   Building2, 
   Boxes, 
@@ -9,28 +10,20 @@ import {
   GitFork, 
   Briefcase, 
   ArrowRight, 
-  Search, 
-  Plus, 
-  X, 
-  RefreshCw, 
-  CheckCircle2, 
   Activity, 
-  Trash2,
-  Cpu
+  RefreshCw,
+  Search,
+  CheckCircle2,
+  AlertCircle
 } from "lucide-react";
-import { catalogosService } from "@/services/catalogosService";
 
 export default function CatalogsSecurityView() {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCatalog, setSelectedCatalog] = useState(null);
-  const [catalogItems, setCatalogItems] = useState([]);
-  const [isManageModalOpen, setIsManageModalOpen] = useState(false);
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [newItemName, setNewItemName] = useState("");
   const [toastMessage, setToastMessage] = useState(null);
 
-  // Real catalog counters & live stats
+  // Real catalog counters & live stats from PostgreSQL
   const [stats, setStats] = useState({
     empresas: 0,
     tiposEmpresa: 0,
@@ -49,14 +42,14 @@ export default function CatalogsSecurityView() {
   const fetchLiveStatsAndActivity = async () => {
     try {
       setLoading(true);
-      const [empRes, tiposEmpRes, tiposUsuRes, depRes, areasRes, cargosRes, auditsRes] = await Promise.allSettled([
+      const [empRes, tiposEmpRes, tiposUsuRes, depRes, areasRes, cargosRes, meRes] = await Promise.allSettled([
         fetch('/api/empresas').then(r => r.ok ? r.json() : []),
         fetch('/api/tipos-empresa').then(r => r.ok ? r.json() : []),
         fetch('/api/tipos-usuario').then(r => r.ok ? r.json() : []),
         fetch('/api/departamentos').then(r => r.ok ? r.json() : []),
         fetch('/api/areas').then(r => r.ok ? r.json() : []),
         fetch('/api/cargos').then(r => r.ok ? r.json() : []),
-        fetch('/api/usuarios/1/auditoria?pageSize=5').then(r => r.ok ? r.json() : { items: [] })
+        fetch('/api/auth/me').then(r => r.ok ? r.json() : null)
       ]);
 
       const getCount = (res) => {
@@ -77,18 +70,32 @@ export default function CatalogsSecurityView() {
         cargos: getCount(cargosRes)
       });
 
-      if (auditsRes.status === 'fulfilled' && auditsRes.value) {
-        const auditData = auditsRes.value;
-        const items = Array.isArray(auditData.items) ? auditData.items : (Array.isArray(auditData) ? auditData : []);
-        const mapped = items.map((a, idx) => ({
-          id: a.auditoria_id || a.id || idx,
-          date: a.fecha_hora ? new Date(a.fecha_hora).toLocaleString('es-DO', { dateStyle: 'short', timeStyle: 'short' }) : '—',
-          user: a.admin_nombre || a.nombre || 'Administrador',
-          catalog: a.modulo || 'Seguridad',
-          action: a.accion ? `${a.accion}${a.motivo ? `: ${a.motivo}` : ''}` : 'Actualización',
-          status: a.resultado || 'COMPLETADO'
-        }));
-        setActivityLogs(mapped);
+      // Fetch authentic audit logs for authenticated user if available
+      if (meRes.status === 'fulfilled' && meRes.value) {
+        const me = meRes.value;
+        const currentUserId = me.usuario_id || me.id;
+        if (currentUserId) {
+          try {
+            const auditRes = await fetch(`/api/usuarios/${currentUserId}/auditoria?pageSize=5`);
+            if (auditRes.ok) {
+              const auditData = await auditRes.json();
+              const items = Array.isArray(auditData.items) ? auditData.items : (Array.isArray(auditData) ? auditData : []);
+              const mapped = items.map((a, idx) => ({
+                id: a.auditoria_id || a.id || idx,
+                date: a.fecha_hora ? new Date(a.fecha_hora).toLocaleString('es-DO', { dateStyle: 'short', timeStyle: 'short' }) : '—',
+                user: a.admin_nombre || a.nombre || me.full_name || 'Administrador',
+                catalog: a.modulo || 'Seguridad',
+                action: a.accion ? `${a.accion}${a.motivo ? `: ${a.motivo}` : ''}` : 'Actualización',
+                status: a.resultado || 'COMPLETADO'
+              }));
+              setActivityLogs(mapped);
+            } else {
+              setActivityLogs([]);
+            }
+          } catch {
+            setActivityLogs([]);
+          }
+        }
       } else {
         setActivityLogs([]);
       }
@@ -103,62 +110,56 @@ export default function CatalogsSecurityView() {
     {
       id: "empresas",
       title: "Empresas",
-      description: "Gestión de sucursales y filiales operativas de la corporación.",
+      description: "Gestión de sucursales, filiales y entidades operativas de la corporación.",
       icon: Building2,
       count: stats.empresas,
-      progress: 75,
       badge: "ACTIVO",
-      key: "empresa"
+      route: "/settings/security/companies"
     },
     {
       id: "tiposEmpresa",
       title: "Tipos de Empresa",
-      description: "Clasificación por sector, tamaño y estructura legal.",
+      description: "Clasificación por sector, tamaño y estructura legal aplicable.",
       icon: Boxes,
       count: stats.tiposEmpresa,
-      progress: 40,
       badge: null,
-      key: "tipoEmpresa"
+      route: "/settings/security/company-types"
     },
     {
       id: "tiposUsuario",
       title: "Tipos de Usuario",
-      description: "Definición de perfiles de acceso y permisos base.",
+      description: "Definición de perfiles de acceso y permisos base del sistema.",
       icon: Users,
       count: stats.tiposUsuario,
-      progress: 60,
       badge: null,
-      key: "tipoUsuario"
+      route: "/settings/security/user-types"
     },
     {
       id: "departamentos",
       title: "Departamentos",
-      description: "Unidades funcionales superiores del organigrama.",
+      description: "Unidades funcionales superiores del organigrama empresarial.",
       icon: Network,
       count: stats.departamentos,
-      progress: 50,
       badge: null,
-      key: "departamento"
+      route: "/settings/security/departments"
     },
     {
       id: "areas",
       title: "Áreas",
-      description: "Sub-unidades operativas enfocadas en tareas específicas.",
+      description: "Sub-unidades operativas especializadas en tareas y servicios.",
       icon: GitFork,
       count: stats.areas,
-      progress: 85,
       badge: null,
-      key: "area"
+      route: "/settings/security/areas"
     },
     {
       id: "cargos",
       title: "Cargos",
-      description: "Definición de posiciones, responsabilidades y tabuladores.",
+      description: "Definición de posiciones de trabajo, responsabilidades y tabuladores.",
       icon: Briefcase,
       count: stats.cargos,
-      progress: 92,
       badge: null,
-      key: "cargo"
+      route: "/settings/security/positions"
     }
   ];
 
@@ -167,166 +168,64 @@ export default function CatalogsSecurityView() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const handleOpenManage = async (cat) => {
-    setSelectedCatalog(cat);
-    setIsManageModalOpen(true);
-    setLoading(true);
-    try {
-      if (cat.id === "departamentos") {
-        const data = await catalogosService.getDepartamentos();
-        setCatalogItems(data.map(d => ({ id: d.id, name: d.name || d.nombre, code: `DEP-${d.id}` })));
-      } else if (cat.id === "areas") {
-        const data = await catalogosService.getAreas();
-        setCatalogItems(data.map(a => ({ id: a.id, name: a.name || a.nombre, code: `ARE-${a.id}` })));
-      } else if (cat.id === "cargos") {
-        const data = await catalogosService.getCargos();
-        setCatalogItems(data.map(c => ({ id: c.id, name: c.name || c.nombre, code: `CAR-${c.id}` })));
-      } else if (cat.id === "tiposUsuario") {
-        const data = await catalogosService.getTiposUsuario();
-        setCatalogItems(data.map(t => ({ id: t.id, name: t.name || t.nombre, code: `TIP-${t.id}` })));
-      } else if (cat.id === "empresas") {
-        setCatalogItems([
-          { id: 1, name: "Biker's Fort Central", code: "EMP-001", status: "Activo" },
-          { id: 2, name: "Biker's Fort Norte", code: "EMP-002", status: "Activo" },
-          { id: 3, name: "Biker's Fort Este", code: "EMP-003", status: "Activo" },
-          { id: 4, name: "Biker's Fort Sur", code: "EMP-004", status: "Inactivo" }
-        ]);
-      } else {
-        setCatalogItems([
-          { id: 1, name: "Sociedad Anónima (S.A.)", code: "TE-001" },
-          { id: 2, name: "Responsabilidad Limitada (S.R.L.)", code: "TE-002" },
-          { id: 3, name: "Empresa Individual (E.I.R.L.)", code: "TE-003" }
-        ]);
-      }
-    } catch (e) {
-      console.error("Error loading catalog details:", e);
-    } finally {
-      setLoading(false);
-    }
+  const handleNavigate = (route) => {
+    router.push(route);
   };
 
-  const handleAddItem = (e) => {
-    e.preventDefault();
-    if (!newItemName.trim()) return;
-
-    const newItem = {
-      id: Date.now(),
-      name: newItemName.trim(),
-      code: `${selectedCatalog.id.substring(0, 3).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`,
-      status: "Activo"
-    };
-
-    setCatalogItems(prev => [newItem, ...prev]);
-    setStats(prev => ({
-      ...prev,
-      [selectedCatalog.id]: (prev[selectedCatalog.id] || 0) + 1
-    }));
-
-    const newLog = {
-      id: Date.now(),
-      date: new Date().toISOString().replace('T', ' ').substring(0, 16),
-      user: "Admin_Actual",
-      catalog: selectedCatalog.title,
-      action: `Creación: ${newItemName.trim()}`,
-      status: "COMPLETADO"
-    };
-    setActivityLogs(prev => [newLog, ...prev]);
-
-    setNewItemName("");
-    setIsAddModalOpen(false);
-    showToast(`Registro "${newItem.name}" añadido al catálogo ${selectedCatalog.title}.`);
-  };
-
-  const handleDeleteItem = (itemId, itemName) => {
-    setCatalogItems(prev => prev.filter(i => i.id !== itemId));
-    setStats(prev => ({
-      ...prev,
-      [selectedCatalog.id]: Math.max(0, (prev[selectedCatalog.id] || 0) - 1)
-    }));
-
-    const newLog = {
-      id: Date.now(),
-      date: new Date().toISOString().replace('T', ' ').substring(0, 16),
-      user: "Admin_Actual",
-      catalog: selectedCatalog.title,
-      action: `Baja: ${itemName}`,
-      status: "COMPLETADO"
-    };
-    setActivityLogs(prev => [newLog, ...prev]);
-    showToast(`Item "${itemName}" eliminado del catálogo.`);
-  };
-
-  const filteredCatalogs = catalogDefinitions.filter(cat => 
-    cat.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    cat.description.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredCatalogs = catalogDefinitions.filter(
+    (c) =>
+      c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.description.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
-    <div className="w-full space-y-8 animate-in fade-in duration-300 font-sans text-foreground">
+    <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto font-sans text-foreground">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-[99999] bg-primary text-primary-foreground px-5 py-3 rounded-xl font-bold shadow-2xl flex items-center gap-2 animate-in slide-in-from-bottom-5 duration-200">
-          <CheckCircle2 size={18} />
-          <span>{toastMessage}</span>
+        <div className="fixed bottom-6 right-6 z-50 bg-card border border-primary/40 text-foreground px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-5">
+          <CheckCircle2 size={16} className="text-primary shrink-0" />
+          <span className="text-xs font-mono font-medium">{toastMessage}</span>
         </div>
       )}
 
-      {/* Header Banner */}
-      <section className="relative overflow-hidden border border-border p-6 md:p-8 bg-card rounded-2xl shadow-sm">
-        <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none text-primary">
-          <Cpu size={140} />
+      {/* Top Header Section */}
+      <section className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border pb-6">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-primary bg-surface-subtle border border-border px-2.5 py-0.5 rounded-full">
+              Sistema Maestro
+            </span>
+            <span className="text-xs text-foreground-muted font-mono">• 6 Módulos Oficiales</span>
+          </div>
+          <h1 className="text-3xl font-black text-foreground tracking-tight">
+            Catálogos del Sistema
+          </h1>
+          <p className="text-sm text-foreground-secondary mt-1">
+            Administración centralizada de entidades organizacionales y parámetros maestros de Bikers&apos; Fort Core.
+          </p>
         </div>
 
-        <div className="relative z-10 space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <span className="text-[10px] font-mono tracking-widest text-primary uppercase font-bold">
-                SYSTEM ADMINISTRATION • BIKER&apos;S FORT CORE
-              </span>
-              <h2 className="text-2xl md:text-3xl font-extrabold text-foreground tracking-tight mt-1 font-sans">
-                Panel de Control de Catálogos
-              </h2>
-            </div>
-            
-            <div className="flex items-center gap-3 bg-input border border-border px-3.5 py-1.5 rounded-xl text-xs font-mono">
-              <Search size={14} className="text-foreground-muted" />
-              <input 
-                type="text"
-                placeholder="Buscar catálogo..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="bg-transparent text-foreground placeholder:text-foreground-disabled focus:outline-none w-36 md:w-48 text-xs font-mono"
-              />
-            </div>
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-foreground-muted" size={14} />
+            <input
+              type="text"
+              placeholder="Buscar catálogo..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="bg-input border border-border rounded-xl pl-9 pr-4 py-2 text-xs text-foreground placeholder:text-foreground-disabled focus:outline-none focus:border-primary transition-colors w-48 md:w-64 font-sans"
+            />
           </div>
 
-          <p className="text-sm text-foreground-secondary max-w-3xl leading-relaxed font-sans">
-            Gestione la arquitectura organizacional y operativa de Biker&apos;s Fort. Configure entidades, estructuras jerárquicas y roles maestros con precisión industrial.
-          </p>
-
-          <div className="pt-3 border-t border-border flex flex-wrap items-center gap-6 text-xs font-mono">
-            <div className="flex flex-col">
-              <span className="text-[10px] text-primary font-bold tracking-wider uppercase">STATUS DEL SISTEMA</span>
-              <div className="flex items-center gap-2 mt-0.5">
-                <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
-                <span className="font-bold text-foreground">Operacional</span>
-              </div>
-            </div>
-
-            <div className="w-px h-8 bg-border" />
-
-            <div className="flex flex-col">
-              <span className="text-[10px] text-primary font-bold tracking-wider uppercase">ÚLTIMO RESPALDO</span>
-              <span className="font-bold text-foreground-secondary mt-0.5">Hace 14 minutos</span>
-            </div>
-
-            <div className="w-px h-8 bg-border" />
-
-            <div className="flex flex-col">
-              <span className="text-[10px] text-primary font-bold tracking-wider uppercase">CATÁLOGOS ACTIVOS</span>
-              <span className="font-bold text-foreground mt-0.5">6 Módulos Maestros</span>
-            </div>
-          </div>
+          <button
+            type="button"
+            onClick={fetchLiveStatsAndActivity}
+            disabled={loading}
+            className="p-2 bg-surface-subtle border border-border hover:bg-hover text-foreground-secondary hover:text-foreground rounded-xl transition-all cursor-pointer disabled:opacity-50"
+            title="Recargar estadísticas"
+          >
+            <RefreshCw size={14} className={loading ? "animate-spin text-primary" : ""} />
+          </button>
         </div>
       </section>
 
@@ -360,22 +259,14 @@ export default function CatalogsSecurityView() {
               </div>
 
               <div className="mt-auto space-y-4">
-                <div className="flex justify-between items-end">
-                  <span className="text-[10px] font-mono font-bold tracking-widest text-foreground-muted">REGISTROS</span>
+                <div className="flex justify-between items-end border-t border-border pt-4">
+                  <span className="text-[10px] font-mono font-bold tracking-widest text-foreground-muted uppercase">REGISTROS EN BD</span>
                   <span className="text-2xl font-black text-foreground font-mono">{cat.count}</span>
-                </div>
-
-                {/* Segmented progress bar */}
-                <div className="w-full h-1.5 bg-surface-subtle rounded-full overflow-hidden relative">
-                  <div 
-                    className="h-full bg-primary transition-all duration-500"
-                    style={{ width: `${cat.progress}%` }}
-                  />
                 </div>
 
                 <button 
                   type="button"
-                  onClick={() => handleOpenManage(cat)}
+                  onClick={() => handleNavigate(cat.route)}
                   className="w-full py-2.5 bg-primary-button-bg hover:brightness-110 text-primary-foreground font-mono text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-2 shadow-sm cursor-pointer"
                 >
                   ADMINISTRAR <ArrowRight size={14} />
@@ -390,9 +281,9 @@ export default function CatalogsSecurityView() {
       <section className="border border-border bg-card rounded-2xl overflow-hidden shadow-sm">
         <div className="px-6 py-4 border-b border-border bg-surface-subtle flex items-center justify-between">
           <h3 className="text-xs font-mono font-bold text-primary tracking-widest flex items-center gap-2">
-            <Activity size={14} /> ACTIVIDAD RECIENTE DE CATÁLOGOS
+            <Activity size={14} /> ACTIVIDAD RECIENTE DE AUDITORÍA Y ACCESO
           </h3>
-          <span className="text-[11px] font-mono text-foreground-muted">Últimas acciones registradas</span>
+          <span className="text-[11px] font-mono text-foreground-muted">Registros verificados en PostgreSQL</span>
         </div>
 
         <div className="overflow-x-auto">
@@ -400,8 +291,8 @@ export default function CatalogsSecurityView() {
             <thead>
               <tr className="bg-surface-subtle text-foreground-muted font-mono text-[10px] tracking-wider border-b border-border">
                 <th className="px-6 py-3">FECHA / HORA</th>
-                <th className="px-6 py-3">USUARIO</th>
-                <th className="px-6 py-3">CATÁLOGO</th>
+                <th className="px-6 py-3">USUARIO / ADMIN</th>
+                <th className="px-6 py-3">MÓDULO</th>
                 <th className="px-6 py-3">ACCIÓN</th>
                 <th className="px-6 py-3 text-right">ESTADO</th>
               </tr>
@@ -422,7 +313,7 @@ export default function CatalogsSecurityView() {
                     <td className="px-6 py-3.5 text-foreground-secondary">{log.action}</td>
                     <td className="px-6 py-3.5 text-right">
                       <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9.5px] font-mono font-bold border ${
-                        log.status === "COMPLETADO" 
+                        log.status === "COMPLETADO" || log.status === "EXITOSO"
                           ? "bg-success/15 text-success border-success/30"
                           : "bg-error/15 text-error border-error/30"
                       }`}>
@@ -436,137 +327,6 @@ export default function CatalogsSecurityView() {
           </table>
         </div>
       </section>
-
-      {/* MANAGE CATALOG MODAL */}
-      {isManageModalOpen && selectedCatalog && (
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsManageModalOpen(false)} />
-          
-          <div className="relative bg-surface-elevated border border-border rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200 text-foreground">
-            {/* Header */}
-            <div className="px-6 py-4 border-b border-border bg-surface-subtle flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 bg-surface border border-border rounded-lg flex items-center justify-center text-primary">
-                  {React.createElement(selectedCatalog.icon, { size: 18 })}
-                </div>
-                <div>
-                  <h4 className="text-base font-bold text-foreground font-sans">{selectedCatalog.title}</h4>
-                  <p className="text-[11px] text-foreground-muted font-mono">Administración del catálogo maestro</p>
-                </div>
-              </div>
-              <button 
-                type="button"
-                onClick={() => setIsManageModalOpen(false)} 
-                className="p-1.5 text-foreground-muted hover:text-foreground rounded-lg hover:bg-hover transition-colors cursor-pointer"
-                aria-label="Cerrar modal"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            {/* Actions Bar */}
-            <div className="p-4 border-b border-border bg-surface flex items-center justify-between gap-3">
-              <span className="text-xs font-mono text-foreground-secondary">
-                Total de registros: <strong className="text-foreground">{catalogItems.length}</strong>
-              </span>
-              <button 
-                type="button"
-                onClick={() => setIsAddModalOpen(true)}
-                className="px-4 py-2 bg-primary-button-bg hover:brightness-110 text-primary-foreground text-xs font-bold rounded-xl shadow transition-all flex items-center gap-1.5 cursor-pointer font-mono"
-              >
-                <Plus size={14} /> Nuevo Registro
-              </button>
-            </div>
-
-            {/* Items List */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-2.5 custom-scrollbar">
-              {loading ? (
-                <div className="py-12 text-center text-xs font-mono text-foreground-muted flex items-center justify-center gap-2">
-                  <RefreshCw className="animate-spin text-primary" size={16} /> Cargando datos...
-                </div>
-              ) : catalogItems.length === 0 ? (
-                <div className="py-12 text-center text-xs text-foreground-muted italic font-mono">
-                  No hay registros creados en este catálogo.
-                </div>
-              ) : (
-                catalogItems.map((item) => (
-                  <div key={item.id} className="p-3.5 bg-surface-subtle border border-border rounded-xl flex items-center justify-between gap-3 hover:border-primary/40 transition-colors">
-                    <div className="flex items-center gap-3">
-                      <span className="px-2 py-1 bg-surface border border-border rounded text-[10px] font-mono text-primary font-bold">
-                        {item.code}
-                      </span>
-                      <span className="text-xs font-bold text-foreground font-sans">{item.name}</span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <button 
-                        type="button"
-                        onClick={() => handleDeleteItem(item.id, item.name)}
-                        className="p-1.5 text-foreground-muted hover:text-error hover:bg-error/10 rounded-lg transition-colors cursor-pointer"
-                        title="Eliminar registro"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="p-4 border-t border-border bg-surface-subtle flex justify-end">
-              <button 
-                type="button"
-                onClick={() => setIsManageModalOpen(false)}
-                className="px-5 py-2 bg-surface text-foreground text-xs font-bold rounded-xl border border-border hover:bg-hover transition-all cursor-pointer font-mono"
-              >
-                Cerrar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ADD ITEM SUBMODAL */}
-      {isAddModalOpen && selectedCatalog && (
-        <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setIsAddModalOpen(false)} />
-          <div className="relative bg-surface-elevated border border-border rounded-2xl shadow-2xl w-full max-w-md p-6 animate-in zoom-in-95 duration-200 text-foreground">
-            <h4 className="text-base font-bold text-foreground mb-1 font-sans">Añadir a {selectedCatalog.title}</h4>
-            <p className="text-xs text-foreground-muted mb-4 font-sans">Ingrese los datos para registrar un nuevo elemento maestro.</p>
-
-            <form onSubmit={handleAddItem} className="space-y-4">
-              <div>
-                <label className="block text-[11px] font-mono font-bold text-foreground-secondary uppercase mb-1">Nombre del Registro *</label>
-                <input 
-                  type="text"
-                  required
-                  value={newItemName}
-                  onChange={(e) => setNewItemName(e.target.value)}
-                  placeholder={`Ej. ${selectedCatalog.title.substring(0, selectedCatalog.title.length - 1)} Demo`}
-                  className="w-full bg-input border border-border rounded-xl px-3 py-2 text-xs text-foreground placeholder:text-foreground-disabled focus:outline-none focus:border-primary font-sans"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-border">
-                <button 
-                  type="button" 
-                  onClick={() => setIsAddModalOpen(false)}
-                  className="px-4 py-2 bg-surface text-foreground text-xs font-bold rounded-xl border border-border hover:bg-hover font-mono"
-                >
-                  Cancelar
-                </button>
-                <button 
-                  type="submit" 
-                  className="px-5 py-2 bg-primary-button-bg text-primary-foreground text-xs font-bold rounded-xl hover:brightness-110 font-mono shadow-sm"
-                >
-                  Guardar Registro
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

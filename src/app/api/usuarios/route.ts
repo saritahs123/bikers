@@ -22,7 +22,7 @@ export async function GET() {
         u.empresa_id AS "companyId",
         ui.nombre AS first_name,
         ui.apellido AS last_name,
-        ui.nombre || ' ' || ui.apellido AS full_name,
+        NULLIF(TRIM(CONCAT(COALESCE(ui.nombre, ''), ' ', COALESCE(ui.apellido, ''))), '') AS full_name,
         ui.correo_electronico AS email,
         ui.telefono AS phone,
         ui.numero_documento AS document_number,
@@ -32,6 +32,7 @@ export async function GET() {
         r.nombre AS role,
         tu.nombre AS user_type,
         us.metodo_acceso_principal AS primary_access_type,
+        us.identificador_principal,
         us.identificador_principal AS login_identifiers,
         us.fecha_ultimo_acceso AS last_login_at,
         us.mfa_activo AS "mfaEnabled",
@@ -55,40 +56,52 @@ export async function GET() {
     const usersRes = await query(sql);
     
     // Convert properties correctly for the frontend component
-    const mappedUsers = (usersRes || []).map((u: any) => ({
-      id: u.id,
-      full_name: u.full_name || 'Desconocido',
-      first_name: u.first_name,
-      last_name: u.last_name,
-      email: u.email,
-      phone: u.phone,
-      document_number: u.document_number,
-      companyId: u.companyId,
-      department_id: u.departamento_id,
-      area_id: u.area_id,
-      cargo_id: u.cargo_id,
-      role: u.role || 'Sin Rol',
-      user_type: u.user_type || 'Sin Tipo',
-      primary_access_type: u.primary_access_type,
-      login_identifiers: u.login_identifiers ? [{ is_primary: true, identifier_value: u.login_identifiers }] : [],
-      last_login_at: u.last_login_at,
-      mfaEnabled: !!u.mfaEnabled,
-      mfa_method: u.mfa_method,
-      status: u.estado, 
-      estado: u.estado, 
-      estado_activacion: u.estado_activacion,
-      activation: u.activation,
-      fecha_creacion: u.fecha_creacion,
-      correo_acceso: u.correo_acceso || null,
-      enviar_invitacion_correo: Boolean(u.enviar_invitacion_correo),
-      generar_clave_automatica: Boolean(u.generar_clave_automatica),
-      forzar_cambio_clave: Boolean(u.forzar_cambio_clave),
-      idioma_preferido: u.idioma_preferido || 'Español (América Latina)',
-      zona_horaria: u.zona_horaria || 'America/Santo_Domingo (GMT-4)',
-      formato_fecha: u.formato_fecha || 'DD/MM/YYYY',
-      permissionsOverride: false, // Default logic mapping
-      scope_type: 'GLOBAL' // Default scope mapping 
-    }));
+    const mappedUsers = (usersRes || []).map((u: any) => {
+      const primaryAccessValue = u.identificador_principal || u.correo_acceso || u.email || u.document_number || (u.id ? `ID #${u.id}` : '—');
+      const resolvedFullName = u.full_name || u.email || u.identificador_principal || (u.id ? `Usuario #${u.id}` : 'Usuario');
+
+      return {
+        id: u.id,
+        full_name: resolvedFullName,
+        first_name: u.first_name,
+        last_name: u.last_name,
+        email: u.email,
+        phone: u.phone,
+        document_number: u.document_number,
+        companyId: u.companyId,
+        department_id: u.departamento_id,
+        area_id: u.area_id,
+        cargo_id: u.cargo_id,
+        role: u.role || 'Sin Rol',
+        user_type: u.user_type || 'Sin Tipo',
+        primary_access_type: u.primary_access_type || 'EMAIL',
+        identificador_principal: primaryAccessValue,
+        login_identifiers: [
+          {
+            is_primary: true,
+            identifier_type: u.primary_access_type || (primaryAccessValue.includes('@') ? 'EMAIL' : 'DOCUMENT'),
+            identifier_value: primaryAccessValue
+          }
+        ],
+        last_login_at: u.last_login_at,
+        mfaEnabled: !!u.mfaEnabled,
+        mfa_method: u.mfa_method,
+        status: u.estado, 
+        estado: u.estado, 
+        estado_activacion: u.estado_activacion,
+        activation: u.activation,
+        fecha_creacion: u.fecha_creacion,
+        correo_acceso: u.correo_acceso || u.identificador_principal || u.email || null,
+        enviar_invitacion_correo: Boolean(u.enviar_invitacion_correo),
+        generar_clave_automatica: Boolean(u.generar_clave_automatica),
+        forzar_cambio_clave: Boolean(u.forzar_cambio_clave),
+        idioma_preferido: u.idioma_preferido || 'Español (América Latina)',
+        zona_horaria: u.zona_horaria || 'America/Santo_Domingo (GMT-4)',
+        formato_fecha: u.formato_fecha || 'DD/MM/YYYY',
+        permissionsOverride: false, // Default logic mapping
+        scope_type: 'GLOBAL' // Default scope mapping 
+      };
+    });
 
     return NextResponse.json(mappedUsers);
   } catch (error: any) {
