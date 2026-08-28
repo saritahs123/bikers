@@ -304,9 +304,6 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
           numero_serie: component.numero_serie ?? "",
           estado_nombre: component.estado_nombre ?? "Sin estado",
           nivel_desgaste: component.nivel_desgaste ?? 0,
-          porcentaje_salud: component.nivel_desgaste !== undefined
-            ? Math.max(0, 100 - Number(component.nivel_desgaste))
-            : 100,
           activo: component.activo !== false
         }))
         .filter((component) =>
@@ -449,7 +446,6 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
       estado_componente_id: stateId,
       estado_nombre: stateObj?.nombre || "Nuevo",
       nivel_desgaste: stateObj?.nivel_desgaste ?? 0,
-      porcentaje_salud: stateObj?.nivel_desgaste !== undefined ? Math.max(0, 100 - Number(stateObj.nivel_desgaste)) : 100,
       marca,
       numero_serie: serial
     };
@@ -1759,8 +1755,8 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
                         {bicycleComponents.map((c) => {
                           const compId = c.bicicleta_componente_id;
                           const marcaMod = [c.marca, c.modelo].filter(Boolean).join(" ");
-                          const healthText = `${c.estado_nombre} (${c.porcentaje_salud}% salud)`;
-                          const label = `${c.categoria_nombre}${marcaMod ? ` — ${marcaMod}` : ""} — ${healthText}${c.numero_serie ? ` (SN: ${c.numero_serie})` : ""}`;
+                          const wearText = `${c.estado_nombre} (${c.nivel_desgaste}% desgaste)`;
+                          const label = `${c.categoria_nombre}${marcaMod ? ` — ${marcaMod}` : ""} — ${wearText}${c.numero_serie ? ` (SN: ${c.numero_serie})` : ""}`;
                           return (
                             <option key={compId} value={compId}>
                               {label}
@@ -1813,7 +1809,7 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
                         </div>
                         <div>
                           <span className="text-slate-400 font-semibold block">Estado actual:</span>
-                          <span>{pendingNewComponent.estado_nombre} ({pendingNewComponent.porcentaje_salud}% salud)</span>
+                          <span>{pendingNewComponent.estado_nombre} ({pendingNewComponent.nivel_desgaste}% desgaste)</span>
                         </div>
                         <div>
                           <span className="text-slate-400 font-semibold block">Número de serie:</span>
@@ -1909,14 +1905,11 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
                             className={`w-full bg-slate-900 border rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none ${newComponentErrors.estado_componente_id ? "border-rose-500" : "border-slate-800 focus:border-[#bfce7f]"}`}
                           >
                             <option value="">-- Seleccionar estado --</option>
-                            {estadosComponenteCatalog.map((est) => {
-                              const salud = est.nivel_desgaste !== undefined ? Math.max(0, 100 - Number(est.nivel_desgaste)) : 100;
-                              return (
-                                <option key={est.estado_componente_id} value={est.estado_componente_id}>
-                                  {est.nombre} ({salud}% salud)
-                                </option>
-                              );
-                            })}
+                            {estadosComponenteCatalog.map((est) => (
+                              <option key={est.estado_componente_id} value={est.estado_componente_id}>
+                                {est.nombre} ({est.nivel_desgaste}% desgaste)
+                              </option>
+                            ))}
                           </select>
                           {newComponentErrors.estado_componente_id && (
                             <p className="text-[10px] text-rose-400 mt-0.5">{newComponentErrors.estado_componente_id}</p>

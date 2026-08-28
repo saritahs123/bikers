@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { recordUserActivity, recordUserAudit, sanitizeAuditPayload } from "@/lib/auditLogger";
 
 // GET /api/crm/clientes
 export async function GET() {
@@ -233,6 +234,35 @@ export async function POST(req: Request) {
       activo: true,
       fecha_creacion: r.fecha_creacion || new Date().toISOString()
     };
+
+    // Forensic Activity & Audit Logging
+    await recordUserActivity({
+      userId: session.usuario_id,
+      modulo: "CRM",
+      evento: "CLIENT_CREATED",
+      descripcion: `Registro de nuevo cliente ${nombre_completo} (ID: ${clientData.cliente_id})`,
+      req
+    });
+
+    await recordUserAudit({
+      userId: session.usuario_id,
+      adminId: session.usuario_id,
+      accion: "CRM_CLIENT_CREATED",
+      valorAnterior: null,
+      valorNuevo: JSON.stringify(sanitizeAuditPayload({
+        cliente_id: clientData.cliente_id,
+        nombre: clientData.nombre,
+        apellido: clientData.apellido,
+        nombre_completo: clientData.nombre_completo,
+        tipo_cliente: clientData.tipo_cliente,
+        identificacion: clientData.identificacion,
+        telefono_principal: clientData.telefono_principal,
+        correo: clientData.correo,
+        ciudad: clientData.ciudad
+      })),
+      motivo: `Creación de nuevo cliente ID ${clientData.cliente_id} (${nombre_completo})`,
+      req
+    });
 
     return NextResponse.json({
       success: true,

@@ -2,15 +2,16 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
 import { getPresignedDownloadUrl, deleteS3Object, verifyS3ObjectMetadata } from "@/lib/storage/s3";
+import { recordUserActivity, recordUserAudit, computeDiff, sanitizeAuditPayload } from "@/lib/auditLogger";
 
 async function verifyBikeOwnership(bicicletaId: number, empresaId: number) {
   const rows = await query(`
-    SELECT b.bicicleta_id
+    SELECT b.bicicleta_id, b.marca, b.modelo
     FROM admin.bicicletas b
     JOIN admin.clientes c ON b.cliente_id = c.cliente_id
     WHERE b.bicicleta_id = $1 AND c.empresa_id = $2 AND b.fecha_eliminacion IS NULL
   `, [bicicletaId, empresaId]);
-  return rows && rows.length > 0;
+  return rows && rows.length > 0 ? rows[0] : null;
 }
 
 // GET /api/crm/bicicletas/[id]/photos
@@ -33,8 +34,8 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
       return NextResponse.json({ error: "ID de bicicleta inválido." }, { status: 400 });
     }
 
-    const isOwned = await verifyBikeOwnership(bicicletaId, session.empresa_id);
-    if (!isOwned) {
+    const bike = await verifyBikeOwnership(bicicletaId, session.empresa_id);
+    if (!bike) {
       return NextResponse.json({ error: "Bicicleta no encontrada." }, { status: 404 });
     }
 
@@ -65,7 +66,7 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
 
     const mapped = await Promise.all(
       (rows || []).map(async (r: any) => {
-        let finalUrl = r.url_archivo || r.ruta_archivo || '/storage/bicicletas/default.png';
+        let finalUrl = (r.url_archivo && !r.url_archivo.includes("default.png")) ? r.url_archivo : null;
         const keyCandidate = r.ruta_archivo || '';
 
         // If stored path is an S3 Key structure (e.g. production/1/crm/bicicletas/125/uuid-foto.jpg)
@@ -127,8 +128,8 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
       return NextResponse.json({ error: "ID de bicicleta inválido." }, { status: 400 });
     }
 
-    const isOwned = await verifyBikeOwnership(bicicletaId, session.empresa_id);
-    if (!isOwned) {
+    const bike = await verifyBikeOwnership(bicicletaId, session.empresa_id);
+    if (!bike) {
       return NextResponse.json({ error: "Bicicleta no encontrada o no pertenece a su empresa." }, { status: 404 });
     }
 
@@ -225,7 +226,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
     const r = res[0] || {};
     objectKeyToRollback = null; // Successfully persisted
 
-    return NextResponse.json({
+    const createdPhoto = {
       id: r.bicicleta_foto_id ?? r.id,
       bicicleta_foto_id: r.bicicleta_foto_id ?? r.id,
       bicicleta_id: bicicletaId,
@@ -237,7 +238,35 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
       descripcion: r.descripcion || descripcion,
       es_principal: r.es_principal ?? es_principal,
       fecha_creacion: r.fecha_creacion || new Date().toISOString()
+    };
+
+    // Forensic logging
+    await recordUserActivity({
+      userId: session.usuario_id,
+      modulo: "BICICLETA",
+      evento: "BICYCLE_PHOTO_ADDED",
+      descripcion: `Fotografía (${tipo_foto}) agregada a bicicleta ID ${bicicletaId} [${filename}]`,
+      req
     });
+
+    await recordUserAudit({
+      userId: session.usuario_id,
+      adminId: session.usuario_id,
+      accion: "CRM_PHOTO_ADDED",
+      valorAnterior: null,
+      valorNuevo: JSON.stringify(sanitizeAuditPayload({
+        foto_id: createdPhoto.id,
+        bicicleta_id: bicicletaId,
+        tipo_foto,
+        nombre_archivo: filename,
+        ruta_archivo,
+        es_principal
+      })),
+      motivo: `Fotografía adjuntada a bicicleta ID ${bicicletaId}`,
+      req
+    });
+
+    return NextResponse.json(createdPhoto);
 
   } catch (error: any) {
     if (objectKeyToRollback) {
@@ -269,8 +298,8 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
       return NextResponse.json({ error: "ID de bicicleta inválido." }, { status: 400 });
     }
 
-    const isOwned = await verifyBikeOwnership(bicicletaId, session.empresa_id);
-    if (!isOwned) {
+    const bike = await verifyBikeOwnership(bicicletaId, session.empresa_id);
+    if (!bike) {
       return NextResponse.json({ error: "Bicicleta no encontrada o no pertenece a su empresa." }, { status: 404 });
     }
 
@@ -279,6 +308,17 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
     if (isNaN(photoId)) {
       return NextResponse.json({ error: "ID de fotografía inválido." }, { status: 400 });
     }
+
+    const beforeRows = await query(`
+      SELECT * FROM admin.bicicleta_fotos
+      WHERE bicicleta_foto_id = $1 AND bicicleta_id = $2
+    `, [photoId, bicicletaId]);
+
+    if (!beforeRows || beforeRows.length === 0) {
+      return NextResponse.json({ error: "Fotografía no encontrada para actualizar." }, { status: 404 });
+    }
+
+    const beforePhoto = beforeRows[0];
 
     const tipo_foto = (body.tipo_foto || 'GENERAL').trim().toUpperCase().substring(0, 30);
     const descripcion = (body.descripcion || '').trim().substring(0, 490);
@@ -317,7 +357,30 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
       return NextResponse.json({ error: "Fotografía no encontrada para actualizar." }, { status: 404 });
     }
 
-    return NextResponse.json(result[0]);
+    const updatedPhoto = result[0];
+    const diff = computeDiff(beforePhoto, updatedPhoto);
+
+    if (diff.hasChanges) {
+      await recordUserActivity({
+        userId: session.usuario_id,
+        modulo: "BICICLETA",
+        evento: "BICYCLE_PHOTO_UPDATED",
+        descripcion: `Modificación de fotografía ID ${photoId} en bicicleta ID ${bicicletaId}`,
+        req
+      });
+
+      await recordUserAudit({
+        userId: session.usuario_id,
+        adminId: session.usuario_id,
+        accion: "CRM_PHOTO_UPDATED",
+        valorAnterior: diff.valorAnterior,
+        valorNuevo: diff.valorNuevo,
+        motivo: `Modificación de fotografía ID ${photoId}`,
+        req
+      });
+    }
+
+    return NextResponse.json(updatedPhoto);
 
   } catch (error: any) {
     console.error("Error in PUT /api/crm/bicicletas/[id]/photos:", error);
@@ -348,8 +411,8 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
       return NextResponse.json({ error: "ID de bicicleta o foto inválido." }, { status: 400 });
     }
 
-    const isOwned = await verifyBikeOwnership(bicicletaId, session.empresa_id);
-    if (!isOwned) {
+    const bike = await verifyBikeOwnership(bicicletaId, session.empresa_id);
+    if (!bike) {
       return NextResponse.json({ error: "Bicicleta no encontrada o no pertenece a su empresa." }, { status: 404 });
     }
 
@@ -357,22 +420,50 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
 
     // Domain-specific ownership check in DB before S3 deletion
     const photoRows = await query(`
-      SELECT f.ruta_archivo
+      SELECT f.*
       FROM admin.bicicleta_fotos f
       WHERE f.bicicleta_foto_id = $1 AND f.bicicleta_id = $2
     `, [photoId, bicicletaId]);
 
-    if (photoRows && photoRows.length > 0) {
-      const keyCandidate = photoRows[0].ruta_archivo || '';
-      if (keyCandidate && !keyCandidate.startsWith("http") && !keyCandidate.startsWith("/storage") && keyCandidate.includes("/")) {
-        await deleteS3Object(keyCandidate);
-      }
+    if (!photoRows || photoRows.length === 0) {
+      return NextResponse.json({ error: "Fotografía no encontrada." }, { status: 404 });
+    }
+
+    const beforePhoto = photoRows[0];
+    const keyCandidate = beforePhoto.ruta_archivo || '';
+    if (keyCandidate && !keyCandidate.startsWith("http") && !keyCandidate.startsWith("/storage") && keyCandidate.includes("/")) {
+      await deleteS3Object(keyCandidate);
     }
 
     await query(`
       DELETE FROM admin.bicicleta_fotos
       WHERE bicicleta_foto_id = $1 AND bicicleta_id = $2
     `, [photoId, bicicletaId]);
+
+    // Forensic logging
+    await recordUserActivity({
+      userId: session.usuario_id,
+      modulo: "BICICLETA",
+      evento: "BICYCLE_PHOTO_DELETED",
+      descripcion: `Eliminación de fotografía ID ${photoId} de bicicleta ID ${bicicletaId}`,
+      req
+    });
+
+    await recordUserAudit({
+      userId: session.usuario_id,
+      adminId: session.usuario_id,
+      accion: "CRM_PHOTO_DELETED",
+      valorAnterior: JSON.stringify(sanitizeAuditPayload({
+        foto_id: photoId,
+        bicicleta_id: bicicletaId,
+        tipo_foto: beforePhoto.tipo_foto,
+        nombre_archivo: beforePhoto.nombre_archivo,
+        ruta_archivo: beforePhoto.ruta_archivo
+      })),
+      valorNuevo: null,
+      motivo: `Eliminación de fotografía ID ${photoId} de bicicleta ID ${bicicletaId}`,
+      req
+    });
 
     return NextResponse.json({ message: "Fotografía eliminada correctamente." });
 

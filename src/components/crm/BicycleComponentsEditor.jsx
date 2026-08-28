@@ -43,22 +43,22 @@ export default function BicycleComponentsEditor({
   const [loading, setLoading] = useState(false);
 
   const [componentForm, setComponentForm] = useState({
-    categoria_componente_id: categoriesList[0]?.id || "",
+    categoria_componente_id: "",
     marca: "",
     modelo: "",
     especificacion: "",
-    estado_componente_id: statesList[0]?.id || "",
+    estado_componente_id: "",
     numero_serie: ""
   });
 
   const handleOpenNewForm = () => {
     setEditingComponent(null);
     setComponentForm({
-      categoria_componente_id: categoriesList[0]?.id || "",
+      categoria_componente_id: "",
       marca: "",
       modelo: "",
       especificacion: "",
-      estado_componente_id: statesList[0]?.id || "",
+      estado_componente_id: "",
       numero_serie: ""
     });
     setIsFormOpen(true);
@@ -72,11 +72,11 @@ export default function BicycleComponentsEditor({
   const handleEditClick = (comp) => {
     setEditingComponent(comp);
     setComponentForm({
-      categoria_componente_id: comp.categoria_componente_id || categoriesList[0]?.id || "",
+      categoria_componente_id: comp.categoria_componente_id ? String(comp.categoria_componente_id) : "",
       marca: comp.marca || "",
       modelo: comp.modelo || comp.especificacion || "",
       especificacion: comp.especificacion || comp.modelo || "",
-      estado_componente_id: comp.estado_componente_id || statesList[0]?.id || "",
+      estado_componente_id: comp.estado_componente_id ? String(comp.estado_componente_id) : "",
       numero_serie: comp.numero_serie || ""
     });
     setIsFormOpen(true);
@@ -94,6 +94,11 @@ export default function BicycleComponentsEditor({
 
     if (!componentForm.categoria_componente_id) {
       if (showToast) showToast("Debe seleccionar una categoría de componente.", "error");
+      return;
+    }
+
+    if (!componentForm.estado_componente_id) {
+      if (showToast) showToast("Selecciona el estado del componente.", "error");
       return;
     }
 
@@ -292,6 +297,7 @@ export default function BicycleComponentsEditor({
                 }
                 className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#bfce7f]"
               >
+                <option value="">Selecciona una categoría...</option>
                 {categoriesList.map((cat) => (
                   <option key={cat.id} value={cat.id}>
                     {cat.nombre} ({cat.codigo})
@@ -323,7 +329,9 @@ export default function BicycleComponentsEditor({
             </div>
 
             <div>
-              <label className="block text-slate-300 mb-1">Estado de Uso</label>
+              <label className="block text-slate-300 mb-1">
+                Estado de Uso <span className="text-rose-400">*</span>
+              </label>
               <select
                 value={componentForm.estado_componente_id}
                 onChange={(e) =>
@@ -331,6 +339,7 @@ export default function BicycleComponentsEditor({
                 }
                 className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#bfce7f]"
               >
+                <option value="">Selecciona el estado del componente...</option>
                 {statesList.map((est) => (
                   <option key={est.id} value={est.id}>
                     {est.nombre} ({est.nivel_desgaste}% desgaste)

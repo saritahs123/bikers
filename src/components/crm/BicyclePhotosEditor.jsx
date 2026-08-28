@@ -412,8 +412,8 @@ export default function BicyclePhotosEditor({
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
           {photos.map((photo) => {
             const key = photo.tempId || photo.id;
-            const isSelectedForEdit = editingPhoto && (editingPhoto.tempId || editingPhoto.id) === key;
-            const imgSrc = photo.previewUrl || photo.url_archivo || "/storage/bicicletas/default.png";
+            const rawSrc = photo.previewUrl || photo.url_archivo;
+            const imgSrc = (rawSrc && !rawSrc.includes("default.png")) ? rawSrc : null;
 
             return (
               <div
@@ -425,12 +425,19 @@ export default function BicyclePhotosEditor({
                     : "border border-[#2d3748] hover:border-[#bfce7f]/60"
                 }`}
               >
-                <div className="aspect-video w-full relative overflow-hidden bg-black/40">
-                  <img
-                    src={imgSrc}
-                    alt={photo.nombre_archivo || "Foto Bicicleta"}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  />
+                <div className="aspect-video w-full relative overflow-hidden bg-black/40 flex items-center justify-center">
+                  {imgSrc ? (
+                    <img
+                      src={imgSrc}
+                      alt={photo.nombre_archivo || "Foto Bicicleta"}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-[#11151c] flex flex-col items-center justify-center text-slate-500 gap-1.5 p-3 text-center font-mono">
+                      <Camera size={24} className="text-slate-600" />
+                      <span className="text-[10px] uppercase tracking-wider">Sin imagen disponible</span>
+                    </div>
+                  )}
 
                   <div className="absolute top-2 left-2 flex gap-1 flex-wrap">
                     {photo.es_principal && (

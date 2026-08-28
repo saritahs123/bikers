@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { recordUserActivity, recordUserAudit, sanitizeAuditPayload } from "@/lib/auditLogger";
 
 // GET /api/crm/component-categories
 export async function GET() {
@@ -121,7 +122,7 @@ export async function POST(req: Request) {
     const result = await query(sql, [codigo, nombre, descripcion || null, orden_visual, activo]);
     const r = result[0] || {};
 
-    return NextResponse.json({
+    const createdCategory = {
       id: r.categoria_componente_id ?? r.id,
       categoria_componente_id: r.categoria_componente_id ?? r.id,
       codigo: r.codigo || codigo,
@@ -130,7 +131,34 @@ export async function POST(req: Request) {
       orden_visual: r.orden_visual ?? orden_visual,
       activo: r.activo !== false,
       fecha_creacion: r.fecha_creacion || new Date().toISOString()
+    };
+
+    // Forensic logging
+    await recordUserActivity({
+      userId: session.usuario_id,
+      modulo: "CRM",
+      evento: "COMPONENT_CATEGORY_CREATED",
+      descripcion: `Creación de categoría de componentes ${nombre} (Código: ${codigo})`,
+      req
     });
+
+    await recordUserAudit({
+      userId: session.usuario_id,
+      adminId: session.usuario_id,
+      accion: "CRM_CATALOG_CATEGORY_CREATED",
+      valorAnterior: null,
+      valorNuevo: JSON.stringify(sanitizeAuditPayload({
+        categoria_componente_id: createdCategory.id,
+        codigo,
+        nombre,
+        descripcion,
+        orden_visual
+      })),
+      motivo: `Creación de categoría de componente ${nombre}`,
+      req
+    });
+
+    return NextResponse.json(createdCategory);
 
   } catch (error: any) {
     console.error("Error in POST /api/crm/component-categories:", error);

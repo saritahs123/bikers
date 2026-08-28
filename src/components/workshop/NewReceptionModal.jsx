@@ -358,8 +358,8 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
     const preparedDraft = {
       categoria_componente_id: Number(newComponentDraft.categoria_componente_id),
       categoria_nombre: catObj ? catObj.nombre : "Componente",
-      estado_componente_id: Number(newComponentDraft.estado_componente_id || 1),
-      estado_nombre: estObj ? estObj.nombre : "Bueno",
+      estado_componente_id: Number(newComponentDraft.estado_componente_id),
+      estado_nombre: estObj ? estObj.nombre : "Nuevo",
       marca: (newComponentDraft.marca || "").trim(),
       numero_serie: (newComponentDraft.numero_serie || "").trim()
     };
@@ -545,7 +545,7 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
           nuevo_componente: s.nuevo_componente
             ? {
                 categoria_componente_id: parseInt(s.nuevo_componente.categoria_componente_id, 10),
-                estado_componente_id: parseInt(s.nuevo_componente.estado_componente_id || 1, 10),
+                estado_componente_id: parseInt(s.nuevo_componente.estado_componente_id, 10),
                 marca: s.nuevo_componente.marca || null,
                 numero_serie: s.nuevo_componente.numero_serie || null
               }

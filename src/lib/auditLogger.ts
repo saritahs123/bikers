@@ -47,6 +47,84 @@ export async function extractClientInfo(req?: Request) {
   return { ip, rawUa, dispositivo };
 }
 
+/**
+ * Sanitizes any data payload before persisting to audit logs.
+ * Strips presigned URLs, AWS credentials, auth tokens, passwords, cookies, etc.
+ */
+export function sanitizeAuditPayload(data: any): any {
+  if (!data || typeof data !== "object") return data;
+  if (Array.isArray(data)) return data.map(sanitizeAuditPayload);
+
+  const clean: Record<string, any> = {};
+  const forbiddenPatterns = ["password", "token", "hash", "secret", "cookie", "auth", "credential", "signature", "x-amz-", "key_secret"];
+
+  for (const [k, v] of Object.entries(data)) {
+    const keyLower = k.toLowerCase();
+    const isForbidden = forbiddenPatterns.some(p => keyLower.includes(p));
+
+    if (isForbidden) {
+      clean[k] = "[REDACTED]";
+      continue;
+    }
+
+    // Strip presigned AWS URLs (leave only logical S3 key or relative path)
+    if (typeof v === "string" && (v.includes("X-Amz-Signature") || v.includes("X-Amz-Credential") || (v.startsWith("http") && v.includes(".s3.")))) {
+      clean[k] = "[S3_PRESIGNED_URL_REDACTED]";
+      continue;
+    }
+
+    if (v !== null && typeof v === "object" && !(v instanceof Date)) {
+      clean[k] = sanitizeAuditPayload(v);
+    } else {
+      clean[k] = v;
+    }
+  }
+
+  return clean;
+}
+
+/**
+ * Computes difference between before and after states.
+ * Returns only modified keys to ensure lean, forensic audit trails.
+ */
+export function computeDiff(
+  before: Record<string, any> = {},
+  after: Record<string, any> = {},
+  ignoreKeys: string[] = ["fecha_modificacion", "usuario_modificacion", "fecha_actualizacion", "usuario_actualizacion", "fecha_creacion", "usuario_creacion"]
+) {
+  const diffBefore: Record<string, any> = {};
+  const diffAfter: Record<string, any> = {};
+  const allKeys = Array.from(new Set([...Object.keys(before || {}), ...Object.keys(after || {})]));
+
+  for (const key of allKeys) {
+    if (ignoreKeys.includes(key)) continue;
+
+    const valBefore = before?.[key] !== undefined ? before[key] : null;
+    const valAfter = after?.[key] !== undefined ? after[key] : null;
+
+    const normBefore = valBefore instanceof Date ? valBefore.toISOString() : valBefore;
+    const normAfter = valAfter instanceof Date ? valAfter.toISOString() : valAfter;
+
+    if (JSON.stringify(normBefore) !== JSON.stringify(normAfter)) {
+      diffBefore[key] = normBefore;
+      diffAfter[key] = normAfter;
+    }
+  }
+
+  const cleanBefore = sanitizeAuditPayload(diffBefore);
+  const cleanAfter = sanitizeAuditPayload(diffAfter);
+
+  const hasChanges = Object.keys(cleanAfter).length > 0 || Object.keys(cleanBefore).length > 0;
+
+  return {
+    hasChanges,
+    diffBefore: cleanBefore,
+    diffAfter: cleanAfter,
+    valorAnterior: Object.keys(cleanBefore).length > 0 ? JSON.stringify(cleanBefore) : null,
+    valorNuevo: Object.keys(cleanAfter).length > 0 ? JSON.stringify(cleanAfter) : null,
+  };
+}
+
 export interface RecordActivityParams {
   userId: number;
   modulo: string;

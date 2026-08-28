@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { query } from "@/lib/db";
+import { query, withTransaction } from "@/lib/db";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { recordUserActivity, recordUserAudit, computeDiff, sanitizeAuditPayload } from "@/lib/auditLogger";
 
 // GET /api/crm/clientes/[id]
 export async function GET(req: Request, context: { params: Promise<{ id: string }> }) {
@@ -68,7 +69,8 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
 
     const mappedBikes = (bicicletas || []).map((b: any) => ({
       ...b,
-      foto_url: (b.foto_url && !b.foto_url.includes("default.png")) ? b.foto_url : null
+      foto_url: (b.foto_url && !b.foto_url.includes("default.png")) ? b.foto_url : null,
+      salud: null
     }));
 
     // Fetch work orders (Historial de Mantenimientos) for this client
@@ -255,6 +257,17 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
       return NextResponse.json({ error: "ID de cliente inválido." }, { status: 400 });
     }
 
+    // Fetch existing client before modification for audit diff
+    const beforeRows = await query(`
+      SELECT * FROM admin.clientes
+      WHERE cliente_id = $1 AND empresa_id = $2 AND fecha_eliminacion IS NULL
+    `, [clienteId, session.empresa_id]);
+
+    if (!beforeRows || beforeRows.length === 0) {
+      return NextResponse.json({ success: false, message: "Cliente no encontrado o no pertenece a su empresa." }, { status: 404 });
+    }
+
+    const beforeClient = beforeRows[0];
     const body = await req.json();
 
     const nombre = (body.nombre || '').trim();
@@ -273,6 +286,7 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
     const contacto_whatsapp = Boolean(body.contacto_whatsapp);
     const contacto_email = Boolean(body.contacto_email);
     const notas = (body.notas || '').trim();
+    const activo = body.activo !== undefined ? Boolean(body.activo) : (beforeClient.activo !== false);
 
     if (!nombre) {
       return NextResponse.json({ success: false, message: "El Nombre es obligatorio.", field: "nombre" }, { status: 400 });
@@ -337,9 +351,10 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
         contacto_whatsapp = $15::boolean,
         contacto_email = $16::boolean,
         notas = $17,
+        activo = $18::boolean,
         fecha_modificacion = NOW(),
-        usuario_modificacion = $18
-      WHERE cliente_id = $19::integer AND empresa_id = $20::integer AND fecha_eliminacion IS NULL
+        usuario_modificacion = $19
+      WHERE cliente_id = $20::integer AND empresa_id = $21::integer AND fecha_eliminacion IS NULL
       RETURNING *
     `;
 
@@ -361,6 +376,7 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
       contacto_whatsapp,
       contacto_email,
       notas || null,
+      activo,
       session.usuario_id,
       clienteId,
       session.empresa_id
@@ -371,18 +387,52 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
       return NextResponse.json({ success: false, message: "Cliente no encontrado o no pertenece a su empresa." }, { status: 404 });
     }
 
-    const r = result[0];
+    const updatedClient = result[0];
+
+    // Compute diff and determine semantic event
+    const diff = computeDiff(beforeClient, updatedClient);
+
+    let eventType = "CLIENT_UPDATED";
+    let auditAction = "CRM_CLIENT_UPDATED";
+    if (beforeClient.activo !== false && updatedClient.activo === false) {
+      eventType = "CLIENT_DEACTIVATED";
+      auditAction = "CRM_CLIENT_DEACTIVATED";
+    } else if (beforeClient.activo === false && updatedClient.activo === true) {
+      eventType = "CLIENT_REACTIVATED";
+      auditAction = "CRM_CLIENT_REACTIVATED";
+    }
+
+    if (diff.hasChanges) {
+      await recordUserActivity({
+        userId: session.usuario_id,
+        modulo: "CRM",
+        evento: eventType,
+        descripcion: `Actualización de cliente ${updatedClient.nombre_completo} (ID: ${clienteId})`,
+        req
+      });
+
+      await recordUserAudit({
+        userId: session.usuario_id,
+        adminId: session.usuario_id,
+        accion: auditAction,
+        valorAnterior: diff.valorAnterior,
+        valorNuevo: diff.valorNuevo,
+        motivo: `Modificación de cliente ID ${clienteId}`,
+        req
+      });
+    }
+
     return NextResponse.json({
       success: true,
       message: "Cliente actualizado correctamente",
       data: {
-        id: r.cliente_id,
-        cliente_id: r.cliente_id,
-        ...r
+        id: updatedClient.cliente_id,
+        cliente_id: updatedClient.cliente_id,
+        ...updatedClient
       },
-      id: r.cliente_id,
-      cliente_id: r.cliente_id,
-      ...r
+      id: updatedClient.cliente_id,
+      cliente_id: updatedClient.cliente_id,
+      ...updatedClient
     });
 
   } catch (error: any) {
@@ -418,61 +468,116 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
       return NextResponse.json({ success: false, message: "ID de cliente inválido." }, { status: 400 });
     }
 
-    // 1. Verify existence & ownership in company
+    // 1. Verify existence & ownership in company (Anti-enumeration: returns 404 for other tenants)
     const clientOwnership = await query(`
-      SELECT cliente_id FROM admin.clientes WHERE cliente_id = $1 AND empresa_id = $2 AND fecha_eliminacion IS NULL
+      SELECT * FROM admin.clientes
+      WHERE cliente_id = $1 AND empresa_id = $2 AND fecha_eliminacion IS NULL
     `, [clienteId, session.empresa_id]);
 
     if (!clientOwnership || clientOwnership.length === 0) {
-      return NextResponse.json({ success: false, message: "Cliente no encontrado." }, { status: 404 });
+      return NextResponse.json({ success: false, error: "NOT_FOUND", message: "Cliente no encontrado." }, { status: 404 });
     }
 
-    // 2. Check if client has assigned bicycles in admin.bicicletas
+    const beforeClient = clientOwnership[0];
+
+    // 2. Audit all dependent relationships in CRM and Taller
     const bikeCheck = await query(`
       SELECT COUNT(*)::integer AS total FROM admin.bicicletas
       WHERE cliente_id = $1 AND fecha_eliminacion IS NULL
     `, [clienteId]);
+    const totalBikes = Number(bikeCheck[0]?.total || 0);
 
-    const hasBikes = Number(bikeCheck[0]?.total || 0) > 0;
-    if (hasBikes) {
-      return NextResponse.json({
-        success: false,
-        message: "No se puede eliminar el cliente porque tiene bicicletas asignadas."
-      }, { status: 409 });
-    }
-
-    // 3. Check if client has work orders in admin.ordenes_trabajo
     const otCheck = await query(`
       SELECT COUNT(*)::integer AS total FROM admin.ordenes_trabajo
       WHERE cliente_id = $1 AND (activo = true OR activo IS NULL)
     `, [clienteId]);
+    const totalOrders = Number(otCheck[0]?.total || 0);
 
-    const hasOrders = Number(otCheck[0]?.total || 0) > 0;
-    if (hasOrders) {
+    const recCheck = await query(`
+      SELECT COUNT(*)::integer AS total FROM admin.recepciones
+      WHERE cliente_id = $1 AND (activo = true OR activo IS NULL)
+    `, [clienteId]);
+    const totalReceptions = Number(recCheck[0]?.total || 0);
+
+    const facCheck = await query(`
+      SELECT COUNT(*)::integer AS total FROM admin.facturas
+      WHERE cliente_id = $1 AND (activo = true OR activo IS NULL)
+    `, [clienteId]);
+    const totalInvoices = Number(facCheck[0]?.total || 0);
+
+    // 3. Block physical deletion if dependencies exist -> Return semantic HTTP 409
+    if (totalBikes > 0 || totalOrders > 0 || totalReceptions > 0 || totalInvoices > 0) {
+      // Record denied activity attempt
+      await recordUserActivity({
+        userId: session.usuario_id,
+        modulo: "CRM",
+        evento: "CLIENT_DELETE_BLOCKED",
+        descripcion: `Intento de eliminación de cliente con dependencias (ID: ${clienteId})`,
+        resultado: "DENEGADO",
+        req
+      });
+
       return NextResponse.json({
         success: false,
-        message: "No se puede eliminar el cliente porque tiene órdenes de trabajo registradas."
+        error: "CLIENT_HAS_DEPENDENCIES",
+        code: "CLIENT_HAS_DEPENDENCIES",
+        message: "No puedes eliminar este cliente porque posee historial operativo o bicicletas asociadas. Puedes desactivarlo en su lugar.",
+        dependencies: {
+          bicicletas: totalBikes,
+          ordenes: totalOrders,
+          recepciones: totalReceptions,
+          facturas: totalInvoices
+        }
       }, { status: 409 });
     }
 
-    // 4. Perform physical DELETE directly
-    const deleteSql = `
-      DELETE FROM admin.clientes
-      WHERE cliente_id = $1 AND empresa_id = $2
-      RETURNING cliente_id
-    `;
-    const deleteResult = await query(deleteSql, [clienteId, session.empresa_id]);
+    // 4. Client has 0 dependencies -> Perform physical DELETE inside transaction
+    const deleteResult = await withTransaction(async (client) => {
+      const res = await client.query(`
+        DELETE FROM admin.clientes
+        WHERE cliente_id = $1 AND empresa_id = $2
+        RETURNING cliente_id
+      `, [clienteId, session.empresa_id]);
+      return res.rows;
+    });
 
     if (!deleteResult || deleteResult.length === 0) {
       return NextResponse.json({
         success: false,
+        error: "NOT_FOUND",
         message: "Cliente no encontrado."
       }, { status: 404 });
     }
 
+    // Forensic logging on successful deletion
+    await recordUserActivity({
+      userId: session.usuario_id,
+      modulo: "CRM",
+      evento: "CLIENT_DELETED",
+      descripcion: `Eliminación física del cliente ${beforeClient.nombre_completo} (ID: ${clienteId})`,
+      req
+    });
+
+    await recordUserAudit({
+      userId: session.usuario_id,
+      adminId: session.usuario_id,
+      accion: "CRM_CLIENT_DELETED",
+      valorAnterior: JSON.stringify(sanitizeAuditPayload({
+        cliente_id: beforeClient.cliente_id,
+        nombre_completo: beforeClient.nombre_completo,
+        identificacion: beforeClient.identificacion,
+        correo: beforeClient.correo,
+        telefono_principal: beforeClient.telefono_principal
+      })),
+      valorNuevo: null,
+      motivo: `Eliminación física de cliente ID ${clienteId} sin dependencias`,
+      req
+    });
+
     return NextResponse.json({
       success: true,
-      message: "Cliente eliminado correctamente"
+      message: "Cliente eliminado correctamente.",
+      id: clienteId
     }, { status: 200 });
 
   } catch (error: any) {
@@ -482,12 +587,15 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
     if (errorCode === "23503") {
       return NextResponse.json({
         success: false,
-        message: "No se puede eliminar el cliente porque tiene registros asociados en el sistema."
+        error: "CLIENT_HAS_DEPENDENCIES",
+        code: "CLIENT_HAS_DEPENDENCIES",
+        message: "No puedes eliminar este cliente porque posee registros asociados en el sistema. Puedes desactivarlo en su lugar."
       }, { status: 409 });
     }
 
     return NextResponse.json({
       success: false,
+      error: "SERVER_ERROR",
       message: "No fue posible eliminar el cliente. Inténtalo nuevamente."
     }, { status: 500 });
   }

@@ -478,13 +478,24 @@ export async function POST(req: NextRequest) {
           // Atomic creation of new component draft if provided
           if (!compId && s.nuevo_componente) {
             const nc = s.nuevo_componente;
-            const catCompId = parseInt(nc.categoria_componente_id, 10);
-            const estCompId = parseInt(nc.estado_componente_id || 1, 10);
+            const catCompId = nc.categoria_componente_id !== undefined && nc.categoria_componente_id !== null && nc.categoria_componente_id !== ""
+              ? parseInt(nc.categoria_componente_id, 10)
+              : NaN;
+            const estCompId = nc.estado_componente_id !== undefined && nc.estado_componente_id !== null && nc.estado_componente_id !== ""
+              ? parseInt(nc.estado_componente_id, 10)
+              : NaN;
             const marca = (nc.marca || "").trim();
             const numSerie = (nc.numero_serie || "").trim();
 
             if (isNaN(catCompId) || catCompId <= 0) {
               const err: any = new Error("Categoría de componente inválida.");
+              err.code = "VALIDATION_ERROR";
+              err.status = 400;
+              throw err;
+            }
+
+            if (isNaN(estCompId) || estCompId <= 0) {
+              const err: any = new Error("Selecciona el estado del componente.");
               err.code = "VALIDATION_ERROR";
               err.status = 400;
               throw err;

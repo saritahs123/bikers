@@ -101,29 +101,27 @@ export const validateDominicanPhone = (value) => {
   if (!value || !value.trim()) {
     return "El Teléfono Principal es obligatorio.";
   }
-  const str = String(value).trim();
   const digits = normalizeDigits(value);
-  let areaCode = "";
-
-  if ((digits.startsWith("1") && digits.length >= 11) || str.startsWith("+1")) {
-    const main10 = digits.startsWith("1") ? digits.slice(1) : digits;
-    if (main10.length !== 10) {
-      return "El teléfono debe contener 10 dígitos.";
-    }
-    areaCode = main10.slice(0, 3);
-  } else {
-    if (digits.length !== 10) {
-      return "El teléfono debe contener 10 dígitos.";
-    }
-    areaCode = digits.slice(0, 3);
+  const main10 = digits.startsWith("1") && digits.length >= 11 ? digits.slice(1) : digits;
+  if (main10.length !== 10) {
+    return "El teléfono debe contener 10 dígitos.";
   }
-
+  const areaCode = main10.slice(0, 3);
   const validAreaCodes = ["809", "829", "849"];
   if (!validAreaCodes.includes(areaCode)) {
-    return "Introduce un teléfono válido de República Dominicana.";
+    return "Introduce un teléfono válido de República Dominicana (809, 829, 849).";
   }
-
   return null;
+};
+
+export const getContactPreferenceLabel = (whatsapp, email) => {
+  const isWhatsapp = Boolean(whatsapp);
+  const isEmail = Boolean(email);
+
+  if (isWhatsapp && isEmail) return "WhatsApp / Email";
+  if (isWhatsapp) return "WhatsApp";
+  if (isEmail) return "Email";
+  return "No especificado";
 };
 
 export default function CustomersView() {
@@ -666,7 +664,7 @@ export default function CustomersView() {
                     {detailUser.nombre_completo}
                   </h1>
                   <p className="text-slate-400 font-mono text-xs">
-                    ID: BF-CL-{detailUser.id} • REGISTRADO DESDE {detailUser.fecha_creacion ? String(detailUser.fecha_creacion).substring(0,4) : '2021'}
+                    ID: BF-CL-{detailUser.id} • REGISTRADO DESDE {detailUser.fecha_creacion ? String(detailUser.fecha_creacion).substring(0,10) : 'Fecha no registrada'}
                   </p>
                 </div>
                 <div>{getTipoClienteBadge(detailUser.tipo_cliente)}</div>
@@ -688,7 +686,7 @@ export default function CustomersView() {
                 <div>
                   <span className="block text-[10px] uppercase text-slate-400 mb-1 font-mono">Preferencias</span>
                   <span className="text-sm font-bold text-slate-300">
-                    {detailUser.contacto_whatsapp ? "WhatsApp" : "Email"} / Solo Urgente
+                    {getContactPreferenceLabel(detailUser.contacto_whatsapp, detailUser.contacto_email)}
                   </span>
                 </div>
               </div>
@@ -711,7 +709,7 @@ export default function CustomersView() {
               <div>
                 <span className="block text-[10px] uppercase text-slate-400 mb-1 font-mono">Conteo de Activos</span>
                 <span className="text-2xl font-bold text-white">
-                  {detailUser.bicicletas ? detailUser.bicicletas.length : detailUser.cantidad_bicicletas || 3} Bicicletas
+                  {detailUser.bicicletas ? detailUser.bicicletas.length : (detailUser.cantidad_bicicletas || 0)} Bicicletas
                 </span>
               </div>
               <Bike className="text-slate-400" size={26} />
@@ -794,68 +792,51 @@ export default function CustomersView() {
                         {mainBike.marca} {mainBike.modelo}
                       </h3>
                       <p className="text-xs text-slate-400 font-mono">
-                        SERIE: {mainBike.numero_serie_cuadro || "SC-9902-XJ102"}
+                        SERIE: {mainBike.numero_serie_cuadro || "Sin serie registrada"}
                       </p>
                     </div>
                     <div className="text-right">
                       <span className="block text-[10px] uppercase text-slate-400 font-mono">Puntuación de Salud</span>
-                      <span className="text-lg font-bold text-[#bfce7f]">
-                        {mainBike.salud || 94}%
+                      <span className={`text-lg font-bold ${mainBike.salud !== null && mainBike.salud !== undefined ? (mainBike.salud >= 80 ? 'text-[#bfce7f]' : mainBike.salud >= 60 ? 'text-amber-400' : 'text-rose-400') : 'text-slate-400'}`}>
+                        {mainBike.salud !== null && mainBike.salud !== undefined ? `${mainBike.salud}%` : "Sin evaluación"}
                       </span>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-y-4 gap-x-8 font-mono text-xs">
                     <div>
-                      <span className="block text-[10px] uppercase text-slate-400 mb-1">Transmisión</span>
-                      <span className="text-white font-bold">{mainBike.transmision || "SRAM X01 AXS (12s)"}</span>
+                      <span className="block text-[10px] uppercase text-slate-400 mb-1">Tipo / Disciplina</span>
+                      <span className="text-white font-bold">{mainBike.tipo_bicicleta || "MTB"}</span>
                     </div>
                     <div>
-                      <span className="block text-[10px] uppercase text-slate-400 mb-1">Suspensión</span>
-                      <span className="text-white font-bold">{mainBike.suspension || "Fox Factory 38 / Float X2"}</span>
+                      <span className="block text-[10px] uppercase text-slate-400 mb-1">Año / Talla</span>
+                      <span className="text-white font-bold">{mainBike.ano || "N/D"} • Talla {mainBike.talla || "N/D"}</span>
                     </div>
                     <div>
-                      <span className="block text-[10px] uppercase text-slate-400 mb-1">Juego de Ruedas</span>
-                      <span className="text-white font-bold">{mainBike.ruedas || "Reserve 30|HD Carbon"}</span>
+                      <span className="block text-[10px] uppercase text-slate-400 mb-1">Kilometraje Actual</span>
+                      <span className="text-white font-bold">{Number(mainBike.kilometraje_actual || 0).toLocaleString()} km</span>
                     </div>
                     <div>
-                      <span className="block text-[10px] uppercase text-slate-400 mb-1">Frenos</span>
-                      <span className="text-white font-bold">{mainBike.frenos || "SRAM Code RSC 200mm"}</span>
+                      <span className="block text-[10px] uppercase text-slate-400 mb-1">Última Revisión</span>
+                      <span className="text-white font-bold">{mainBike.fecha_ultima_revision ? String(mainBike.fecha_ultima_revision).substring(0, 10) : "Sin revisiones registradas"}</span>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Fatigue / Wear Indicators */}
-              <div className="bg-[#0e1117] border-t border-[#2d3748] p-4 grid grid-cols-1 md:grid-cols-3 gap-6 font-mono">
-                <div>
-                  <div className="flex justify-between text-[10px] uppercase text-slate-400 mb-1">
-                    <span>Desgaste de Cadena</span>
-                    <span className="text-white font-bold">{mainBike.desgaste_cadena || "0.4mm"}</span>
-                  </div>
-                  <div className="h-2 bg-[#161a21] rounded-full overflow-hidden border border-[#2d3748]">
-                    <div className="h-full bg-[#bfce7f] w-[40%]" />
-                  </div>
+              {/* Health Evaluation Bar */}
+              <div className="bg-[#0e1117] border-t border-[#2d3748] p-4 font-mono">
+                <div className="flex justify-between text-[10px] uppercase text-slate-400 mb-1.5">
+                  <span>Estado General del Activo</span>
+                  <span className={mainBike.salud !== null && mainBike.salud !== undefined ? (mainBike.salud >= 80 ? 'text-emerald-400 font-bold' : mainBike.salud >= 60 ? 'text-amber-400 font-bold' : 'text-rose-400 font-bold') : 'text-slate-400'}>
+                    {mainBike.salud !== null && mainBike.salud !== undefined ? `${mainBike.salud}% • ${mainBike.salud >= 80 ? 'Óptimo' : mainBike.salud >= 60 ? 'Requiere Atención' : 'Crítico'}` : 'Sin evaluación técnica'}
+                  </span>
                 </div>
-
-                <div>
-                  <div className="flex justify-between text-[10px] uppercase text-slate-400 mb-1">
-                    <span>Servicio de Horquilla</span>
-                    <span className="text-amber-400 font-bold">{mainBike.servicio_horquilla || "42h / 50h"}</span>
-                  </div>
-                  <div className="h-2 bg-[#161a21] rounded-full overflow-hidden border border-[#2d3748]">
-                    <div className="h-full bg-amber-500 w-[84%]" />
-                  </div>
-                </div>
-
-                <div>
-                  <div className="flex justify-between text-[10px] uppercase text-slate-400 mb-1">
-                    <span>Pastillas de Freno (Traseras)</span>
-                    <span className="text-rose-400 font-bold">{mainBike.pastillas_freno || "15% restante"}</span>
-                  </div>
-                  <div className="h-2 bg-[#161a21] rounded-full overflow-hidden border border-[#2d3748]">
-                    <div className="h-full bg-rose-500 w-[15%]" />
-                  </div>
+                <div className="h-2 bg-[#161a21] rounded-full overflow-hidden border border-[#2d3748]">
+                  <div 
+                    className={`h-full rounded-full transition-all duration-500 ${mainBike.salud !== null && mainBike.salud !== undefined ? (mainBike.salud >= 80 ? 'bg-[#bfce7f]' : mainBike.salud >= 60 ? 'bg-amber-500' : 'bg-rose-500') : 'bg-slate-700'}`}
+                    style={{ width: `${mainBike.salud !== null && mainBike.salud !== undefined ? mainBike.salud : 0}%` }}
+                  />
                 </div>
               </div>
             </div>
@@ -879,13 +860,13 @@ export default function CustomersView() {
                   <div className="flex justify-between items-start gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="inline-flex items-center px-2.5 py-0.5 rounded-md bg-[#bfce7f]/10 border border-[#bfce7f]/30 text-[#bfce7f] text-[10px] font-bold uppercase mb-2">
-                        {bike.tipo_bicicleta || "MTB"} • {bike.ano || "2025"}
+                        {bike.tipo_bicicleta || "MTB"}{bike.ano ? ` • ${bike.ano}` : ""}
                       </div>
                       <h4 className="text-base font-bold text-white truncate group-hover:text-[#bfce7f] transition-colors">
                         {bike.marca} {bike.modelo}
                       </h4>
                       <p className="text-xs text-slate-400 font-mono mt-1 truncate">
-                        SN: <span className="text-slate-300">{bike.numero_serie_cuadro || "TRSPUR20240001"}</span>
+                        SN: <span className="text-slate-300">{bike.numero_serie_cuadro || "Sin serie registrada"}</span>
                       </p>
                     </div>
 
@@ -911,18 +892,20 @@ export default function CustomersView() {
 
                   <div className="flex items-center gap-2 text-xs text-slate-300 mb-3">
                     <User size={14} className="text-slate-400 shrink-0" />
-                    <span className="truncate">{detailUser?.nombre_completo || "Carlos Martínez"}</span>
+                    <span className="truncate">{detailUser?.nombre_completo || "Sin nombre registrado"}</span>
                   </div>
 
                   <div>
                     <div className="flex justify-between items-center text-xs font-mono">
                       <span className="text-slate-400">Salud Global</span>
-                      <span className="font-bold text-[#00e699]">{bike.salud || 92}% ÓPTIMO</span>
+                      <span className={`font-bold ${bike.salud !== null && bike.salud !== undefined ? (bike.salud >= 80 ? 'text-[#00e699]' : bike.salud >= 60 ? 'text-amber-400' : 'text-rose-400') : 'text-slate-400'}`}>
+                        {bike.salud !== null && bike.salud !== undefined ? `${bike.salud}% ${bike.salud >= 80 ? 'ÓPTIMO' : 'REVISIÓN'}` : "Sin evaluación"}
+                      </span>
                     </div>
                     <div className="h-1.5 bg-[#0e1117] rounded-full overflow-hidden border border-[#2d3748]/60 mt-1.5">
                       <div
-                        className="h-full bg-[#00e699] rounded-full transition-all duration-500"
-                        style={{ width: `${bike.salud || 92}%` }}
+                        className={`h-full rounded-full transition-all duration-500 ${bike.salud !== null && bike.salud !== undefined ? (bike.salud >= 80 ? 'bg-[#00e699]' : bike.salud >= 60 ? 'bg-amber-500' : 'bg-rose-500') : 'bg-slate-700'}`}
+                        style={{ width: `${bike.salud !== null && bike.salud !== undefined ? bike.salud : 0}%` }}
                       />
                     </div>
                   </div>
@@ -997,14 +980,19 @@ export default function CustomersView() {
                         <div className="text-right">
                           <span className="block text-[10px] uppercase text-slate-400 font-bold">Total Orden:</span>
                           <span className="text-lg font-black text-white">
-                            RD$ {Number(orden.costo || 8700).toLocaleString("es-DO", { minimumFractionDigits: 2 })}
+                            RD$ {Number(orden.costo || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })}
                           </span>
                         </div>
 
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            window.location.href = `/work-orders?id=${orden.id || 1}`;
+                            const targetOrderId = orden.id || orden.orden_trabajo_id;
+                            if (targetOrderId) {
+                              window.location.href = `/work-orders?order_id=${targetOrderId}`;
+                            } else {
+                              showToast("No existe una orden de trabajo asociada a este registro.", "info");
+                            }
                           }}
                           className="px-4 py-2 bg-[#bfce7f] text-[#1d1f18] font-bold text-xs rounded-xl hover:bg-[#a9ba6b] transition-colors cursor-pointer flex items-center gap-2 shadow-md shrink-0"
                         >
@@ -1109,7 +1097,12 @@ export default function CustomersView() {
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    window.location.href = `/work-orders?id=${orden.id || 1}&serviceId=${os.id}`;
+                                    const targetOrderId = orden.id || orden.orden_trabajo_id;
+                                    if (targetOrderId) {
+                                      window.location.href = `/work-orders?order_id=${targetOrderId}&serviceId=${os.id}`;
+                                    } else {
+                                      showToast("No existe una orden de trabajo asociada a este registro.", "info");
+                                    }
                                   }}
                                   className="text-xs text-[#bfce7f] hover:text-white font-bold flex items-center gap-1 cursor-pointer transition-colors"
                                 >
@@ -1135,13 +1128,21 @@ export default function CustomersView() {
             className={`fixed top-6 right-6 z-50 px-4 py-3 rounded-xl shadow-2xl border flex items-center gap-3 font-mono text-xs animate-in slide-in-from-top-2 duration-200 ${
               toastMessage.type === "error"
                 ? "bg-rose-950/90 border-rose-500/50 text-rose-200"
+                : toastMessage.type === "warning"
+                ? "bg-amber-950/90 border-amber-500/50 text-amber-200"
+                : toastMessage.type === "info"
+                ? "bg-sky-950/90 border-sky-500/50 text-sky-200"
                 : "bg-emerald-950/90 border-emerald-500/50 text-emerald-200"
             }`}
           >
             {toastMessage.type === "error" ? (
-              <XCircle size={18} className="text-rose-400" />
+              <XCircle size={18} className="text-rose-400 shrink-0" />
+            ) : toastMessage.type === "warning" ? (
+              <AlertTriangle size={18} className="text-amber-400 shrink-0" />
+            ) : toastMessage.type === "info" ? (
+              <Info size={18} className="text-sky-400 shrink-0" />
             ) : (
-              <CheckCircle2 size={18} className="text-emerald-400" />
+              <CheckCircle2 size={18} className="text-emerald-400 shrink-0" />
             )}
             <span>{toastMessage.text}</span>
           </div>
@@ -1428,11 +1429,19 @@ export default function CustomersView() {
           className={`px-4 py-3 rounded-xl shadow-2xl border flex items-center gap-3 font-mono text-xs animate-in slide-in-from-top-2 duration-200 ${
             toastMessage.type === "error"
               ? "bg-rose-950/95 border-rose-500/80 text-rose-100 shadow-rose-950/50"
+              : toastMessage.type === "warning"
+              ? "bg-amber-950/95 border-amber-500/80 text-amber-100 shadow-amber-950/50"
+              : toastMessage.type === "info"
+              ? "bg-sky-950/95 border-sky-500/80 text-sky-100 shadow-sky-950/50"
               : "bg-emerald-950/95 border-emerald-500/80 text-emerald-100 shadow-emerald-950/50"
           }`}
         >
           {toastMessage.type === "error" ? (
             <XCircle size={18} className="text-rose-400 shrink-0" />
+          ) : toastMessage.type === "warning" ? (
+            <AlertTriangle size={18} className="text-amber-400 shrink-0" />
+          ) : toastMessage.type === "info" ? (
+            <Info size={18} className="text-sky-400 shrink-0" />
           ) : (
             <CheckCircle2 size={18} className="text-emerald-400 shrink-0" />
           )}
@@ -1931,6 +1940,32 @@ export default function CustomersView() {
                       placeholder="Ej: República Dominicana"
                       className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-[#bfce7f]"
                     />
+                  </div>
+
+                  <div className="sm:col-span-2 pt-2 border-t border-[#2d3748]/60">
+                    <label className="block text-slate-300 mb-2 font-bold text-[11px] uppercase tracking-wider text-[#bfce7f]">
+                      Canales de Contacto Autorizados
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <label className="flex items-center gap-2.5 bg-[#0e1117] border border-[#2d3748] rounded-xl p-3 cursor-pointer hover:border-[#bfce7f]/50 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(formData.contacto_whatsapp)}
+                          onChange={(e) => setFormData({ ...formData, contacto_whatsapp: e.target.checked })}
+                          className="rounded border-[#2d3748] text-[#bfce7f] focus:ring-0 focus:ring-offset-0 bg-[#161a21]"
+                        />
+                        <span className="text-white text-xs font-semibold">Autoriza WhatsApp</span>
+                      </label>
+                      <label className="flex items-center gap-2.5 bg-[#0e1117] border border-[#2d3748] rounded-xl p-3 cursor-pointer hover:border-[#bfce7f]/50 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(formData.contacto_email)}
+                          onChange={(e) => setFormData({ ...formData, contacto_email: e.target.checked })}
+                          className="rounded border-[#2d3748] text-[#bfce7f] focus:ring-0 focus:ring-offset-0 bg-[#161a21]"
+                        />
+                        <span className="text-white text-xs font-semibold">Autoriza Email</span>
+                      </label>
+                    </div>
                   </div>
                 </div>
               </div>

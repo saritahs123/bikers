@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { recordUserActivity, recordUserAudit, computeDiff, sanitizeAuditPayload } from "@/lib/auditLogger";
 
 // GET /api/crm/component-categories/[id]
 export async function GET(req: Request, context: { params: Promise<{ id: string }> }) {
@@ -65,6 +66,16 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
       return NextResponse.json({ error: "ID de categoría inválido." }, { status: 400 });
     }
 
+    const beforeRows = await query(`
+      SELECT * FROM admin.categoria_componente
+      WHERE categoria_componente_id = $1 AND fecha_eliminacion IS NULL
+    `, [categoryId]);
+
+    if (!beforeRows || beforeRows.length === 0) {
+      return NextResponse.json({ error: "Categoría de componente no encontrada." }, { status: 404 });
+    }
+
+    const beforeCategory = beforeRows[0];
     const body = await req.json();
     const codigo = (body.codigo || '').trim().toUpperCase();
     const nombre = (body.nombre || '').trim();
@@ -127,7 +138,30 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
       return NextResponse.json({ error: "No se pudo actualizar la categoría de componente." }, { status: 404 });
     }
 
-    return NextResponse.json(result[0]);
+    const updatedCategory = result[0];
+    const diff = computeDiff(beforeCategory, updatedCategory);
+
+    if (diff.hasChanges) {
+      await recordUserActivity({
+        userId: session.usuario_id,
+        modulo: "CRM",
+        evento: "COMPONENT_CATEGORY_UPDATED",
+        descripcion: `Modificación de categoría de componentes ${updatedCategory.nombre} (ID: ${categoryId})`,
+        req
+      });
+
+      await recordUserAudit({
+        userId: session.usuario_id,
+        adminId: session.usuario_id,
+        accion: "CRM_CATALOG_CATEGORY_UPDATED",
+        valorAnterior: diff.valorAnterior,
+        valorNuevo: diff.valorNuevo,
+        motivo: `Modificación de categoría de componente ID ${categoryId}`,
+        req
+      });
+    }
+
+    return NextResponse.json(updatedCategory);
 
   } catch (error: any) {
     console.error("Error in PUT /api/crm/component-categories/[id]:", error);
@@ -155,6 +189,17 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
       return NextResponse.json({ error: "ID de categoría inválido." }, { status: 400 });
     }
 
+    const beforeRows = await query(`
+      SELECT * FROM admin.categoria_componente
+      WHERE categoria_componente_id = $1 AND fecha_eliminacion IS NULL
+    `, [categoryId]);
+
+    if (!beforeRows || beforeRows.length === 0) {
+      return NextResponse.json({ error: "Categoría de componente no encontrada." }, { status: 404 });
+    }
+
+    const beforeCategory = beforeRows[0];
+
     // Check if any bicycle component is currently using this category
     const usageCheck = await query(`
       SELECT COUNT(*)::int as count FROM admin.bicicleta_componentes
@@ -179,6 +224,29 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
     if (!result || result.length === 0) {
       return NextResponse.json({ error: "Categoría de componente no encontrada." }, { status: 404 });
     }
+
+    // Forensic logging
+    await recordUserActivity({
+      userId: session.usuario_id,
+      modulo: "CRM",
+      evento: "COMPONENT_CATEGORY_DELETED",
+      descripcion: `Eliminación de categoría de componentes ${beforeCategory.nombre} (ID: ${categoryId})`,
+      req
+    });
+
+    await recordUserAudit({
+      userId: session.usuario_id,
+      adminId: session.usuario_id,
+      accion: "CRM_CATALOG_CATEGORY_DELETED",
+      valorAnterior: JSON.stringify(sanitizeAuditPayload({
+        categoria_componente_id: categoryId,
+        codigo: beforeCategory.codigo,
+        nombre: beforeCategory.nombre
+      })),
+      valorNuevo: null,
+      motivo: `Eliminación de categoría de componente ID ${categoryId}`,
+      req
+    });
 
     return NextResponse.json({ message: "Categoría de componente eliminada correctamente.", id: categoryId });
 

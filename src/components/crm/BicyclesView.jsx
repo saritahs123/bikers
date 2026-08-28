@@ -138,7 +138,7 @@ export default function BicyclesView({ initialBikeId = null, initialTab = "gener
     tipo_servicio: "PREVENTIVO",
     fecha_servicio: new Date().toISOString().substring(0, 10),
     kilometraje_servicio: 0,
-    mecanico_responsable: "Taller Central",
+    mecanico_responsable: "",
     costo_total: 0,
     bicicleta_componente_id: "",
     nuevo_estado_componente_id: "",
@@ -303,9 +303,6 @@ export default function BicyclesView({ initialBikeId = null, initialTab = "gener
       if (resCat.ok) {
         const cats = await resCat.json();
         setCategoriesList(cats);
-        if (cats.length > 0) {
-          setComponentForm((prev) => ({ ...prev, categoria_componente_id: cats[0].id }));
-        }
       }
       if (resEst.ok) {
         const ests = await resEst.json();
@@ -422,7 +419,7 @@ export default function BicyclesView({ initialBikeId = null, initialTab = "gener
         tipo_servicio: "PREVENTIVO",
         fecha_servicio: new Date().toISOString().substring(0, 10),
         kilometraje_servicio: detailBike.kilometraje_actual || 0,
-        mecanico_responsable: "Taller Central",
+        mecanico_responsable: "",
         costo_total: 0,
         bicicleta_componente_id: "",
         nuevo_estado_componente_id: "",
@@ -566,7 +563,7 @@ export default function BicyclesView({ initialBikeId = null, initialTab = "gener
             </div>
             <div class="code">${bike.codigo_qr || `QR-BF-${bike.id}`}</div>
             <div class="info">
-              <div><strong>N° Serie / VIN:</strong> ${bike.numero_serie_cuadro || 'TRSPUR20240001'}</div>
+              <div><strong>N° Serie / VIN:</strong> ${bike.numero_serie_cuadro || 'Sin serie registrada'}</div>
               <div><strong>Propietario:</strong> ${bike.cliente_nombre || 'Cliente Registrado'}</div>
               <div><strong>Escaneo:</strong> Check-in de Recepción & Trazabilidad</div>
             </div>
@@ -620,7 +617,7 @@ export default function BicyclesView({ initialBikeId = null, initialTab = "gener
     setDetailBike(bikeData);
 
     const foundClient = clientes.find(c => String(c.id) === String(bikeData.cliente_id) || c.nombre_completo === bikeData.cliente_nombre);
-    const targetClienteId = foundClient ? foundClient.id : (bikeData.cliente_id || (clientes.length > 0 ? clientes[0].id : ""));
+    const targetClienteId = foundClient ? foundClient.id : (bikeData.cliente_id || "");
 
     setFormData({
       cliente_id: targetClienteId,
@@ -733,27 +730,10 @@ export default function BicyclesView({ initialBikeId = null, initialTab = "gener
   };
 
   const getGlobalHealthData = () => {
-    if (!bikeComponents || bikeComponents.length === 0) {
-      return {
-        percentage: 100,
-        statusLabel: "100% Óptimo",
-        barColor: "bg-emerald-400",
-        textColor: "text-emerald-400",
-        criticalItem: null
-      };
-    }
-
-    const totalHealth = bikeComponents.reduce((acc, comp) => {
-      const wear = Number(comp.nivel_desgaste || 0);
-      return acc + Math.max(0, 100 - wear);
-    }, 0);
-
-    const averageHealth = Math.round(totalHealth / bikeComponents.length);
-
     let worstComponent = null;
     let maxWear = -1;
 
-    bikeComponents.forEach((comp) => {
+    (bikeComponents || []).forEach((comp) => {
       const wear = Number(comp.nivel_desgaste || 0);
       if (wear > maxWear) {
         maxWear = wear;
@@ -761,25 +741,11 @@ export default function BicyclesView({ initialBikeId = null, initialTab = "gener
       }
     });
 
-    let barColor = "bg-emerald-400";
-    let textColor = "text-emerald-400";
-    let statusLabel = `${averageHealth}% Óptimo`;
-
-    if (averageHealth < 60) {
-      barColor = "bg-rose-500";
-      textColor = "text-rose-400";
-      statusLabel = `${averageHealth}% Requiere Atención`;
-    } else if (averageHealth < 80) {
-      barColor = "bg-amber-400";
-      textColor = "text-amber-400";
-      statusLabel = `${averageHealth}% Aceptable`;
-    }
-
     return {
-      percentage: averageHealth,
-      statusLabel,
-      barColor,
-      textColor,
+      percentage: null,
+      statusLabel: "Sin evaluación",
+      barColor: "bg-slate-700",
+      textColor: "text-slate-400",
       criticalItem: maxWear >= 50 ? worstComponent : null
     };
   };
@@ -849,7 +815,7 @@ export default function BicyclesView({ initialBikeId = null, initialTab = "gener
     } else {
       setEditingItem(null);
       setFormData({
-        cliente_id: clientes.length > 0 ? clientes[0].id : "",
+        cliente_id: "",
         marca: "",
         modelo: "",
         tipo_bicicleta: "MTB",
@@ -1165,8 +1131,8 @@ export default function BicyclesView({ initialBikeId = null, initialTab = "gener
   const handleEditComponent = (comp) => {
     setEditingComponent(comp);
     setComponentForm({
-      categoria_componente_id: comp.categoria_componente_id || (categoriesList.length > 0 ? categoriesList[0].id : ""),
-      estado_componente_id: comp.estado_componente_id || 1,
+      categoria_componente_id: comp.categoria_componente_id ? String(comp.categoria_componente_id) : "",
+      estado_componente_id: comp.estado_componente_id ? String(comp.estado_componente_id) : "",
       marca: comp.marca || "",
       modelo: comp.modelo || "",
       numero_serie: comp.numero_serie || "",
@@ -1180,8 +1146,8 @@ export default function BicyclesView({ initialBikeId = null, initialTab = "gener
     setIsComponentFormOpen(false);
     setEditingComponent(null);
     setComponentForm({
-      categoria_componente_id: categoriesList.length > 0 ? categoriesList[0].id : "",
-      estado_componente_id: 1,
+      categoria_componente_id: "",
+      estado_componente_id: "",
       marca: "",
       modelo: "",
       numero_serie: "",
@@ -1447,10 +1413,15 @@ export default function BicyclesView({ initialBikeId = null, initialTab = "gener
             <div className="space-y-1 pt-1">
               <div className="flex justify-between font-mono text-[10px] text-slate-400">
                 <span>Salud Global</span>
-                <span className="text-emerald-400 font-bold">92% ÓPTIMO</span>
+                <span className={item.salud !== null && item.salud !== undefined ? (item.salud >= 80 ? 'text-emerald-400 font-bold' : item.salud >= 60 ? 'text-amber-400 font-bold' : 'text-rose-400 font-bold') : 'text-slate-400'}>
+                  {item.salud !== null && item.salud !== undefined ? `${item.salud}%` : "Sin evaluación"}
+                </span>
               </div>
               <div className="w-full bg-[#0e1117] h-1.5 rounded-full overflow-hidden border border-[#2d3748]">
-                <div className="bg-emerald-400 h-full rounded-full w-[92%]" />
+                <div 
+                  className={`h-full rounded-full transition-all duration-500 ${item.salud !== null && item.salud !== undefined ? (item.salud >= 80 ? 'bg-emerald-400' : item.salud >= 60 ? 'bg-amber-500' : 'bg-rose-500') : 'bg-slate-700'}`}
+                  style={{ width: `${item.salud !== null && item.salud !== undefined ? item.salud : 0}%` }}
+                />
               </div>
             </div>
           </div>
@@ -1677,7 +1648,7 @@ export default function BicyclesView({ initialBikeId = null, initialTab = "gener
                     </span>
                   </div>
                   <p className="font-mono text-xs text-slate-400 truncate mt-0.5">
-                    VIN / SERIE: {detailBike.numero_serie_cuadro || "SPZ-4492-SL-2025"} • CÓDIGO QR: {detailBike.codigo_qr} • PROPIETARIO: <strong className="text-[#bfce7f]">{detailBike.cliente_nombre}</strong>
+                    VIN / SERIE: {detailBike.numero_serie_cuadro || "Sin serie registrada"} • CÓDIGO QR: {detailBike.codigo_qr} • PROPIETARIO: <strong className="text-[#bfce7f]">{detailBike.cliente_nombre}</strong>
                   </p>
                 </div>
               </div>
@@ -1692,7 +1663,7 @@ export default function BicyclesView({ initialBikeId = null, initialTab = "gener
                     onClick={() => {
                       setIsEditingDetail(true);
                       const foundClient = clientes.find(c => String(c.id) === String(detailBike.cliente_id) || c.nombre_completo === detailBike.cliente_nombre);
-                      const targetClienteId = foundClient ? foundClient.id : (detailBike.cliente_id || (clientes.length > 0 ? clientes[0].id : ""));
+                      const targetClienteId = foundClient ? foundClient.id : (detailBike.cliente_id || "");
                       setFormData({
                         cliente_id: targetClienteId,
                         marca: detailBike.marca || "",
@@ -1770,19 +1741,19 @@ export default function BicyclesView({ initialBikeId = null, initialTab = "gener
                         <AlertTriangle size={15} /> DESGASTE CRÍTICO DETECTADO
                       </span>
                       <p className="text-[11px] text-slate-300">
-                        <strong className="text-white">{healthData.criticalItem.categoria_nombre}</strong> ({healthData.criticalItem.especificacion}): {100 - Number(healthData.criticalItem.nivel_desgaste || 0)}% vida útil restante ({healthData.criticalItem.estado_nombre || 'Desgaste Elevado'}). Reemplazo sugerido.
+                        <strong className="text-white">{healthData.criticalItem.categoria_nombre}</strong> ({healthData.criticalItem.especificacion}): Desgaste del {healthData.criticalItem.nivel_desgaste || 0}% ({healthData.criticalItem.estado_nombre || 'Desgaste Elevado'}). Reemplazo sugerido.
                       </p>
                     </div>
                   ) : (
                     <div className="md:col-span-5 bg-emerald-950/20 border border-emerald-500/30 rounded-2xl p-4 font-mono space-y-1">
                       <span className="text-emerald-400 text-xs font-bold flex items-center gap-1.5 uppercase">
-                        <CheckCircle2 size={15} /> SALUD DE COMPONENTES ÓPTIMA
+                        <CheckCircle2 size={15} /> ESTADO DE COMPONENTES
                       </span>
                       <p className="text-[11px] text-slate-300">
                         {bikeComponents.length === 1
-                          ? "El componente registrado opera en un nivel de conservación óptimo."
+                          ? "El componente registrado opera en un nivel de conservación adecuado."
                           : bikeComponents.length > 1
-                          ? `Los ${bikeComponents.length} componentes registrados operan en niveles de conservación óptimos.`
+                          ? `Los ${bikeComponents.length} componentes registrados operan sin alertas críticas.`
                           : "No hay registros de desgaste crítico adicionales."}
                       </p>
                     </div>

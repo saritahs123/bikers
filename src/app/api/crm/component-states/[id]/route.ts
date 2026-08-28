@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { recordUserActivity, recordUserAudit, computeDiff, sanitizeAuditPayload } from "@/lib/auditLogger";
 
 // GET /api/crm/component-states/[id]
 export async function GET(req: Request, context: { params: Promise<{ id: string }> }) {
@@ -69,6 +70,16 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
       return NextResponse.json({ error: "ID de estado inválido." }, { status: 400 });
     }
 
+    const beforeRows = await query(`
+      SELECT * FROM admin.estado_componente
+      WHERE estado_componente_id = $1 AND fecha_eliminacion IS NULL
+    `, [stateId]);
+
+    if (!beforeRows || beforeRows.length === 0) {
+      return NextResponse.json({ error: "Estado de componente no encontrado." }, { status: 404 });
+    }
+
+    const beforeState = beforeRows[0];
     const body = await req.json();
     const codigo = (body.codigo || '').trim().toUpperCase();
     const nombre = (body.nombre || '').trim();
@@ -138,7 +149,30 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
       return NextResponse.json({ error: "No se pudo actualizar el estado de componente." }, { status: 404 });
     }
 
-    return NextResponse.json(result[0]);
+    const updatedState = result[0];
+    const diff = computeDiff(beforeState, updatedState);
+
+    if (diff.hasChanges) {
+      await recordUserActivity({
+        userId: session.usuario_id,
+        modulo: "CRM",
+        evento: "COMPONENT_STATE_UPDATED",
+        descripcion: `Modificación de estado de componentes ${updatedState.nombre} (ID: ${stateId})`,
+        req
+      });
+
+      await recordUserAudit({
+        userId: session.usuario_id,
+        adminId: session.usuario_id,
+        accion: "CRM_CATALOG_STATE_UPDATED",
+        valorAnterior: diff.valorAnterior,
+        valorNuevo: diff.valorNuevo,
+        motivo: `Modificación de estado de componente ID ${stateId}`,
+        req
+      });
+    }
+
+    return NextResponse.json(updatedState);
 
   } catch (error: any) {
     console.error("Error in PUT /api/crm/component-states/[id]:", error);
@@ -166,6 +200,17 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
       return NextResponse.json({ error: "ID de estado inválido." }, { status: 400 });
     }
 
+    const beforeRows = await query(`
+      SELECT * FROM admin.estado_componente
+      WHERE estado_componente_id = $1 AND fecha_eliminacion IS NULL
+    `, [stateId]);
+
+    if (!beforeRows || beforeRows.length === 0) {
+      return NextResponse.json({ error: "Estado de componente no encontrado." }, { status: 404 });
+    }
+
+    const beforeState = beforeRows[0];
+
     // Check if any bicycle component is currently using this state
     const usageCheck = await query(`
       SELECT COUNT(*)::int as count FROM admin.bicicleta_componentes
@@ -190,6 +235,29 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
     if (!result || result.length === 0) {
       return NextResponse.json({ error: "Estado de componente no encontrado." }, { status: 404 });
     }
+
+    // Forensic logging
+    await recordUserActivity({
+      userId: session.usuario_id,
+      modulo: "CRM",
+      evento: "COMPONENT_STATE_DELETED",
+      descripcion: `Eliminación de estado de componentes ${beforeState.nombre} (ID: ${stateId})`,
+      req
+    });
+
+    await recordUserAudit({
+      userId: session.usuario_id,
+      adminId: session.usuario_id,
+      accion: "CRM_CATALOG_STATE_DELETED",
+      valorAnterior: JSON.stringify(sanitizeAuditPayload({
+        estado_componente_id: stateId,
+        codigo: beforeState.codigo,
+        nombre: beforeState.nombre
+      })),
+      valorNuevo: null,
+      motivo: `Eliminación de estado de componente ID ${stateId}`,
+      req
+    });
 
     return NextResponse.json({ message: "Estado de componente eliminado correctamente.", id: stateId });
 

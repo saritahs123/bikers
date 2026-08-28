@@ -5,7 +5,7 @@ export function normalizeBicycleComponentPayload(component) {
   if (!component) return {};
 
   const rawCatId = component.categoria_componente_id ?? component.categoryId;
-  const rawStateId = component.estado_componente_id ?? component.stateId ?? 1;
+  const rawStateId = component.estado_componente_id ?? component.stateId;
 
   const categoryId = Number(rawCatId);
   const stateId = Number(rawStateId);
@@ -21,7 +21,7 @@ export function normalizeBicycleComponentPayload(component) {
 
   return {
     categoria_componente_id: !isNaN(categoryId) && categoryId > 0 ? categoryId : null,
-    estado_componente_id: !isNaN(stateId) && stateId > 0 ? stateId : 1,
+    estado_componente_id: !isNaN(stateId) && stateId > 0 ? stateId : null,
     marca: marca || null,
     modelo: modelo || null,
     especificacion: specText || null,

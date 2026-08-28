@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { recordUserActivity, recordUserAudit, sanitizeAuditPayload } from "@/lib/auditLogger";
 
 // GET /api/crm/component-states
 export async function GET() {
@@ -130,7 +131,7 @@ export async function POST(req: Request) {
     const result = await query(sql, [codigo, nombre, descripcion || null, nivel_desgaste, requiere_revision, orden_visual, activo]);
     const r = result[0] || {};
 
-    return NextResponse.json({
+    const createdState = {
       id: r.estado_componente_id ?? r.id,
       estado_componente_id: r.estado_componente_id ?? r.id,
       codigo: r.codigo || codigo,
@@ -141,7 +142,35 @@ export async function POST(req: Request) {
       orden_visual: r.orden_visual ?? orden_visual,
       activo: r.activo !== false,
       fecha_creacion: r.fecha_creacion || new Date().toISOString()
+    };
+
+    // Forensic logging
+    await recordUserActivity({
+      userId: session.usuario_id,
+      modulo: "CRM",
+      evento: "COMPONENT_STATE_CREATED",
+      descripcion: `Creación de estado de componentes ${nombre} (Código: ${codigo})`,
+      req
     });
+
+    await recordUserAudit({
+      userId: session.usuario_id,
+      adminId: session.usuario_id,
+      accion: "CRM_CATALOG_STATE_CREATED",
+      valorAnterior: null,
+      valorNuevo: JSON.stringify(sanitizeAuditPayload({
+        estado_componente_id: createdState.id,
+        codigo,
+        nombre,
+        descripcion,
+        nivel_desgaste,
+        requiere_revision
+      })),
+      motivo: `Creación de estado de componente ${nombre}`,
+      req
+    });
+
+    return NextResponse.json(createdState);
 
   } catch (error: any) {
     console.error("Error in POST /api/crm/component-states:", error);

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { recordUserActivity, recordUserAudit, computeDiff, sanitizeAuditPayload } from "@/lib/auditLogger";
 
 const cleanFecha = (val: any) => {
   if (!val) return null;
@@ -14,12 +15,12 @@ const cleanFecha = (val: any) => {
 
 async function verifyBikeOwnership(bicicletaId: number, empresaId: number) {
   const rows = await query(`
-    SELECT b.bicicleta_id
+    SELECT b.bicicleta_id, b.marca, b.modelo
     FROM admin.bicicletas b
     JOIN admin.clientes c ON b.cliente_id = c.cliente_id
     WHERE b.bicicleta_id = $1 AND c.empresa_id = $2 AND b.fecha_eliminacion IS NULL
   `, [bicicletaId, empresaId]);
-  return rows && rows.length > 0;
+  return rows && rows.length > 0 ? rows[0] : null;
 }
 
 // GET /api/crm/bicicletas/[id]/components
@@ -42,8 +43,8 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
       return NextResponse.json({ error: "ID de bicicleta inválido." }, { status: 400 });
     }
 
-    const isOwned = await verifyBikeOwnership(bicicletaId, session.empresa_id);
-    if (!isOwned) {
+    const bike = await verifyBikeOwnership(bicicletaId, session.empresa_id);
+    if (!bike) {
       return NextResponse.json({ error: "Bicicleta no encontrada." }, { status: 404 });
     }
 
@@ -132,8 +133,8 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
       }, { status: 400 });
     }
 
-    const isOwned = await verifyBikeOwnership(bicicletaId, session.empresa_id);
-    if (!isOwned) {
+    const bike = await verifyBikeOwnership(bicicletaId, session.empresa_id);
+    if (!bike) {
       return NextResponse.json({
         success: false,
         error: "NOT_FOUND",
@@ -142,8 +143,12 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
     }
 
     const body = await req.json();
-    const categoria_componente_id = parseInt(body.categoria_componente_id, 10);
-    const estado_componente_id = parseInt(body.estado_componente_id || 1, 10);
+    const categoria_componente_id = body.categoria_componente_id !== undefined && body.categoria_componente_id !== null && body.categoria_componente_id !== ""
+      ? parseInt(body.categoria_componente_id, 10)
+      : NaN;
+    const estado_componente_id = body.estado_componente_id !== undefined && body.estado_componente_id !== null && body.estado_componente_id !== ""
+      ? parseInt(body.estado_componente_id, 10)
+      : NaN;
     const marca = (body.marca || '').trim();
     const modelo = (body.modelo || '').trim();
     const especificacion = (body.especificacion || [marca, modelo].filter(Boolean).join(" ") || '').trim();
@@ -166,7 +171,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
       return NextResponse.json({
         success: false,
         error: "VALIDATION_ERROR",
-        message: "Selecciona un estado de uso válido.",
+        message: "Selecciona el estado del componente.",
         fields: { estado_componente_id: "Requerido" }
       }, { status: 400 });
     }
@@ -247,6 +252,33 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
       observaciones: createdRow.observaciones || ""
     };
 
+    // Forensic logging
+    await recordUserActivity({
+      userId: session.usuario_id,
+      modulo: "BICICLETA",
+      evento: "COMPONENT_ADDED",
+      descripcion: `Agregado componente ${marca || 'General'} ${modelo} (ID: ${mapped.id}) a bicicleta ID ${bicicletaId}`,
+      req
+    });
+
+    await recordUserAudit({
+      userId: session.usuario_id,
+      adminId: session.usuario_id,
+      accion: "CRM_COMPONENT_ADDED",
+      valorAnterior: null,
+      valorNuevo: JSON.stringify(sanitizeAuditPayload({
+        bicicleta_componente_id: mapped.id,
+        bicicleta_id: bicicletaId,
+        categoria_componente_id,
+        estado_componente_id,
+        marca,
+        modelo,
+        numero_serie
+      })),
+      motivo: `Componente agregado a bicicleta ID ${bicicletaId}`,
+      req
+    });
+
     return NextResponse.json({
       success: true,
       data: mapped
@@ -282,8 +314,8 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
       return NextResponse.json({ error: "ID de bicicleta inválido." }, { status: 400 });
     }
 
-    const isOwned = await verifyBikeOwnership(bicicletaId, session.empresa_id);
-    if (!isOwned) {
+    const bike = await verifyBikeOwnership(bicicletaId, session.empresa_id);
+    if (!bike) {
       return NextResponse.json({ error: "Bicicleta no encontrada o no pertenece a su empresa." }, { status: 404 });
     }
 
@@ -294,8 +326,23 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
       return NextResponse.json({ error: "ID de componente inválido." }, { status: 400 });
     }
 
-    const categoria_componente_id = parseInt(body.categoria_componente_id, 10);
-    const estado_componente_id = parseInt(body.estado_componente_id || 1, 10);
+    const beforeRows = await query(`
+      SELECT * FROM admin.bicicleta_componentes
+      WHERE bicicleta_componente_id = $1 AND bicicleta_id = $2
+    `, [componentId, bicicletaId]);
+
+    if (!beforeRows || beforeRows.length === 0) {
+      return NextResponse.json({ error: "No se encontró el componente a actualizar." }, { status: 404 });
+    }
+
+    const beforeComp = beforeRows[0];
+
+    const categoria_componente_id = body.categoria_componente_id !== undefined && body.categoria_componente_id !== null && body.categoria_componente_id !== ""
+      ? parseInt(body.categoria_componente_id, 10)
+      : NaN;
+    const estado_componente_id = body.estado_componente_id !== undefined && body.estado_componente_id !== null && body.estado_componente_id !== ""
+      ? parseInt(body.estado_componente_id, 10)
+      : NaN;
     const marca = (body.marca || '').trim();
     const modelo = (body.modelo || '').trim();
     const numero_serie = (body.numero_serie || '').trim();
@@ -303,8 +350,12 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
     const kilometraje_instalacion = body.kilometraje_instalacion ? parseInt(body.kilometraje_instalacion, 10) : 0;
     const observaciones = (body.observaciones || '').trim();
 
-    if (isNaN(categoria_componente_id)) {
+    if (isNaN(categoria_componente_id) || categoria_componente_id <= 0) {
       return NextResponse.json({ error: "Debe seleccionar una categoría de componente." }, { status: 400 });
+    }
+
+    if (isNaN(estado_componente_id) || estado_componente_id <= 0) {
+      return NextResponse.json({ error: "Selecciona el estado del componente." }, { status: 400 });
     }
 
     const setClauses: string[] = [
@@ -352,7 +403,30 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
       return NextResponse.json({ error: "No se encontró el componente a actualizar." }, { status: 404 });
     }
 
-    return NextResponse.json(result[0]);
+    const updatedComp = result[0];
+    const diff = computeDiff(beforeComp, updatedComp);
+
+    if (diff.hasChanges) {
+      await recordUserActivity({
+        userId: session.usuario_id,
+        modulo: "BICICLETA",
+        evento: "COMPONENT_UPDATED",
+        descripcion: `Modificación de componente ID ${componentId} en bicicleta ID ${bicicletaId}`,
+        req
+      });
+
+      await recordUserAudit({
+        userId: session.usuario_id,
+        adminId: session.usuario_id,
+        accion: "CRM_COMPONENT_UPDATED",
+        valorAnterior: diff.valorAnterior,
+        valorNuevo: diff.valorNuevo,
+        motivo: `Modificación de componente ID ${componentId}`,
+        req
+      });
+    }
+
+    return NextResponse.json(updatedComp);
 
   } catch (error: any) {
     console.error("Error in PUT /api/crm/bicicletas/[id]/components:", error);
@@ -382,17 +456,53 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
       return NextResponse.json({ error: "ID de bicicleta o componente inválido." }, { status: 400 });
     }
 
-    const isOwned = await verifyBikeOwnership(bicicletaId, session.empresa_id);
-    if (!isOwned) {
+    const bike = await verifyBikeOwnership(bicicletaId, session.empresa_id);
+    if (!bike) {
       return NextResponse.json({ error: "Bicicleta no encontrada o no pertenece a su empresa." }, { status: 404 });
     }
 
     const componentId = parseInt(componentIdParam, 10);
 
+    const beforeRows = await query(`
+      SELECT * FROM admin.bicicleta_componentes
+      WHERE bicicleta_componente_id = $1 AND bicicleta_id = $2
+    `, [componentId, bicicletaId]);
+
+    if (!beforeRows || beforeRows.length === 0) {
+      return NextResponse.json({ error: "Componente no encontrado." }, { status: 404 });
+    }
+
+    const beforeComp = beforeRows[0];
+
     await query(`
       DELETE FROM admin.bicicleta_componentes
       WHERE bicicleta_componente_id = $1 AND bicicleta_id = $2
     `, [componentId, bicicletaId]);
+
+    // Forensic logging
+    await recordUserActivity({
+      userId: session.usuario_id,
+      modulo: "BICICLETA",
+      evento: "COMPONENT_REMOVED",
+      descripcion: `Eliminación de componente ID ${componentId} de bicicleta ID ${bicicletaId}`,
+      req
+    });
+
+    await recordUserAudit({
+      userId: session.usuario_id,
+      adminId: session.usuario_id,
+      accion: "CRM_COMPONENT_REMOVED",
+      valorAnterior: JSON.stringify(sanitizeAuditPayload({
+        bicicleta_componente_id: beforeComp.bicicleta_componente_id,
+        bicicleta_id: bicicletaId,
+        categoria_componente_id: beforeComp.categoria_componente_id,
+        marca: beforeComp.marca,
+        modelo: beforeComp.modelo
+      })),
+      valorNuevo: null,
+      motivo: `Eliminación de componente ID ${componentId} de bicicleta ID ${bicicletaId}`,
+      req
+    });
 
     return NextResponse.json({ message: "Componente eliminado correctamente." });
 
