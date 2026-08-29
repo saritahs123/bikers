@@ -46,15 +46,15 @@ export async function GET(
       SELECT
         ot.orden_trabajo_id,
         ot.recepcion_id,
-        ot.usuario_registro,
+        ot.cliente_id,
         ot.estado_orden_id,
         ot.activo,
         ot.facturado,
         ot.fecha_facturacion,
         ot.usuario_facturacion_id,
-        u_ot.empresa_id AS order_empresa_id
+        c.empresa_id AS order_empresa_id
       FROM admin.ordenes_trabajo ot
-      JOIN admin.usuario u_ot ON u_ot.usuario_id = ot.usuario_registro
+      JOIN admin.clientes c ON ot.cliente_id = c.cliente_id
       WHERE ot.orden_trabajo_id = $1 AND ot.activo = true
     `;
     const existenceRes = await query<any>(existenceSql, [ordenId]);
@@ -159,7 +159,7 @@ export async function GET(
         COALESCE(bicicleta_ot.numero_serie_cuadro, bicicleta_recepcion.numero_serie_cuadro, '') AS bicicleta_serie,
         COALESCE(bicicleta_ot.codigo_qr, bicicleta_recepcion.codigo_qr, '') AS bicicleta_qr
       FROM admin.ordenes_trabajo ot
-      JOIN admin.usuario u_ot ON u_ot.usuario_id = ot.usuario_registro
+      JOIN admin.clientes c ON ot.cliente_id = c.cliente_id
       LEFT JOIN admin.usuario uf ON uf.usuario_id = ot.usuario_facturacion_id
       LEFT JOIN admin.usuario_identidad ui_fact ON ui_fact.usuario_id = uf.usuario_id
       LEFT JOIN admin.usuario u_mec ON u_mec.usuario_id = ot.mecanico_id

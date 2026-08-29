@@ -49,14 +49,27 @@ export async function extractClientInfo(req?: Request) {
 
 /**
  * Sanitizes any data payload before persisting to audit logs.
- * Strips presigned URLs, AWS credentials, auth tokens, passwords, cookies, etc.
+ * Strips presigned URLs, AWS credentials, auth tokens, passwords, cookies, Base64 images/signatures, etc.
  */
 export function sanitizeAuditPayload(data: any): any {
-  if (!data || typeof data !== "object") return data;
+  if (!data || typeof data !== "object") {
+    if (typeof data === "string") {
+      if (data.startsWith("data:image/") || data.startsWith("data:application/") || data.includes(";base64,")) {
+        return "[BASE64_DATA_REDACTED]";
+      }
+      if (data.includes("X-Amz-Signature") || data.includes("X-Amz-Credential") || (data.startsWith("http") && data.includes(".s3."))) {
+        return "[S3_PRESIGNED_URL_REDACTED]";
+      }
+    }
+    return data;
+  }
   if (Array.isArray(data)) return data.map(sanitizeAuditPayload);
 
   const clean: Record<string, any> = {};
-  const forbiddenPatterns = ["password", "token", "hash", "secret", "cookie", "auth", "credential", "signature", "x-amz-", "key_secret"];
+  const forbiddenPatterns = [
+    "password", "token", "hash", "secret", "cookie", "auth", "credential",
+    "signature", "firma_digital", "firma", "x-amz-", "key_secret", "jwt", "authorization"
+  ];
 
   for (const [k, v] of Object.entries(data)) {
     const keyLower = k.toLowerCase();
@@ -64,6 +77,12 @@ export function sanitizeAuditPayload(data: any): any {
 
     if (isForbidden) {
       clean[k] = "[REDACTED]";
+      continue;
+    }
+
+    // Strip Data URLs / Base64 binary strings
+    if (typeof v === "string" && (v.startsWith("data:image/") || v.startsWith("data:application/") || v.includes(";base64,") || (v.length > 500 && /^[A-Za-z0-9+/=]+$/.test(v.trim())))) {
+      clean[k] = "[BASE64_DATA_REDACTED]";
       continue;
     }
 
@@ -134,6 +153,8 @@ export interface RecordActivityParams {
   req?: Request;
   ip?: string | null;
   dispositivo?: string | null;
+  client?: any;
+  throwOnError?: boolean;
 }
 
 /**
@@ -142,8 +163,13 @@ export interface RecordActivityParams {
  */
 export async function recordUserActivity(params: RecordActivityParams): Promise<boolean> {
   try {
-    const { userId, modulo, evento, descripcion = null, resultado = 'Exitoso', req } = params;
-    if (!userId || !modulo || !evento) return false;
+    const { userId, modulo, evento, descripcion = null, resultado = 'Exitoso', req, client, throwOnError = false } = params;
+    if (!userId || !modulo || !evento) {
+      if (throwOnError) {
+        throw new Error("Missing required activity parameters: userId, modulo, and evento are mandatory.");
+      }
+      return false;
+    }
 
     let ip = params.ip;
     let dispositivo = params.dispositivo;
@@ -154,25 +180,36 @@ export async function recordUserActivity(params: RecordActivityParams): Promise<
       if (!dispositivo) dispositivo = clientInfo.dispositivo;
     }
 
-    await query(
-      `INSERT INTO admin.usuario_actividad 
-       (usuario_id, fecha_hora, modulo, evento, descripcion, resultado, direccion_ip, dispositivo)
-       VALUES 
-       ($1, NOW(), $2, $3, $4, $5, $6, $7)`,
-      [
-        Number(userId),
-        String(modulo).trim(),
-        String(evento).trim(),
-        descripcion ? String(descripcion).trim() : null,
-        String(resultado).trim(),
-        ip || null,
-        dispositivo || null
-      ]
-    );
+    const cleanDesc = descripcion ? (typeof descripcion === "object" ? JSON.stringify(sanitizeAuditPayload(descripcion)) : String(descripcion).trim()) : null;
+
+    const insertSql = `
+      INSERT INTO admin.usuario_actividad
+      (usuario_id, fecha_hora, modulo, evento, descripcion, resultado, direccion_ip, dispositivo)
+      VALUES
+      ($1, NOW(), $2, $3, $4, $5, $6, $7)
+    `;
+    const insertValues = [
+      Number(userId),
+      String(modulo).trim(),
+      String(evento).trim(),
+      cleanDesc,
+      String(resultado).trim(),
+      ip || null,
+      dispositivo || null
+    ];
+
+    if (client && typeof client.query === "function") {
+      await client.query(insertSql, insertValues);
+    } else {
+      await query(insertSql, insertValues);
+    }
 
     return true;
   } catch (error) {
     console.error("Failed to record user activity in PostgreSQL:", error);
+    if (params.throwOnError) {
+      throw error;
+    }
     return false;
   }
 }
@@ -181,13 +218,15 @@ export interface RecordAuditParams {
   userId: number;
   adminId?: number | null;
   accion: string;
-  valorAnterior?: string | null;
-  valorNuevo?: string | null;
+  valorAnterior?: string | null | Record<string, any>;
+  valorNuevo?: string | null | Record<string, any>;
   motivo?: string | null;
   resultado?: string;
   req?: Request;
   ip?: string | null;
   dispositivo?: string | null;
+  client?: any;
+  throwOnError?: boolean;
 }
 
 /**
@@ -196,8 +235,13 @@ export interface RecordAuditParams {
  */
 export async function recordUserAudit(params: RecordAuditParams): Promise<boolean> {
   try {
-    const { userId, adminId = null, accion, valorAnterior = null, valorNuevo = null, motivo = null, resultado = 'COMPLETADO', req } = params;
-    if (!userId || !accion) return false;
+    const { userId, adminId = null, accion, valorAnterior = null, valorNuevo = null, motivo = null, resultado = 'COMPLETADO', req, client, throwOnError = false } = params;
+    if (!userId || !accion) {
+      if (throwOnError) {
+        throw new Error("Missing required audit parameters: userId and accion are mandatory.");
+      }
+      return false;
+    }
 
     let ip = params.ip;
     let dispositivo = params.dispositivo;
@@ -208,27 +252,65 @@ export async function recordUserAudit(params: RecordAuditParams): Promise<boolea
       if (!dispositivo) dispositivo = clientInfo.dispositivo;
     }
 
-    await query(
-      `INSERT INTO admin.usuario_auditoria
-       (usuario_id, admin_id, fecha_hora, accion, valor_anterior, valor_nuevo, motivo, resultado, direccion_ip, dispositivo)
-       VALUES
-       ($1, $2, NOW(), $3, $4, $5, $6, $7, $8, $9)`,
-      [
-        Number(userId),
-        adminId ? Number(adminId) : null,
-        String(accion).trim(),
-        valorAnterior ? String(valorAnterior) : null,
-        valorNuevo ? String(valorNuevo) : null,
-        motivo ? String(motivo).trim() : null,
-        String(resultado).trim(),
-        ip || null,
-        dispositivo || null
-      ]
-    );
+    // Sanitize string or object payloads
+    let cleanAnterior: string | null = null;
+    if (valorAnterior !== null && valorAnterior !== undefined) {
+      if (typeof valorAnterior === "object") {
+        cleanAnterior = JSON.stringify(sanitizeAuditPayload(valorAnterior));
+      } else {
+        try {
+          const parsed = JSON.parse(valorAnterior);
+          cleanAnterior = JSON.stringify(sanitizeAuditPayload(parsed));
+        } catch {
+          cleanAnterior = String(valorAnterior);
+        }
+      }
+    }
+
+    let cleanNuevo: string | null = null;
+    if (valorNuevo !== null && valorNuevo !== undefined) {
+      if (typeof valorNuevo === "object") {
+        cleanNuevo = JSON.stringify(sanitizeAuditPayload(valorNuevo));
+      } else {
+        try {
+          const parsed = JSON.parse(valorNuevo);
+          cleanNuevo = JSON.stringify(sanitizeAuditPayload(parsed));
+        } catch {
+          cleanNuevo = String(valorNuevo);
+        }
+      }
+    }
+
+    const insertSql = `
+      INSERT INTO admin.usuario_auditoria
+      (usuario_id, admin_id, fecha_hora, accion, valor_anterior, valor_nuevo, motivo, resultado, direccion_ip, dispositivo)
+      VALUES
+      ($1, $2, NOW(), $3, $4, $5, $6, $7, $8, $9)
+    `;
+    const insertValues = [
+      Number(userId),
+      adminId ? Number(adminId) : null,
+      String(accion).trim(),
+      cleanAnterior,
+      cleanNuevo,
+      motivo ? String(motivo).trim() : null,
+      String(resultado).trim(),
+      ip || null,
+      dispositivo || null
+    ];
+
+    if (client && typeof client.query === "function") {
+      await client.query(insertSql, insertValues);
+    } else {
+      await query(insertSql, insertValues);
+    }
 
     return true;
   } catch (error) {
     console.error("Failed to record user audit in PostgreSQL:", error);
+    if (params.throwOnError) {
+      throw error;
+    }
     return false;
   }
 }

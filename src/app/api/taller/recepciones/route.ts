@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { recordUserActivity, recordUserAudit } from "@/lib/auditLogger";
 
 function cleanFecha(val: any) {
   if (!val || typeof val !== "string" || !val.trim()) return null;
@@ -32,7 +33,7 @@ export async function GET(req: Request) {
     const estadoId = searchParams.get("estado_id") ? parseInt(searchParams.get("estado_id")!, 10) : null;
     const search = (searchParams.get("search") || "").trim().toLowerCase();
 
-    let whereClause = `WHERE (u.empresa_id = $1 OR u.empresa_id IS NULL OR $1 = 1) AND (r.activo = true OR r.activo IS NULL) AND r.fecha_eliminacion IS NULL`;
+    let whereClause = `WHERE c.empresa_id = $1 AND (r.activo = true OR r.activo IS NULL) AND r.fecha_eliminacion IS NULL`;
     const params: any[] = [session.empresa_id];
 
     if (estadoId && !isNaN(estadoId)) {
@@ -49,7 +50,7 @@ export async function GET(req: Request) {
     const countSql = `
       SELECT COUNT(r.recepcion_id)::int as total
       FROM admin.recepciones r
-      LEFT JOIN admin.clientes c ON r.cliente_id = c.cliente_id
+      JOIN admin.clientes c ON r.cliente_id = c.cliente_id
       LEFT JOIN admin.bicicletas b ON r.bicicleta_id = b.bicicleta_id
       LEFT JOIN admin.usuario u ON r.recibido_por_usuario_id = u.usuario_id
       ${whereClause}
@@ -71,7 +72,7 @@ export async function GET(req: Request) {
              b.bicicleta_id, CONCAT(b.marca, ' ', b.modelo) as bicicleta_resumen, b.color as bicicleta_color,
              er.estado_recepcion_id, er.nombre as estado_nombre, er.codigo as estado_codigo
       FROM admin.recepciones r
-      LEFT JOIN admin.clientes c ON r.cliente_id = c.cliente_id
+      JOIN admin.clientes c ON r.cliente_id = c.cliente_id
       LEFT JOIN admin.bicicletas b ON r.bicicleta_id = b.bicicleta_id
       LEFT JOIN admin.estado_recepcion er ON r.estado_recepcion_id = er.estado_recepcion_id
       LEFT JOIN admin.usuario u ON r.recibido_por_usuario_id = u.usuario_id
@@ -110,9 +111,9 @@ export async function GET(req: Request) {
           0
         )::integer AS convertidas_ot
       FROM admin.recepciones r
+      JOIN admin.clientes c ON r.cliente_id = c.cliente_id
       JOIN admin.estado_recepcion er ON r.estado_recepcion_id = er.estado_recepcion_id
-      LEFT JOIN admin.usuario u ON r.recibido_por_usuario_id = u.usuario_id
-      WHERE (u.empresa_id = $1 OR u.empresa_id IS NULL OR $1 = 1)
+      WHERE c.empresa_id = $1
         AND (r.activo = true OR r.activo IS NULL)
         AND r.fecha_eliminacion IS NULL;
     `, [session.empresa_id]);
@@ -228,12 +229,45 @@ export async function POST(req: NextRequest) {
       }];
     }
 
-    // 1. Basic Validations
+    // 1. Basic Validations & Canonical Multitenant Ownership
     if (isNaN(cliente_id) || cliente_id <= 0) {
       return NextResponse.json({ error: "Debe seleccionar un cliente válido." }, { status: 400 });
     }
     if (isNaN(bicicleta_id) || bicicleta_id <= 0) {
       return NextResponse.json({ error: "Debe seleccionar una bicicleta válida." }, { status: 400 });
+    }
+
+    // Validate Client Company Isolation (Returns 404 for cross-tenant to prevent existence leak)
+    const clientCheck = await query<any>(
+      `SELECT cliente_id, empresa_id FROM admin.clientes WHERE cliente_id = $1 AND fecha_eliminacion IS NULL LIMIT 1`,
+      [cliente_id]
+    );
+
+    if (!clientCheck || clientCheck.length === 0 || Number(clientCheck[0].empresa_id) !== Number(session.empresa_id)) {
+      return NextResponse.json({
+        error: "NOT_FOUND",
+        message: "El cliente seleccionado no existe o no pertenece a su empresa."
+      }, { status: 404 });
+    }
+
+    // Validate Bicycle Ownership & Client Matching
+    const bikeCheck = await query<any>(
+      `SELECT bicicleta_id, cliente_id FROM admin.bicicletas WHERE bicicleta_id = $1 AND fecha_eliminacion IS NULL LIMIT 1`,
+      [bicicleta_id]
+    );
+
+    if (!bikeCheck || bikeCheck.length === 0) {
+      return NextResponse.json({
+        error: "NOT_FOUND",
+        message: "La bicicleta seleccionada no existe."
+      }, { status: 404 });
+    }
+
+    if (Number(bikeCheck[0].cliente_id) !== Number(cliente_id)) {
+      return NextResponse.json({
+        error: "BICYCLE_CLIENT_MISMATCH",
+        message: "La bicicleta seleccionada no pertenece al cliente especificado."
+      }, { status: 400 });
     }
 
     if (generar_orden_trabajo && servicios.length === 0) {
@@ -306,11 +340,7 @@ export async function POST(req: NextRequest) {
         throw new Error("La bicicleta seleccionada no pertenece al cliente indicado.");
       }
 
-      // 1. Reception Advisory Locks & Sequences
-      await client.query(`SELECT pg_advisory_xact_lock(7001)`);
-      const nextRecRows = await client.query(`SELECT COALESCE(MAX(recepcion_id), 0) + 1 as next_id FROM admin.recepciones`);
-      const recepcion_id = nextRecRows.rows[0].next_id;
-
+      // 1. Reception Code Generation & Atomic Insert via Sequence
       await client.query(`SELECT pg_advisory_xact_lock(7004)`);
       const now = new Date();
       const yearMonth = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -334,36 +364,34 @@ export async function POST(req: NextRequest) {
         ? (servicios[0].diagnostico_preliminar || "").trim()
         : (body.diagnostico_preliminar || "").trim();
 
-      // Insert Reception
-      await client.query(
+      // Insert Reception using PostgreSQL sequence RETURNING recepcion_id
+      const recInsertRes = await client.query(
         `INSERT INTO admin.recepciones (
-          recepcion_id, cliente_id, bicicleta_id, estado_recepcion_id, tipo_servicio_id,
+          cliente_id, bicicleta_id, estado_recepcion_id, tipo_servicio_id,
           codigo_recepcion, fecha_recepcion, diagnostico_preliminar,
           observaciones_cliente, observaciones_recepcion, presupuesto_estimado,
           requiere_aprobacion, recibido_por_usuario_id, activo, fecha_creacion, usuario_creacion
         ) VALUES (
-          $1, $2, $3, $4, $5,
-          $6, NOW(), $7,
-          $8, $9, $10,
-          $11, $12, true, NOW(), $12
-        )`,
+          $1, $2, $3, $4,
+          $5, NOW(), $6,
+          $7, $8, $9,
+          $10, $11, true, NOW(), $11
+        ) RETURNING recepcion_id`,
         [
-          recepcion_id, cliente_id, bicicleta_id, estado_recepcion_id, servicios[0]?.tipo_servicio_id || null,
+          cliente_id, bicicleta_id, estado_recepcion_id, servicios[0]?.tipo_servicio_id || null,
           codigo_recepcion, firstDiag || null,
           observaciones_cliente || null, observaciones_recepcion || null, presupuesto_estimado_input,
           requiere_aprobacion, session.usuario_id
         ]
       );
+      const recepcion_id = recInsertRes.rows[0].recepcion_id;
 
-      // 2. Insert Checklist Responses
+      // 2. Insert Checklist Responses using PostgreSQL sequence
       for (let chkIdx = 0; chkIdx < checklist.length; chkIdx++) {
         const chkItem = checklist[chkIdx];
         const item_checklist_id = parseInt(chkItem.item_checklist_id, 10);
         const estado_checklist_id = parseInt(chkItem.estado_checklist_id, 10);
         if (isNaN(item_checklist_id) || isNaN(estado_checklist_id)) continue;
-
-        const nextChkRows = await client.query(`SELECT COALESCE(MAX(recepcion_checklist_id), 0) + 1 as next_id FROM admin.recepcion_checklist`);
-        const recepcion_checklist_id = nextChkRows.rows[0].next_id;
 
         const s3Path = (chkItem.object_key || chkItem.s3_key || chkItem.ruta_archivo || "").trim() || null;
         const fileName = (chkItem.filename || chkItem.nombre_archivo || "").trim() || null;
@@ -371,18 +399,18 @@ export async function POST(req: NextRequest) {
 
         await client.query(
           `INSERT INTO admin.recepcion_checklist (
-            recepcion_checklist_id, recepcion_id, item_checklist_id, estado_checklist_id,
+            recepcion_id, item_checklist_id, estado_checklist_id,
             observacion, requiere_trabajo, requiere_aprobacion, evidencia_foto,
             nombre_archivo, ruta_archivo, url_archivo,
             orden_visual, fecha_evaluacion, usuario_evaluacion, activo, fecha_registro, usuario_registro
           ) VALUES (
-            $1, $2, $3, $4,
-            $5, $6, false, $7,
-            $8, $9, NULL,
-            $10, NOW(), $11, true, NOW(), $11
-          )`,
+            $1, $2, $3,
+            $4, $5, false, $6,
+            $7, $8, NULL,
+            $9, NOW(), $10, true, NOW(), $10
+          ) RETURNING recepcion_checklist_id`,
           [
-            recepcion_checklist_id, recepcion_id, item_checklist_id, estado_checklist_id,
+            recepcion_id, item_checklist_id, estado_checklist_id,
             (chkItem.observacion || "").trim() || null, Boolean(chkItem.requiere_trabajo), hasPhoto,
             fileName, s3Path,
             chkIdx + 1, session.usuario_id
@@ -390,21 +418,18 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // 3. Insert Signature (Optional, if provided)
+      // 3. Insert Signature (Optional, if provided) using PostgreSQL sequence
       if (hasValidSignature) {
-        const nextSigRows = await client.query(`SELECT COALESCE(MAX(firma_recepcion_id), 0) + 1 as next_id FROM admin.firma_recepcion`);
-        const firma_recepcion_id = nextSigRows.rows[0].next_id;
-
         await client.query(
           `INSERT INTO admin.firma_recepcion (
-            firma_recepcion_id, recepcion_id, firma_digital, terminos_aceptados,
-            version_terminos, ip_registro, user_agent, activo, fecha_registro, usuario_registro
+            recepcion_id, cliente_id, tipo_firma, firma_digital, terminos_aceptados,
+            fecha_firma, ip_firma, navegador_firma, activo, fecha_creacion, usuario_creacion
           ) VALUES (
-            $1, $2, $3, $4,
-            'v1.0', $5, $6, true, NOW(), $7
-          )`,
+            $1, $2, 'INGRESO', $3, true,
+            NOW(), $4, $5, true, NOW(), $6
+          ) RETURNING firma_recepcion_id`,
           [
-            firma_recepcion_id, recepcion_id, firma_digital, true,
+            recepcion_id, cliente_id, firma_digital,
             ipFirma, userAgent, session.usuario_id
           ]
         );
@@ -414,10 +439,6 @@ export async function POST(req: NextRequest) {
 
       // 4. Auto-Generate Work Order if requested
       if (generar_orden_trabajo) {
-        await client.query(`SELECT pg_advisory_xact_lock(7002)`);
-        const nextWoRows = await client.query(`SELECT COALESCE(MAX(orden_trabajo_id), 0) + 1 as next_id FROM admin.ordenes_trabajo`);
-        const orden_trabajo_id = nextWoRows.rows[0].next_id;
-
         await client.query(`SELECT pg_advisory_xact_lock(7003)`);
         const woCodeSeqRes = await client.query(
           `SELECT COALESCE(MAX(CAST(SUBSTRING(codigo_orden FROM 'OT-\\d{6}-(\\d+)') AS INTEGER)), 0) + 1 AS next_seq
@@ -530,25 +551,17 @@ export async function POST(req: NextRequest) {
               }
             }
 
-            // Advisory lock for component ID sequence
-            await client.query(`SELECT pg_advisory_xact_lock(7008)`);
-            const nextCompRes = await client.query(
-              `SELECT COALESCE(MAX(bicicleta_componente_id), 0) + 1 AS next_id FROM admin.bicicleta_componentes`
-            );
-            const new_comp_id = nextCompRes.rows[0].next_id;
-
             const insertedComp = await client.query(
               `INSERT INTO admin.bicicleta_componentes (
-                bicicleta_componente_id, bicicleta_id, categoria_componente_id, estado_componente_id,
+                bicicleta_id, categoria_componente_id, estado_componente_id,
                 marca, numero_serie, descripcion, fecha_instalacion, kilometraje_instalacion,
                 vigente, activo, fecha_creacion, usuario_creacion
               ) VALUES (
-                $1, $2, $3, $4,
-                $5, $6, $7, NOW(), 0,
-                true, true, NOW(), $8
+                $1, $2, $3,
+                $4, $5, $6, NOW(), 0,
+                true, true, NOW(), $7
               ) RETURNING bicicleta_componente_id`,
               [
-                new_comp_id,
                 bicicleta_id,
                 catCompId,
                 estCompId,
@@ -589,29 +602,30 @@ export async function POST(req: NextRequest) {
           });
         }
 
-        // Insert Work Order initially WITHOUT mechanic (mecanico_id = null)
-        await client.query(
+        // Insert Work Order initially WITHOUT mechanic (mecanico_id = null) using PostgreSQL sequence
+        const otInsertRes = await client.query(
           `INSERT INTO admin.ordenes_trabajo (
-            orden_trabajo_id, codigo_orden, recepcion_id, cliente_id, bicicleta_id,
+            codigo_orden, recepcion_id, cliente_id, bicicleta_id,
             estado_orden_id, prioridad_orden_id, descripcion_cliente, diagnostico_inicial,
             observacion_interna, fecha_recepcion,
             subtotal_servicios, subtotal_general, total_orden,
             mecanico_id, usuario_registro, activo, fecha_registro
           ) VALUES (
-            $1, $2, $3, $4, $5,
-            $6, $7, $8, $9,
-            $10, NOW(),
-            $11, $11, $11,
-            NULL, $12, true, NOW()
-          )`,
+            $1, $2, $3, $4,
+            $5, $6, $7, $8,
+            $9, NOW(),
+            $10, $10, $10,
+            NULL, $11, true, NOW()
+          ) RETURNING orden_trabajo_id`,
           [
-            orden_trabajo_id, codigo_orden, recepcion_id, cliente_id, bicicleta_id,
+            codigo_orden, recepcion_id, cliente_id, bicicleta_id,
             estado_orden_id, prioridad_orden_id, observaciones_cliente || null, consolidated_diagnostico || null,
             obs_interna_ot || null,
             subtotal_servicios,
             session.usuario_id
           ]
         );
+        const orden_trabajo_id = otInsertRes.rows[0].orden_trabajo_id;
 
         // Update Reception linkage
         await client.query(
@@ -648,26 +662,22 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        // Insert Services with bicicleta_componente_id and usuario_id = null
-        await client.query(`SELECT pg_advisory_xact_lock(7007)`);
+        // Insert Services with sequence RETURNING
         for (let idx = 0; idx < preparedServicesData.length; idx++) {
           const sData = preparedServicesData[idx];
 
-          const nextSrvRows = await client.query(`SELECT COALESCE(MAX(orden_servicio_id), 0) + 1 as next_id FROM admin.orden_servicios`);
-          const orden_servicio_id = nextSrvRows.rows[0].next_id;
-
           await client.query(
             `INSERT INTO admin.orden_servicios (
-              orden_servicio_id, orden_trabajo_id, tipo_servicio_id, estado_orden_servicio_id, estado_aprobacion_id,
+              orden_trabajo_id, tipo_servicio_id, estado_orden_servicio_id, estado_aprobacion_id,
               secuencia, descripcion_servicio, observacion_tecnica, cantidad,
               precio_unitario, subtotal, bicicleta_componente_id, usuario_id, usuario_registro, activo, fecha_registro
             ) VALUES (
-              $1, $2, $3, $4, $5,
-              $6, $7, $8, 1,
-              $9, $9, $10, NULL, $11, true, NOW()
-            )`,
+              $1, $2, $3, $4,
+              $5, $6, $7, 1,
+              $8, $8, $9, NULL, $10, true, NOW()
+            ) RETURNING orden_servicio_id`,
             [
-              orden_servicio_id, orden_trabajo_id, sData.tipo_servicio_id, estado_orden_servicio_id, estado_aprobacion_id,
+              orden_trabajo_id, sData.tipo_servicio_id, estado_orden_servicio_id, estado_aprobacion_id,
               idx + 1, sData.nombre, sData.diagnostico,
               sData.precio, sData.bicicleta_componente_id, session.usuario_id
             ]
@@ -680,12 +690,58 @@ export async function POST(req: NextRequest) {
         };
       }
 
+      // Forensic Audit Mutation inside the same transaction
+      await recordUserAudit({
+        userId: session.usuario_id,
+        accion: "CREAR_RECEPCION",
+        valorNuevo: {
+          recepcion_id,
+          codigo_recepcion,
+          cliente_id,
+          bicicleta_id,
+          orden_trabajo_id: generatedWorkOrderInfo?.orden_trabajo_id || null,
+          codigo_orden: generatedWorkOrderInfo?.codigo_orden || null,
+          checklist_count: checklist.length,
+          has_signature: hasValidSignature
+        },
+        motivo: "Creación de recepción de taller",
+        resultado: "COMPLETADO",
+        client,
+        throwOnError: true
+      });
+
+      if (hasValidSignature) {
+        await recordUserAudit({
+          userId: session.usuario_id,
+          accion: "REGISTRAR_FIRMA_RECEPCION",
+          valorNuevo: {
+            recepcion_id,
+            cliente_id,
+            tipo_firma: "INGRESO",
+            version_terminos: "v1.0"
+          },
+          motivo: "Firma digital de conformidad del cliente en recepción",
+          resultado: "COMPLETADO",
+          client,
+          throwOnError: true
+        });
+      }
+
       return {
         recepcion_id,
         codigo_recepcion,
         orden_trabajo_id: generatedWorkOrderInfo?.orden_trabajo_id || null,
         codigo_orden: generatedWorkOrderInfo?.codigo_orden || null
       };
+    });
+
+    await recordUserActivity({
+      userId: session.usuario_id,
+      modulo: "TALLER_RECEPCIONES",
+      evento: "RECEPTION_CREATED",
+      descripcion: `Recepción ${resultData.codigo_recepcion} creada exitosamente (Cliente #${cliente_id}, Bicicleta #${bicicleta_id}${resultData.orden_trabajo_id ? `, Orden ${resultData.codigo_orden}` : ""})`,
+      resultado: "Exitoso",
+      req
     });
 
     return NextResponse.json(

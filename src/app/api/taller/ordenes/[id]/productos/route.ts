@@ -3,6 +3,7 @@ import { getPool, query } from "@/lib/db";
 import { getWorkshopSession } from "@/lib/workshop-session";
 import { recalculateWorkOrderTotals } from "@/lib/workshop/recalculateWorkOrderTotals";
 import { validateOrderInRepair } from "@/lib/workshop/validateOrderState";
+import { recordUserActivity, recordUserAudit } from "@/lib/auditLogger";
 
 export async function POST(
   req: Request,
@@ -105,7 +106,6 @@ export async function POST(
     const insertRes = await client.query(
       `
       INSERT INTO admin.orden_productos (
-        orden_producto_id,
         orden_trabajo_id,
         orden_servicio_id,
         producto_id,
@@ -121,7 +121,6 @@ export async function POST(
         fecha_registro,
         usuario_registro
       ) VALUES (
-        (SELECT COALESCE(MAX(orden_producto_id), 0) + 1 FROM admin.orden_productos),
         $1, NULL, $2, 1, $3, $4, 0, 0, $5, 1, false, $6, NOW(), $7
       )
       RETURNING orden_producto_id, producto_id, cantidad, precio_unitario, subtotal
@@ -134,16 +133,14 @@ export async function POST(
     // Recalculate order totals inside transaction
     await recalculateWorkOrderTotals(client, ordenId);
 
-    // Register history event
     await client.query(
       `
       INSERT INTO admin.orden_historial_estado (
-        orden_historial_estado_id, orden_trabajo_id, estado_anterior_id, estado_nuevo_id,
+        orden_trabajo_id, estado_anterior_id, estado_nuevo_id,
         usuario_cambio, comentario, fecha_cambio, activo, fecha_registro
       ) VALUES (
-        (SELECT COALESCE(MAX(orden_historial_estado_id), 0) + 1 FROM admin.orden_historial_estado),
         $1, $2, $2, $3, $4, NOW(), true, NOW()
-      )
+      ) RETURNING orden_historial_estado_id
       `,
       [
         ordenId,
@@ -153,7 +150,33 @@ export async function POST(
       ]
     );
 
+    await recordUserAudit({
+      userId: session.usuario_id,
+      accion: "AGREGAR_PRODUCTO_ORDEN",
+      valorNuevo: {
+        orden_producto_id: newProd.orden_producto_id,
+        orden_trabajo_id: ordenId,
+        producto_id: productoId,
+        cantidad,
+        precio_unitario: precioUnitario,
+        subtotal
+      },
+      motivo: `Producto agregado a orden #${ordenId}`,
+      resultado: "COMPLETADO",
+      client,
+      throwOnError: true
+    });
+
     await client.query("COMMIT");
+
+    await recordUserActivity({
+      userId: session.usuario_id,
+      modulo: "TALLER_PRODUCTOS",
+      evento: "ORDER_PRODUCT_ADDED",
+      descripcion: `Producto #${productoId} (${prod.nombre}) agregado a la orden #${ordenId}`,
+      resultado: "Exitoso",
+      req
+    });
 
     return NextResponse.json(
       {

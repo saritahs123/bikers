@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { query } from "@/lib/db";
+import { getPool, query } from "@/lib/db";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { recordUserActivity, recordUserAudit, computeDiff } from "@/lib/auditLogger";
 
 // GET /api/taller/recepciones/[id]
 export async function GET(
@@ -39,12 +40,12 @@ export async function GET(
               er.estado_recepcion_id, er.nombre as estado_nombre, er.codigo as estado_codigo,
               ts.tipo_servicio_id, ts.nombre as tipo_servicio_nombre
        FROM admin.recepciones r
-       LEFT JOIN admin.clientes c ON r.cliente_id = c.cliente_id
+       JOIN admin.clientes c ON r.cliente_id = c.cliente_id
        LEFT JOIN admin.bicicletas b ON r.bicicleta_id = b.bicicleta_id
        LEFT JOIN admin.estado_recepcion er ON r.estado_recepcion_id = er.estado_recepcion_id
        LEFT JOIN admin.tipo_servicio ts ON r.tipo_servicio_id = ts.tipo_servicio_id
        LEFT JOIN admin.usuario u ON r.recibido_por_usuario_id = u.usuario_id
-       WHERE r.recepcion_id = $1 AND (u.empresa_id = $2 OR u.empresa_id IS NULL OR $2 = 1) AND (r.activo = true OR r.activo IS NULL) AND r.fecha_eliminacion IS NULL
+       WHERE r.recepcion_id = $1 AND c.empresa_id = $2 AND (r.activo = true OR r.activo IS NULL) AND r.fecha_eliminacion IS NULL
        LIMIT 1`,
       [recepcion_id, session.empresa_id]
     );
@@ -161,6 +162,9 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const pool = getPool();
+  const client = await pool.connect();
+
   try {
     const session = await getWorkshopSession();
     if (!session) {
@@ -180,12 +184,12 @@ export async function PATCH(
 
     const body = await req.json();
 
-    // Check reception exists
+    // Check reception exists with canonical client company isolation
     const existing = await query(
-      `SELECT r.recepcion_id, r.convertido_orden_id
+      `SELECT r.*
        FROM admin.recepciones r
-       LEFT JOIN admin.usuario u ON r.recibido_por_usuario_id = u.usuario_id
-       WHERE r.recepcion_id = $1 AND (u.empresa_id = $2 OR u.empresa_id IS NULL OR $2 = 1) AND (r.activo = true OR r.activo IS NULL) AND r.fecha_eliminacion IS NULL
+       JOIN admin.clientes c ON r.cliente_id = c.cliente_id
+       WHERE r.recepcion_id = $1 AND c.empresa_id = $2 AND (r.activo = true OR r.activo IS NULL) AND r.fecha_eliminacion IS NULL
        LIMIT 1`,
       [recepcion_id, session.empresa_id]
     );
@@ -195,8 +199,18 @@ export async function PATCH(
     }
 
     if (existing[0].convertido_orden_id) {
+      await recordUserActivity({
+        userId: session.usuario_id,
+        modulo: "TALLER_RECEPCIONES",
+        evento: "RECEPTION_UPDATE_DENIED",
+        descripcion: `Intento de edición denegado: Recepción #${recepcion_id} ya fue convertida a Orden de Trabajo`,
+        resultado: "Denegado",
+        req
+      });
       return NextResponse.json({ error: "LOCKED", message: "No se puede editar una recepción que ya fue convertida a Orden de Trabajo." }, { status: 400 });
     }
+
+    const beforeState = existing[0];
 
     // Allowed Fields
     const updates: string[] = [];
@@ -239,6 +253,8 @@ export async function PATCH(
       return NextResponse.json({ error: "Debe enviar al menos un campo permitido para actualizar." }, { status: 400 });
     }
 
+    await client.query("BEGIN");
+
     updateParams.push(session.usuario_id);
     const userIdx = updateParams.length;
     updates.push(`usuario_modificacion = $${userIdx}`);
@@ -251,9 +267,37 @@ export async function PATCH(
       UPDATE admin.recepciones
       SET ${updates.join(", ")}
       WHERE recepcion_id = $${idIdx}
+      RETURNING *
     `;
 
-    await query(sql, updateParams);
+    const updateRes = await client.query(sql, updateParams);
+    const afterState = updateRes.rows[0];
+
+    const diff = computeDiff(beforeState, afterState);
+
+    if (diff.hasChanges) {
+      await recordUserAudit({
+        userId: session.usuario_id,
+        accion: "ACTUALIZAR_RECEPCION",
+        valorAnterior: diff.valorAnterior,
+        valorNuevo: diff.valorNuevo,
+        motivo: "Actualización de datos de recepción",
+        resultado: "COMPLETADO",
+        client,
+        throwOnError: true
+      });
+    }
+
+    await client.query("COMMIT");
+
+    await recordUserActivity({
+      userId: session.usuario_id,
+      modulo: "TALLER_RECEPCIONES",
+      evento: "RECEPTION_UPDATED",
+      descripcion: `Recepción #${recepcion_id} (${beforeState.codigo_recepcion}) actualizada exitosamente`,
+      resultado: "Exitoso",
+      req
+    });
 
     return NextResponse.json({
       success: true,
@@ -261,16 +305,25 @@ export async function PATCH(
     });
 
   } catch (error: any) {
+    await client.query("ROLLBACK").catch(() => {});
     console.error("Error in PATCH /api/taller/recepciones/[id]:", error);
     return NextResponse.json({ error: error.message || "Error al actualizar la recepción." }, { status: 500 });
+  } finally {
+    client.release();
   }
 }
+
+// PUT /api/taller/recepciones/[id] (Alias to PATCH)
+export const PUT = PATCH;
 
 // DELETE /api/taller/recepciones/[id] (Soft Delete Exclusivo)
 export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const pool = getPool();
+  const client = await pool.connect();
+
   try {
     const session = await getWorkshopSession();
     if (!session) {
@@ -288,12 +341,12 @@ export async function DELETE(
       return NextResponse.json({ error: "ID de recepción inválido." }, { status: 400 });
     }
 
-    // Verify reception exists
+    // Verify reception exists with canonical client company isolation
     const existing = await query(
-      `SELECT r.recepcion_id
+      `SELECT r.recepcion_id, r.codigo_recepcion
        FROM admin.recepciones r
-       LEFT JOIN admin.usuario u ON r.recibido_por_usuario_id = u.usuario_id
-       WHERE r.recepcion_id = $1 AND (u.empresa_id = $2 OR u.empresa_id IS NULL OR $2 = 1) AND (r.activo = true OR r.activo IS NULL) AND r.fecha_eliminacion IS NULL
+       JOIN admin.clientes c ON r.cliente_id = c.cliente_id
+       WHERE r.recepcion_id = $1 AND c.empresa_id = $2 AND (r.activo = true OR r.activo IS NULL) AND r.fecha_eliminacion IS NULL
        LIMIT 1`,
       [recepcion_id, session.empresa_id]
     );
@@ -302,8 +355,10 @@ export async function DELETE(
       return NextResponse.json({ error: "NOT_FOUND", message: "La recepción no existe o no pertenece a su empresa." }, { status: 404 });
     }
 
+    await client.query("BEGIN");
+
     // Soft delete
-    await query(
+    await client.query(
       `UPDATE admin.recepciones
        SET activo = false,
            fecha_eliminacion = NOW(),
@@ -312,13 +367,38 @@ export async function DELETE(
       [session.usuario_id, recepcion_id]
     );
 
+    await recordUserAudit({
+      userId: session.usuario_id,
+      accion: "ELIMINAR_RECEPCION",
+      valorAnterior: { recepcion_id, codigo_recepcion: existing[0].codigo_recepcion, activo: true },
+      valorNuevo: { recepcion_id, codigo_recepcion: existing[0].codigo_recepcion, activo: false },
+      motivo: "Inactivación de recepción",
+      resultado: "COMPLETADO",
+      client,
+      throwOnError: true
+    });
+
+    await client.query("COMMIT");
+
+    await recordUserActivity({
+      userId: session.usuario_id,
+      modulo: "TALLER_RECEPCIONES",
+      evento: "RECEPTION_DELETED",
+      descripcion: `Recepción #${recepcion_id} (${existing[0].codigo_recepcion}) inactivada exitosamente`,
+      resultado: "Exitoso",
+      req
+    });
+
     return NextResponse.json({
       success: true,
       message: "Recepción inactivada correctamente."
     });
 
   } catch (error: any) {
+    await client.query("ROLLBACK").catch(() => {});
     console.error("Error in DELETE /api/taller/recepciones/[id]:", error);
     return NextResponse.json({ error: error.message || "Error al inactivar la recepción." }, { status: 500 });
+  } finally {
+    client.release();
   }
 }

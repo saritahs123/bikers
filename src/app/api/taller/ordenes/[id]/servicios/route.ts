@@ -3,6 +3,7 @@ import { getPool } from "@/lib/db";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
 import { recalculateWorkOrderTotals } from "@/lib/workshop/recalculateWorkOrderTotals";
 import { validateOrderInRepair } from "@/lib/workshop/validateOrderState";
+import { recordUserActivity, recordUserAudit } from "@/lib/auditLogger";
 import crypto from "crypto";
 
 function hashPayload(payload: any): string {
@@ -161,19 +162,19 @@ export async function POST(
       }
     }
 
-    // 2. Lock Order and fetch its data safely
+    // 2. Lock Order and fetch its data safely with canonical client company isolation
     const otCheck = await client.query(`
       SELECT
           ot.orden_trabajo_id,
           ot.bicicleta_id,
           ot.estado_orden_id,
-          u.empresa_id
+          c.empresa_id
       FROM admin.ordenes_trabajo ot
-      JOIN admin.usuario u
-        ON u.usuario_id = ot.usuario_registro
+      JOIN admin.clientes c
+        ON c.cliente_id = ot.cliente_id
       WHERE ot.orden_trabajo_id = $1
         AND ot.activo IS DISTINCT FROM false
-        AND u.empresa_id = $2
+        AND c.empresa_id = $2
       FOR UPDATE OF ot;
     `, [ordenId, session.empresa_id]);
 
@@ -381,7 +382,6 @@ export async function POST(
       // Generate next component ID and INSERT into admin.bicicleta_componentes using bikeId exclusively
       const insertCompRes = await client.query(`
         INSERT INTO admin.bicicleta_componentes (
-          bicicleta_componente_id,
           bicicleta_id,
           categoria_componente_id,
           estado_componente_id,
@@ -391,7 +391,6 @@ export async function POST(
           fecha_creacion,
           usuario_creacion
         ) VALUES (
-          (SELECT COALESCE(MAX(bicicleta_componente_id), 0) + 1 FROM admin.bicicleta_componentes),
           $1, $2, $3, $4, $5, true, NOW(), $6
         )
         RETURNING bicicleta_componente_id, bicicleta_id;
@@ -424,10 +423,9 @@ export async function POST(
       componenteCreado = true;
     }
 
-    // Insert Service into admin.orden_servicios
+    // Insert Service into admin.orden_servicios using sequence RETURNING
     const insertServRes = await client.query(`
       INSERT INTO admin.orden_servicios (
-        orden_servicio_id,
         orden_trabajo_id,
         codigo_servicio,
         tipo_servicio_id,
@@ -447,7 +445,6 @@ export async function POST(
         fecha_registro,
         usuario_registro
       ) VALUES (
-        (SELECT COALESCE(MAX(orden_servicio_id), 0) + 1 FROM admin.orden_servicios),
         $1, $2, $3, 1, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NULL, true, NOW(), $6
       )
       RETURNING orden_servicio_id, codigo_servicio, bicicleta_componente_id;
@@ -507,14 +504,13 @@ export async function POST(
       }
     }
 
-    // Register Historial log
+    // Register Historial log using PostgreSQL sequence
     await client.query(`
       INSERT INTO admin.orden_historial_estado (
-        orden_historial_estado_id, orden_trabajo_id, estado_anterior_id, estado_nuevo_id, usuario_cambio, comentario, fecha_cambio, activo, fecha_registro
+        orden_trabajo_id, estado_anterior_id, estado_nuevo_id, usuario_cambio, comentario, fecha_cambio, activo, fecha_registro
       ) VALUES (
-        (SELECT COALESCE(MAX(orden_historial_estado_id), 0) + 1 FROM admin.orden_historial_estado),
         $1, $2, $2, $3, $4, NOW(), true, NOW()
-      )
+      ) RETURNING orden_historial_estado_id
     `, [
       ordenId,
       estadoOrdenId,
@@ -524,6 +520,25 @@ export async function POST(
 
     // Recalculate totals in transaction
     await recalculateWorkOrderTotals(client, ordenId, sessionUserId);
+
+    // Atomic Audit Mutation
+    await recordUserAudit({
+      userId: sessionUserId,
+      accion: "AGREGAR_SERVICIO_ORDEN",
+      valorNuevo: {
+        orden_servicio_id: newServId,
+        orden_trabajo_id: ordenId,
+        codigo_servicio: codigoServicio,
+        tipo_servicio_id: tipo_servicio_id,
+        precio: finalPrecio,
+        cantidad: finalCantidad,
+        bicicleta_componente_id: finalComponenteId
+      },
+      motivo: `Servicio ${codigoServicio} agregado a la orden #${ordenId}`,
+      resultado: "COMPLETADO",
+      client,
+      throwOnError: true
+    });
 
     // Save final response payload
     const responseData = {
@@ -568,6 +583,15 @@ export async function POST(
 
     // Commit transaction permanently
     await client.query("COMMIT");
+
+    await recordUserActivity({
+      userId: sessionUserId,
+      modulo: "TALLER_SERVICIOS",
+      evento: "SERVICE_ADDED",
+      descripcion: `Servicio ${codigoServicio} (#${newServId}) agregado a la orden #${ordenId}`,
+      resultado: "Exitoso",
+      req: request
+    });
 
     return NextResponse.json(responseData, { status: 201 });
 
