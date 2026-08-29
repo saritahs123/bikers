@@ -242,13 +242,22 @@ export default function ReceptionDetailView({ recepcionId, onBack }) {
   const fotosEvidencia = (data.checklist || []).filter((ch) => ch.evidencia_foto);
   
   // Real DB value: null if not converted
-  const hasLinkedOT = Boolean(data.convertido_orden_id);
-  const otIdText = hasLinkedOT
-    ? `OT-2026-${String(data.convertido_orden_id).padStart(4, "0")}`
-    : null;
+  const hasLinkedOT = Boolean(data.convertido_orden_id || data.codigo_orden);
+  const otIdText = data.codigo_orden || (data.convertido_orden_id ? `OT #${data.convertido_orden_id}` : null);
+  const isLocked = Boolean(data.estado?.permite_edicion === false || data.convertido_orden_id);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
+      {/* Locked State Banner */}
+      {isLocked && (
+        <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs flex items-center gap-2.5">
+          <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
+          <span className="font-medium">
+            Esta recepción está confirmada y su información se encuentra bloqueada para garantizar la trazabilidad documental.
+          </span>
+        </div>
+      )}
+
       {/* 1. Header & Actions */}
       <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-800">
         <div className="flex items-center gap-4">
@@ -262,7 +271,7 @@ export default function ReceptionDetailView({ recepcionId, onBack }) {
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20">
-                {data.codigo_recepcion || "RC-2026-0001"}
+                {data.codigo_recepcion || "—"}
               </span>
               <span className="text-xs font-medium text-slate-300 bg-slate-800 px-2.5 py-1 rounded-lg">
                 {data.estado?.nombre || "RECIBIDA"}
@@ -282,6 +291,11 @@ export default function ReceptionDetailView({ recepcionId, onBack }) {
                 {data.bicicleta?.marca || "Bicicleta"} {data.bicicleta?.modelo || ""}{" "}
                 {data.bicicleta?.ano ? `(${data.bicicleta.ano})` : ""}
               </span>
+              {data.usuario_receptor?.nombre_completo && (
+                <span className="flex items-center gap-1 border-l border-slate-800 pl-3 text-slate-400">
+                  <span className="text-slate-500">Receptor:</span> {data.usuario_receptor.nombre_completo}
+                </span>
+              )}
             </p>
           </div>
         </div>
@@ -302,17 +316,17 @@ export default function ReceptionDetailView({ recepcionId, onBack }) {
             <button
               type="button"
               onClick={() =>
-                alert("Acción de navegación vinculada al Módulo de Órdenes de Trabajo (Bloque 2).")
+                alert(`Navegación a la Orden de Trabajo ${otIdText}.`)
               }
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-400 hover:bg-emerald-300 text-slate-950 rounded-xl text-xs font-bold transition-all shadow-lg shadow-emerald-400/20 cursor-pointer"
-              title="Función del Módulo de Órdenes de Trabajo (Bloque 2)"
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-400 hover:bg-emerald-300 text-slate-950 rounded-xl text-xs font-bold transition-all shadow-lg shadow-emerald-400/20 cursor-pointer font-mono"
+              title="Ir a la Orden de Trabajo vinculada"
             >
               VER {otIdText}
               <ArrowRight className="w-4 h-4" />
             </button>
           ) : (
             <span className="flex items-center gap-1.5 px-3 py-2 bg-slate-800/80 text-slate-400 border border-slate-700 rounded-xl text-xs font-medium select-none">
-              SIN OT VINCULADA
+              Sin orden de trabajo asociada
             </span>
           )}
         </div>
@@ -839,7 +853,7 @@ export default function ReceptionDetailView({ recepcionId, onBack }) {
                 />
               </div>
 
-              <div className="p-4 bg-slate-950/60 border border-slate-800 rounded-xl grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+              <div className="p-4 bg-slate-950/60 border border-slate-800 rounded-xl grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
                 <div className="flex flex-col sm:flex-row justify-between sm:justify-start gap-1 sm:gap-2">
                   <span className="text-slate-400">Tipo de Firma:</span>
                   <span className="text-slate-200 font-medium">{data.firma.tipo_firma || "—"}</span>
@@ -849,6 +863,10 @@ export default function ReceptionDetailView({ recepcionId, onBack }) {
                   <span className="text-emerald-400 font-medium">
                     {data.firma.terminos_aceptados ? "Aceptados" : "No Aceptados"}
                   </span>
+                </div>
+                <div className="flex flex-col sm:flex-row justify-between sm:justify-start gap-1 sm:gap-2">
+                  <span className="text-slate-400">Versión:</span>
+                  <span className="text-slate-300 font-mono font-medium">{data.firma.version_terminos || "LEGACY_UNVERSIONED"}</span>
                 </div>
                 <div className="flex flex-col sm:flex-row justify-between sm:justify-start gap-1 sm:gap-2">
                   <span className="text-slate-400">Fecha de Firma:</span>

@@ -1,8 +1,10 @@
 "use client";
 import React, { useRef, useState, useEffect } from "react";
 import { X, Check, RotateCcw, AlertTriangle, ShieldCheck } from "lucide-react";
+import { getCurrentReceptionTerms } from "@/lib/workshop/receptionTerms";
 
 export default function DigitalSignatureCanvasModal({ isOpen, onClose, onConfirm }) {
+  const currentTerms = getCurrentReceptionTerms();
   const canvasRef = useRef(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasSigned, setHasSigned] = useState(false);
@@ -102,7 +104,11 @@ export default function DigitalSignatureCanvasModal({ isOpen, onClose, onConfirm
     const canvas = canvasRef.current;
     if (!canvas) return;
     const dataUrl = canvas.toDataURL("image/png");
-    onConfirm({ firma_digital: dataUrl, terminos_aceptados: terminosAceptados });
+    onConfirm({
+      firma_digital: dataUrl,
+      terminos_aceptados: terminosAceptados,
+      version_terminos: currentTerms.version
+    });
     onClose();
   };
 
@@ -177,7 +183,7 @@ export default function DigitalSignatureCanvasModal({ isOpen, onClose, onConfirm
               className="mt-0.5 w-4 h-4 rounded border-slate-500 text-emerald-500 focus:ring-emerald-500/20 bg-slate-950 cursor-pointer"
             />
             <span className="text-xs text-slate-200 group-hover:text-white transition-colors leading-relaxed font-medium">
-              El cliente declara haber entregado la bicicleta en las condiciones descritas en el checklist y acepta los términos del servicio de taller.
+              {currentTerms.text}
             </span>
           </label>
 

@@ -26,6 +26,7 @@ import ReceptionChecklistModal from "./ReceptionChecklistModal";
 export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreated }) {
   const router = useRouter();
   const navigationStartedRef = useRef(false);
+  const idempotencyKeyRef = useRef(null);
 
   // Initial Data & Catalog States
   const [loadingInit, setLoadingInit] = useState(true);
@@ -105,8 +106,15 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
 
   useEffect(() => {
     if (isOpen) {
+      if (!idempotencyKeyRef.current) {
+        idempotencyKeyRef.current = typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : ("rec_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9));
+      }
       navigationStartedRef.current = false;
       loadInitialData();
+    } else {
+      idempotencyKeyRef.current = null;
     }
   }, [isOpen]);
 
@@ -564,6 +572,7 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
           evidencia_foto: Boolean(c.object_key || c.upload_token || c.s3_key)
         })),
         generar_orden_trabajo: generarOrdenTrabajo,
+        idempotency_key: idempotencyKeyRef.current,
         orden_trabajo: generarOrdenTrabajo
           ? {
               prioridad_id: prioridadId ? parseInt(prioridadId, 10) : null,

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
 import { recordUserActivity, recordUserAudit } from "@/lib/auditLogger";
+import { CURRENT_RECEPTION_TERMS_VERSION, isValidReceptionTermsVersion } from "@/lib/workshop/receptionTerms";
 
 function cleanFecha(val: any) {
   if (!val || typeof val !== "string" || !val.trim()) return null;
@@ -181,8 +182,9 @@ export async function GET(req: Request) {
 
 // POST /api/taller/recepciones
 export async function POST(req: NextRequest) {
+  let session: any = null;
   try {
-    const session = await getWorkshopSession();
+    session = await getWorkshopSession();
     if (!session || !session.usuario_id) {
       return NextResponse.json(
         { error: "UNAUTHORIZED", message: "Sesión inválida o expirada." },
@@ -218,6 +220,8 @@ export async function POST(req: NextRequest) {
 
     const checklist: any[] = Array.isArray(body.checklist) ? body.checklist : [];
     const firma: any = body.firma || {};
+
+    const idempotency_key = (body.idempotency_key || body.request_id || req.headers.get("x-idempotency-key") || "").trim() || null;
 
     let servicios: any[] = Array.isArray(body.servicios) ? body.servicios : [];
     if (servicios.length === 0 && body.tipo_servicio_id) {
@@ -307,6 +311,18 @@ export async function POST(req: NextRequest) {
 
     // Signature data (Optional, non-blocking)
     const firma_digital = (firma.firma_digital || "").trim();
+    const hasSignaturePayload = Boolean(firma_digital);
+
+    // Validate Terms Version if signature is supplied
+    if (hasSignaturePayload) {
+      if (firma.version_terminos && !isValidReceptionTermsVersion(firma.version_terminos)) {
+        return NextResponse.json({
+          error: "TERMS_VERSION_MISMATCH",
+          message: "La versión de los términos y condiciones es incompatible o no está vigente en el servidor."
+        }, { status: 409 });
+      }
+    }
+
     const hasValidSignature = Boolean(
       firma_digital &&
       firma.terminos_aceptados &&
@@ -322,6 +338,32 @@ export async function POST(req: NextRequest) {
     const { withTransaction } = await import("@/lib/db");
 
     const resultData = await withTransaction(async (client) => {
+      // 0. Advisory Lock for strict concurrency serialization
+      await client.query(`SELECT pg_advisory_xact_lock(7004)`);
+
+      // Idempotency check under lock: if key already exists for this tenant, return previous result deterministically
+      if (idempotency_key) {
+        const existingKeyRes = await client.query(
+          `SELECT r.recepcion_id, r.codigo_recepcion, r.convertido_orden_id, ot.codigo_orden
+           FROM admin.recepciones r
+           LEFT JOIN admin.ordenes_trabajo ot ON r.convertido_orden_id = ot.orden_trabajo_id
+           WHERE r.idempotency_empresa_id = $1 AND r.idempotency_key = $2 AND (r.activo = true OR r.activo IS NULL) AND r.fecha_eliminacion IS NULL
+           LIMIT 1`,
+          [session.empresa_id, idempotency_key]
+        );
+
+        if (existingKeyRes.rows.length > 0) {
+          const row = existingKeyRes.rows[0];
+          return {
+            recepcion_id: row.recepcion_id,
+            codigo_recepcion: row.codigo_recepcion,
+            orden_trabajo_id: row.convertido_orden_id || null,
+            codigo_orden: row.codigo_orden || null,
+            is_replay: true
+          };
+        }
+      }
+
       // Client Check
       const clientRes = await client.query(
         `SELECT cliente_id FROM admin.clientes WHERE cliente_id = $1 AND fecha_eliminacion IS NULL LIMIT 1`,
@@ -341,7 +383,6 @@ export async function POST(req: NextRequest) {
       }
 
       // 1. Reception Code Generation & Atomic Insert via Sequence
-      await client.query(`SELECT pg_advisory_xact_lock(7004)`);
       const now = new Date();
       const yearMonth = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`;
       const recCodeSeqRes = await client.query(
@@ -353,35 +394,52 @@ export async function POST(req: NextRequest) {
       const nextRecSeq = recCodeSeqRes.rows[0].next_seq;
       const codigo_recepcion = `REC-${yearMonth}-${String(nextRecSeq).padStart(4, "0")}`;
 
-      // Resolve default Reception State
+      // Resolve Dynamic Reception State based on business outcome
+      let targetStateCode = "RECIBIDA";
+      if (generar_orden_trabajo) {
+        targetStateCode = "CONVERTIDA_OT";
+      } else if (hasValidSignature) {
+        targetStateCode = "CONFIRMADA";
+      } else if (checklist.length > 0) {
+        targetStateCode = "PENDIENTE_FIRMA";
+      }
+
       let estado_recepcion_id = 1;
       const estRecRes = await client.query(
-        `SELECT estado_recepcion_id FROM admin.estado_recepcion WHERE (codigo = 'INGRESADO' OR estado_recepcion_id = 1) ORDER BY estado_recepcion_id ASC LIMIT 1`
+        `SELECT estado_recepcion_id FROM admin.estado_recepcion WHERE codigo = $1 AND activo = true ORDER BY orden_visual ASC LIMIT 1`,
+        [targetStateCode]
       );
-      if (estRecRes.rows.length > 0) estado_recepcion_id = estRecRes.rows[0].estado_recepcion_id;
+      if (estRecRes.rows.length > 0) {
+        estado_recepcion_id = estRecRes.rows[0].estado_recepcion_id;
+      } else {
+        const fallbackEst = await client.query(
+          `SELECT estado_recepcion_id FROM admin.estado_recepcion WHERE activo = true ORDER BY orden_visual ASC LIMIT 1`
+        );
+        if (fallbackEst.rows.length > 0) estado_recepcion_id = fallbackEst.rows[0].estado_recepcion_id;
+      }
 
       const firstDiag = servicios.length > 0
         ? (servicios[0].diagnostico_preliminar || "").trim()
         : (body.diagnostico_preliminar || "").trim();
 
-      // Insert Reception using PostgreSQL sequence RETURNING recepcion_id
+      // Insert Reception using PostgreSQL sequence RETURNING recepcion_id and persisting server-scoped idempotency
       const recInsertRes = await client.query(
         `INSERT INTO admin.recepciones (
           cliente_id, bicicleta_id, estado_recepcion_id, tipo_servicio_id,
           codigo_recepcion, fecha_recepcion, diagnostico_preliminar,
           observaciones_cliente, observaciones_recepcion, presupuesto_estimado,
-          requiere_aprobacion, recibido_por_usuario_id, activo, fecha_creacion, usuario_creacion
+          requiere_aprobacion, recibido_por_usuario_id, idempotency_key, idempotency_empresa_id, activo, fecha_creacion, usuario_creacion
         ) VALUES (
           $1, $2, $3, $4,
           $5, NOW(), $6,
           $7, $8, $9,
-          $10, $11, true, NOW(), $11
+          $10, $11, $12, $13, true, NOW(), $11
         ) RETURNING recepcion_id`,
         [
           cliente_id, bicicleta_id, estado_recepcion_id, servicios[0]?.tipo_servicio_id || null,
           codigo_recepcion, firstDiag || null,
           observaciones_cliente || null, observaciones_recepcion || null, presupuesto_estimado_input,
-          requiere_aprobacion, session.usuario_id
+          requiere_aprobacion, session.usuario_id, idempotency_key, session.empresa_id
         ]
       );
       const recepcion_id = recInsertRes.rows[0].recepcion_id;
@@ -418,19 +476,19 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // 3. Insert Signature (Optional, if provided) using PostgreSQL sequence
+      // 3. Insert Signature (Optional, if provided) with version_terminos using PostgreSQL sequence
       if (hasValidSignature) {
         await client.query(
           `INSERT INTO admin.firma_recepcion (
             recepcion_id, cliente_id, tipo_firma, firma_digital, terminos_aceptados,
-            fecha_firma, ip_firma, navegador_firma, activo, fecha_creacion, usuario_creacion
+            version_terminos, fecha_firma, ip_firma, navegador_firma, activo, fecha_creacion, usuario_creacion
           ) VALUES (
             $1, $2, 'INGRESO', $3, true,
-            NOW(), $4, $5, true, NOW(), $6
+            $4, NOW(), $5, $6, true, NOW(), $7
           ) RETURNING firma_recepcion_id`,
           [
             recepcion_id, cliente_id, firma_digital,
-            ipFirma, userAgent, session.usuario_id
+            CURRENT_RECEPTION_TERMS_VERSION, ipFirma, userAgent, session.usuario_id
           ]
         );
       }
@@ -718,7 +776,7 @@ export async function POST(req: NextRequest) {
             recepcion_id,
             cliente_id,
             tipo_firma: "INGRESO",
-            version_terminos: "v1.0"
+            version_terminos: CURRENT_RECEPTION_TERMS_VERSION
           },
           motivo: "Firma digital de conformidad del cliente en recepción",
           resultado: "COMPLETADO",
@@ -731,9 +789,33 @@ export async function POST(req: NextRequest) {
         recepcion_id,
         codigo_recepcion,
         orden_trabajo_id: generatedWorkOrderInfo?.orden_trabajo_id || null,
-        codigo_orden: generatedWorkOrderInfo?.codigo_orden || null
+        codigo_orden: generatedWorkOrderInfo?.codigo_orden || null,
+        is_replay: false
       };
     });
+
+    if (resultData.is_replay) {
+      return NextResponse.json(
+        {
+          success: true,
+          is_replay: true,
+          message: resultData.orden_trabajo_id
+            ? "Recepción registrada exitosamente y Orden de Trabajo generada."
+            : "Recepción de bicicleta registrada exitosamente.",
+          recepcion_id: resultData.recepcion_id,
+          codigo_recepcion: resultData.codigo_recepcion,
+          orden_trabajo_id: resultData.orden_trabajo_id,
+          codigo_orden: resultData.codigo_orden,
+          data: {
+            recepcion_id: resultData.recepcion_id,
+            codigo_recepcion: resultData.codigo_recepcion,
+            orden_trabajo_id: resultData.orden_trabajo_id,
+            codigo_orden: resultData.codigo_orden
+          }
+        },
+        { status: 200 }
+      );
+    }
 
     await recordUserActivity({
       userId: session.usuario_id,
@@ -765,6 +847,45 @@ export async function POST(req: NextRequest) {
     );
   } catch (error: any) {
     console.error("Error in POST /api/taller/recepciones:", error);
+
+    // Graceful recovery for concurrent idempotency race conditions
+    if (error?.code === "23505" && (error?.constraint === "uq_recepciones_idempotency_empresa_key" || error?.message?.includes("uq_recepciones_idempotency"))) {
+      try {
+        const bodyFallback = await req.clone().json().catch(() => ({}));
+        const key = (bodyFallback.idempotency_key || bodyFallback.request_id || "").trim();
+        if (key && session?.empresa_id) {
+          const replayRows = await query<any>(
+            `SELECT r.recepcion_id, r.codigo_recepcion, r.convertido_orden_id, ot.codigo_orden
+             FROM admin.recepciones r
+             LEFT JOIN admin.ordenes_trabajo ot ON r.convertido_orden_id = ot.orden_trabajo_id
+             WHERE r.idempotency_empresa_id = $1 AND r.idempotency_key = $2 AND (r.activo = true OR r.activo IS NULL) AND r.fecha_eliminacion IS NULL
+             LIMIT 1`,
+            [session.empresa_id, key]
+          );
+          if (replayRows && replayRows.length > 0) {
+            return NextResponse.json({
+              success: true,
+              is_replay: true,
+              message: replayRows[0].convertido_orden_id
+                ? "Recepción registrada exitosamente y Orden de Trabajo generada."
+                : "Recepción de bicicleta registrada exitosamente.",
+              recepcion_id: replayRows[0].recepcion_id,
+              codigo_recepcion: replayRows[0].codigo_recepcion,
+              orden_trabajo_id: replayRows[0].convertido_orden_id || null,
+              codigo_orden: replayRows[0].codigo_orden || null,
+              data: {
+                recepcion_id: replayRows[0].recepcion_id,
+                codigo_recepcion: replayRows[0].codigo_recepcion,
+                orden_trabajo_id: replayRows[0].convertido_orden_id || null,
+                codigo_orden: replayRows[0].codigo_orden || null
+              }
+            }, { status: 200 });
+          }
+        }
+      } catch (err2) {
+        console.error("Error recovering idempotent response on 23505:", err2);
+      }
+    }
 
     const isDev = process.env.NODE_ENV !== "production";
 
