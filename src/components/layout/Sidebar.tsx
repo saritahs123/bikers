@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useState, useEffect, Suspense } from "react";
 
@@ -20,11 +19,13 @@ interface NavItem {
 }
 
 function SidebarContent({
-  mobileOpen,
-  setMobileOpen,
+  isOpen = false,
+  onClose = () => {},
+  onNavigate = () => {},
 }: {
-  mobileOpen?: boolean;
-  setMobileOpen?: (open: boolean) => void;
+  isOpen?: boolean;
+  onClose?: () => void;
+  onNavigate?: () => void;
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -32,13 +33,25 @@ function SidebarContent({
 
   const currentFullUrl = pathname + (searchParams?.toString() ? `?${searchParams.toString()}` : "");
 
+  // Close sidebar on Escape key
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
   const navItems: NavItem[] = [
-    { href: "/", icon: "dashboard", label: "DASHBOARD" },
     {
       id: "taller",
       icon: "build",
       label: "TALLER",
       submenu: [
+        { href: "/", label: "DASHBOARD" },
         { href: "/workshop", label: "PANEL OPERATIVO" },
         { href: "/workshop?view=list", label: "RECEPCIONES" },
         { href: "/workshop?view=work_orders", label: "ÓRDENES DE TRABAJO" },
@@ -83,6 +96,9 @@ function SidebarContent({
     const currentOrderId = searchParams?.get("order_id");
     const currentInvoiceOrderId = searchParams?.get("invoice_order_id");
 
+    if (subHref === "/") {
+      return pathname === "/";
+    }
     if (subHref === "/workshop") {
       return pathname === "/workshop" && !currentView && !currentAction && !currentId && !currentOrderId && !currentInvoiceOrderId;
     }
@@ -136,6 +152,7 @@ function SidebarContent({
       return (
         <div key={item.id} className="flex flex-col mb-2 font-mono">
           <button
+            type="button"
             onClick={() => toggleExpand(item.id!)}
             className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl border transition-all duration-200 w-full cursor-pointer group text-xs ${
               isGroupActive
@@ -187,6 +204,9 @@ function SidebarContent({
                     key={idx}
                     href={sub.href || "#"}
                     title={sub.label}
+                    onClick={() => {
+                      onNavigate();
+                    }}
                     className={`text-xs py-2 px-3 rounded-lg border transition-all duration-200 whitespace-nowrap truncate block uppercase ${
                       isSubActive
                         ? "bg-primary/10 border-primary/40 text-primary font-bold"
@@ -208,6 +228,9 @@ function SidebarContent({
       <Link
         key={item.href}
         href={item.href!}
+        onClick={() => {
+          onNavigate();
+        }}
         className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl border transition-all duration-200 cursor-pointer group font-mono text-xs mb-2 ${
           isActive
             ? "bg-surface-subtle border-primary/40 text-primary font-bold shadow-[inset_4px_0_0_var(--color-primary)]"
@@ -234,94 +257,48 @@ function SidebarContent({
 
   return (
     <>
-      {/* Desktop Fixed Sidebar */}
-      <aside className="hidden md:flex fixed left-0 top-0 h-full w-64 bg-surface border-r border-border flex-col p-4 z-50 font-mono transition-colors">
-        <div className="w-full flex items-center justify-center pt-2 pb-5">
-          <Link
-            href="/"
-            className="flex items-center justify-center transition-transform hover:scale-[1.02] focus:outline-none"
-            title="Bikers' Fort Core"
-          >
-            <Image
-              src="/logo.png"
-              alt="Bikers' Fort Logo"
-              width={165}
-              height={112}
-              className="w-[165px] h-auto object-contain"
-              priority
-            />
-          </Link>
-        </div>
+      {/* Mobile/Tablet Semi-transparent Backdrop Overlay */}
+      <div
+        className={`fixed inset-0 bg-black/70 backdrop-blur-sm z-40 md:hidden transition-opacity duration-300 ${
+          isOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+        }`}
+        onClick={onClose}
+        aria-hidden="true"
+      />
 
+      {/* Unified Responsive Sidebar (Desktop Fixed / Mobile Drawer) */}
+      <aside
+        className={`fixed left-0 top-0 h-full w-64 bg-surface border-r border-border flex flex-col pt-5 pb-4 px-4 z-45 font-mono transition-transform duration-300 ease-in-out shadow-2xl md:shadow-none ${
+          isOpen ? "translate-x-0" : "-translate-x-full pointer-events-none"
+        }`}
+        aria-label="Menú principal de navegación"
+      >
         <div className="flex-1 overflow-y-auto custom-scrollbar -mx-2 px-2">
           <nav className="space-y-1">
             {navItems.map((item) => renderItemCard(item))}
           </nav>
         </div>
       </aside>
-
-      {/* Mobile Navigation Drawer */}
-      {mobileOpen && (
-        <div className="md:hidden fixed inset-0 z-50 flex">
-          <div
-            className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity"
-            onClick={() => setMobileOpen && setMobileOpen(false)}
-          />
-          <aside className="relative w-64 max-w-[80vw] bg-surface border-r border-border flex flex-col p-4 z-50 font-mono h-full shadow-2xl animate-in slide-in-from-left duration-200">
-            <div className="flex items-center justify-between pt-1 pb-3 mb-3 border-b border-border">
-              <Link
-                href="/"
-                onClick={() => setMobileOpen && setMobileOpen(false)}
-                className="flex items-center transition-transform hover:scale-[1.02] focus:outline-none"
-                title="Bikers' Fort Core"
-              >
-                <Image
-                  src="/logo.png"
-                  alt="Bikers' Fort Logo"
-                  width={135}
-                  height={91}
-                  className="w-[135px] h-auto object-contain"
-                  priority
-                />
-              </Link>
-              <button
-                type="button"
-                onClick={() => setMobileOpen && setMobileOpen(false)}
-                className="text-foreground-muted hover:text-foreground p-1.5 rounded-lg border border-border hover:bg-hover transition-colors cursor-pointer"
-                aria-label="Cerrar menú"
-              >
-                <span className="material-symbols-outlined text-lg">close</span>
-              </button>
-            </div>
-            <div
-              className="flex-1 overflow-y-auto custom-scrollbar -mx-2 px-2"
-              onClick={() => setMobileOpen && setMobileOpen(false)}
-            >
-              <nav className="space-y-1">
-                {navItems.map((item) => renderItemCard(item))}
-              </nav>
-            </div>
-          </aside>
-        </div>
-      )}
     </>
   );
 }
 
 export function Sidebar({
-  mobileOpen,
-  setMobileOpen,
+  isOpen = false,
+  onClose = () => {},
+  onNavigate = () => {},
 }: {
-  mobileOpen?: boolean;
-  setMobileOpen?: (open: boolean) => void;
+  isOpen?: boolean;
+  onClose?: () => void;
+  onNavigate?: () => void;
 }) {
   return (
     <Suspense
       fallback={
-        <aside className="hidden md:flex fixed left-0 top-0 h-full w-64 bg-surface border-r border-border flex-col p-4 z-50 font-mono animate-pulse" />
+        <aside className="fixed left-0 top-0 h-full w-64 bg-surface border-r border-border flex-col p-4 z-45 font-mono animate-pulse -translate-x-full pointer-events-none" />
       }
     >
-      <SidebarContent mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} />
+      <SidebarContent isOpen={isOpen} onClose={onClose} onNavigate={onNavigate} />
     </Suspense>
   );
 }

@@ -3,7 +3,8 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Moon, Sun, Check } from "lucide-react";
+import Image from "next/image";
+import { Moon, Sun, Check, Menu } from "lucide-react";
 import { useTheme } from "@/context/ThemeContext";
 
 export interface AuthenticatedUser {
@@ -23,9 +24,11 @@ export interface AuthenticatedUser {
 
 export function TopBar({
   user,
+  isSidebarOpen = false,
   onMenuToggle,
 }: {
   user: AuthenticatedUser;
+  isSidebarOpen?: boolean;
   onMenuToggle?: () => void;
 }) {
   const router = useRouter();
@@ -61,16 +64,36 @@ export function TopBar({
   const accessLabel = user.identificador_principal || user.correo_electronico || "Sin identificador";
 
   return (
-    <header className="fixed top-0 right-0 h-16 ml-0 md:ml-64 w-full md:w-[calc(100%-16rem)] bg-surface border-b border-border flex justify-between items-center px-4 md:px-xl z-40 transition-colors">
-      <div className="flex items-center gap-md">
+    <header
+      className={`fixed top-0 right-0 h-16 bg-surface border-b border-border flex justify-between items-center px-4 md:px-xl z-30 transition-all duration-300 ease-in-out ${
+        isSidebarOpen ? "md:left-64 md:w-[calc(100%-16rem)] left-0 w-full" : "left-0 w-full"
+      }`}
+    >
+      <div className="flex items-center gap-3 md:gap-4 min-w-0">
         <button
           type="button"
           onClick={onMenuToggle}
-          className="md:hidden text-foreground-secondary hover:text-foreground p-2 rounded-lg hover:bg-hover transition-colors cursor-pointer flex items-center justify-center"
-          title="Abrir menú de navegación"
+          className="p-2 rounded-xl border border-border bg-surface-subtle text-foreground-secondary hover:text-primary hover:border-primary/50 hover:bg-hover transition-all cursor-pointer flex items-center justify-center shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/30 shrink-0"
+          title={isSidebarOpen ? "Ocultar menú" : "Mostrar menú"}
+          aria-label={isSidebarOpen ? "Ocultar menú de navegación" : "Mostrar menú de navegación"}
         >
-          <span className="material-symbols-outlined text-2xl">menu</span>
+          <Menu className="w-5 h-5 transition-colors" />
         </button>
+
+        <Link
+          href="/"
+          className="flex items-center transition-transform hover:scale-[1.02] focus:outline-none shrink-0"
+          title="Bikers' Fort Core"
+        >
+          <Image
+            src="/logo.png"
+            alt="Bikers' Fort Logo"
+            width={160}
+            height={50}
+            className="h-9 sm:h-11 md:h-12 w-auto object-contain shrink-0"
+            priority
+          />
+        </Link>
       </div>
 
       <div className="flex items-center gap-3">

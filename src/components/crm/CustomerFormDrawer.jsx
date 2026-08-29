@@ -23,7 +23,7 @@ import {
   validateRnc,
   validateDominicanPhone,
   normalizeDigits
-} from "./CustomersView";
+} from "@/lib/crm/customerValidation";
 
 export {
   formatCedula,

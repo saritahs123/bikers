@@ -140,7 +140,7 @@ export async function GET(
         ot.subtotal_general,
         COALESCE(ot.impuesto, 0) AS impuesto,
         COALESCE(ot.total_orden, ot.subtotal_general, 0) AS total_orden,
-        u_ot.empresa_id AS empresa_id,
+        c.empresa_id AS empresa_id,
 
         -- Customer Info
         COALESCE(cliente_ot.cliente_id, cliente_recepcion.cliente_id) AS cliente_id,

@@ -1,5 +1,6 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { COMPANY_LOGO_BASE64 } from "@/lib/assets/logoBase64";
 
 export interface InvoicePdfData {
   empresa: {
@@ -142,35 +143,21 @@ export function generateInvoicePdfDocument(data: InvoicePdfData): jsPDF {
   // 1. HEADER SECTION
   // ==========================================
 
-  // Draw Logo Vector (Bicycle Shape)
-  doc.setDrawColor(primaryGreen[0], primaryGreen[1], primaryGreen[2]);
-  doc.setLineWidth(0.8);
-  doc.circle(marginX + 4, currentY + 7, 3.5); // Rear wheel
-  doc.circle(marginX + 16, currentY + 7, 3.5); // Front wheel
-  doc.line(marginX + 4, currentY + 7, marginX + 10, currentY + 7); // Chainstay
-  doc.line(marginX + 4, currentY + 7, marginX + 8, currentY + 3); // Seatstay
-  doc.line(marginX + 10, currentY + 7, marginX + 8, currentY + 3); // Seat tube
-  doc.line(marginX + 10, currentY + 7, marginX + 14, currentY + 3.5); // Down tube
-  doc.line(marginX + 8, currentY + 3, marginX + 14, currentY + 3.5); // Top tube
-  doc.line(marginX + 16, currentY + 7, marginX + 14, currentY + 3.5); // Fork
-  doc.line(marginX + 14, currentY + 3.5, marginX + 14.5, currentY + 1.5); // Handlebar stem
-  doc.line(marginX + 13.5, currentY + 1.5, marginX + 15.5, currentY + 1.5); // Handlebar
-
-  // Company Brand Titles
-  doc.setTextColor(textDark[0], textDark[1], textDark[2]);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(14);
-  doc.text(data.empresa.nombre_comercial || "BIKERS' FORT CORE", marginX + 22, currentY + 4);
-
-  doc.setTextColor(brandGreen[0], brandGreen[1], brandGreen[2]);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.text(data.empresa.subtitulo || "Tienda y Taller de Bicicletas", marginX + 22, currentY + 8.5);
+  // 1. Draw Company Brand Logo
+  try {
+    doc.addImage(COMPANY_LOGO_BASE64, "PNG", marginX, currentY - 2, 28, 18.9);
+  } catch {
+    // Fallback text if image cannot be embedded
+    doc.setTextColor(textDark[0], textDark[1], textDark[2]);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.text(data.empresa?.nombre_comercial || "BIKERS' FORT CORE", marginX, currentY + 4);
+  }
 
   // Company Info Lines - Clean labels without emojis/Unicode icons
   doc.setTextColor(textGray[0], textGray[1], textGray[2]);
   doc.setFontSize(8);
-  let compY = currentY + 14;
+  let compY = currentY + 19;
 
   const companyLines = [
     data.empresa?.direccion ? `Dirección: ${data.empresa.direccion}` : null,
@@ -181,7 +168,7 @@ export function generateInvoicePdfDocument(data: InvoicePdfData): jsPDF {
 
   companyLines.forEach((line) => {
     doc.text(line, marginX, compY);
-    compY += 4.2;
+    compY += 4.0;
   });
 
   // Right Header: FACTURA title & Metadata (Without artificial invoice number)
@@ -265,11 +252,11 @@ export function generateInvoicePdfDocument(data: InvoicePdfData): jsPDF {
     doc.setTextColor(textGray[0], textGray[1], textGray[2]);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7.5);
-    doc.text(f.label, marginX + 4, leftY);
+    doc.text(String(f.label || ""), marginX + 4, leftY);
 
     doc.setTextColor(textDark[0], textDark[1], textDark[2]);
     doc.setFont("helvetica", "normal");
-    doc.text(f.val, marginX + 32, leftY, { maxWidth: colWidth - 36 });
+    doc.text(String(f.val || ""), marginX + 32, leftY, { maxWidth: colWidth - 36 });
     leftY += 4.5;
   });
 
@@ -288,11 +275,11 @@ export function generateInvoicePdfDocument(data: InvoicePdfData): jsPDF {
     doc.setTextColor(textGray[0], textGray[1], textGray[2]);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7.5);
-    doc.text(f.label, rightX + 4, rightCardY);
+    doc.text(String(f.label || ""), rightX + 4, rightCardY);
 
     doc.setTextColor(textDark[0], textDark[1], textDark[2]);
     doc.setFont("helvetica", "normal");
-    doc.text(f.val, rightX + 34, rightCardY, { maxWidth: colWidth - 38 });
+    doc.text(String(f.val || ""), rightX + 34, rightCardY, { maxWidth: colWidth - 38 });
     rightCardY += 4.5;
   });
 

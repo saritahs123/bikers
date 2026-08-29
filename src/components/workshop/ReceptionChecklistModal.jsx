@@ -123,6 +123,7 @@ export default function ReceptionChecklistModal({
 
     const currentEvaluated = getItemEvaluated(itemId);
     const oldObjectKey = currentEvaluated.object_key || currentEvaluated.s3_key;
+    const oldUploadToken = currentEvaluated.upload_token;
 
     setUploadingItem(itemId);
     setValidationError(null);
@@ -160,7 +161,7 @@ export default function ReceptionChecklistModal({
 
       // If there was an old key that got replaced, notify parent for cleanup queueing
       if (oldObjectKey && typeof onPhotoReplaced === "function") {
-        onPhotoReplaced(oldObjectKey);
+        onPhotoReplaced(oldObjectKey, oldUploadToken);
       }
 
       updateItem(itemId, {

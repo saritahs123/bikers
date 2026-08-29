@@ -474,6 +474,16 @@ export async function POST(req: NextRequest) {
             chkIdx + 1, session.usuario_id
           ]
         );
+
+        // Mark consolidated staging evidence as ASSOCIATED in durable registry
+        if (s3Path && s3Path.startsWith(`staging/emp_${session.empresa_id}/`)) {
+          await client.query(
+            `UPDATE admin.s3_staging_registry
+             SET estado = 'ASSOCIATED', fecha_consumo = NOW()
+             WHERE empresa_id = $1 AND object_key = $2`,
+            [session.empresa_id, s3Path]
+          ).catch(() => {});
+        }
       }
 
       // Process discarded / replaced staging keys within transaction
@@ -486,6 +496,13 @@ export async function POST(req: NextRequest) {
       for (const dKey of discardedKeys) {
         const cleanKey = String(dKey || "").trim();
         if (cleanKey && cleanKey.startsWith(expectedStagingPrefix)) {
+          await client.query(
+            `UPDATE admin.s3_staging_registry
+             SET estado = 'QUEUED'
+             WHERE empresa_id = $1 AND object_key = $2`,
+            [session.empresa_id, cleanKey]
+          ).catch(() => {});
+
           const { enqueueS3Cleanup } = await import("@/lib/storage/s3CleanupQueue");
           await enqueueS3Cleanup(client, {
             empresaId: session.empresa_id,

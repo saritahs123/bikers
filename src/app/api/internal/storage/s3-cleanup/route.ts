@@ -36,6 +36,7 @@ async function handleS3CleanupCron(req: Request) {
     // Return sanitized metrics without exposing S3 keys or internal credentials
     return NextResponse.json({
       success: true,
+      reaped: result.reaped || 0,
       processed: result.processed,
       succeeded: result.succeeded,
       failed: result.failed,

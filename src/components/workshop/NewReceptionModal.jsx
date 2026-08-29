@@ -28,6 +28,7 @@ import ReceptionChecklistModal from "./ReceptionChecklistModal";
 import DigitalSignatureCanvasModal from "./DigitalSignatureCanvasModal";
 import CustomerFormDrawer from "@/components/crm/CustomerFormDrawer";
 import BikeFormDrawer from "@/components/crm/BikeFormDrawer";
+import SecurityConfirmDialog from "@/components/security/SecurityConfirmDialog";
 
 export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreated }) {
   const router = useRouter();
@@ -62,12 +63,17 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
   const comboboxRef = useRef(null);
   const searchInputRef = useRef(null);
 
-  // Bicycle Selection State & Components for selected bike
+  // Bicycle Autocomplete & Selection State
+  const [bikeSearch, setBikeSearch] = useState("");
   const [clientBicycles, setClientBicycles] = useState([]);
   const [selectedBike, setSelectedBike] = useState(null);
+  const [isBikeDropdownOpen, setIsBikeDropdownOpen] = useState(false);
+  const [activeBikeIndex, setActiveBikeIndex] = useState(-1);
   const [loadingBikes, setLoadingBikes] = useState(false);
   const [bikeComponents, setBikeComponents] = useState([]);
   const [loadingComponents, setLoadingComponents] = useState(false);
+  const bikeComboboxRef = useRef(null);
+  const bikeSearchInputRef = useRef(null);
 
   // Multi-Service State & Draft Validation Errors
   const [serviciosList, setServiciosList] = useState([]);
@@ -120,8 +126,6 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
   const [isBikeDrawerOpen, setIsBikeDrawerOpen] = useState(false);
 
   // Confirmation Modals State
-  const [clientChangePendingObj, setClientChangePendingObj] = useState(null);
-  const [isClientChangeConfirmOpen, setIsClientChangeConfirmOpen] = useState(false);
   const [isCloseConfirmOpen, setIsCloseConfirmOpen] = useState(false);
 
   useEffect(() => {
@@ -138,11 +142,14 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
     }
   }, [isOpen]);
 
-  // Click outside to close client dropdown
+  // Click outside to close client & bike dropdowns
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (comboboxRef.current && !comboboxRef.current.contains(e.target)) {
         setIsDropdownOpen(false);
+      }
+      if (bikeComboboxRef.current && !bikeComboboxRef.current.contains(e.target)) {
+        setIsBikeDropdownOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -226,27 +233,36 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
     }
   };
 
+  // Handle photo replacement during checklist evaluation
+  const handleChecklistPhotoReplaced = (oldKey, oldToken) => {
+    if (oldKey) {
+      discardedStagingKeysRef.current.push({ object_key: oldKey, upload_token: oldToken });
+    }
+  };
+
   // Final Close: Clean staging photos and notify parent
   const performActualClose = async () => {
-    // Collect staging keys from checklistState & discarded
-    const stagingKeys = [];
+    // Collect staging entries from checklistState & discarded
+    const stagingEntries = [];
     checklistState.forEach((c) => {
       const key = c.object_key || c.s3_key || c.ruta_archivo;
       if (key && typeof key === "string" && key.startsWith("staging/")) {
-        stagingKeys.push(key);
+        stagingEntries.push({ object_key: key, upload_token: c.upload_token });
       }
     });
-    discardedStagingKeysRef.current.forEach((k) => {
-      if (k && typeof k === "string" && k.startsWith("staging/")) {
-        stagingKeys.push(k);
+    discardedStagingKeysRef.current.forEach((item) => {
+      const key = typeof item === "string" ? item : item?.object_key;
+      const token = typeof item === "object" ? item?.upload_token : null;
+      if (key && typeof key === "string" && key.startsWith("staging/")) {
+        stagingEntries.push({ object_key: key, upload_token: token });
       }
     });
 
-    if (stagingKeys.length > 0) {
+    if (stagingEntries.length > 0) {
       fetch("/api/taller/evidencias/cleanup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ staging_keys: stagingKeys })
+        body: JSON.stringify({ entries: stagingEntries })
       }).catch(() => {});
     }
 
@@ -256,7 +272,7 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
     onClose();
   };
 
-  // Select Client & Load Bicycles (With Dependent Data Protection)
+  // Select Client & Load Bicycles
   const handleSelectClient = (clientObj) => {
     if (!clientObj) return;
 
@@ -264,21 +280,6 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
     const newClientId = clientObj.id || clientObj.cliente_id;
 
     if (currentClientId && currentClientId === newClientId) {
-      setIsDropdownOpen(false);
-      return;
-    }
-
-    // Check if there are dependent items that would be lost
-    const hasDependentData = Boolean(
-      selectedBike ||
-      bikeComponents.length > 0 ||
-      serviciosList.some((s) => s.bicicleta_componente_id) ||
-      signatureData
-    );
-
-    if (hasDependentData) {
-      setClientChangePendingObj(clientObj);
-      setIsClientChangeConfirmOpen(true);
       setIsDropdownOpen(false);
       return;
     }
@@ -328,17 +329,12 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
     }
   };
 
-  const confirmClientChange = () => {
-    if (clientChangePendingObj) {
-      applyClientSelection(clientChangePendingObj);
-      setClientChangePendingObj(null);
-    }
-    setIsClientChangeConfirmOpen(false);
-  };
-
   // Select Bike & Load Components strictly belonging to this bike
   const handleSelectBike = async (bikeObj) => {
     setSelectedBike(bikeObj);
+    setBikeSearch(bikeObj ? `${bikeObj.marca || "Bicicleta"} ${bikeObj.modelo || ""}`.trim() : "");
+    setIsBikeDropdownOpen(false);
+    setActiveBikeIndex(-1);
     setBikeComponents([]);
     setCurrentBicicletaComponenteId("");
     setAttachedNewComponent(null);
@@ -363,24 +359,35 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
     }
   };
 
+  const handleClearBike = () => {
+    setSelectedBike(null);
+    setBikeSearch("");
+    setBikeComponents([]);
+    setCurrentBicicletaComponenteId("");
+    setAttachedNewComponent(null);
+    setIsAddingNewComponent(false);
+    setSignatureData(null);
+    setIsBikeDropdownOpen(false);
+    if (bikeSearchInputRef.current) {
+      bikeSearchInputRef.current.focus();
+    }
+  };
+
   const handleClearClient = () => {
-    if (isFormDirty()) {
-      setClientChangePendingObj({ id: null, nombre_completo: "" });
-      setIsClientChangeConfirmOpen(true);
-    } else {
-      setSelectedClient(null);
-      setClientSearch("");
-      setSelectedBike(null);
-      setClientBicycles([]);
-      setBikeComponents([]);
-      setCurrentBicicletaComponenteId("");
-      setAttachedNewComponent(null);
-      setIsAddingNewComponent(false);
-      setSignatureData(null);
-      setIsDropdownOpen(false);
-      if (searchInputRef.current) {
-        searchInputRef.current.focus();
-      }
+    setSelectedClient(null);
+    setClientSearch("");
+    setSelectedBike(null);
+    setBikeSearch("");
+    setClientBicycles([]);
+    setBikeComponents([]);
+    setCurrentBicicletaComponenteId("");
+    setAttachedNewComponent(null);
+    setIsAddingNewComponent(false);
+    setSignatureData(null);
+    setIsDropdownOpen(false);
+    setIsBikeDropdownOpen(false);
+    if (searchInputRef.current) {
+      searchInputRef.current.focus();
     }
   };
 
@@ -403,6 +410,28 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
   });
 
   const displayedClients = filteredClientsList.slice(0, 6);
+
+  const filteredBikesList = clientBicycles.filter((b) => {
+    if (!bikeSearch.trim()) return true;
+    const q = normalizeText(bikeSearch);
+    const marca = normalizeText(b.marca);
+    const modelo = normalizeText(b.modelo);
+    const sn = normalizeText(b.numero_serie_cuadro);
+    const qr = normalizeText(b.codigo_qr);
+    const tipo = normalizeText(b.tipo_bicicleta);
+    const color = normalizeText(b.color);
+
+    return (
+      marca.includes(q) ||
+      modelo.includes(q) ||
+      sn.includes(q) ||
+      qr.includes(q) ||
+      tipo.includes(q) ||
+      color.includes(q)
+    );
+  });
+
+  const displayedBikes = filteredBikesList.slice(0, 6);
 
   const getInitials = (name) => {
     if (!name) return "CL";
@@ -436,6 +465,32 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
       e.preventDefault();
       setIsDropdownOpen(false);
       setActiveIndex(-1);
+    }
+  };
+
+  const handleBikeKeyDown = (e) => {
+    if (!isBikeDropdownOpen) {
+      if (e.key === "ArrowDown" || e.key === "Enter") {
+        setIsBikeDropdownOpen(true);
+        return;
+      }
+    }
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveBikeIndex((prev) => (prev < displayedBikes.length - 1 ? prev + 1 : 0));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveBikeIndex((prev) => (prev > 0 ? prev - 1 : displayedBikes.length - 1));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (activeBikeIndex >= 0 && activeBikeIndex < displayedBikes.length) {
+        handleSelectBike(displayedBikes[activeBikeIndex]);
+      }
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setIsBikeDropdownOpen(false);
+      setActiveBikeIndex(-1);
     }
   };
 
@@ -641,12 +696,16 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
 
   // Quick Customer Creation Callback
   const handleCustomerCreated = (newClient) => {
-    setClients((prev) => [newClient, ...prev]);
-    applyClientSelection(newClient);
+    setIsCustomerDrawerOpen(false);
+    if (newClient) {
+      setClients((prev) => [newClient, ...prev]);
+      applyClientSelection(newClient);
+    }
   };
 
   // Quick Bicycle Creation Callback
   const handleBikeCreated = (newBikeId) => {
+    setIsBikeDrawerOpen(false);
     if (selectedClient) {
       const clientId = selectedClient.id || selectedClient.cliente_id;
       fetch(`/api/crm/bicicletas?cliente_id=${clientId}`)
@@ -654,21 +713,18 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
         .then((data) => {
           const bikesArr = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
           setClientBicycles(bikesArr);
-          const found = bikesArr.find((b) => Number(b.id || b.bicicleta_id) === Number(newBikeId));
+          const found = bikesArr.find(
+            (b) => Number(b.id || b.bicicleta_id) === Number(newBikeId?.id || newBikeId?.bicicleta_id || newBikeId)
+          );
           if (found) {
             handleSelectBike(found);
+          } else if (typeof newBikeId === "object" && newBikeId !== null) {
+            handleSelectBike(newBikeId);
           } else if (bikesArr.length > 0) {
             handleSelectBike(bikesArr[bikesArr.length - 1]);
           }
         })
         .catch((err) => console.error("Error refreshing bikes:", err));
-    }
-  };
-
-  // Handle Photo Replaced in Checklist
-  const handleChecklistPhotoReplaced = (oldKey) => {
-    if (oldKey && !discardedStagingKeysRef.current.includes(oldKey)) {
-      discardedStagingKeysRef.current.push(oldKey);
     }
   };
 
@@ -966,59 +1022,139 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
                         <Loader2 className="w-4 h-4 animate-spin text-primary" />
                         <span>Cargando bicicletas del cliente...</span>
                       </div>
-                    ) : clientBicycles.length === 0 ? (
-                      <div className="p-4 bg-surface border border-border rounded-xl text-center space-y-2">
-                        <p className="text-xs text-foreground-muted">Este cliente no tiene bicicletas registradas.</p>
-                        {canCreateBike ? (
-                          <button
-                            type="button"
-                            onClick={() => setIsBikeDrawerOpen(true)}
-                            className="px-3.5 py-2 bg-primary-button-bg text-primary-foreground font-bold rounded-xl text-xs inline-flex items-center gap-1.5 hover:bg-primary-button-hover transition-colors cursor-pointer"
-                          >
-                            <Bike size={14} />
-                            <span>Registrar Primera Bicicleta</span>
-                          </button>
-                        ) : (
-                          <p className="text-[11px] text-foreground-muted flex items-center justify-center gap-1">
-                            <Info size={13} className="text-info" />
-                            <span>No posees permisos para registrar bicicletas en el CRM.</span>
-                          </p>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
-                        {clientBicycles.map((bike) => {
-                          const isSelected =
-                            selectedBike &&
-                            Number(selectedBike.id || selectedBike.bicicleta_id) ===
-                              Number(bike.id || bike.bicicleta_id);
-                          return (
-                            <div
-                              key={bike.id || bike.bicicleta_id}
-                              onClick={() => handleSelectBike(bike)}
-                              className={`p-3 rounded-xl border cursor-pointer transition-all flex items-start gap-2.5 ${
-                                isSelected
-                                  ? "bg-primary-muted border-primary text-foreground shadow-sm"
-                                  : "bg-surface border-border text-foreground-secondary hover:bg-hover hover:text-foreground"
-                              }`}
-                            >
-                              <Bike size={18} className={isSelected ? "text-primary shrink-0" : "text-foreground-muted shrink-0"} />
-                              <div className="min-w-0 flex-1">
-                                <p className="font-bold text-xs truncate">
-                                  {bike.marca || "Bicicleta"} {bike.modelo || ""}
-                                </p>
-                                <p className="text-[11px] text-foreground-muted truncate">
-                                  {bike.tipo_bicicleta || "General"} {bike.color ? `• ${bike.color}` : ""}
-                                </p>
-                                {bike.numero_serie_cuadro && (
-                                  <p className="text-[10px] text-foreground-muted font-mono truncate">
-                                    S/N: {bike.numero_serie_cuadro}
+                    ) : !selectedBike ? (
+                      <div className="relative" ref={bikeComboboxRef}>
+                        <div className="relative">
+                          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-foreground-muted pointer-events-none" />
+                          <input
+                            ref={bikeSearchInputRef}
+                            type="text"
+                            value={bikeSearch}
+                            onChange={(e) => {
+                              setBikeSearch(e.target.value);
+                              setIsBikeDropdownOpen(true);
+                              setActiveBikeIndex(-1);
+                            }}
+                            onFocus={() => setIsBikeDropdownOpen(true)}
+                            onKeyDown={handleBikeKeyDown}
+                            placeholder={
+                              clientBicycles.length === 0
+                                ? "No hay bicicletas registradas para este cliente..."
+                                : "Buscar por marca, modelo, tipo, color o número de serie..."
+                            }
+                            className="w-full pl-10 pr-10 py-2.5 bg-surface border border-border rounded-xl text-xs text-foreground placeholder-foreground-muted focus:outline-none focus:border-primary transition-all font-mono"
+                          />
+                          <ChevronDown className="w-4 h-4 absolute right-3.5 top-1/2 -translate-y-1/2 text-foreground-muted pointer-events-none" />
+                        </div>
+
+                        {isBikeDropdownOpen && (
+                          <div className="absolute left-0 right-0 top-full mt-1.5 bg-card border border-border rounded-xl shadow-2xl z-50 overflow-hidden font-mono text-xs max-h-64 overflow-y-auto custom-scrollbar animate-in fade-in duration-100">
+                            {clientBicycles.length === 0 ? (
+                              <div className="p-4 text-center space-y-2">
+                                <p className="text-xs text-foreground-muted">Este cliente no tiene bicicletas registradas.</p>
+                                {canCreateBike ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setIsBikeDropdownOpen(false);
+                                      setIsBikeDrawerOpen(true);
+                                    }}
+                                    className="px-3.5 py-2 bg-primary-button-bg text-primary-foreground font-bold rounded-xl text-xs inline-flex items-center gap-1.5 hover:bg-primary-button-hover transition-colors cursor-pointer"
+                                  >
+                                    <Bike size={14} />
+                                    <span>Registrar Primera Bicicleta</span>
+                                  </button>
+                                ) : (
+                                  <p className="text-[11px] text-foreground-muted flex items-center justify-center gap-1">
+                                    <Info size={13} className="text-info" />
+                                    <span>No posees permisos para registrar bicicletas en el CRM.</span>
                                   </p>
                                 )}
                               </div>
+                            ) : displayedBikes.length === 0 ? (
+                              <div className="p-4 text-center space-y-2">
+                                <p className="font-semibold text-foreground">Sin coincidencias encontradas</p>
+                                {canCreateBike ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setIsBikeDropdownOpen(false);
+                                      setIsBikeDrawerOpen(true);
+                                    }}
+                                    className="mt-2 px-3.5 py-2 bg-primary-button-bg text-primary-foreground font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 mx-auto hover:bg-primary-button-hover transition-colors cursor-pointer"
+                                  >
+                                    <Plus size={14} />
+                                    <span>Registrar Bicicleta &quot;{bikeSearch}&quot;</span>
+                                  </button>
+                                ) : (
+                                  <p className="text-[11px] text-foreground-muted flex items-center justify-center gap-1">
+                                    <Info size={13} className="text-info" />
+                                    <span>No posees permisos para registrar bicicletas en el CRM.</span>
+                                  </p>
+                                )}
+                              </div>
+                            ) : (
+                              displayedBikes.map((bike, idx) => (
+                                <div
+                                  key={bike.id || bike.bicicleta_id}
+                                  onClick={() => handleSelectBike(bike)}
+                                  className={`p-3 flex items-center justify-between cursor-pointer border-b border-border-subtle last:border-0 transition-colors ${
+                                    activeBikeIndex === idx ? "bg-hover text-foreground" : "hover:bg-hover"
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-lg bg-surface border border-border flex items-center justify-center font-bold text-primary shrink-0">
+                                      <Bike size={16} />
+                                    </div>
+                                    <div>
+                                      <p className="font-bold text-foreground">
+                                        {bike.marca || "Bicicleta"} {bike.modelo || ""}
+                                      </p>
+                                      <p className="text-[11px] text-foreground-muted">
+                                        {bike.tipo_bicicleta || "General"} {bike.color ? `• ${bike.color}` : ""}{" "}
+                                        {bike.numero_serie_cuadro ? `• S/N: ${bike.numero_serie_cuadro}` : ""}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <span className="text-[10px] uppercase font-bold text-primary bg-primary-muted px-2 py-0.5 rounded">
+                                    {bike.tipo_bicicleta || "Bicicleta"}
+                                  </span>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="p-3.5 bg-surface border border-border rounded-xl flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-primary-muted border border-primary/30 flex items-center justify-center font-bold text-primary shrink-0 font-mono">
+                            <Bike size={20} />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-foreground text-xs">
+                                {selectedBike.marca || "Bicicleta"} {selectedBike.modelo || ""}
+                              </span>
+                              <span className="text-[10px] uppercase font-bold text-primary bg-primary-muted px-2 py-0.5 rounded">
+                                {selectedBike.tipo_bicicleta || "Bicicleta"}
+                              </span>
                             </div>
-                          );
-                        })}
+                            <p className="text-[11px] text-foreground-muted font-mono mt-0.5">
+                              {selectedBike.color ? `Color: ${selectedBike.color} | ` : ""}
+                              {selectedBike.numero_serie_cuadro ? `S/N: ${selectedBike.numero_serie_cuadro} | ` : ""}
+                              QR: {selectedBike.codigo_qr || "Sin QR"}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleClearBike}
+                          className="p-1.5 text-foreground-muted hover:text-error hover:bg-error-muted rounded-lg transition-colors cursor-pointer"
+                          title="Cambiar bicicleta"
+                        >
+                          <X size={16} />
+                        </button>
                       </div>
                     )}
                   </div>
@@ -1380,82 +1516,17 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
         }}
       />
 
-      {/* Confirmation Dialog: Customer Change (Loss of Dependent Data) */}
-      {isClientChangeConfirmOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="bg-card border border-border rounded-2xl p-5 max-w-md w-full shadow-2xl space-y-4 font-sans">
-            <div className="flex items-center gap-3 text-warning">
-              <div className="p-2.5 bg-warning-muted border border-warning/30 rounded-xl">
-                <AlertTriangle size={20} />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-foreground">¿Cambiar de Cliente?</h3>
-                <p className="text-xs text-foreground-muted">Se desvincularán los datos dependientes.</p>
-              </div>
-            </div>
-            <p className="text-xs text-foreground-secondary leading-relaxed">
-              Al cambiar de cliente se limpiará la bicicleta seleccionada, los componentes asociados y la firma
-              previa. ¿Deseas continuar?
-            </p>
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-border-subtle font-mono text-xs">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsClientChangeConfirmOpen(false);
-                  setClientChangePendingObj(null);
-                }}
-                className="px-3.5 py-2 bg-surface border border-border rounded-xl text-foreground-muted hover:text-foreground"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={confirmClientChange}
-                className="px-4 py-2 bg-warning text-black font-bold rounded-xl hover:brightness-110"
-              >
-                Confirmar Cambio
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Confirmation Dialog: Unsaved Changes on Exit */}
-      {isCloseConfirmOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="bg-card border border-border rounded-2xl p-5 max-w-md w-full shadow-2xl space-y-4 font-sans">
-            <div className="flex items-center gap-3 text-warning">
-              <div className="p-2.5 bg-warning-muted border border-warning/30 rounded-xl">
-                <AlertTriangle size={20} />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-foreground">Cambios Sin Guardar</h3>
-                <p className="text-xs text-foreground-muted">Hay datos ingresados en el formulario.</p>
-              </div>
-            </div>
-            <p className="text-xs text-foreground-secondary leading-relaxed">
-              Tienes cambios sin guardar en esta recepción. Si sales ahora, se descartarán los datos capturados y las
-              fotos temporales. ¿Deseas salir?
-            </p>
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-border-subtle font-mono text-xs">
-              <button
-                type="button"
-                onClick={() => setIsCloseConfirmOpen(false)}
-                className="px-3.5 py-2 bg-surface border border-border rounded-xl text-foreground-muted hover:text-foreground"
-              >
-                Continuar Editando
-              </button>
-              <button
-                type="button"
-                onClick={performActualClose}
-                className="px-4 py-2 bg-error text-white font-bold rounded-xl hover:brightness-110"
-              >
-                Descartar y Salir
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <SecurityConfirmDialog
+        isOpen={isCloseConfirmOpen}
+        onClose={() => setIsCloseConfirmOpen(false)}
+        onConfirm={performActualClose}
+        title="Cambios Sin Guardar"
+        description="Tienes cambios sin guardar en esta recepción. Si sales ahora, se descartarán los datos capturados y las fotos temporales. ¿Deseas salir?"
+        confirmLabel="Descartar y Salir"
+        cancelLabel="Continuar Editando"
+        variant="danger"
+      />
     </>
   );
 }
