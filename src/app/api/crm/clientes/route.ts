@@ -83,7 +83,15 @@ export async function GET() {
       fecha_creacion: r.fecha_creacion ? String(r.fecha_creacion).substring(0, 10) : null
     }));
 
-    return NextResponse.json(mapped);
+    return NextResponse.json(mapped, {
+      headers: {
+        "x-perm-ver": String(perms.puede_ver),
+        "x-perm-crear": String(perms.puede_crear),
+        "x-perm-editar": String(perms.puede_editar),
+        "x-perm-eliminar": String(perms.puede_eliminar),
+        "x-perm-exportar": String(perms.puede_exportar)
+      }
+    });
   } catch (error: any) {
     console.error("Error in GET /api/crm/clientes:", error);
     return NextResponse.json({ error: error.message || "Error al obtener clientes" }, { status: 500 });

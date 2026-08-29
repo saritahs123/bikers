@@ -193,6 +193,12 @@ export default function BikeFormDrawer({
         if (showToast) showToast(msg, "error");
         return false;
       }
+      if (!comp.estado_componente_id) {
+        setActiveTab("componentes");
+        const msg = `El componente #${i + 1} requiere que selecciones su estado.`;
+        if (showToast) showToast(msg, "error");
+        return false;
+      }
     }
 
     // 3. Draft Photos Validation

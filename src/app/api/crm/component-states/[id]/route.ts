@@ -21,7 +21,7 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
     const stateId = parseInt(id, 10);
 
     if (isNaN(stateId)) {
-      return NextResponse.json({ error: "ID de estado inválido." }, { status: 400 });
+      return NextResponse.json({ error: "INVALID_ID", message: "ID de estado inválido." }, { status: 400 });
     }
 
     const rows = await query(`
@@ -30,7 +30,7 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
     `, [stateId]);
 
     if (!rows || rows.length === 0) {
-      return NextResponse.json({ error: "Estado de componente no encontrado." }, { status: 404 });
+      return NextResponse.json({ error: "NOT_FOUND", message: "Estado de componente no encontrado." }, { status: 404 });
     }
 
     const r = rows[0];
@@ -67,7 +67,7 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
     const stateId = parseInt(id, 10);
 
     if (isNaN(stateId)) {
-      return NextResponse.json({ error: "ID de estado inválido." }, { status: 400 });
+      return NextResponse.json({ error: "INVALID_ID", message: "ID de estado inválido." }, { status: 400 });
     }
 
     const beforeRows = await query(`
@@ -76,7 +76,7 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
     `, [stateId]);
 
     if (!beforeRows || beforeRows.length === 0) {
-      return NextResponse.json({ error: "Estado de componente no encontrado." }, { status: 404 });
+      return NextResponse.json({ error: "NOT_FOUND", message: "Estado de componente no encontrado." }, { status: 404 });
     }
 
     const beforeState = beforeRows[0];
@@ -91,25 +91,25 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
 
     // Validations
     if (!codigo) {
-      return NextResponse.json({ error: "El Código del estado es obligatorio." }, { status: 400 });
+      return NextResponse.json({ error: "VALIDATION_ERROR", message: "El Código del estado es obligatorio." }, { status: 400 });
     }
     if (codigo.length > 50) {
-      return NextResponse.json({ error: "El Código no puede exceder los 50 caracteres." }, { status: 400 });
+      return NextResponse.json({ error: "VALIDATION_ERROR", message: "El Código no puede exceder los 50 caracteres." }, { status: 400 });
     }
     if (!nombre) {
-      return NextResponse.json({ error: "El Nombre del estado es obligatorio." }, { status: 400 });
+      return NextResponse.json({ error: "VALIDATION_ERROR", message: "El Nombre del estado es obligatorio." }, { status: 400 });
     }
     if (nombre.length > 100) {
-      return NextResponse.json({ error: "El Nombre no puede exceder los 100 caracteres." }, { status: 400 });
+      return NextResponse.json({ error: "VALIDATION_ERROR", message: "El Nombre no puede exceder los 100 caracteres." }, { status: 400 });
     }
     if (descripcion.length > 300) {
-      return NextResponse.json({ error: "La Descripción no puede exceder los 300 caracteres." }, { status: 400 });
+      return NextResponse.json({ error: "VALIDATION_ERROR", message: "La Descripción no puede exceder los 300 caracteres." }, { status: 400 });
     }
     if (isNaN(nivel_desgaste) || nivel_desgaste < 0 || nivel_desgaste > 100) {
-      return NextResponse.json({ error: "El Nivel de Desgaste es obligatorio y debe estar entre 0 y 100." }, { status: 400 });
+      return NextResponse.json({ error: "VALIDATION_ERROR", message: "El Nivel de Desgaste es obligatorio y debe estar entre 0 y 100." }, { status: 400 });
     }
     if (isNaN(orden_visual) || orden_visual < 0) {
-      return NextResponse.json({ error: "El Orden Visual es obligatorio y debe ser mayor o igual a cero." }, { status: 400 });
+      return NextResponse.json({ error: "VALIDATION_ERROR", message: "El Orden Visual es obligatorio y debe ser mayor o igual a cero." }, { status: 400 });
     }
 
     // Unique check for codigo
@@ -118,7 +118,7 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
       WHERE UPPER(codigo) = $1 AND estado_componente_id <> $2 AND fecha_eliminacion IS NULL
     `, [codigo, stateId]);
     if (checkCodigo && checkCodigo.length > 0) {
-      return NextResponse.json({ error: "Ya existe otro estado registrado con este Código." }, { status: 400 });
+      return NextResponse.json({ error: "STATE_ALREADY_EXISTS", message: "Ya existe otro estado registrado con este Código." }, { status: 400 });
     }
 
     // Unique check for nombre
@@ -127,7 +127,7 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
       WHERE LOWER(nombre) = $1 AND estado_componente_id <> $2 AND fecha_eliminacion IS NULL
     `, [nombre.toLowerCase(), stateId]);
     if (checkNombre && checkNombre.length > 0) {
-      return NextResponse.json({ error: "Ya existe otro estado registrado con este Nombre." }, { status: 400 });
+      return NextResponse.json({ error: "STATE_ALREADY_EXISTS", message: "Ya existe otro estado registrado con este Nombre." }, { status: 400 });
     }
 
     const sql = `
@@ -139,14 +139,15 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
         requiere_revision = $5,
         orden_visual = $6,
         activo = $7,
-        fecha_modificacion = NOW()
-      WHERE estado_componente_id = $8 AND fecha_eliminacion IS NULL
+        fecha_modificacion = NOW(),
+        usuario_modificacion = $8
+      WHERE estado_componente_id = $9 AND fecha_eliminacion IS NULL
       RETURNING *
     `;
 
-    const result = await query(sql, [codigo, nombre, descripcion || null, nivel_desgaste, requiere_revision, orden_visual, activo, stateId]);
+    const result = await query(sql, [codigo, nombre, descripcion || null, nivel_desgaste, requiere_revision, orden_visual, activo, session.usuario_id, stateId]);
     if (!result || result.length === 0) {
-      return NextResponse.json({ error: "No se pudo actualizar el estado de componente." }, { status: 404 });
+      return NextResponse.json({ error: "NOT_FOUND", message: "No se pudo actualizar el estado de componente." }, { status: 404 });
     }
 
     const updatedState = result[0];
@@ -197,7 +198,7 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
     const stateId = parseInt(id, 10);
 
     if (isNaN(stateId)) {
-      return NextResponse.json({ error: "ID de estado inválido." }, { status: 400 });
+      return NextResponse.json({ error: "INVALID_ID", message: "ID de estado inválido." }, { status: 400 });
     }
 
     const beforeRows = await query(`
@@ -206,7 +207,7 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
     `, [stateId]);
 
     if (!beforeRows || beforeRows.length === 0) {
-      return NextResponse.json({ error: "Estado de componente no encontrado." }, { status: 404 });
+      return NextResponse.json({ error: "NOT_FOUND", message: "Estado de componente no encontrado." }, { status: 404 });
     }
 
     const beforeState = beforeRows[0];
@@ -217,26 +218,43 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
       WHERE estado_componente_id = $1 AND fecha_eliminacion IS NULL
     `, [stateId]);
 
-    if (parseInt(usageCheck[0]?.count || "0", 10) > 0) {
+    const compCount = Number(usageCheck[0]?.count || 0);
+    if (compCount > 0) {
+      // Forensic log for blocked deletion attempt
+      await recordUserActivity({
+        userId: session.usuario_id,
+        modulo: "CRM",
+        evento: "COMPONENT_STATE_DELETE_BLOCKED",
+        descripcion: `Intento bloqueado de eliminar estado ${beforeState.nombre} (ID: ${stateId}) por tener ${compCount} componente(s) vinculado(s)`,
+        resultado: "DENEGADO",
+        req
+      });
+
       return NextResponse.json({
-        error: "No se puede eliminar el estado porque está siendo utilizado por componentes de bicicletas."
+        error: "COMPONENT_STATE_IN_USE",
+        code: "COMPONENT_STATE_IN_USE",
+        message: "No puedes eliminar este estado porque está siendo utilizado por componentes de bicicletas. Puedes desactivarlo en su lugar.",
+        dependencies: {
+          componentes: compCount
+        }
       }, { status: 409 });
     }
 
     const sql = `
       UPDATE admin.estado_componente SET
         activo = false,
-        fecha_eliminacion = NOW()
+        fecha_eliminacion = NOW(),
+        usuario_eliminacion = $2
       WHERE estado_componente_id = $1
       RETURNING *
     `;
 
-    const result = await query(sql, [stateId]);
+    const result = await query(sql, [stateId, session.usuario_id]);
     if (!result || result.length === 0) {
-      return NextResponse.json({ error: "Estado de componente no encontrado." }, { status: 404 });
+      return NextResponse.json({ error: "NOT_FOUND", message: "Estado de componente no encontrado." }, { status: 404 });
     }
 
-    // Forensic logging
+    // Forensic logging on success
     await recordUserActivity({
       userId: session.usuario_id,
       modulo: "CRM",
@@ -259,7 +277,10 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
       req
     });
 
-    return NextResponse.json({ message: "Estado de componente eliminado correctamente.", id: stateId });
+    return NextResponse.json({
+      message: "Estado de componente eliminado correctamente.",
+      id: stateId
+    });
 
   } catch (error: any) {
     console.error("Error in DELETE /api/crm/component-states/[id]:", error);

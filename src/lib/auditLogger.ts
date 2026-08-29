@@ -156,9 +156,9 @@ export async function recordUserActivity(params: RecordActivityParams): Promise<
 
     await query(
       `INSERT INTO admin.usuario_actividad 
-       (actividad_id, usuario_id, fecha_hora, modulo, evento, descripcion, resultado, direccion_ip, dispositivo)
+       (usuario_id, fecha_hora, modulo, evento, descripcion, resultado, direccion_ip, dispositivo)
        VALUES 
-       ((SELECT COALESCE(MAX(actividad_id), 0) + 1 FROM admin.usuario_actividad), $1, NOW(), $2, $3, $4, $5, $6, $7)`,
+       ($1, NOW(), $2, $3, $4, $5, $6, $7)`,
       [
         Number(userId),
         String(modulo).trim(),
@@ -210,9 +210,9 @@ export async function recordUserAudit(params: RecordAuditParams): Promise<boolea
 
     await query(
       `INSERT INTO admin.usuario_auditoria
-       (auditoria_id, usuario_id, admin_id, fecha_hora, accion, valor_anterior, valor_nuevo, motivo, resultado, direccion_ip, dispositivo)
+       (usuario_id, admin_id, fecha_hora, accion, valor_anterior, valor_nuevo, motivo, resultado, direccion_ip, dispositivo)
        VALUES
-       ((SELECT COALESCE(MAX(auditoria_id), 0) + 1 FROM admin.usuario_auditoria), $1, $2, NOW(), $3, $4, $5, $6, $7, $8, $9)`,
+       ($1, $2, NOW(), $3, $4, $5, $6, $7, $8, $9)`,
       [
         Number(userId),
         adminId ? Number(adminId) : null,

@@ -167,12 +167,62 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
       }, { status: 400 });
     }
 
+    // Verify category exists and is active
+    const catCheck = await query(`
+      SELECT categoria_componente_id, activo, fecha_eliminacion
+      FROM admin.categoria_componente
+      WHERE categoria_componente_id = $1
+    `, [categoria_componente_id]);
+
+    if (!catCheck || catCheck.length === 0 || catCheck[0].fecha_eliminacion) {
+      return NextResponse.json({
+        success: false,
+        error: "CATEGORY_NOT_FOUND",
+        message: "La categoría de componente seleccionada no existe.",
+        fields: { categoria_componente_id: "Inexistente" }
+      }, { status: 400 });
+    }
+
+    if (catCheck[0].activo === false) {
+      return NextResponse.json({
+        success: false,
+        error: "CATEGORY_INACTIVE",
+        message: "La categoría seleccionada está desactivada y no puede asignarse a nuevos componentes.",
+        fields: { categoria_componente_id: "Desactivada" }
+      }, { status: 400 });
+    }
+
     if (isNaN(estado_componente_id) || estado_componente_id <= 0) {
       return NextResponse.json({
         success: false,
         error: "VALIDATION_ERROR",
         message: "Selecciona el estado del componente.",
         fields: { estado_componente_id: "Requerido" }
+      }, { status: 400 });
+    }
+
+    // Verify state exists and is active
+    const stateCheck = await query(`
+      SELECT estado_componente_id, activo, fecha_eliminacion
+      FROM admin.estado_componente
+      WHERE estado_componente_id = $1
+    `, [estado_componente_id]);
+
+    if (!stateCheck || stateCheck.length === 0 || stateCheck[0].fecha_eliminacion) {
+      return NextResponse.json({
+        success: false,
+        error: "STATE_NOT_FOUND",
+        message: "El estado de componente seleccionado no existe.",
+        fields: { estado_componente_id: "Inexistente" }
+      }, { status: 400 });
+    }
+
+    if (stateCheck[0].activo === false) {
+      return NextResponse.json({
+        success: false,
+        error: "STATE_INACTIVE",
+        message: "El estado seleccionado está desactivado y no puede asignarse a nuevos componentes.",
+        fields: { estado_componente_id: "Desactivado" }
       }, { status: 400 });
     }
 
@@ -354,8 +404,48 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
       return NextResponse.json({ error: "Debe seleccionar una categoría de componente." }, { status: 400 });
     }
 
+    // Verify category if changed
+    if (beforeComp.categoria_componente_id !== categoria_componente_id) {
+      const catCheck = await query(`
+        SELECT categoria_componente_id, activo, fecha_eliminacion
+        FROM admin.categoria_componente
+        WHERE categoria_componente_id = $1
+      `, [categoria_componente_id]);
+
+      if (!catCheck || catCheck.length === 0 || catCheck[0].fecha_eliminacion) {
+        return NextResponse.json({ error: "La categoría de componente seleccionada no existe." }, { status: 400 });
+      }
+
+      if (catCheck[0].activo === false) {
+        return NextResponse.json({
+          error: "CATEGORY_INACTIVE",
+          message: "La categoría seleccionada está desactivada y no puede asignarse a componentes."
+        }, { status: 400 });
+      }
+    }
+
     if (isNaN(estado_componente_id) || estado_componente_id <= 0) {
       return NextResponse.json({ error: "Selecciona el estado del componente." }, { status: 400 });
+    }
+
+    // Verify state if changed
+    if (beforeComp.estado_componente_id !== estado_componente_id) {
+      const stateCheck = await query(`
+        SELECT estado_componente_id, activo, fecha_eliminacion
+        FROM admin.estado_componente
+        WHERE estado_componente_id = $1
+      `, [estado_componente_id]);
+
+      if (!stateCheck || stateCheck.length === 0 || stateCheck[0].fecha_eliminacion) {
+        return NextResponse.json({ error: "El estado de componente seleccionado no existe." }, { status: 400 });
+      }
+
+      if (stateCheck[0].activo === false) {
+        return NextResponse.json({
+          error: "STATE_INACTIVE",
+          message: "El estado seleccionado está desactivado y no puede asignarse a componentes."
+        }, { status: 400 });
+      }
     }
 
     const setClauses: string[] = [

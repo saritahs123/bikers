@@ -19,18 +19,21 @@ export async function GET() {
 
     const rows = await query(`
       SELECT 
-        categoria_componente_id AS id,
-        categoria_componente_id,
-        codigo,
-        nombre,
-        descripcion,
-        orden_visual,
-        activo,
-        fecha_creacion,
-        fecha_modificacion
-      FROM admin.categoria_componente
-      WHERE fecha_eliminacion IS NULL
-      ORDER BY orden_visual ASC, categoria_componente_id ASC
+        cc.categoria_componente_id AS id,
+        cc.categoria_componente_id,
+        cc.codigo,
+        cc.nombre,
+        cc.descripcion,
+        cc.orden_visual,
+        cc.activo,
+        cc.fecha_creacion,
+        cc.fecha_modificacion,
+        COUNT(bc.bicicleta_componente_id)::int as component_count
+      FROM admin.categoria_componente cc
+      LEFT JOIN admin.bicicleta_componentes bc ON cc.categoria_componente_id = bc.categoria_componente_id AND bc.fecha_eliminacion IS NULL
+      WHERE cc.fecha_eliminacion IS NULL
+      GROUP BY cc.categoria_componente_id
+      ORDER BY cc.orden_visual ASC, cc.categoria_componente_id ASC
     `);
 
     const mapped = (rows || []).map((r: any) => ({
@@ -42,11 +45,19 @@ export async function GET() {
       orden_visual: r.orden_visual !== undefined && r.orden_visual !== null ? Number(r.orden_visual) : 0,
       activo: r.activo !== false,
       estado: r.activo !== false ? 'ACTIVO' : 'INACTIVO',
+      component_count: Number(r.component_count || 0),
       fecha_creacion: r.fecha_creacion ? String(r.fecha_creacion).substring(0, 10) : null,
       fecha_modificacion: r.fecha_modificacion ? String(r.fecha_modificacion).substring(0, 10) : null
     }));
 
-    return NextResponse.json(mapped);
+    const response = NextResponse.json(mapped);
+    response.headers.set("x-perm-ver", String(permsCrm.puede_ver || permsBici.puede_ver));
+    response.headers.set("x-perm-crear", String(permsCrm.puede_crear));
+    response.headers.set("x-perm-editar", String(permsCrm.puede_editar));
+    response.headers.set("x-perm-eliminar", String(permsCrm.puede_eliminar));
+    response.headers.set("x-perm-exportar", String(permsCrm.puede_exportar));
+
+    return response;
   } catch (error: any) {
     console.error("Error in GET /api/crm/component-categories:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -75,22 +86,22 @@ export async function POST(req: Request) {
 
     // Validations
     if (!codigo) {
-      return NextResponse.json({ error: "El Código de la categoría es obligatorio." }, { status: 400 });
+      return NextResponse.json({ error: "VALIDATION_ERROR", message: "El Código de la categoría es obligatorio." }, { status: 400 });
     }
     if (codigo.length > 50) {
-      return NextResponse.json({ error: "El Código no puede exceder los 50 caracteres." }, { status: 400 });
+      return NextResponse.json({ error: "VALIDATION_ERROR", message: "El Código no puede exceder los 50 caracteres." }, { status: 400 });
     }
     if (!nombre) {
-      return NextResponse.json({ error: "El Nombre de la categoría es obligatorio." }, { status: 400 });
+      return NextResponse.json({ error: "VALIDATION_ERROR", message: "El Nombre de la categoría es obligatorio." }, { status: 400 });
     }
     if (nombre.length > 100) {
-      return NextResponse.json({ error: "El Nombre no puede exceder los 100 caracteres." }, { status: 400 });
+      return NextResponse.json({ error: "VALIDATION_ERROR", message: "El Nombre no puede exceder los 100 caracteres." }, { status: 400 });
     }
     if (descripcion.length > 300) {
-      return NextResponse.json({ error: "La Descripción no puede exceder los 300 caracteres." }, { status: 400 });
+      return NextResponse.json({ error: "VALIDATION_ERROR", message: "La Descripción no puede exceder los 300 caracteres." }, { status: 400 });
     }
     if (isNaN(orden_visual) || orden_visual < 0) {
-      return NextResponse.json({ error: "El Orden Visual debe ser un número entero mayor o igual a cero." }, { status: 400 });
+      return NextResponse.json({ error: "VALIDATION_ERROR", message: "El Orden Visual debe ser un número entero mayor o igual a cero." }, { status: 400 });
     }
 
     // Unique check for codigo
@@ -99,7 +110,7 @@ export async function POST(req: Request) {
       WHERE UPPER(codigo) = $1 AND fecha_eliminacion IS NULL
     `, [codigo]);
     if (checkCodigo && checkCodigo.length > 0) {
-      return NextResponse.json({ error: "Ya existe una categoría registrada con este Código." }, { status: 400 });
+      return NextResponse.json({ error: "CATEGORY_ALREADY_EXISTS", message: "Ya existe una categoría registrada con este Código." }, { status: 400 });
     }
 
     // Unique check for nombre
@@ -108,18 +119,18 @@ export async function POST(req: Request) {
       WHERE LOWER(nombre) = $1 AND fecha_eliminacion IS NULL
     `, [nombre.toLowerCase()]);
     if (checkNombre && checkNombre.length > 0) {
-      return NextResponse.json({ error: "Ya existe una categoría registrada con este Nombre." }, { status: 400 });
+      return NextResponse.json({ error: "CATEGORY_ALREADY_EXISTS", message: "Ya existe una categoría registrada con este Nombre." }, { status: 400 });
     }
 
     const sql = `
       INSERT INTO admin.categoria_componente (
-        codigo, nombre, descripcion, orden_visual, activo, fecha_creacion
+        codigo, nombre, descripcion, orden_visual, activo, fecha_creacion, usuario_creacion
       )
-      VALUES ($1, $2, $3, $4, $5, NOW())
+      VALUES ($1, $2, $3, $4, $5, NOW(), $6)
       RETURNING *
     `;
 
-    const result = await query(sql, [codigo, nombre, descripcion || null, orden_visual, activo]);
+    const result = await query(sql, [codigo, nombre, descripcion || null, orden_visual, activo, session.usuario_id]);
     const r = result[0] || {};
 
     const createdCategory = {
@@ -130,6 +141,7 @@ export async function POST(req: Request) {
       descripcion: r.descripcion || descripcion,
       orden_visual: r.orden_visual ?? orden_visual,
       activo: r.activo !== false,
+      component_count: 0,
       fecha_creacion: r.fecha_creacion || new Date().toISOString()
     };
 
@@ -158,7 +170,7 @@ export async function POST(req: Request) {
       req
     });
 
-    return NextResponse.json(createdCategory);
+    return NextResponse.json(createdCategory, { status: 201 });
 
   } catch (error: any) {
     console.error("Error in POST /api/crm/component-categories:", error);

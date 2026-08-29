@@ -265,12 +265,12 @@ export default function BicycleComponentsEditor({
       {isFormOpen && !readOnly && (
         <form
           onSubmit={handleSubmit}
-          className={`p-5 bg-[#161a21] border rounded-2xl space-y-4 shadow-xl animate-in fade-in duration-200 ${
-            editingComponent ? "border-[#bfce7f]" : "border-[#2d3748]"
+          className={`p-5 bg-card border rounded-2xl space-y-4 shadow-xl animate-in fade-in duration-200 ${
+            editingComponent ? "border-primary" : "border-border"
           }`}
         >
-          <div className="flex justify-between items-center border-b border-[#2d3748] pb-3">
-            <h4 className="font-bold text-[#bfce7f] uppercase text-xs flex items-center gap-2">
+          <div className="flex justify-between items-center border-b border-border pb-3">
+            <h4 className="font-bold text-primary uppercase text-xs flex items-center gap-2">
               {editingComponent ? <Edit2 size={16} /> : <Plus size={16} />}
               <span>
                 {editingComponent ? "EDITAR COMPONENTE DE BICICLETA" : "REGISTRAR NUEVO COMPONENTE DE BICICLETA"}
@@ -279,7 +279,7 @@ export default function BicycleComponentsEditor({
             <button
               type="button"
               onClick={handleCancelForm}
-              className="text-slate-400 hover:text-white p-1 rounded transition-colors cursor-pointer"
+              className="text-foreground-muted hover:text-foreground p-1 rounded transition-colors cursor-pointer"
             >
               <X size={16} />
             </button>
@@ -287,7 +287,7 @@ export default function BicycleComponentsEditor({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
             <div>
-              <label className="block text-slate-300 mb-1">
+              <label className="block text-foreground-muted mb-1">
                 Categoría <span className="text-rose-400">*</span>
               </label>
               <select
@@ -295,41 +295,43 @@ export default function BicycleComponentsEditor({
                 onChange={(e) =>
                   setComponentForm({ ...componentForm, categoria_componente_id: e.target.value })
                 }
-                className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#bfce7f]"
+                className="w-full bg-background border border-border rounded-xl px-3 py-2 text-foreground focus:outline-none focus:border-primary"
               >
                 <option value="">Selecciona una categoría...</option>
-                {categoriesList.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.nombre} ({cat.codigo})
-                  </option>
-                ))}
+                {categoriesList
+                  .filter((cat) => cat.activo !== false || String(cat.id) === String(componentForm.categoria_componente_id))
+                  .map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.nombre} ({cat.codigo}){cat.activo === false ? " — [Desactivada]" : ""}
+                    </option>
+                  ))}
               </select>
             </div>
 
             <div>
-              <label className="block text-slate-300 mb-1">Marca</label>
+              <label className="block text-foreground-muted mb-1">Marca</label>
               <input
                 type="text"
                 value={componentForm.marca}
                 onChange={(e) => setComponentForm({ ...componentForm, marca: e.target.value })}
                 placeholder="Ej: Fox, SRAM, Shimano"
-                className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#bfce7f]"
+                className="w-full bg-background border border-border rounded-xl px-3 py-2 text-foreground focus:outline-none focus:border-primary"
               />
             </div>
 
             <div>
-              <label className="block text-slate-300 mb-1">Modelo / Especificación</label>
+              <label className="block text-foreground-muted mb-1">Modelo / Especificación</label>
               <input
                 type="text"
                 value={componentForm.modelo}
                 onChange={(e) => setComponentForm({ ...componentForm, modelo: e.target.value })}
                 placeholder="Ej: 34 Float, XX1 AXS"
-                className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#bfce7f]"
+                className="w-full bg-background border border-border rounded-xl px-3 py-2 text-foreground focus:outline-none focus:border-primary"
               />
             </div>
 
             <div>
-              <label className="block text-slate-300 mb-1">
+              <label className="block text-foreground-muted mb-1">
                 Estado de Uso <span className="text-rose-400">*</span>
               </label>
               <select
@@ -337,27 +339,29 @@ export default function BicycleComponentsEditor({
                 onChange={(e) =>
                   setComponentForm({ ...componentForm, estado_componente_id: e.target.value })
                 }
-                className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#bfce7f]"
+                className="w-full bg-background border border-border rounded-xl px-3 py-2 text-foreground focus:outline-none focus:border-primary"
               >
                 <option value="">Selecciona el estado del componente...</option>
-                {statesList.map((est) => (
-                  <option key={est.id} value={est.id}>
-                    {est.nombre} ({est.nivel_desgaste}% desgaste)
-                  </option>
-                ))}
+                {statesList
+                  .filter((est) => est.activo !== false || String(est.id) === String(componentForm.estado_componente_id))
+                  .map((est) => (
+                    <option key={est.id} value={est.id}>
+                      {est.nombre} ({est.nivel_desgaste}% desgaste){est.activo === false ? " — [Desactivado]" : ""}
+                    </option>
+                  ))}
               </select>
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
             <div>
-              <label className="block text-slate-300 mb-1">Número de Serie</label>
+              <label className="block text-foreground-muted mb-1">Número de Serie</label>
               <input
                 type="text"
                 value={componentForm.numero_serie}
                 onChange={(e) => setComponentForm({ ...componentForm, numero_serie: e.target.value })}
                 placeholder="Ej: FOX34-20240001"
-                className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#bfce7f]"
+                className="w-full bg-background border border-border rounded-xl px-3 py-2 text-foreground focus:outline-none focus:border-primary"
               />
             </div>
 
@@ -365,14 +369,14 @@ export default function BicycleComponentsEditor({
               <button
                 type="button"
                 onClick={handleCancelForm}
-                className="px-4 py-2 rounded-xl border border-[#2d3748] bg-[#0e1117] text-slate-300 hover:text-white transition-colors cursor-pointer"
+                className="px-4 py-2 rounded-xl border border-border bg-surface text-foreground-muted hover:text-foreground transition-colors cursor-pointer"
               >
                 Cancelar
               </button>
               <button
                 type="submit"
                 disabled={loading}
-                className="px-5 py-2 rounded-xl bg-[#bfce7f] hover:bg-[#a9ba6b] text-[#1d1f18] font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-lg disabled:opacity-50"
+                className="px-5 py-2 rounded-xl bg-primary hover:opacity-90 text-primary-foreground font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-lg disabled:opacity-50"
               >
                 {loading ? <RefreshCw className="animate-spin" size={15} /> : (editingComponent ? <Edit2 size={15} /> : <Save size={15} />)}
                 <span>

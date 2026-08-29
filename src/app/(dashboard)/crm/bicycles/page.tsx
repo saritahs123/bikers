@@ -16,7 +16,7 @@ function BicyclesPageContent() {
 
   return (
     <BicyclesView
-      initialBikeId={(bikeId && !isNaN(bikeId)) ? bikeId : undefined}
+      initialBikeId={(bikeId && !isNaN(bikeId)) ? bikeId : null}
       initialTab={initialTab}
     />
   );
@@ -25,9 +25,9 @@ function BicyclesPageContent() {
 export default function BicyclesPage() {
   return (
     <Suspense fallback={
-      <div className="p-12 flex flex-col items-center justify-center bg-[#161a21] border border-[#2d3748] rounded-2xl text-slate-400 gap-3 font-mono min-h-[400px]">
-        <div className="w-6 h-6 border-2 border-[#bfce7f] border-t-transparent rounded-full animate-spin" />
-        <span className="text-xs font-bold text-slate-300">Cargando módulo de bicicletas...</span>
+      <div className="p-12 flex flex-col items-center justify-center bg-card border border-border rounded-2xl text-foreground-muted gap-3 font-mono min-h-[400px]">
+        <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        <span className="text-xs font-bold text-foreground">Cargando módulo de bicicletas...</span>
       </div>
     }>
       <BicyclesPageContent />

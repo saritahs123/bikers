@@ -100,7 +100,13 @@ export async function GET(req: Request) {
       fecha_creacion: r.fecha_creacion ? String(r.fecha_creacion).substring(0, 10) : null
     }));
 
-    return NextResponse.json(mapped);
+    const res = NextResponse.json(mapped);
+    res.headers.set("x-perm-ver", String(perms.puede_ver));
+    res.headers.set("x-perm-crear", String(perms.puede_crear));
+    res.headers.set("x-perm-editar", String(perms.puede_editar));
+    res.headers.set("x-perm-eliminar", String(perms.puede_eliminar));
+    res.headers.set("x-perm-exportar", String(perms.puede_exportar));
+    return res;
   } catch (error: any) {
     console.error("Error in GET /api/crm/bicicletas:", error);
     return NextResponse.json({ error: error?.message || "Error al obtener bicicletas" }, { status: 500 });

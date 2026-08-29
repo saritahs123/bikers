@@ -505,8 +505,14 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
     `, [clienteId]);
     const totalInvoices = Number(facCheck[0]?.total || 0);
 
+    const firmaCheck = await query(`
+      SELECT COUNT(*)::integer AS total FROM admin.firma_recepcion
+      WHERE cliente_id = $1 AND (activo = true OR activo IS NULL)
+    `, [clienteId]);
+    const totalFirmas = Number(firmaCheck[0]?.total || 0);
+
     // 3. Block physical deletion if dependencies exist -> Return semantic HTTP 409
-    if (totalBikes > 0 || totalOrders > 0 || totalReceptions > 0 || totalInvoices > 0) {
+    if (totalBikes > 0 || totalOrders > 0 || totalReceptions > 0 || totalInvoices > 0 || totalFirmas > 0) {
       // Record denied activity attempt
       await recordUserActivity({
         userId: session.usuario_id,
@@ -521,12 +527,13 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
         success: false,
         error: "CLIENT_HAS_DEPENDENCIES",
         code: "CLIENT_HAS_DEPENDENCIES",
-        message: "No puedes eliminar este cliente porque posee historial operativo o bicicletas asociadas. Puedes desactivarlo en su lugar.",
+        message: "No puedes eliminar este cliente porque posee historial operativo o registros asociados en el sistema. Puedes desactivarlo en su lugar.",
         dependencies: {
           bicicletas: totalBikes,
           ordenes: totalOrders,
           recepciones: totalReceptions,
-          facturas: totalInvoices
+          facturas: totalInvoices,
+          firmas: totalFirmas
         }
       }, { status: 409 });
     }

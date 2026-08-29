@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { query } from "@/lib/db";
+import { query, withTransaction } from "@/lib/db";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
 import { getPresignedDownloadUrl, deleteS3Object, verifyS3ObjectMetadata } from "@/lib/storage/s3";
+import { enqueueS3Cleanup, executeDurableS3Cleanup } from "@/lib/storage/s3CleanupQueue";
 import { recordUserActivity, recordUserAudit, computeDiff, sanitizeAuditPayload } from "@/lib/auditLogger";
 
 async function verifyBikeOwnership(bicicletaId: number, empresaId: number) {
@@ -431,14 +432,35 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
 
     const beforePhoto = photoRows[0];
     const keyCandidate = beforePhoto.ruta_archivo || '';
-    if (keyCandidate && !keyCandidate.startsWith("http") && !keyCandidate.startsWith("/storage") && keyCandidate.includes("/")) {
-      await deleteS3Object(keyCandidate);
-    }
+    const hasS3Key = Boolean(keyCandidate && !keyCandidate.startsWith("http") && !keyCandidate.startsWith("/storage") && keyCandidate.includes("/"));
 
-    await query(`
-      DELETE FROM admin.bicicleta_fotos
-      WHERE bicicleta_foto_id = $1 AND bicicleta_id = $2
-    `, [photoId, bicicletaId]);
+    let cleanupId: number | null = null;
+
+    // 1. Transactional DB metadata deletion with persistent S3 cleanup obligation
+    await withTransaction(async (client) => {
+      if (hasS3Key) {
+        cleanupId = await enqueueS3Cleanup(client, {
+          empresaId: session.empresa_id,
+          objectKey: keyCandidate,
+          modulo: "BICICLETA",
+          entidad: "bicicleta_fotos",
+          entidadId: photoId,
+          usuarioId: session.usuario_id
+        });
+      }
+
+      await client.query(`
+        DELETE FROM admin.bicicleta_fotos
+        WHERE bicicleta_foto_id = $1 AND bicicleta_id = $2
+      `, [photoId, bicicletaId]);
+    });
+
+    // 2. Post-commit durable S3 execution
+    let s3Status = "NOT_APPLICABLE";
+    if (cleanupId && hasS3Key) {
+      const s3Res = await executeDurableS3Cleanup(cleanupId, keyCandidate);
+      s3Status = s3Res.success ? "COMPLETED" : "PENDING_RETRY";
+    }
 
     // Forensic logging
     await recordUserActivity({
@@ -465,7 +487,11 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
       req
     });
 
-    return NextResponse.json({ message: "Fotografía eliminada correctamente." });
+    return NextResponse.json({
+      message: "Fotografía eliminada correctamente.",
+      s3Status,
+      cleanupId
+    });
 
   } catch (error: any) {
     console.error("Error in DELETE /api/crm/bicicletas/[id]/photos:", error);

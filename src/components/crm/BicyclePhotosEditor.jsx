@@ -270,20 +270,20 @@ export default function BicyclePhotosEditor({
       {/* Upload/Edit Form Box */}
       {!readOnly && (
         <div
-          className={`p-5 bg-[#161a21] border rounded-2xl space-y-4 transition-all shadow-xl ${
-            editingPhoto ? "border-[#bfce7f] shadow-[0_0_20px_rgba(191,206,127,0.15)]" : "border-[#2d3748]"
+          className={`p-5 bg-card border rounded-2xl space-y-4 transition-all shadow-xl ${
+            editingPhoto ? "border-primary shadow-[0_0_20px_rgba(191,206,127,0.15)]" : "border-border"
           }`}
         >
-          <div className="flex justify-between items-center border-b border-[#2d3748] pb-3">
-            <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+          <div className="flex justify-between items-center border-b border-border pb-3">
+            <h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
               {editingPhoto ? (
                 <>
-                  <Edit2 size={16} className="text-[#bfce7f]" />
+                  <Edit2 size={16} className="text-primary" />
                   <span>EDITAR DATOS DE LA FOTOGRAFÍA SELECCIONADA</span>
                 </>
               ) : (
                 <>
-                  <Upload size={16} className="text-[#bfce7f]" />
+                  <Upload size={16} className="text-primary" />
                   <span>CARGAR NUEVA FOTOGRAFÍA DE LA BICICLETA ({photos.length})</span>
                 </>
               )}
@@ -293,7 +293,7 @@ export default function BicyclePhotosEditor({
               <button
                 type="button"
                 onClick={handleCancelEdit}
-                className="px-3 py-1 bg-[#2d3748] hover:bg-slate-700 text-white font-bold rounded-lg text-[11px] flex items-center gap-1 transition-colors cursor-pointer"
+                className="px-3 py-1 bg-surface hover:bg-surface-elevated text-foreground font-bold rounded-lg text-[11px] flex items-center gap-1 transition-colors cursor-pointer border border-border"
               >
                 <X size={14} />
                 <span>Cerrar Edición</span>
@@ -303,12 +303,12 @@ export default function BicyclePhotosEditor({
 
           <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
             <div className="md:col-span-4">
-              <label className="block text-slate-300 mb-1">
+              <label className="block text-foreground-muted mb-1">
                 {editingPhoto ? "Imagen Registrada" : "Seleccionar Imagen (JPG, PNG, WEBP)"}
               </label>
               {editingPhoto ? (
-                <div className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-2 text-slate-400 text-xs truncate flex items-center gap-2">
-                  <ImageIcon size={14} className="text-[#bfce7f]" />
+                <div className="w-full bg-background border border-border rounded-xl px-3 py-2 text-foreground-muted text-xs truncate flex items-center gap-2">
+                  <ImageIcon size={14} className="text-primary" />
                   <span className="truncate">{editingPhoto.nombre_archivo || "foto.png"}</span>
                 </div>
               ) : (
@@ -316,28 +316,28 @@ export default function BicyclePhotosEditor({
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
                   onChange={handleFileSelect}
-                  className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-2 text-slate-300 text-xs focus:outline-none focus:border-[#bfce7f] cursor-pointer file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-[#bfce7f] file:text-[#1d1f18]"
+                  className="w-full bg-background border border-border rounded-xl px-3 py-2 text-foreground-muted text-xs focus:outline-none focus:border-primary cursor-pointer file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-primary file:text-primary-foreground"
                 />
               )}
             </div>
 
             <div className="md:col-span-3">
-              <label className="block text-slate-300 mb-1">Descripción / Módulo</label>
+              <label className="block text-foreground-muted mb-1">Descripción / Módulo</label>
               <input
                 type="text"
                 value={newPhotoDesc}
                 onChange={(e) => setNewPhotoDesc(e.target.value)}
                 placeholder="Ej: Vista lateral, Transmisión"
-                className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#bfce7f]"
+                className="w-full bg-background border border-border rounded-xl px-3 py-2 text-foreground focus:outline-none focus:border-primary"
               />
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-slate-300 mb-1">Tipo</label>
+              <label className="block text-foreground-muted mb-1">Tipo</label>
               <select
                 value={newPhotoType}
                 onChange={(e) => setNewPhotoType(e.target.value)}
-                className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-2 py-2 text-white focus:outline-none focus:border-[#bfce7f]"
+                className="w-full bg-background border border-border rounded-xl px-2 py-2 text-foreground focus:outline-none focus:border-primary"
               >
                 <option value="GENERAL">GENERAL</option>
                 <option value="PRINCIPAL">PRINCIPAL</option>

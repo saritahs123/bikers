@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { query, withTransaction } from "@/lib/db";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
 import { deleteS3Object } from "@/lib/storage/s3";
+import { enqueueS3Cleanup, executeDurableS3Cleanup } from "@/lib/storage/s3CleanupQueue";
 import { recordUserActivity, recordUserAudit, computeDiff, sanitizeAuditPayload } from "@/lib/auditLogger";
 
 // GET /api/crm/bicicletas/[id]
@@ -272,14 +273,14 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
     const beforeBike = bikeRows[0];
     const cliente_id = beforeBike.cliente_id;
 
-    // 2. Audit workshop dependencies (receptions, work orders)
+    // 2. Audit workshop dependencies (receptions, work orders, active or historical)
     const recCheck = await query(`
-      SELECT COUNT(*)::int AS total FROM admin.recepciones WHERE bicicleta_id = $1 AND (activo = true OR activo IS NULL)
+      SELECT COUNT(*)::int AS total FROM admin.recepciones WHERE bicicleta_id = $1
     `, [bicicletaId]);
     const totalReceptions = Number(recCheck[0]?.total || 0);
 
     const ordersCheck = await query(`
-      SELECT COUNT(*)::int AS total FROM admin.ordenes_trabajo WHERE bicicleta_id = $1 AND (activo = true OR activo IS NULL)
+      SELECT COUNT(*)::int AS total FROM admin.ordenes_trabajo WHERE bicicleta_id = $1
     `, [bicicletaId]);
     const totalOrders = Number(ordersCheck[0]?.total || 0);
 
@@ -315,8 +316,23 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
       .map(p => p.ruta_archivo || '')
       .filter(k => k && !k.startsWith("http") && !k.startsWith("/storage") && k.includes("/"));
 
-    // 5. Execute transactional DB deletion
+    const cleanupJobs: { cleanupId: number; key: string }[] = [];
+
+    // 5. Execute transactional DB deletion with persistent S3 cleanup enqueue
     await withTransaction(async (client) => {
+      // Enqueue S3 cleanup obligations durably BEFORE metadata is dropped
+      for (const key of s3KeysToDelete) {
+        const cleanupId = await enqueueS3Cleanup(client, {
+          empresaId: session.empresa_id,
+          objectKey: key,
+          modulo: "BICICLETA",
+          entidad: "bicicletas",
+          entidadId: bicicletaId,
+          usuarioId: session.usuario_id
+        });
+        cleanupJobs.push({ cleanupId, key });
+      }
+
       // Delete child photos in DB
       await client.query(`DELETE FROM admin.bicicleta_fotos WHERE bicicleta_id = $1`, [bicicletaId]);
       
@@ -346,12 +362,15 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
       }
     });
 
-    // 6. Post-COMMIT S3 cleanup (Non-blocking DB guarantee)
-    for (const key of s3KeysToDelete) {
-      try {
-        await deleteS3Object(key);
-      } catch (s3Err) {
-        console.warn("Could not delete S3 object post-commit:", key, s3Err);
+    // 6. Post-COMMIT durable S3 execution
+    let s3Succeeded = 0;
+    let s3Pending = 0;
+    for (const job of cleanupJobs) {
+      const s3Res = await executeDurableS3Cleanup(job.cleanupId, job.key);
+      if (s3Res.success) {
+        s3Succeeded++;
+      } else {
+        s3Pending++;
       }
     }
 
@@ -384,7 +403,13 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
     return NextResponse.json({
       success: true,
       message: "Bicicleta y sus componentes asociados eliminados correctamente.",
-      id: bicicletaId
+      id: bicicletaId,
+      s3Cleanup: s3Pending === 0 ? "ALL_COMPLETED" : "PENDING_RETRY",
+      s3Stats: {
+        total: cleanupJobs.length,
+        succeeded: s3Succeeded,
+        pending: s3Pending
+      }
     }, { status: 200 });
 
   } catch (error: any) {
