@@ -1,9 +1,30 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+
+async function verifyBikeOwnership(bicicletaId: number, empresaId: number) {
+  const rows = await query(`
+    SELECT b.bicicleta_id
+    FROM admin.bicicletas b
+    JOIN admin.clientes c ON b.cliente_id = c.cliente_id
+    WHERE b.bicicleta_id = $1 AND c.empresa_id = $2 AND b.fecha_eliminacion IS NULL
+  `, [bicicletaId, empresaId]);
+  return rows && rows.length > 0;
+}
 
 // GET /api/crm/bicicletas/[id]/history
 export async function GET(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
+    const session = await getWorkshopSession();
+    if (!session || !session.empresa_id) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("BICICLETA", session.usuario_id);
+    if (!perms.puede_ver) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para ver el historial técnico de bicicletas." }, { status: 403 });
+    }
+
     const { id } = await context.params;
     const bicicletaId = parseInt(id, 10);
 
@@ -11,7 +32,12 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
       return NextResponse.json({ error: "ID de bicicleta inválido." }, { status: 400 });
     }
 
-    // 1. Fetch work orders
+    const isOwned = await verifyBikeOwnership(bicicletaId, session.empresa_id);
+    if (!isOwned) {
+      return NextResponse.json({ error: "Bicicleta no encontrada." }, { status: 404 });
+    }
+
+    // 1. Fetch work orders with real mechanic aggregation
     const parentOrders = await query(`
       SELECT 
         ot.orden_trabajo_id AS id,
@@ -36,13 +62,30 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
         cc.nombre AS categoria_nombre,
         nest.nombre AS nuevo_estado_nombre,
         nest.codigo AS nuevo_estado_codigo,
-        nest.nivel_desgaste AS nuevo_estado_desgaste
+        nest.nivel_desgaste AS nuevo_estado_desgaste,
+        mo_agg.mecanicos_list,
+        mo_agg.minutos_total
       FROM admin.ordenes_trabajo ot
       LEFT JOIN admin.estado_orden_trabajo eot ON ot.estado_orden_id = eot.estado_orden_id
       LEFT JOIN admin.prioridad_orden_trabajo pot ON ot.prioridad_orden_id = pot.prioridad_orden_trabajo_id
       LEFT JOIN admin.bicicleta_componentes bc ON ot.bicicleta_componente_id = bc.bicicleta_componente_id
       LEFT JOIN admin.categoria_componente cc ON bc.categoria_componente_id = cc.categoria_componente_id
       LEFT JOIN admin.estado_componente nest ON ot.nuevo_estado_componente_id = nest.estado_componente_id
+      LEFT JOIN LATERAL (
+        SELECT 
+          COALESCE(SUM(mo.minutos_trabajados), 0) AS minutos_total,
+          ARRAY_AGG(
+            DISTINCT CASE 
+              WHEN TRIM(COALESCE(ui.nombre, '') || ' ' || COALESCE(ui.apellido, '')) <> '' 
+              THEN TRIM(COALESCE(ui.nombre, '') || ' ' || COALESCE(ui.apellido, ''))
+              ELSE 'Usuario no disponible'
+            END
+          ) AS mecanicos_list
+        FROM admin.orden_servicios os
+        JOIN admin.orden_servicio_mano_obra mo ON os.orden_servicio_id = mo.orden_servicio_id
+        LEFT JOIN admin.usuario_identidad ui ON mo.usuario_id = ui.usuario_id
+        WHERE os.orden_trabajo_id = ot.orden_trabajo_id AND (mo.activo = true OR mo.activo IS NULL)
+      ) mo_agg ON true
       WHERE ot.bicicleta_id = $1 AND (ot.activo = true OR ot.activo IS NULL)
       ORDER BY ot.fecha_recepcion DESC, ot.orden_trabajo_id DESC
     `, [bicicletaId]);
@@ -98,6 +141,25 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
       }
     }
 
+    const formatMecanicos = (arr: any) => {
+      let list: string[] = [];
+      if (Array.isArray(arr)) {
+        list = arr.filter((n: any) => typeof n === 'string' && n.trim() !== '');
+      }
+      if (list.length === 0) {
+        return { text: "Sin mecánico asignado", list: [] };
+      }
+      if (list.length === 1) {
+        return { text: list[0], list };
+      }
+      if (list.length === 2) {
+        return { text: `${list[0]}, ${list[1]}`, list };
+      }
+      const mainTwo = list.slice(0, 2).join(", ");
+      const rem = list.length - 2;
+      return { text: `${mainTwo} +${rem}`, list };
+    };
+
     // 3. Map final result
     const mapped = (parentOrders || []).map((r: any) => {
       let componente_nombre = null;
@@ -107,6 +169,7 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
 
       const orderId = Number(r.orden_trabajo_id);
       const servicios = subServicesMap[orderId] || [];
+      const mecInfo = formatMecanicos(r.mecanicos_list);
 
       return {
         id: r.orden_trabajo_id,
@@ -115,7 +178,7 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
         bicicleta_componente_id: r.bicicleta_componente_id ? Number(r.bicicleta_componente_id) : null,
         nuevo_estado_componente_id: r.nuevo_estado_componente_id ? Number(r.nuevo_estado_componente_id) : null,
         es_mantenimiento_general: r.es_mantenimiento_general === true,
-        salud_global_porcentaje: r.salud_global_porcentaje !== null && r.salud_global_porcentaje !== undefined ? Number(r.salud_global_porcentaje) : 80,
+        salud_global_porcentaje: r.salud_global_porcentaje !== null && r.salud_global_porcentaje !== undefined ? Number(r.salud_global_porcentaje) : null,
         kilometraje_servicio: r.kilometraje_ingreso !== null && r.kilometraje_ingreso !== undefined ? Number(r.kilometraje_ingreso) : 0,
         fecha_servicio: r.fecha_servicio ? String(r.fecha_servicio).substring(0, 10) : null,
         titulo_servicio: r.codigo_orden ? `${r.codigo_orden} — ${r.titulo_servicio || 'Orden de Trabajo'}` : (r.titulo_servicio || "Servicio Técnico"),
@@ -123,7 +186,8 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
         tipo_servicio: (r.tipo_servicio || "PREVENTIVO").toUpperCase(),
         estado_nombre: r.estado_nombre || "Recibida",
         costo_total: Number(r.costo_total || 0),
-        mecanico_responsable: "Taller Central",
+        mecanico_responsable: mecInfo.text,
+        mecanicos_lista: mecInfo.list,
         componente_nombre,
         nuevo_estado_nombre: r.nuevo_estado_nombre || null,
         nuevo_estado_codigo: r.nuevo_estado_codigo || null,
@@ -143,11 +207,26 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
 // POST /api/crm/bicicletas/[id]/history
 export async function POST(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
+    const session = await getWorkshopSession();
+    if (!session || !session.empresa_id) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("BICICLETA", session.usuario_id);
+    if (!perms.puede_crear && !perms.puede_editar) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para registrar servicios técnicos en bicicletas." }, { status: 403 });
+    }
+
     const { id } = await context.params;
     const bicicletaId = parseInt(id, 10);
 
     if (isNaN(bicicletaId)) {
       return NextResponse.json({ error: "ID de bicicleta inválido." }, { status: 400 });
+    }
+
+    const isOwned = await verifyBikeOwnership(bicicletaId, session.empresa_id);
+    if (!isOwned) {
+      return NextResponse.json({ error: "Bicicleta no encontrada o no pertenece a su empresa." }, { status: 404 });
     }
 
     const body = await req.json();
@@ -179,8 +258,8 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
       await query(`
         UPDATE admin.bicicleta_componentes
         SET estado_componente_id = $2::integer, fecha_modificacion = NOW()
-        WHERE bicicleta_componente_id = $1::integer
-      `, [bicicleta_componente_id, nuevo_estado_componente_id]);
+        WHERE bicicleta_componente_id = $1::integer AND bicicleta_id = $3::integer
+      `, [bicicleta_componente_id, nuevo_estado_componente_id, bicicletaId]);
     } 
     // Multi-Component Mode -> Update components
     else if (modo_registro === "GENERAL_MULTI" && subServicios.length > 0) {
@@ -191,25 +270,17 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
           await query(`
             UPDATE admin.bicicleta_componentes
             SET estado_componente_id = $2::integer, fecha_modificacion = NOW()
-            WHERE bicicleta_componente_id = $1::integer
-          `, [compId, stateId]);
+            WHERE bicicleta_componente_id = $1::integer AND bicicleta_id = $3::integer
+          `, [compId, stateId, bicicletaId]);
         }
       }
     }
 
-    // Calculate current remaining health of bike post-service
-    const healthRows = await query(`
-      SELECT ROUND(AVG(100 - COALESCE(est.nivel_desgaste, 0))) AS salud
-      FROM admin.bicicleta_componentes bc
-      LEFT JOIN admin.estado_componente est ON bc.estado_componente_id = est.estado_componente_id
-      WHERE bc.bicicleta_id = $1 AND (bc.activo = true OR bc.activo IS NULL) AND bc.fecha_eliminacion IS NULL
-    `, [bicicletaId]);
+    const explicitHealth = body.salud_global_porcentaje !== undefined && body.salud_global_porcentaje !== null
+      ? Math.round(Number(body.salud_global_porcentaje))
+      : null;
 
-    const calculatedHealth = healthRows?.[0]?.salud !== null && healthRows?.[0]?.salud !== undefined 
-      ? Math.round(Number(healthRows[0].salud)) 
-      : 80;
-
-    // Insert Parent Work Order with kilometraje_ingreso
+    // Insert Parent Work Order
     const sql = `
       INSERT INTO admin.ordenes_trabajo (
         orden_trabajo_id, codigo_orden, recepcion_id, cliente_id, bicicleta_id,
@@ -219,7 +290,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
       ) VALUES (
         (SELECT COALESCE(MAX(orden_trabajo_id), 0) + 1 FROM admin.ordenes_trabajo),
         $1, 1, $2::integer, $3::integer,
-        $4::integer, $5::integer, $6::boolean, $7::integer, $8::integer,
+        $4::integer, $5::integer, $6::boolean, $7, $8::integer,
         1, 1, $9, $10,
         $11::numeric, NOW(), true, NOW()
       )
@@ -233,7 +304,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
       modo_registro === "ESPECIFICO" ? bicicleta_componente_id : null,
       modo_registro === "ESPECIFICO" ? nuevo_estado_componente_id : null,
       es_mantenimiento_general,
-      calculatedHealth,
+      explicitHealth,
       currentKm,
       titulo_servicio,
       descripcion_trabajo || null,
@@ -246,12 +317,12 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
     if (modo_registro === "ESPECIFICO" && bicicleta_componente_id && nuevo_estado_componente_id) {
       await query(`
         INSERT INTO admin.orden_servicios (
-          orden_servicio_id, orden_trabajo_id, tipo_servicio_id, estado_orden_servicio_id,
+          orden_servicio_id, orden_trabajo_id, tipo_servicio_id, estado_orden_servicio_id, estado_aprobacion_id,
           secuencia, descripcion_servicio, cantidad, precio_unitario, subtotal,
           bicicleta_componente_id, nuevo_estado_componente_id, activo, fecha_registro
         ) VALUES (
           (SELECT COALESCE(MAX(orden_servicio_id), 0) + 1 FROM admin.orden_servicios),
-          $1::integer, 1, 1, 1, $2, 1, $3::numeric, $3::numeric,
+          $1::integer, 1, 1, 1, 1, $2, 1, $3::numeric, $3::numeric,
           $4::integer, $5::integer, true, NOW()
         )
       `, [
@@ -272,12 +343,12 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
         if (desc || compId) {
           await query(`
             INSERT INTO admin.orden_servicios (
-              orden_servicio_id, orden_trabajo_id, tipo_servicio_id, estado_orden_servicio_id,
+              orden_servicio_id, orden_trabajo_id, tipo_servicio_id, estado_orden_servicio_id, estado_aprobacion_id,
               secuencia, descripcion_servicio, cantidad, precio_unitario, subtotal,
               bicicleta_componente_id, nuevo_estado_componente_id, activo, fecha_registro
             ) VALUES (
               (SELECT COALESCE(MAX(orden_servicio_id), 0) + 1 FROM admin.orden_servicios),
-              $1::integer, 1, 1, $2::integer, $3, 1, $4::numeric, $4::numeric,
+              $1::integer, 1, 1, 1, $2::integer, $3, 1, $4::numeric, $4::numeric,
               $5::integer, $6::integer, true, NOW()
             )
           `, [ordenTrabajoId, seq++, desc || "Servicio Técnico", itemCosto, compId, stateId]);
@@ -305,6 +376,16 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
 // DELETE /api/crm/bicicletas/[id]/history
 export async function DELETE(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
+    const session = await getWorkshopSession();
+    if (!session || !session.empresa_id) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("BICICLETA", session.usuario_id);
+    if (!perms.puede_eliminar) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para eliminar órdenes de trabajo." }, { status: 403 });
+    }
+
     const { id } = await context.params;
     const bicicletaId = parseInt(id, 10);
     const { searchParams } = new URL(req.url);
@@ -312,6 +393,11 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
 
     if (isNaN(bicicletaId) || !historyIdParam) {
       return NextResponse.json({ error: "ID de bicicleta u orden inválido." }, { status: 400 });
+    }
+
+    const isOwned = await verifyBikeOwnership(bicicletaId, session.empresa_id);
+    if (!isOwned) {
+      return NextResponse.json({ error: "Bicicleta no encontrada o no pertenece a su empresa." }, { status: 404 });
     }
 
     const ordenId = parseInt(historyIdParam, 10);

@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import { query } from "@/lib/db";
 import { authorizeUserAccess } from "@/lib/userAuth";
+import { recordUserActivity, recordUserAudit } from "@/lib/auditLogger";
+import { hashSessionToken } from "@/lib/auth";
+import { revokeSession, revokeAllUserSessions } from "@/lib/sessionLifecycle";
 
 const SESSION_STALE_MINUTES = 30;
 
@@ -36,12 +39,20 @@ export async function GET(
     const userId = authResult.targetUserId;
     const cookieStore = await cookies();
     const callerSessionToken = cookieStore.get("session_token")?.value || "";
+    const callerTokenHash = callerSessionToken ? hashSessionToken(callerSessionToken) : "";
 
     const sql = `
-      SELECT *
-      FROM admin.usuario_sesion
-      WHERE usuario_id = $1
-      ORDER BY ultima_actividad DESC, fecha_inicio DESC
+      SELECT 
+        s.*,
+        COALESCE(
+          NULLIF(TRIM(ui.nombre || ' ' || ui.apellido), ''),
+          ui.correo_electronico,
+          'Admin #' || s.revocado_por::text
+        ) AS revocado_por_nombre
+      FROM admin.usuario_sesion s
+      LEFT JOIN admin.usuario_identidad ui ON s.revocado_por = ui.usuario_id
+      WHERE s.usuario_id = $1
+      ORDER BY s.fecha_inicio DESC, s.ultima_actividad DESC
     `;
 
     const rows = await query(sql, [userId]);
@@ -52,6 +63,7 @@ export async function GET(
       const startMs = r.fecha_inicio ? new Date(r.fecha_inicio).getTime() : nowMs;
       const lastActMs = r.ultima_actividad ? new Date(r.ultima_actividad).getTime() : startMs;
       const expMs = r.fecha_expiracion ? new Date(r.fecha_expiracion).getTime() : null;
+      const cierreMs = r.fecha_cierre ? new Date(r.fecha_cierre).getTime() : null;
 
       let derivedState = rawState;
       if (expMs && expMs < nowMs && rawState === 'ACTIVA') {
@@ -63,16 +75,22 @@ export async function GET(
         }
       }
 
-      const isCurrent = Boolean(callerSessionToken && r.token_identificador === callerSessionToken);
-      const endMsForDuration = (derivedState === 'ACTIVA' || derivedState === 'POSIBLEMENTE COLGADA') ? nowMs : lastActMs;
+      const isCurrent = Boolean(
+        callerTokenHash &&
+        r.token_identificador === callerTokenHash
+      );
+
+      const endMsForDuration = (derivedState === 'ACTIVA' || derivedState === 'POSIBLEMENTE COLGADA')
+        ? nowMs
+        : (cierreMs || lastActMs);
       const durationFormatted = formatDuration(startMs, endMsForDuration);
 
       return {
         id: r.sesion_id,
         sesion_id: r.sesion_id,
         usuario_id: r.usuario_id,
-        device: r.dispositivo_navegador || "Navegador Web",
-        dispositivo_navegador: r.dispositivo_navegador || "Navegador Web",
+        device: r.dispositivo_navegador || "No registrado",
+        dispositivo_navegador: r.dispositivo_navegador || "No registrado",
         ip: r.direccion_ip || "—",
         direccion_ip: r.direccion_ip || "—",
         location: r.ubicacion || "No disponible",
@@ -85,8 +103,8 @@ export async function GET(
         fecha_cierre: r.fecha_cierre || null,
         fecha_revocacion: r.fecha_revocacion || null,
         motivo_cierre: r.motivo_cierre || null,
-        motivo_revocacion: r.motivo_revocacion || null,
         revocado_por: r.revocado_por || null,
+        revocado_por_nombre: r.revocado_por_nombre || null,
         tipo_cierre: r.tipo_cierre || null,
         raw_estado: rawState,
         estado: derivedState,
@@ -124,54 +142,81 @@ export async function DELETE(
     const cookieStore = await cookies();
     const callerSessionToken = cookieStore.get("session_token")?.value || "";
 
-    const reqHeaders = await headers();
-    const ip = reqHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() || reqHeaders.get("x-real-ip") || "127.0.0.1";
-    const device = reqHeaders.get("user-agent") || "Navegador Web";
-
     if (body.revokeAll) {
-      const keepCurrentToken = body.keepCurrent !== false ? callerSessionToken : "";
-      
-      if (keepCurrentToken) {
-        await query(`
-          UPDATE admin.usuario_sesion
-          SET estado = 'REVOCADA', ultima_actividad = CURRENT_TIMESTAMP
-          WHERE usuario_id = $1 AND UPPER(estado) = 'ACTIVA' AND token_identificador != $2
-        `, [userId, keepCurrentToken]);
-      } else {
-        await query(`
-          UPDATE admin.usuario_sesion
-          SET estado = 'REVOCADA', ultima_actividad = CURRENT_TIMESTAMP
-          WHERE usuario_id = $1 AND UPPER(estado) = 'ACTIVA'
-        `, [userId]);
+      let excludeSessionId: number | undefined;
+      if (body.keepCurrent !== false && callerSessionToken) {
+        const callerHash = hashSessionToken(callerSessionToken);
+        const curRes = await query<{ sesion_id: number }>(
+          `SELECT sesion_id FROM admin.usuario_sesion WHERE token_identificador = $1 LIMIT 1`,
+          [callerHash]
+        );
+        if (curRes && curRes.length > 0) {
+          excludeSessionId = curRes[0].sesion_id;
+        }
       }
 
+      await revokeAllUserSessions({
+        targetUserId: userId,
+        adminId: callerUserId,
+        motivo: body.motivo || 'Revocación masiva de sesiones por administrador',
+        excludeSessionId
+      });
+
       // Record audit
-      await query(`
-        INSERT INTO admin.usuario_auditoria
-        (auditoria_id, usuario_id, admin_id, fecha_hora, accion, valor_anterior, valor_nuevo, motivo, resultado, direccion_ip, dispositivo)
-        VALUES
-        ((SELECT COALESCE(MAX(auditoria_id), 0) + 1 FROM admin.usuario_auditoria), $1, $2, CURRENT_TIMESTAMP, 'ALL_SESSIONS_REVOKED', 'Estado: ACTIVAS', 'Estado: REVOCADAS', 'Revocación masiva de sesiones por administrador', 'COMPLETADO', $3, $4)
-      `, [userId, callerUserId, ip, device]).catch(err => console.error("Audit error:", err));
+      await recordUserAudit({
+        userId,
+        adminId: callerUserId,
+        accion: 'ALL_SESSIONS_REVOKED',
+        valorAnterior: 'Estado: ACTIVAS',
+        valorNuevo: 'Estado: REVOCADAS',
+        motivo: body.motivo || 'Revocación masiva de sesiones por administrador',
+        resultado: 'COMPLETADO',
+        req
+      });
+
+      // Record activity
+      await recordUserActivity({
+        userId,
+        modulo: 'Seguridad',
+        evento: 'REVOCAR_TODAS_SESIONES',
+        descripcion: 'Revocación masiva de todas las sesiones activas por administrador',
+        resultado: 'Exitoso',
+        req
+      });
 
       return NextResponse.json({ success: true, message: "Todas las sesiones activas han sido revocadas exitosamente." });
     }
 
     if (body.sessionId) {
       const sessionIdNum = parseInt(String(body.sessionId).replace(/\D/g, ""), 10);
-      
-      await query(`
-        UPDATE admin.usuario_sesion
-        SET estado = 'REVOCADA', ultima_actividad = CURRENT_TIMESTAMP
-        WHERE usuario_id = $1 AND sesion_id = $2
-      `, [userId, sessionIdNum]);
+
+      await revokeSession({
+        sessionId: sessionIdNum,
+        adminId: callerUserId,
+        motivo: body.motivo || `Revocación administrativa de sesión ID #${sessionIdNum}`
+      });
 
       // Record audit
-      await query(`
-        INSERT INTO admin.usuario_auditoria
-        (auditoria_id, usuario_id, admin_id, fecha_hora, accion, valor_anterior, valor_nuevo, motivo, resultado, direccion_ip, dispositivo)
-        VALUES
-        ((SELECT COALESCE(MAX(auditoria_id), 0) + 1 FROM admin.usuario_auditoria), $1, $2, CURRENT_TIMESTAMP, 'SESSION_REVOKED', 'Estado: ACTIVA', 'Estado: REVOCADA', $3, 'COMPLETADO', $4, $5)
-      `, [userId, callerUserId, `Revocación de sesión ID ${sessionIdNum}`, ip, device]).catch(err => console.error("Audit error:", err));
+      await recordUserAudit({
+        userId,
+        adminId: callerUserId,
+        accion: 'SESSION_REVOKED',
+        valorAnterior: 'Estado: ACTIVA',
+        valorNuevo: 'Estado: REVOCADA',
+        motivo: body.motivo || `Revocación de sesión ID #${sessionIdNum}`,
+        resultado: 'COMPLETADO',
+        req
+      });
+
+      // Record activity
+      await recordUserActivity({
+        userId,
+        modulo: 'Seguridad',
+        evento: 'REVOCAR_SESION',
+        descripcion: `Revocación de sesión ID #${sessionIdNum} por administrador`,
+        resultado: 'Exitoso',
+        req
+      });
 
       return NextResponse.json({ success: true, message: "La sesión ha sido revocada exitosamente." });
     }

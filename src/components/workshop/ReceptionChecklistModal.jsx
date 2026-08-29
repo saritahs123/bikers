@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { X, Check, AlertCircle, Camera, Trash2 } from "lucide-react";
+import { X, Check, AlertCircle, Camera, Trash2, Loader2, Sparkles } from "lucide-react";
 
 export default function ReceptionChecklistModal({
   isOpen,
@@ -13,6 +13,7 @@ export default function ReceptionChecklistModal({
   onChange,
   onChangeChecklist,
   onSave,
+  onPhotoReplaced,
   recepcionId = null,
   recepcion_id = null
 }) {
@@ -37,7 +38,7 @@ export default function ReceptionChecklistModal({
 
   if (!isOpen) return null;
 
-  // Category ordering & formatting without "TODOS"
+  // Category ordering & formatting
   const CATEGORY_ORDER = [
     "CUADRO",
     "SUSPENSION",
@@ -67,6 +68,7 @@ export default function ReceptionChecklistModal({
       estado_checklist_id: null,
       observacion: "",
       requiere_trabajo: false,
+      object_key: null,
       upload_token: null,
       preview_url: null,
       filename: null
@@ -86,6 +88,7 @@ export default function ReceptionChecklistModal({
         estado_checklist_id: null,
         observacion: "",
         requiere_trabajo: false,
+        object_key: null,
         upload_token: null,
         preview_url: null,
         filename: null,
@@ -117,6 +120,10 @@ export default function ReceptionChecklistModal({
       setValidationError("La imagen excede el límite máximo de 5 MB.");
       return;
     }
+
+    const currentEvaluated = getItemEvaluated(itemId);
+    const oldObjectKey = currentEvaluated.object_key || currentEvaluated.s3_key;
+    const oldUploadToken = currentEvaluated.upload_token;
 
     setUploadingItem(itemId);
     setValidationError(null);
@@ -152,6 +159,11 @@ export default function ReceptionChecklistModal({
         throw new Error("No se pudo transferir la evidencia al almacenamiento S3.");
       }
 
+      // If there was an old key that got replaced, notify parent for cleanup queueing
+      if (oldObjectKey && typeof onPhotoReplaced === "function") {
+        onPhotoReplaced(oldObjectKey, oldUploadToken);
+      }
+
       updateItem(itemId, {
         object_key: presignData.objectKey,
         upload_token: presignData.uploadToken,
@@ -168,7 +180,14 @@ export default function ReceptionChecklistModal({
   };
 
   const removePhoto = (itemId) => {
+    const currentEvaluated = getItemEvaluated(itemId);
+    const oldObjectKey = currentEvaluated.object_key || currentEvaluated.s3_key;
+    if (oldObjectKey && typeof onPhotoReplaced === "function") {
+      onPhotoReplaced(oldObjectKey);
+    }
+
     updateItem(itemId, {
+      object_key: null,
       upload_token: null,
       preview_url: null,
       filename: null
@@ -203,181 +222,195 @@ export default function ReceptionChecklistModal({
   ).length;
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 p-4">
-      <div className="relative w-full max-w-4xl bg-[#0f172a] border-2 border-emerald-500/40 rounded-2xl shadow-[0_0_80px_rgba(0,0,0,0.95)] overflow-hidden flex flex-col max-h-[90vh] z-[10000] text-white">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 backdrop-blur-sm p-2 sm:p-4">
+      <div className="relative w-full max-w-4xl bg-card border border-border sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col h-full sm:h-auto sm:max-h-[90vh] z-[10000] text-foreground font-sans">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-[#162032]">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-border bg-surface shrink-0">
           <div>
-            <h3 className="text-base font-bold text-white uppercase tracking-wider">Checklist de Inspección de Recepción</h3>
-            <p className="text-xs text-slate-300 mt-0.5">Evalúe el estado inicial de componentes y adjunte fotos de evidencia previa.</p>
+            <h3 className="text-sm sm:text-base font-bold text-foreground uppercase tracking-wider">
+              Checklist de Inspección de Recepción
+            </h3>
+            <p className="text-xs text-foreground-muted mt-0.5 font-mono">
+              Evalúe el estado inicial de componentes y adjunte fotos de evidencia previa.
+            </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+            className="text-foreground-muted hover:text-foreground p-1.5 rounded-lg hover:bg-hover transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Validation Error Banner */}
+        {/* Validation Alert */}
         {validationError && (
-          <div className="px-6 py-2.5 bg-rose-500/10 border-b border-rose-500/20 text-rose-400 text-xs flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{validationError}</span>
-            </div>
+          <div className="px-5 py-2.5 bg-error-muted border-b border-error/20 flex items-center gap-2 text-xs text-error font-medium">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{validationError}</span>
           </div>
         )}
 
-        {/* Categories Tab Bar */}
-        <div className="flex items-center gap-2 px-6 py-3 border-b border-slate-800 bg-[#0f172a] overflow-x-auto custom-scrollbar">
-          {categories.map((cat) => (
-            <button
-              key={cat}
-              type="button"
-              onClick={() => {
-                setActiveCategory(cat);
-                setValidationError(null);
-              }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
-                activeCategory === cat
-                  ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
-              }`}
-            >
-              {getCategoryLabel(cat)}
-            </button>
-          ))}
+        {/* Category Tabs (Responsive Scroll) */}
+        <div className="flex gap-1.5 px-5 py-2.5 bg-surface border-b border-border overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden shrink-0">
+          {categories.map((cat) => {
+            const isActive = activeCategory === cat;
+            const itemsInCat = itemsCatalog.filter(i => i.categoria === cat);
+            const evaluatedInCat = itemsInCat.filter(i => {
+              const itemState = localItems.find(c => Number(c.item_checklist_id) === Number(i.item_checklist_id));
+              return itemState && itemState.estado_checklist_id !== null && itemState.estado_checklist_id !== undefined;
+            }).length;
+            const isCatComplete = itemsInCat.length > 0 && evaluatedInCat === itemsInCat.length;
+
+            return (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => {
+                  setActiveCategory(cat);
+                  setValidationError(null);
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold whitespace-nowrap flex items-center gap-1.5 transition-all cursor-pointer ${
+                  isActive
+                    ? "bg-primary-muted text-primary border border-primary/30"
+                    : "text-foreground-muted hover:text-foreground hover:bg-hover border border-transparent"
+                }`}
+              >
+                <span>{getCategoryLabel(cat)}</span>
+                {isCatComplete ? (
+                  <Check className="w-3.5 h-3.5 text-primary" />
+                ) : (
+                  <span className="text-[10px] text-foreground-muted">
+                    ({evaluatedInCat}/{itemsInCat.length})
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
-        {/* Checklist Grid Content */}
-        <div className="p-6 overflow-y-auto space-y-4 flex-1 bg-[#0f172a] custom-scrollbar">
-          <div className="grid grid-cols-1 gap-4">
-            {filteredItems.map((item) => {
-              const evalState = getItemEvaluated(item.item_checklist_id);
-              return (
-                <div
-                  key={item.item_checklist_id}
-                  className="p-4 bg-[#162032] border border-slate-800 rounded-xl space-y-3 hover:border-slate-700 transition-colors"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <span className="text-xs font-bold text-white uppercase tracking-wide">{item.nombre}</span>
-                      <span className="ml-2 text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded font-mono uppercase">
-                        {getCategoryLabel(item.categoria)}
-                      </span>
-                      {item.descripcion && (
-                        <p className="text-[11px] text-slate-400 mt-0.5">{item.descripcion}</p>
-                      )}
-                    </div>
+        {/* Items List (Responsive Stacked Cards on mobile & tablet) */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3 custom-scrollbar font-mono text-xs">
+          {filteredItems.map((item) => {
+            const evaluated = getItemEvaluated(item.item_checklist_id);
+            const isItemUploading = uploadingItem === item.item_checklist_id;
 
-                    {/* Status Selector Buttons */}
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {estadosCatalog.map((est) => {
-                        const isSelected = evalState.estado_checklist_id !== null && evalState.estado_checklist_id !== undefined && String(evalState.estado_checklist_id) === String(est.estado_checklist_id);
-                        const code = (est.codigo || est.nombre || "").toUpperCase();
-
-                        let colorClass = "border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800 bg-slate-900/60";
-                        if (isSelected) {
-                          if (code.includes("BUENO") || code.includes("NORMAL") || code.includes("EXCELENTE")) {
-                            colorClass = "bg-emerald-500 text-slate-950 border-emerald-400 font-extrabold shadow-[0_0_12px_rgba(16,185,129,0.5)]";
-                          } else if (code.includes("REGULAR") || code.includes("DESGASTE")) {
-                            colorClass = "bg-amber-500 text-slate-950 border-amber-400 font-extrabold shadow-[0_0_12px_rgba(245,158,11,0.5)]";
-                          } else if (code.includes("DANADO") || code.includes("DAÑADO") || code.includes("DEFECTUOSO") || code.includes("MALO")) {
-                            colorClass = "bg-rose-500 text-white border-rose-400 font-extrabold shadow-[0_0_12px_rgba(244,63,94,0.5)]";
-                          } else {
-                            colorClass = "bg-cyan-500 text-slate-950 border-cyan-400 font-extrabold shadow-[0_0_12px_rgba(6,182,212,0.5)]";
-                          }
-                        }
-
-                        return (
-                          <button
-                            key={est.estado_checklist_id}
-                            type="button"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              updateItem(item.item_checklist_id, { estado_checklist_id: est.estado_checklist_id });
-                            }}
-                            className={`px-3 py-1.5 text-xs rounded-lg border transition-all cursor-pointer uppercase font-semibold ${colorClass}`}
-                          >
-                            {est.nombre}
-                          </button>
-                        );
-                      })}
-                    </div>
+            return (
+              <div
+                key={item.item_checklist_id}
+                className="p-3.5 bg-surface border border-border rounded-xl space-y-3 hover:border-primary/30 transition-colors"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <span className="font-bold text-foreground text-xs">{item.nombre}</span>
+                    {item.descripcion && (
+                      <p className="text-[11px] text-foreground-muted mt-0.5">{item.descripcion}</p>
+                    )}
                   </div>
+                  {evaluated.estado_checklist_id && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-primary-muted text-primary">
+                      Evaluado ✓
+                    </span>
+                  )}
+                </div>
 
-                  {/* Observation & Require Repair Checkbox */}
-                  <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-800/80">
+                {/* State Buttons */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {estadosCatalog.map((est) => {
+                    const isSelected = Number(evaluated.estado_checklist_id) === Number(est.estado_checklist_id);
+                    return (
+                      <button
+                        key={est.estado_checklist_id}
+                        type="button"
+                        onClick={() => updateItem(item.item_checklist_id, { estado_checklist_id: est.estado_checklist_id })}
+                        className={`py-2 px-2.5 rounded-lg border text-xs font-bold transition-all text-center cursor-pointer ${
+                          isSelected
+                            ? "bg-primary-muted border-primary text-primary shadow-sm"
+                            : "bg-card border-border text-foreground-muted hover:text-foreground hover:bg-hover"
+                        }`}
+                      >
+                        {est.nombre}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Observations & Photo Attachment */}
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center pt-1">
+                  <div className="sm:col-span-8">
                     <input
                       type="text"
-                      placeholder="Observación o daño detectado (opcional)..."
-                      value={evalState.observacion || ""}
+                      value={evaluated.observacion || ""}
                       onChange={(e) => updateItem(item.item_checklist_id, { observacion: e.target.value })}
-                      className="flex-1 min-w-[220px] bg-[#090d16] border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/50"
+                      placeholder="Observaciones de inspección..."
+                      className="w-full p-2 bg-card border border-border rounded-lg text-xs text-foreground focus:outline-none focus:border-primary"
                     />
+                  </div>
 
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={evalState.requiere_trabajo || false}
-                        onChange={(e) => updateItem(item.item_checklist_id, { requiere_trabajo: e.target.checked })}
-                        className="w-3.5 h-3.5 rounded border-slate-700 text-emerald-500 focus:ring-emerald-500/20 bg-slate-950 cursor-pointer"
-                      />
-                      <span className="text-xs text-slate-300">Requiere Trabajo</span>
-                    </label>
-
-                    {/* Photo Evidence Uploader */}
-                    {item.requiere_foto && (
-                      <div className="flex items-center gap-2">
-                        {evalState.preview_url ? (
-                          <div className="flex items-center gap-2 bg-slate-950 p-1 pl-2.5 rounded-lg border border-slate-800">
-                            <span className="text-[11px] text-emerald-400 truncate max-w-[120px]">{evalState.filename}</span>
-                            <button
-                              type="button"
-                              onClick={() => removePhoto(item.item_checklist_id)}
-                              className="p-1 text-rose-400 hover:text-rose-300 hover:bg-slate-800 rounded cursor-pointer"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        ) : (
-                          <label className="flex items-center gap-1.5 px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs cursor-pointer border border-slate-700 transition-colors">
-                            <Camera className="w-3.5 h-3.5 text-emerald-400" />
-                            <span>{uploadingItem === item.item_checklist_id ? "Subiendo..." : "Foto Evidence"}</span>
-                            <input
-                              type="file"
-                              accept="image/jpeg,image/png,image/webp"
-                              onChange={(e) => handleFileUpload(item.item_checklist_id, e)}
-                              className="hidden"
-                              disabled={uploadingItem === item.item_checklist_id}
-                            />
-                          </label>
-                        )}
+                  <div className="sm:col-span-4 flex items-center justify-end gap-2">
+                    {evaluated.preview_url || evaluated.filename ? (
+                      <div className="flex items-center gap-1.5 p-1 bg-card border border-border rounded-lg text-[11px] text-foreground-muted">
+                        <Camera size={13} className="text-primary" />
+                        <span className="truncate max-w-[100px]">{evaluated.filename || "Foto"}</span>
+                        <button
+                          type="button"
+                          onClick={() => removePhoto(item.item_checklist_id)}
+                          className="p-1 text-foreground-muted hover:text-error rounded"
+                          title="Eliminar foto"
+                        >
+                          <Trash2 size={12} />
+                        </button>
                       </div>
+                    ) : (
+                      <label className="px-3 py-1.5 bg-card border border-border hover:bg-hover rounded-lg text-xs text-foreground-muted hover:text-foreground flex items-center gap-1.5 cursor-pointer">
+                        {isItemUploading ? (
+                          <>
+                            <Loader2 size={13} className="animate-spin text-primary" />
+                            <span>Subiendo...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Camera size={13} />
+                            <span>+ Foto</span>
+                          </>
+                        )}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          disabled={isItemUploading}
+                          onChange={(e) => handleFileUpload(item.item_checklist_id, e)}
+                          className="hidden"
+                        />
+                      </label>
                     )}
                   </div>
                 </div>
-              );
-            })}
-          </div>
+              </div>
+            );
+          })}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-800 bg-[#162032]">
-          <span className="text-xs text-slate-400">
-            Ítems evaluados: <strong className="text-emerald-400">{evaluatedCount}</strong> de {itemsCatalog.length}
+        <div className="p-4 border-t border-border bg-surface flex items-center justify-between shrink-0 font-mono text-xs">
+          <span className="text-foreground-muted">
+            Progreso total: <strong className="text-foreground">{evaluatedCount}</strong> de {itemsCatalog.length}
           </span>
-          <button
-            type="button"
-            onClick={handleSaveEvaluation}
-            className="flex items-center gap-2 px-5 py-2 text-xs font-bold text-slate-950 bg-emerald-400 hover:bg-emerald-300 rounded-xl transition-all shadow-sm cursor-pointer uppercase"
-          >
-            <Check className="w-4 h-4" />
-            Guardar Evaluación
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-3.5 py-2 rounded-xl border border-border bg-surface text-foreground-muted hover:text-foreground hover:bg-hover transition-colors cursor-pointer"
+            >
+              Cerrar
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveEvaluation}
+              className="px-5 py-2 rounded-xl bg-primary-button-bg text-primary-foreground font-bold hover:bg-primary-button-hover transition-all cursor-pointer shadow-sm"
+            >
+              Guardar Evaluación
+            </button>
+          </div>
         </div>
       </div>
     </div>

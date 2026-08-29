@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar, AuthenticatedUser } from "@/components/layout/TopBar";
 
@@ -11,14 +11,33 @@ export function DashboardShell({
   user: AuthenticatedUser;
   children: React.ReactNode;
 }) {
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  // Desktop defaults to open on initial client load
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth >= 1024) {
+      setIsSidebarOpen(true);
+    }
+  }, []);
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      <Sidebar mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} />
+      <Sidebar
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+        onNavigate={() => setIsSidebarOpen(false)}
+      />
       <div className="flex-1 flex flex-col relative w-full min-w-0">
-        <TopBar user={user} onMenuToggle={() => setMobileOpen(!mobileOpen)} />
-        <main className="ml-0 md:ml-64 mt-16 p-4 md:p-xl h-[calc(100vh-4rem)] overflow-y-auto custom-scrollbar w-full md:w-[calc(100%-16rem)]">
+        <TopBar
+          user={user}
+          isSidebarOpen={isSidebarOpen}
+          onMenuToggle={() => setIsSidebarOpen((prev) => !prev)}
+        />
+        <main
+          className={`mt-16 p-4 md:p-xl h-[calc(100vh-4rem)] overflow-y-auto custom-scrollbar w-full transition-all duration-300 ease-in-out ${
+            isSidebarOpen ? "md:ml-64 md:w-[calc(100%-16rem)]" : "ml-0 w-full"
+          }`}
+        >
           {children}
         </main>
       </div>

@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useState, useEffect, Suspense } from "react";
 
@@ -20,11 +19,13 @@ interface NavItem {
 }
 
 function SidebarContent({
-  mobileOpen,
-  setMobileOpen,
+  isOpen = false,
+  onClose = () => {},
+  onNavigate = () => {},
 }: {
-  mobileOpen?: boolean;
-  setMobileOpen?: (open: boolean) => void;
+  isOpen?: boolean;
+  onClose?: () => void;
+  onNavigate?: () => void;
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -32,24 +33,30 @@ function SidebarContent({
 
   const currentFullUrl = pathname + (searchParams?.toString() ? `?${searchParams.toString()}` : "");
 
+  // Close sidebar on Escape key
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
   const navItems: NavItem[] = [
-    { href: "/", icon: "dashboard", label: "DASHBOARD" },
     {
       id: "taller",
       icon: "build",
       label: "TALLER",
       submenu: [
+        { href: "/", label: "DASHBOARD" },
         { href: "/workshop", label: "PANEL OPERATIVO" },
         { href: "/workshop?view=list", label: "RECEPCIONES" },
-        // Oculto del menú: se accede desde el botón "+ NUEVA RECEPCIÓN" de la pantalla Recepciones.
-        // Conservar ruta y componente para posible reactivación futura.
-        // { href: "/workshop?action=new", label: "NUEVA RECEPCIÓN" },
         { href: "/workshop?view=work_orders", label: "ÓRDENES DE TRABAJO" },
         { href: "/workshop?view=kanban", label: "VISTA KANBAN" },
         { href: "/workshop?view=billing", label: "DESPACHO DE ÓRDENES" },
-        // Oculto del menú: se accede desde el botón de Órdenes de Trabajo.
-        // Conservar ruta y componente para posible reactivación futura.
-        // { href: "/workshop?action=new_order", label: "NUEVA ORDEN DE TRABAJO" }
       ]
     },
     {
@@ -89,6 +96,9 @@ function SidebarContent({
     const currentOrderId = searchParams?.get("order_id");
     const currentInvoiceOrderId = searchParams?.get("invoice_order_id");
 
+    if (subHref === "/") {
+      return pathname === "/";
+    }
     if (subHref === "/workshop") {
       return pathname === "/workshop" && !currentView && !currentAction && !currentId && !currentOrderId && !currentInvoiceOrderId;
     }
@@ -140,32 +150,33 @@ function SidebarContent({
       const isGroupActive = isExpanded || hasActiveChild;
 
       return (
-        <div key={item.id} className="flex flex-col mb-2">
+        <div key={item.id} className="flex flex-col mb-2 font-mono">
           <button
+            type="button"
             onClick={() => toggleExpand(item.id!)}
-            className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl border transition-all duration-200 w-full cursor-pointer group font-mono text-xs ${
+            className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl border transition-all duration-200 w-full cursor-pointer group text-xs ${
               isGroupActive
-                ? "bg-[#161a21] border-[#bfce7f]/40 text-[#bfce7f] font-bold shadow-[inset_4px_0_0_#bfce7f,0_4px_12px_rgba(0,0,0,0.3)]"
-                : "bg-[#161a21]/50 border-[#2d3748]/40 text-slate-400 hover:bg-[#161a21] hover:border-[#bfce7f]/30 hover:text-white"
+                ? "bg-surface-subtle border-primary/40 text-primary font-bold shadow-[inset_4px_0_0_var(--color-primary)]"
+                : "bg-surface-subtle/50 border-border text-foreground-secondary hover:bg-surface-subtle hover:border-primary/40 hover:text-foreground"
             }`}
           >
             <span
               className={`material-symbols-outlined text-[20px] transition-colors ${
-                isGroupActive ? "text-[#bfce7f]" : "text-slate-400 group-hover:text-[#bfce7f]"
+                isGroupActive ? "text-primary" : "text-foreground-muted group-hover:text-primary"
               }`}
             >
               {item.icon}
             </span>
             <span
               className={`flex-1 text-left tracking-wide font-medium uppercase ${
-                isGroupActive ? "text-white font-bold" : "text-slate-300 group-hover:text-white"
+                isGroupActive ? "text-foreground font-bold" : "text-foreground-secondary group-hover:text-foreground"
               }`}
             >
               {item.label}
             </span>
             <span
               className={`material-symbols-outlined text-sm transition-transform duration-200 ${
-                isExpanded ? "rotate-180 text-[#bfce7f]" : "text-slate-400 group-hover:text-slate-200"
+                isExpanded ? "rotate-180 text-primary" : "text-foreground-muted group-hover:text-foreground"
               }`}
             >
               expand_more
@@ -173,13 +184,13 @@ function SidebarContent({
           </button>
 
           {isExpanded && (
-            <div className="flex flex-col mt-1.5 ml-4 pl-3.5 border-l-2 border-[#2d3748] space-y-1 py-1 font-mono text-xs animate-in fade-in duration-200">
+            <div className="flex flex-col mt-1.5 ml-4 pl-3.5 border-l-2 border-border space-y-1 py-1 font-mono text-xs animate-in fade-in duration-200">
               {item.submenu.map((sub, idx) => {
                 if (sub.isHeader) {
                   return (
                     <span
                       key={idx}
-                      className="text-[10px] font-bold text-[#bfce7f] tracking-wider mt-2 mb-1 uppercase"
+                      className="text-[10px] font-bold text-primary tracking-wider mt-2 mb-1 uppercase"
                     >
                       {sub.label}
                     </span>
@@ -193,10 +204,13 @@ function SidebarContent({
                     key={idx}
                     href={sub.href || "#"}
                     title={sub.label}
+                    onClick={() => {
+                      onNavigate();
+                    }}
                     className={`text-xs py-2 px-3 rounded-lg border transition-all duration-200 whitespace-nowrap truncate block uppercase ${
                       isSubActive
-                        ? "bg-[#bfce7f]/15 border-[#bfce7f]/40 text-[#bfce7f] font-bold"
-                        : "border-transparent text-slate-400 hover:text-white hover:bg-[#161a21] hover:border-[#2d3748]"
+                        ? "bg-primary/10 border-primary/40 text-primary font-bold"
+                        : "border-transparent text-foreground-muted hover:text-foreground hover:bg-hover hover:border-border"
                     }`}
                   >
                     {sub.label}
@@ -214,22 +228,25 @@ function SidebarContent({
       <Link
         key={item.href}
         href={item.href!}
+        onClick={() => {
+          onNavigate();
+        }}
         className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl border transition-all duration-200 cursor-pointer group font-mono text-xs mb-2 ${
           isActive
-            ? "bg-[#161a21] border-[#bfce7f]/40 text-[#bfce7f] font-bold shadow-[inset_4px_0_0_#bfce7f,0_4px_12px_rgba(0,0,0,0.3)]"
-            : "bg-[#161a21]/50 border-[#2d3748]/40 text-slate-400 hover:bg-[#161a21] hover:border-[#bfce7f]/30 hover:text-white"
+            ? "bg-surface-subtle border-primary/40 text-primary font-bold shadow-[inset_4px_0_0_var(--color-primary)]"
+            : "bg-surface-subtle/50 border-border text-foreground-secondary hover:bg-surface-subtle hover:border-primary/40 hover:text-foreground"
         }`}
       >
         <span
           className={`material-symbols-outlined text-[20px] transition-colors ${
-            isActive ? "text-[#bfce7f]" : "text-slate-400 group-hover:text-[#bfce7f]"
+            isActive ? "text-primary" : "text-foreground-muted group-hover:text-primary"
           }`}
         >
           {item.icon}
         </span>
         <span
           className={`tracking-wide font-medium uppercase ${
-            isActive ? "text-white font-bold" : "text-slate-300 group-hover:text-white"
+            isActive ? "text-foreground font-bold" : "text-foreground-secondary group-hover:text-foreground"
           }`}
         >
           {item.label}
@@ -240,96 +257,48 @@ function SidebarContent({
 
   return (
     <>
-      {/* Desktop Fixed Sidebar */}
-      <aside className="hidden md:flex fixed left-0 top-0 h-full w-64 bg-[#0e1117] border-r border-[#2d3748] flex-col p-4 z-50 font-mono">
-        <div className="w-full flex items-center justify-center pt-2 pb-5">
-          <Link
-            href="/"
-            className="flex items-center justify-center transition-transform hover:scale-[1.02] focus:outline-none"
-            title="Bikers' Fort Core"
-          >
-            <Image
-              src="/logo.png"
-              alt="Bikers' Fort Logo"
-              width={165}
-              height={112}
-              className="w-[165px] h-auto object-contain"
-              priority
-            />
-          </Link>
-        </div>
+      {/* Mobile/Tablet Semi-transparent Backdrop Overlay */}
+      <div
+        className={`fixed inset-0 bg-black/70 backdrop-blur-sm z-40 md:hidden transition-opacity duration-300 ${
+          isOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+        }`}
+        onClick={onClose}
+        aria-hidden="true"
+      />
 
+      {/* Unified Responsive Sidebar (Desktop Fixed / Mobile Drawer) */}
+      <aside
+        className={`fixed left-0 top-0 h-full w-64 bg-surface border-r border-border flex flex-col pt-5 pb-4 px-4 z-45 font-mono transition-transform duration-300 ease-in-out shadow-2xl md:shadow-none ${
+          isOpen ? "translate-x-0" : "-translate-x-full pointer-events-none"
+        }`}
+        aria-label="Menú principal de navegación"
+      >
         <div className="flex-1 overflow-y-auto custom-scrollbar -mx-2 px-2">
           <nav className="space-y-1">
             {navItems.map((item) => renderItemCard(item))}
           </nav>
         </div>
       </aside>
-
-      {/* Mobile Navigation Drawer */}
-      {mobileOpen && (
-        <div className="md:hidden fixed inset-0 z-50 flex">
-          <div
-            className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity"
-            onClick={() => setMobileOpen && setMobileOpen(false)}
-          />
-          <aside className="relative w-64 max-w-[80vw] bg-[#0e1117] border-r border-[#2d3748] flex flex-col p-4 z-50 font-mono h-full shadow-2xl animate-in slide-in-from-left duration-200">
-            <div className="flex items-center justify-between pt-1 pb-3 mb-3 border-b border-[#2d3748]/50">
-              <Link
-                href="/"
-                onClick={() => setMobileOpen && setMobileOpen(false)}
-                className="flex items-center transition-transform hover:scale-[1.02] focus:outline-none"
-                title="Bikers' Fort Core"
-              >
-                <Image
-                  src="/logo.png"
-                  alt="Bikers' Fort Logo"
-                  width={135}
-                  height={91}
-                  className="w-[135px] h-auto object-contain"
-                  priority
-                />
-              </Link>
-              <button
-                type="button"
-                onClick={() => setMobileOpen && setMobileOpen(false)}
-                className="text-slate-400 hover:text-white p-1.5 rounded-lg border border-[#2d3748] hover:bg-[#161a21] transition-colors cursor-pointer"
-                aria-label="Cerrar menú"
-              >
-                <span className="material-symbols-outlined text-lg">close</span>
-              </button>
-            </div>
-            <div
-              className="flex-1 overflow-y-auto custom-scrollbar -mx-2 px-2"
-              onClick={() => setMobileOpen && setMobileOpen(false)}
-            >
-              <nav className="space-y-1">
-                {navItems.map((item) => renderItemCard(item))}
-              </nav>
-            </div>
-          </aside>
-        </div>
-      )}
     </>
   );
 }
 
 export function Sidebar({
-  mobileOpen,
-  setMobileOpen,
+  isOpen = false,
+  onClose = () => {},
+  onNavigate = () => {},
 }: {
-  mobileOpen?: boolean;
-  setMobileOpen?: (open: boolean) => void;
+  isOpen?: boolean;
+  onClose?: () => void;
+  onNavigate?: () => void;
 }) {
   return (
     <Suspense
       fallback={
-        <aside className="hidden md:flex fixed left-0 top-0 h-full w-64 bg-[#0e1117] border-r border-[#2d3748] flex-col p-4 z-50 font-mono">
-          <div className="text-xs text-slate-400 p-4">Cargando menú...</div>
-        </aside>
+        <aside className="fixed left-0 top-0 h-full w-64 bg-surface border-r border-border flex-col p-4 z-45 font-mono animate-pulse -translate-x-full pointer-events-none" />
       }
     >
-      <SidebarContent mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} />
+      <SidebarContent isOpen={isOpen} onClose={onClose} onNavigate={onNavigate} />
     </Suspense>
   );
 }

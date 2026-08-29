@@ -4,6 +4,7 @@ import { recalculateWorkOrderTotals } from "@/lib/workshop/recalculateWorkOrderT
 import { getCronometroStatus } from "@/lib/workshop/getCronometroStatus";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
 import { validateOrderInRepair } from "@/lib/workshop/validateOrderState";
+import { recordUserActivity, recordUserAudit } from "@/lib/auditLogger";
 
 // GET /api/taller/ordenes/[id]/servicios/[servicioId]
 export async function GET(
@@ -63,15 +64,17 @@ export async function GET(
         os.fecha_finalizacion,
         COALESCE(os.tiempo_transcurrido, 0) AS tiempo_transcurrido
       FROM admin.orden_servicios os
+      JOIN admin.ordenes_trabajo ot ON os.orden_trabajo_id = ot.orden_trabajo_id
+      JOIN admin.clientes c ON ot.cliente_id = c.cliente_id
       LEFT JOIN admin.tipo_servicio ts ON os.tipo_servicio_id = ts.tipo_servicio_id
       LEFT JOIN admin.estado_orden_servicio eos ON os.estado_orden_servicio_id = eos.estado_orden_servicio_id
       LEFT JOIN admin.bicicleta_componentes bc ON os.bicicleta_componente_id = bc.bicicleta_componente_id
       LEFT JOIN admin.categoria_componente cat ON bc.categoria_componente_id = cat.categoria_componente_id
       LEFT JOIN admin.estado_componente est_actual ON bc.estado_componente_id = est_actual.estado_componente_id
       LEFT JOIN admin.estado_componente est_nuevo ON os.nuevo_estado_componente_id = est_nuevo.estado_componente_id
-      WHERE os.orden_servicio_id = $1 AND os.orden_trabajo_id = $2 AND (os.activo IS DISTINCT FROM false)
+      WHERE os.orden_servicio_id = $1 AND os.orden_trabajo_id = $2 AND c.empresa_id = $3 AND (os.activo IS DISTINCT FROM false)
     `;
-    const servRes = await query<any>(servSql, [servId, ordenId]);
+    const servRes = await query<any>(servSql, [servId, ordenId, session.empresa_id]);
 
     if (!servRes || servRes.length === 0) {
       return NextResponse.json({ error: "NOT_FOUND", message: "Servicio no encontrado." }, { status: 404 });
@@ -342,6 +345,14 @@ export async function PUT(
 
       if (estadoOrdenId === 1) {
         await client.query("ROLLBACK");
+        await recordUserActivity({
+          userId: sessionUserId,
+          modulo: "TALLER_SERVICIOS",
+          evento: "SERVICE_START_DENIED",
+          descripcion: `Intento de iniciar servicio #${servId} denegado: la orden #${ordenId} se encuentra en estado RECIBIDA`,
+          resultado: "Denegado",
+          req
+        });
         return NextResponse.json({
           error: "ORDER_NOT_IN_REPAIR",
           message: "Primero debes iniciar la reparación de la orden."
@@ -467,24 +478,22 @@ export async function PUT(
 
         try {
           await client.query(`
-            INSERT INTO admin.orden_servicio_mano_obra (
-              orden_servicio_mano_obra_id,
-              orden_servicio_id,
-              usuario_id,
-              fecha_inicio,
-              fecha_finalizacion,
-              minutos_trabajados,
-              minutos_facturables,
-              costo_hora,
-              costo_total,
-              activo,
-              fecha_registro,
-              usuario_registro
-            ) VALUES (
-              (SELECT COALESCE(MAX(orden_servicio_mano_obra_id), 0) + 1 FROM admin.orden_servicio_mano_obra),
-              $1, $2, NOW(), NULL, 0, 0, $3, 0.00, true, NOW(), $4
-            )
-          `, [servId, sessionUserId, rate, sessionUserId]);
+              INSERT INTO admin.orden_servicio_mano_obra (
+                orden_servicio_id,
+                usuario_id,
+                fecha_inicio,
+                fecha_finalizacion,
+                minutos_trabajados,
+                minutos_facturables,
+                costo_hora,
+                costo_total,
+                activo,
+                fecha_registro,
+                usuario_registro
+              ) VALUES (
+                $1, $2, NOW(), NULL, 0, 0, $3, 0.00, true, NOW(), $4
+              ) RETURNING orden_servicio_mano_obra_id
+            `, [servId, sessionUserId, rate, sessionUserId]);
         } catch (dbErr: any) {
           console.warn("Notice inserting open session:", dbErr?.message);
         }
@@ -590,11 +599,10 @@ export async function PUT(
 
           await client.query(`
             INSERT INTO admin.orden_historial_estado (
-              orden_historial_estado_id, orden_trabajo_id, estado_anterior_id, estado_nuevo_id, usuario_cambio, comentario, fecha_cambio, activo, fecha_registro
+              orden_trabajo_id, estado_anterior_id, estado_nuevo_id, usuario_cambio, comentario, fecha_cambio, activo, fecha_registro
             ) VALUES (
-              (SELECT COALESCE(MAX(orden_historial_estado_id), 0) + 1 FROM admin.orden_historial_estado),
               $1, $2, $2, $3, $4, NOW(), true, NOW()
-            )
+            ) RETURNING orden_historial_estado_id
           `, [
             ordenId,
             estadoOrdenId,
@@ -666,14 +674,13 @@ export async function PUT(
         `, [targetServStateId, sessionUserId, servId, nuevoEstadoComponenteId ?? null]);
       }
 
-      // History record
+      // History record using PostgreSQL sequence
       await client.query(`
         INSERT INTO admin.orden_historial_estado (
-          orden_historial_estado_id, orden_trabajo_id, estado_anterior_id, estado_nuevo_id, usuario_cambio, comentario, fecha_cambio, activo, fecha_registro
+          orden_trabajo_id, estado_anterior_id, estado_nuevo_id, usuario_cambio, comentario, fecha_cambio, activo, fecha_registro
         ) VALUES (
-          (SELECT COALESCE(MAX(orden_historial_estado_id), 0) + 1 FROM admin.orden_historial_estado),
           $1, $2, $2, $3, $4, NOW(), true, NOW()
-        )
+        ) RETURNING orden_historial_estado_id
       `, [
         ordenId,
         estadoOrdenId,
@@ -706,7 +713,60 @@ export async function PUT(
 
     await recalculateWorkOrderTotals(client, ordenId, sessionUserId);
 
+    // Audit and Activity mapping
+    let auditAction = "ACTUALIZAR_SERVICIO";
+    let activityEvent = "SERVICE_UPDATED";
+    let eventDescription = `Servicio #${servId} actualizado en orden #${ordenId}`;
+
+    if (targetServStateId === 2 && currentServStateId === 5) {
+      auditAction = "REANUDAR_SERVICIO";
+      activityEvent = "SERVICE_RESUMED";
+      eventDescription = `Servicio #${servId} reanudado en orden #${ordenId}`;
+    } else if (targetServStateId === 2) {
+      auditAction = "INICIAR_SERVICIO";
+      activityEvent = "SERVICE_STARTED";
+      eventDescription = `Servicio #${servId} iniciado en orden #${ordenId}`;
+    } else if (targetServStateId === 5) {
+      auditAction = "PAUSAR_SERVICIO";
+      activityEvent = "SERVICE_PAUSED";
+      eventDescription = `Servicio #${servId} pausado en orden #${ordenId}`;
+    } else if (targetServStateId === 3) {
+      auditAction = "COMPLETAR_SERVICIO";
+      activityEvent = "SERVICE_COMPLETED";
+      eventDescription = `Servicio #${servId} completado en orden #${ordenId}`;
+    }
+
+    await recordUserAudit({
+      userId: sessionUserId,
+      accion: auditAction,
+      valorAnterior: {
+        estado_servicio_id: currentServStateId,
+        precio_unitario: currentServ.precio_unitario,
+        observacion_tecnica: currentServ.observacion_tecnica
+      },
+      valorNuevo: {
+        estado_servicio_id: targetServStateId || currentServStateId,
+        precio_unitario: precio_acordado !== undefined ? precio_acordado : currentServ.precio_unitario,
+        observacion_tecnica: observaciones !== undefined ? observaciones : currentServ.observacion_tecnica,
+        tiempo_transcurrido: calculatedTiempoTranscurrido,
+        nuevo_estado_componente_id: updatedNuevoEstadoCompId
+      },
+      motivo: eventDescription,
+      resultado: "COMPLETADO",
+      client,
+      throwOnError: true
+    });
+
     await client.query("COMMIT");
+
+    await recordUserActivity({
+      userId: sessionUserId,
+      modulo: "TALLER_SERVICIOS",
+      evento: activityEvent,
+      descripcion: eventDescription,
+      resultado: "Exitoso",
+      req
+    });
 
     return NextResponse.json({
       success: true,
@@ -808,14 +868,13 @@ export async function DELETE(
       WHERE orden_servicio_id = $2 AND orden_trabajo_id = $3
     `, [sessionUserId, servId, ordenId]);
 
-    // Audit History Record
+    // Audit History Record using PostgreSQL sequence
     await client.query(`
       INSERT INTO admin.orden_historial_estado (
-        orden_historial_estado_id, orden_trabajo_id, estado_anterior_id, estado_nuevo_id, usuario_cambio, comentario, fecha_cambio, activo, fecha_registro
+        orden_trabajo_id, estado_anterior_id, estado_nuevo_id, usuario_cambio, comentario, fecha_cambio, activo, fecha_registro
       ) VALUES (
-        (SELECT COALESCE(MAX(orden_historial_estado_id), 0) + 1 FROM admin.orden_historial_estado),
         $1, $2, $2, $3, $4, NOW(), true, NOW()
-      )
+      ) RETURNING orden_historial_estado_id
     `, [
       ordenId,
       estadoOrdenId,
@@ -826,7 +885,27 @@ export async function DELETE(
     // Recalculate financial totals
     await recalculateWorkOrderTotals(client, ordenId, sessionUserId);
 
+    await recordUserAudit({
+      userId: sessionUserId,
+      accion: "ELIMINAR_SERVICIO_ORDEN",
+      valorAnterior: { orden_servicio_id: servId, orden_trabajo_id: ordenId, activo: true },
+      valorNuevo: { orden_servicio_id: servId, orden_trabajo_id: ordenId, activo: false },
+      motivo: `Servicio #${servId} eliminado de la orden #${ordenId}`,
+      resultado: "COMPLETADO",
+      client,
+      throwOnError: true
+    });
+
     await client.query("COMMIT");
+
+    await recordUserActivity({
+      userId: sessionUserId,
+      modulo: "TALLER_SERVICIOS",
+      evento: "SERVICE_DELETED",
+      descripcion: `Servicio #${servId} eliminado de la orden #${ordenId}`,
+      resultado: "Exitoso",
+      req
+    });
 
     return NextResponse.json({
       success: true,

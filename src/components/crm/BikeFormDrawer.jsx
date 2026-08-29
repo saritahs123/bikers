@@ -136,9 +136,7 @@ export default function BikeFormDrawer({
         setDraftComponents([]);
         setDraftPhotos([]);
       } else {
-        const defaultClient = preselectedClienteId
-          ? String(preselectedClienteId)
-          : (clientes.length > 0 ? String(clientes[0].id || clientes[0].cliente_id) : "");
+        const defaultClient = preselectedClienteId ? String(preselectedClienteId) : "";
 
         setFormData({
           cliente_id: defaultClient,
@@ -158,16 +156,6 @@ export default function BikeFormDrawer({
       }
     }
   }, [isOpen, editingItem, preselectedClienteId, clientes]);
-
-  // Sync default client if client list loads asynchronously
-  useEffect(() => {
-    if (isOpen && !editingItem && !lockCliente && !preselectedClienteId && !formData.cliente_id && clientes.length > 0) {
-      const firstId = clientes[0].id || clientes[0].cliente_id;
-      if (firstId) {
-        setFormData((prev) => ({ ...prev, cliente_id: String(firstId) }));
-      }
-    }
-  }, [isOpen, editingItem, lockCliente, preselectedClienteId, formData.cliente_id, clientes]);
 
   if (!isOpen || !mounted || typeof document === "undefined") {
     return null;
@@ -202,6 +190,12 @@ export default function BikeFormDrawer({
       if (!comp.categoria_componente_id) {
         setActiveTab("componentes");
         const msg = `El componente #${i + 1} requiere una categoría válida.`;
+        if (showToast) showToast(msg, "error");
+        return false;
+      }
+      if (!comp.estado_componente_id) {
+        setActiveTab("componentes");
+        const msg = `El componente #${i + 1} requiere que selecciones su estado.`;
         if (showToast) showToast(msg, "error");
         return false;
       }

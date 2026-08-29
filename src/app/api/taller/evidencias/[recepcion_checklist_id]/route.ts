@@ -33,14 +33,14 @@ export async function GET(
       return NextResponse.json({ error: "ID de checklist inválido." }, { status: 400 });
     }
 
-    // Query recepcion_checklist & multitenant company check
+    // Query recepcion_checklist & canonical multitenant client company check
     const rows = await query(
       `SELECT rc.recepcion_checklist_id, rc.ruta_archivo, rc.url_archivo, rc.nombre_archivo, rc.evidencia_foto,
-              r.recepcion_id, u.empresa_id as recepcion_empresa_id
+              r.recepcion_id, c.empresa_id as recepcion_empresa_id
        FROM admin.recepcion_checklist rc
        JOIN admin.recepciones r ON rc.recepcion_id = r.recepcion_id
-       LEFT JOIN admin.usuario u ON r.recibido_por_usuario_id = u.usuario_id
-       WHERE rc.recepcion_checklist_id = $1 AND (u.empresa_id = $2 OR u.empresa_id IS NULL OR $2 = 1) AND (r.activo = true OR r.activo IS NULL) AND r.fecha_eliminacion IS NULL
+       JOIN admin.clientes c ON r.cliente_id = c.cliente_id
+       WHERE rc.recepcion_checklist_id = $1 AND c.empresa_id = $2 AND (r.activo = true OR r.activo IS NULL) AND r.fecha_eliminacion IS NULL
        LIMIT 1`,
       [chkId, session.empresa_id]
     );

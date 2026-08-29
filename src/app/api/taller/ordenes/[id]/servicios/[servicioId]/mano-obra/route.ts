@@ -3,6 +3,7 @@ import { getPool } from "@/lib/db";
 import { recalculateWorkOrderTotals } from "@/lib/workshop/recalculateWorkOrderTotals";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
 import { validateOrderInRepair } from "@/lib/workshop/validateOrderState";
+import { recordUserActivity, recordUserAudit } from "@/lib/auditLogger";
 
 // GET /api/taller/ordenes/[id]/servicios/[servicioId]/mano-obra
 export async function GET(
@@ -14,6 +15,7 @@ export async function GET(
   if (!id || !servicioId || !/^\d+$/.test(id.trim()) || !/^\d+$/.test(servicioId.trim())) {
     return NextResponse.json({ error: "INVALID_ID", message: "IDs no válidos." }, { status: 400 });
   }
+  const ordenId = Number(id.trim());
   const servId = Number(servicioId.trim());
 
   const session = await getWorkshopSession();
@@ -48,14 +50,21 @@ export async function GET(
         mo.observacion AS observaciones,
         (mo.fecha_finalizacion IS NULL) AS es_abierta
       FROM admin.orden_servicio_mano_obra mo
+      JOIN admin.orden_servicios os ON mo.orden_servicio_id = os.orden_servicio_id
+      JOIN admin.ordenes_trabajo ot ON os.orden_trabajo_id = ot.orden_trabajo_id
+      JOIN admin.clientes c ON ot.cliente_id = c.cliente_id
       LEFT JOIN admin.usuario u ON mo.usuario_id = u.usuario_id
       LEFT JOIN admin.usuario_identidad ui ON u.usuario_id = ui.usuario_id
       WHERE mo.orden_servicio_id = $1 
+        AND os.orden_trabajo_id = $2
+        AND c.empresa_id = $3
         AND (mo.activo IS DISTINCT FROM false)
+        AND (os.activo IS DISTINCT FROM false)
+        AND (ot.activo IS DISTINCT FROM false)
         AND mo.detalle_mano_obra IS NOT NULL
         AND BTRIM(mo.detalle_mano_obra) <> ''
       ORDER BY mo.orden_servicio_mano_obra_id ASC
-    `, [servId]);
+    `, [servId, ordenId, session.empresa_id]);
 
     return NextResponse.json({
       success: true,
@@ -129,7 +138,26 @@ export async function POST(
     }
 
     const serv = servRes.rows[0];
-    const mecUserId = mecanico_usuario_id ? parseInt(mecanico_usuario_id, 10) : (serv.usuario_id || sessionUserId);
+    let mecUserId = sessionUserId;
+    if (mecanico_usuario_id) {
+      const parsedMecId = parseInt(mecanico_usuario_id, 10);
+      if (!isNaN(parsedMecId) && parsedMecId > 0) {
+        const mecCheck = await client.query(
+          `SELECT usuario_id FROM admin.usuario WHERE usuario_id = $1 AND empresa_id = $2 AND (estado = 'ACTIVO' OR estado IS NULL) LIMIT 1`,
+          [parsedMecId, session.empresa_id]
+        );
+        if (!mecCheck.rows.length) {
+          await client.query("ROLLBACK");
+          return NextResponse.json({
+            error: "INVALID_MECHANIC",
+            message: "El mecánico asignado no pertenece a su empresa o está inactivo."
+          }, { status: 400 });
+        }
+        mecUserId = parsedMecId;
+      }
+    } else if (serv.usuario_id) {
+      mecUserId = serv.usuario_id;
+    }
     
     const rawHours = horas_reales ?? body.horas_trabajadas;
     const mins = (rawHours !== undefined && rawHours !== null && rawHours !== "" && !isNaN(parseFloat(rawHours)))
@@ -153,10 +181,9 @@ export async function POST(
 
     const costoTotal = Math.round(((mins / 60.0) * rate) * 100) / 100;
 
-    // Insert Manual Closed Labor Session with detalle_mano_obra AND observacion
+    // Insert Manual Closed Labor Session with detalle_mano_obra AND observacion using PostgreSQL sequence
     const insertLaborSql = `
       INSERT INTO admin.orden_servicio_mano_obra (
-        orden_servicio_mano_obra_id,
         orden_servicio_id,
         usuario_id,
         fecha_inicio,
@@ -171,7 +198,6 @@ export async function POST(
         fecha_registro,
         usuario_registro
       ) VALUES (
-        (SELECT COALESCE(MAX(orden_servicio_mano_obra_id), 0) + 1 FROM admin.orden_servicio_mano_obra),
         $1, $2, NOW() - ($3::integer || ' minutes')::interval, NOW(), $3::integer, $3::integer, $4, $5, $7::text, $8::text, true, NOW(), $6
       )
       RETURNING 
@@ -201,11 +227,39 @@ export async function POST(
     ]);
 
     await recalculateWorkOrderTotals(client, ordenId);
+
+    const insertedLabor = laborRes.rows[0];
+
+    await recordUserAudit({
+      userId: sessionUserId,
+      accion: "REGISTRAR_MANO_OBRA_MANUAL",
+      valorNuevo: {
+        orden_servicio_mano_obra_id: insertedLabor.mano_obra_id,
+        orden_servicio_id: servId,
+        minutos_trabajados: mins,
+        costo_total: costoTotal,
+        detalle: detailText
+      },
+      motivo: "Registro de mano de obra manual",
+      resultado: "COMPLETADO",
+      client,
+      throwOnError: true
+    });
+
     await client.query("COMMIT");
+
+    await recordUserActivity({
+      userId: sessionUserId,
+      modulo: "TALLER_MANO_OBRA",
+      evento: "LABOR_MANUAL_REGISTERED",
+      descripcion: `Mano de obra registrada en servicio #${servId} (${mins} min, total $${costoTotal})`,
+      resultado: "Exitoso",
+      req
+    });
 
     return NextResponse.json({
       success: true,
-      data: laborRes.rows[0],
+      data: insertedLabor,
       message: "Registro de mano de obra añadido exitosamente."
     });
   } catch (err: any) {
@@ -263,17 +317,18 @@ export async function PUT(
 
     await client.query("BEGIN");
 
-    // Lock Order Row Exclusively
+    // Lock Order Row Exclusively with canonical client company check
     const orderRes = await client.query(`
-      SELECT orden_trabajo_id, estado_orden_id
-      FROM admin.ordenes_trabajo
-      WHERE orden_trabajo_id = $1 AND activo = true
-      FOR UPDATE OF ordenes_trabajo
+      SELECT ot.orden_trabajo_id, ot.estado_orden_id, c.empresa_id
+      FROM admin.ordenes_trabajo ot
+      JOIN admin.clientes c ON ot.cliente_id = c.cliente_id
+      WHERE ot.orden_trabajo_id = $1 AND ot.activo = true
+      FOR UPDATE OF ot
     `, [ordenId]);
 
-    if (orderRes.rows.length === 0) {
+    if (orderRes.rows.length === 0 || Number(orderRes.rows[0].empresa_id) !== Number(session.empresa_id)) {
       await client.query("ROLLBACK");
-      return NextResponse.json({ error: "Orden de trabajo no encontrada." }, { status: 404 });
+      return NextResponse.json({ error: "NOT_FOUND", message: "Orden de trabajo no encontrada." }, { status: 404 });
     }
 
     const estadoOrdenId = orderRes.rows[0].estado_orden_id;
@@ -326,11 +381,39 @@ export async function PUT(
     }
 
     await recalculateWorkOrderTotals(client, ordenId);
+
+    const updatedLabor = laborRes.rows[0];
+
+    await recordUserAudit({
+      userId: sessionUserId,
+      accion: "ACTUALIZAR_MANO_OBRA",
+      valorNuevo: {
+        orden_servicio_mano_obra_id: manoObraId,
+        orden_servicio_id: servId,
+        minutos_trabajados: mins,
+        costo_total: costoTotal,
+        detalle: detailText
+      },
+      motivo: "Actualización de mano de obra",
+      resultado: "COMPLETADO",
+      client,
+      throwOnError: true
+    });
+
     await client.query("COMMIT");
+
+    await recordUserActivity({
+      userId: sessionUserId,
+      modulo: "TALLER_MANO_OBRA",
+      evento: "LABOR_SESSION_UPDATED",
+      descripcion: `Mano de obra #${manoObraId} actualizada en servicio #${servId}`,
+      resultado: "Exitoso",
+      req
+    });
 
     return NextResponse.json({
       success: true,
-      data: laborRes.rows[0],
+      data: updatedLabor,
       message: "Mano de obra actualizada correctamente."
     });
   } catch (err: any) {
@@ -367,6 +450,7 @@ export async function DELETE(
   if (!session || !session.usuario_id) {
     return NextResponse.json({ error: "NO_SESSION", message: "Sesión no válida o expirada." }, { status: 401 });
   }
+  const sessionUserId = session.usuario_id;
 
   const perms = await getModulePermissions("TALLER", session.usuario_id);
   if (!perms.puede_editar) {
@@ -379,17 +463,18 @@ export async function DELETE(
   try {
     await client.query("BEGIN");
 
-    // Lock Order Row Exclusively
+    // Lock Order Row Exclusively with canonical client company check
     const orderRes = await client.query(`
-      SELECT orden_trabajo_id, estado_orden_id
-      FROM admin.ordenes_trabajo
-      WHERE orden_trabajo_id = $1 AND activo = true
-      FOR UPDATE OF ordenes_trabajo
+      SELECT ot.orden_trabajo_id, ot.estado_orden_id, c.empresa_id
+      FROM admin.ordenes_trabajo ot
+      JOIN admin.clientes c ON ot.cliente_id = c.cliente_id
+      WHERE ot.orden_trabajo_id = $1 AND ot.activo = true
+      FOR UPDATE OF ot
     `, [ordenId]);
 
-    if (orderRes.rows.length === 0) {
+    if (orderRes.rows.length === 0 || Number(orderRes.rows[0].empresa_id) !== Number(session.empresa_id)) {
       await client.query("ROLLBACK");
-      return NextResponse.json({ error: "Orden de trabajo no encontrada." }, { status: 404 });
+      return NextResponse.json({ error: "NOT_FOUND", message: "Orden de trabajo no encontrada." }, { status: 404 });
     }
 
     const estadoOrdenId = orderRes.rows[0].estado_orden_id;
@@ -410,7 +495,28 @@ export async function DELETE(
     }
 
     await recalculateWorkOrderTotals(client, ordenId);
+
+    await recordUserAudit({
+      userId: sessionUserId,
+      accion: "ELIMINAR_MANO_OBRA",
+      valorAnterior: { orden_servicio_mano_obra_id: manoObraId, orden_servicio_id: servId },
+      valorNuevo: null,
+      motivo: "Eliminación de mano de obra",
+      resultado: "COMPLETADO",
+      client,
+      throwOnError: true
+    });
+
     await client.query("COMMIT");
+
+    await recordUserActivity({
+      userId: sessionUserId,
+      modulo: "TALLER_MANO_OBRA",
+      evento: "LABOR_SESSION_DELETED",
+      descripcion: `Mano de obra #${manoObraId} eliminada de servicio #${servId}`,
+      resultado: "Exitoso",
+      req
+    });
 
     return NextResponse.json({
       success: true,

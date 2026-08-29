@@ -28,9 +28,9 @@ export async function GET() {
         COUNT(ot.orden_trabajo_id) FILTER (WHERE eot.codigo = 'REPARACION')::int AS en_reparacion,
         COUNT(ot.orden_trabajo_id) FILTER (WHERE eot.codigo = 'LISTA_ENTREGA')::int AS listas_entrega
       FROM admin.ordenes_trabajo ot
-      JOIN admin.usuario u ON u.usuario_id = ot.usuario_registro
+      JOIN admin.clientes c ON c.cliente_id = ot.cliente_id
       LEFT JOIN admin.estado_orden_trabajo eot ON eot.estado_orden_id = ot.estado_orden_id
-      WHERE u.empresa_id = $1
+      WHERE c.empresa_id = $1
         AND (ot.activo IS DISTINCT FROM false);
     `, [empresaId]);
 
@@ -78,10 +78,10 @@ export async function GET() {
     const retrasosRows = await query<any>(`
       SELECT COUNT(ot.orden_trabajo_id)::int as total
       FROM admin.ordenes_trabajo ot
-      JOIN admin.usuario u ON u.usuario_id = ot.usuario_registro
+      JOIN admin.clientes c ON c.cliente_id = ot.cliente_id
       LEFT JOIN admin.estado_orden_trabajo eot ON eot.estado_orden_id = ot.estado_orden_id
       LEFT JOIN admin.prioridad_orden_trabajo pot ON pot.prioridad_orden_trabajo_id = ot.prioridad_orden_id
-      WHERE u.empresa_id = $1
+      WHERE c.empresa_id = $1
         AND (ot.activo IS DISTINCT FROM false)
         AND eot.codigo IN ('RECIBIDA', 'REPARACION', 'LISTA_ENTREGA')
         AND ot.fecha_entrega_estimada IS NOT NULL
@@ -98,9 +98,9 @@ export async function GET() {
     const facturacionRows = await query<any>(`
       SELECT COALESCE(SUM(ot.total_orden), 0)::numeric AS total
       FROM admin.ordenes_trabajo ot
-      JOIN admin.usuario u ON u.usuario_id = ot.usuario_registro
+      JOIN admin.clientes c ON c.cliente_id = ot.cliente_id
       LEFT JOIN admin.estado_orden_trabajo eot ON eot.estado_orden_id = ot.estado_orden_id
-      WHERE u.empresa_id = $1
+      WHERE c.empresa_id = $1
         AND (ot.activo IS DISTINCT FROM false)
         AND eot.codigo = 'ENTREGADA'
         AND ot.fecha_entrega_real >= ((NOW() AT TIME ZONE 'America/Santo_Domingo') - INTERVAL '7 days');
@@ -122,14 +122,13 @@ export async function GET() {
         COUNT(os.orden_servicio_id) FILTER (WHERE eos.codigo = 'SUSPENDIDO')::int AS servicios_pausados,
         EXTRACT(EPOCH FROM ((NOW() AT TIME ZONE 'America/Santo_Domingo') - ot.fecha_entrega_estimada))::int AS segundos_retraso
       FROM admin.ordenes_trabajo ot
-      JOIN admin.usuario u ON u.usuario_id = ot.usuario_registro
+      JOIN admin.clientes cl ON cl.cliente_id = ot.cliente_id
       LEFT JOIN admin.estado_orden_trabajo eot ON eot.estado_orden_id = ot.estado_orden_id
       LEFT JOIN admin.prioridad_orden_trabajo pot ON pot.prioridad_orden_trabajo_id = ot.prioridad_orden_id
-      LEFT JOIN admin.clientes cl ON cl.cliente_id = ot.cliente_id
       LEFT JOIN admin.bicicletas b ON b.bicicleta_id = ot.bicicleta_id
       LEFT JOIN admin.orden_servicios os ON os.orden_trabajo_id = ot.orden_trabajo_id AND (os.activo IS DISTINCT FROM false)
       LEFT JOIN admin.estado_orden_servicio eos ON eos.estado_orden_servicio_id = os.estado_orden_servicio_id
-      WHERE u.empresa_id = $1
+      WHERE cl.empresa_id = $1
         AND (ot.activo IS DISTINCT FROM false)
         AND eot.codigo IN ('RECIBIDA', 'REPARACION', 'LISTA_ENTREGA')
       GROUP BY ot.orden_trabajo_id, ot.codigo_orden, cl.nombre, b.marca, b.modelo, pot.codigo, eot.codigo, ot.fecha_entrega_estimada, ot.mecanico_id

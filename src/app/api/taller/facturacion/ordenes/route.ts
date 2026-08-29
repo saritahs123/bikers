@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
 
     const queryParams: any[] = [empresaId];
     const whereConditions: string[] = [
-      `u_ot.empresa_id = $1`,
+      `c.empresa_id = $1`,
       `ot.activo = true`
     ];
 
@@ -128,12 +128,11 @@ export async function GET(req: NextRequest) {
             AND mo_sub.fecha_finalizacion IS NULL
         ) AS cronometros_abiertos_count
       FROM admin.ordenes_trabajo ot
-      JOIN admin.usuario u_ot ON u_ot.usuario_id = ot.usuario_registro
+      JOIN admin.clientes c ON ot.cliente_id = c.cliente_id
       LEFT JOIN admin.usuario uf ON uf.usuario_id = ot.usuario_facturacion_id
       LEFT JOIN admin.usuario_identidad ui_fact ON ui_fact.usuario_id = uf.usuario_id
       LEFT JOIN admin.recepciones r ON ot.recepcion_id = r.recepcion_id
-      LEFT JOIN admin.clientes c ON COALESCE(ot.cliente_id, r.cliente_id) = c.cliente_id
-      LEFT JOIN admin.bicicletas b ON COALESCE(ot.bicicleta_id, r.bicicleta_id) = b.bicicleta_id
+      LEFT JOIN admin.bicicletas b ON ot.bicicleta_id = b.bicicleta_id
       LEFT JOIN admin.estado_orden_trabajo eot ON ot.estado_orden_id = eot.estado_orden_id
       LEFT JOIN admin.prioridad_orden_trabajo pot ON ot.prioridad_orden_id = pot.prioridad_orden_trabajo_id
       ${whereClause}

@@ -13,17 +13,17 @@ export async function validateOrderInRepair(
   empresaId: number,
   accion: string
 ): Promise<StateValidationResult> {
-  // Lock order and join state catalog & owner details
+  // Lock order and join state catalog & canonical client company ownership
   const res = await client.query(`
     SELECT 
       ot.orden_trabajo_id,
       ot.estado_orden_id,
       ot.bicicleta_id,
       eot.codigo AS estado_codigo,
-      u.empresa_id AS empresa_id
+      c.empresa_id AS empresa_id
     FROM admin.ordenes_trabajo ot
     JOIN admin.estado_orden_trabajo eot ON ot.estado_orden_id = eot.estado_orden_id
-    JOIN admin.usuario u ON ot.usuario_registro = u.usuario_id
+    JOIN admin.clientes c ON ot.cliente_id = c.cliente_id
     WHERE ot.orden_trabajo_id = $1
       AND ot.activo = true
     FOR UPDATE OF ot
@@ -35,7 +35,7 @@ export async function validateOrderInRepair(
       response: NextResponse.json(
         {
           success: false,
-          error: "ORDER_NOT_FOUND",
+          error: "NOT_FOUND",
           message: "La orden de trabajo no existe o está inactiva."
         },
         { status: 404 }
@@ -45,17 +45,17 @@ export async function validateOrderInRepair(
 
   const order = res.rows[0];
 
-  // Company check
+  // Canonical Company Isolation Check (returns 404 to avoid existence leakage)
   if (order.empresa_id == null || empresaId == null || Number(order.empresa_id) !== Number(empresaId)) {
     return {
       isValid: false,
       response: NextResponse.json(
         {
           success: false,
-          error: "FORBIDDEN_COMPANY",
-          message: "No posee permisos para acceder a esta orden de trabajo."
+          error: "NOT_FOUND",
+          message: "La orden de trabajo no existe o no pertenece a su empresa."
         },
-        { status: 403 }
+        { status: 404 }
       )
     };
   }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
 import { isS3Configured, generateUploadToken } from "@/lib/s3";
+import { recordUserActivity } from "@/lib/auditLogger";
 import crypto from "crypto";
 
 // POST /api/taller/evidencias (Carga Staging de Evidencias)
@@ -84,6 +85,15 @@ export async function POST(req: Request) {
       file_size: fileBuffer.length,
       original_name: fileName,
       expires_at
+    });
+
+    await recordUserActivity({
+      userId: session.usuario_id,
+      modulo: "TALLER_EVIDENCIAS",
+      evento: "EVIDENCE_TOKEN_GENERATED",
+      descripcion: `Token de evidencia generado en staging (${fileName}, ${mimeType}, ${fileBuffer.length} bytes)`,
+      resultado: "Exitoso",
+      req
     });
 
     return NextResponse.json({

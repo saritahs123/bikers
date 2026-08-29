@@ -35,13 +35,13 @@ export async function GET(
     const queryParams: any[] = [userId];
 
     if (fechaDesde) {
-      queryParams.push(`${fechaDesde} 00:00:00`);
-      whereConditions.push(`a.fecha_hora >= $${queryParams.length}::timestamp`);
+      queryParams.push(`${fechaDesde} 00:00:00+00`);
+      whereConditions.push(`a.fecha_hora >= $${queryParams.length}::timestamptz`);
     }
 
     if (fechaHasta) {
-      queryParams.push(`${fechaHasta} 23:59:59`);
-      whereConditions.push(`a.fecha_hora <= $${queryParams.length}::timestamp`);
+      queryParams.push(`${fechaHasta} 23:59:59+00`);
+      whereConditions.push(`a.fecha_hora <= $${queryParams.length}::timestamptz`);
     }
 
     if (accion && accion !== "Todos") {
@@ -116,30 +116,30 @@ export async function GET(
     const rows = await query(itemsSql, queryParams);
 
     const mapped = (rows || []).map((r: any) => ({
-      id: r.auditoria_id || r.id,
-      auditoria_id: r.auditoria_id || r.id,
+      id: r.auditoria_id,
+      auditoria_id: r.auditoria_id,
       usuario_id: r.usuario_id,
       admin_id: r.admin_id,
       admin_nombre: r.admin_nombre || (r.admin_id ? `Admin #${r.admin_id}` : 'Sistema'),
       performed_by: r.admin_nombre || (r.admin_id ? `Admin #${r.admin_id}` : 'Sistema'),
-      performed_at: r.fecha_hora || r.performed_at || null,
-      timestamp: r.fecha_hora || r.performed_at || null,
-      fecha_hora: r.fecha_hora || r.performed_at || null,
-      action: r.accion || r.action || 'Registro de Auditoría',
-      accion: r.accion || r.action || 'Registro de Auditoría',
-      before_value: r.valor_anterior || r.before_value || '—',
-      valor_anterior: r.valor_anterior || r.before_value || '—',
-      after_value: r.valor_nuevo || r.after_value || '—',
-      valor_nuevo: r.valor_nuevo || r.after_value || '—',
-      reason: r.motivo || r.reason || 'Actualización por administrador',
-      motivo: r.motivo || r.reason || 'Actualización por administrador',
-      observaciones: r.observaciones || r.motivo || r.reason || 'Sin observaciones',
-      result: r.resultado || r.result || 'EXITOSO',
-      resultado: r.resultado || r.result || 'EXITOSO',
-      ip: r.direccion_ip || r.ip || '127.0.0.1',
-      direccion_ip: r.direccion_ip || r.ip || '127.0.0.1',
-      device: r.dispositivo || r.device || 'Navegador Web',
-      dispositivo: r.dispositivo || r.device || 'Navegador Web',
+      performed_at: r.fecha_hora || null,
+      timestamp: r.fecha_hora || null,
+      fecha_hora: r.fecha_hora || null,
+      action: r.accion || 'Registro de Auditoría',
+      accion: r.accion || 'Registro de Auditoría',
+      before_value: r.valor_anterior || '—',
+      valor_anterior: r.valor_anterior || '—',
+      after_value: r.valor_nuevo || '—',
+      valor_nuevo: r.valor_nuevo || '—',
+      reason: r.motivo || '—',
+      motivo: r.motivo || '—',
+      observaciones: r.motivo || '—',
+      result: r.resultado || '—',
+      resultado: r.resultado || '—',
+      ip: r.direccion_ip || '—',
+      direccion_ip: r.direccion_ip || '—',
+      device: r.dispositivo || '—',
+      dispositivo: r.dispositivo || '—',
       modulo: r.modulo || 'Seguridad'
     }));
 
@@ -236,23 +236,27 @@ export async function POST(
 
     const userId = authResult.targetUserId;
     const adminId = authResult.authUserId;
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
 
     const { 
-      accion = 'Modificación de Perfil', 
-      valor_anterior = '—', 
-      valor_nuevo = '—', 
-      motivo = 'Actualización administrativa', 
-      resultado = 'EXITOSO', 
-      direccion_ip = '127.0.0.1', 
-      dispositivo = 'Navegador Web' 
+      accion = 'USER_UPDATED', 
+      valor_anterior = null, 
+      valor_nuevo = null, 
+      motivo = null, 
+      resultado = 'COMPLETADO' 
     } = body;
 
-    await query(`
-      INSERT INTO admin.usuario_auditoria 
-      (auditoria_id, usuario_id, admin_id, fecha_hora, accion, valor_anterior, valor_nuevo, motivo, resultado, direccion_ip, dispositivo)
-      VALUES ((SELECT COALESCE(MAX(auditoria_id), 0) + 1 FROM admin.usuario_auditoria), $1, $2, NOW(), $3, $4, $5, $6, $7, $8, $9)
-    `, [userId, adminId, accion, valor_anterior, valor_nuevo, motivo, resultado, direccion_ip, dispositivo]);
+    const { recordUserAudit } = await import("@/lib/auditLogger");
+    await recordUserAudit({
+      userId,
+      adminId,
+      accion,
+      valorAnterior: valor_anterior,
+      valorNuevo: valor_nuevo,
+      motivo,
+      resultado,
+      req
+    });
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
