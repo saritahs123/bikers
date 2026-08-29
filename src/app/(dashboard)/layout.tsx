@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { query } from "@/lib/db";
 import { DashboardShell } from "@/components/layout/DashboardShell";
+import { validateAndTouchSession } from "@/lib/sessionLifecycle";
 
 export const dynamic = "force-dynamic";
 
@@ -14,24 +15,12 @@ async function getAuthenticatedUser() {
     return null;
   }
 
-  const sessionCheck = await query<{ usuario_id: number; fecha_expiracion: string | Date | null; estado: string }>(
-    `SELECT usuario_id, fecha_expiracion, estado
-     FROM admin.usuario_sesion
-     WHERE token_identificador = $1 AND estado = 'ACTIVA' AND (fecha_expiracion IS NULL OR fecha_expiracion > NOW())
-     LIMIT 1`,
-    [tokenCookie]
-  );
-
-  if (!sessionCheck || sessionCheck.length === 0) {
+  const validation = await validateAndTouchSession(tokenCookie);
+  if (!validation.valid) {
     return null;
   }
 
-  const session = sessionCheck[0];
-  if (session.estado !== "ACTIVA") {
-    return null;
-  }
-
-  const targetUserId = session.usuario_id;
+  const targetUserId = validation.userId;
   if (!targetUserId || isNaN(Number(targetUserId))) {
     return null;
   }

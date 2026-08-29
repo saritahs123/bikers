@@ -1,10 +1,11 @@
 "use server";
 
 import { query } from "@/lib/db";
-import { verifyPassword } from "@/lib/auth";
+import { verifyPassword, hashSessionToken } from "@/lib/auth";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import crypto from "crypto";
+import { recordUserActivity, recordUserAudit } from "@/lib/auditLogger";
 
 const SESSION_DURATION_HOURS = 8;
 const REMEMBER_ME_DURATION_DAYS = 30;
@@ -74,7 +75,7 @@ export async function loginAction(
     const reqHeaders = await headers();
     const userAgentRaw = reqHeaders.get("user-agent");
     const device = parseUserAgent(userAgentRaw);
-    const ip = reqHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() || reqHeaders.get("x-real-ip") || "127.0.0.1";
+    const ip = reqHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() || reqHeaders.get("x-real-ip") || null;
 
     let targetUser: UserDbRecord | null = null;
 
@@ -160,6 +161,17 @@ export async function loginAction(
            WHERE usuario_id = $1`,
           [targetUser.usuario_id]
         );
+
+        // Record failed login in activity log
+        await recordUserActivity({
+          userId: targetUser.usuario_id,
+          modulo: 'Seguridad',
+          evento: 'LOGIN',
+          descripcion: 'Intento de inicio de sesión con contraseña incorrecta',
+          resultado: 'Fallido',
+          ip,
+          dispositivo: device
+        });
       } catch (e) {
         console.error("Technical error updating failed attempts counter:", e);
       }
@@ -169,6 +181,7 @@ export async function loginAction(
 
     // 8. Session Duration & Cookie Expiration Configuration based on RememberMe
     const sessionToken = `ses_${crypto.randomUUID().replace(/-/g, "")}`;
+    const tokenHash = hashSessionToken(sessionToken);
     const intervalSql = rememberMe
       ? `${REMEMBER_ME_DURATION_DAYS} days`
       : `${SESSION_DURATION_HOURS} hours`;
@@ -189,12 +202,24 @@ export async function loginAction(
         `INSERT INTO admin.usuario_sesion
          (sesion_id, usuario_id, token_identificador, dispositivo_navegador, direccion_ip, ubicacion, fecha_inicio, ultima_actividad, fecha_expiracion, estado)
          VALUES
-         ((SELECT COALESCE(MAX(sesion_id), 0) + 1 FROM admin.usuario_sesion), $1, $2, $3, $4, 'No disponible', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NOW() + INTERVAL '100 years', 'ACTIVA')`,
-        [targetUser.usuario_id, sessionToken, device, ip]
+         ((SELECT COALESCE(MAX(sesion_id), 0) + 1 FROM admin.usuario_sesion), $1, $2, $3, $4, 'No disponible', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NOW() + INTERVAL '${intervalSql}', 'ACTIVA')`,
+        [targetUser.usuario_id, tokenHash, device, ip]
       );
 
+      // Record successful login in activity log
+      const userDisplayName = targetUser.identificador_principal || 'Usuario';
+      await recordUserActivity({
+        userId: targetUser.usuario_id,
+        modulo: 'Seguridad',
+        evento: 'LOGIN',
+        descripcion: `${userDisplayName} inició sesión en la plataforma`,
+        resultado: 'Exitoso',
+        ip,
+        dispositivo: device
+      });
+
       const cookieStore = await cookies();
-      const maxAgeSeconds = 100 * 365 * 24 * 60 * 60; // 100 years
+      const maxAgeSeconds = rememberMe ? REMEMBER_ME_DURATION_DAYS * 24 * 60 * 60 : SESSION_DURATION_HOURS * 60 * 60;
       const baseCookieOptions: any = {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",

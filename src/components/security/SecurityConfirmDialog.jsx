@@ -2,36 +2,17 @@
 import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { 
-  ShieldX, ShieldCheck, AlertTriangle, Info, CheckCircle2, Save, Trash2, Key, RefreshCw, X 
+  ShieldX, ShieldCheck, AlertTriangle, Info, CheckCircle2, RefreshCw, X 
 } from 'lucide-react';
-
-/**
- * @typedef {Object} SecurityConfirmDialogProps
- * @property {boolean} [isOpen]
- * @property {() => void} [onClose]
- * @property {() => void} [onConfirm]
- * @property {React.ReactNode} [title]
- * @property {React.ReactNode} [description]
- * @property {'default' | 'warning' | 'danger' | 'success' | 'info'} [variant]
- * @property {any} [icon]
- * @property {React.ReactNode} [confirmLabel]
- * @property {React.ReactNode} [cancelLabel]
- * @property {boolean} [isLoading]
- * @property {React.ReactNode} [loadingLabel]
- * @property {any} [details]
- * @property {React.ReactNode} [extraContent]
- */
 
 /**
  * SecurityConfirmDialog - Unified standard confirmation dialog for the Security Module.
  * Adheres strictly to the Bikers' Fort Design System:
- * - Theme background: #161a21
- * - Theme border: #2d3748
- * - Olive/Lime primary accent: #bfce7f
- * - Red/Danger semantic color for destructive actions only (icon, danger button)
+ * - Theme background: bg-surface-elevated
+ * - Theme border: border-border
+ * - Olive/Lime primary accent: text-primary / bg-primary
+ * - Semantic colors for warning, danger, success, info
  * - Rendered via createPortal to document.body
- * 
- * @param {SecurityConfirmDialogProps} props
  */
 export default function SecurityConfirmDialog({
   isOpen = false,
@@ -41,10 +22,10 @@ export default function SecurityConfirmDialog({
   description = '',
   variant = 'default', // 'danger' | 'warning' | 'default' | 'success' | 'info'
   icon: CustomIcon = null,
-  confirmLabel = null,
+  confirmLabel = 'Confirmar',
   cancelLabel = 'Cancelar',
   isLoading = false,
-  loadingLabel = null,
+  loadingLabel = 'Cargando...',
   details = null,
   extraContent = null,
 }) {
@@ -84,16 +65,16 @@ export default function SecurityConfirmDialog({
   const getIconContainerStyle = () => {
     switch (variant) {
       case 'danger':
-        return 'bg-rose-500/10 border-rose-500/30 text-rose-400';
+        return 'bg-error/15 border-error/30 text-error';
       case 'warning':
-        return 'bg-amber-500/10 border-amber-500/30 text-amber-400';
+        return 'bg-warning/15 border-warning/30 text-warning';
       case 'success':
-        return 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400';
+        return 'bg-success/15 border-success/30 text-success';
       case 'info':
-        return 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400';
+        return 'bg-info/15 border-info/30 text-info';
       case 'default':
       default:
-        return 'bg-[#2c321d] border-[#bfce7f]/30 text-[#bfce7f]';
+        return 'bg-primary/15 border-primary/30 text-primary';
     }
   };
 
@@ -101,16 +82,16 @@ export default function SecurityConfirmDialog({
   const getConfirmButtonStyle = () => {
     switch (variant) {
       case 'danger':
-        return 'bg-rose-600 hover:bg-rose-700 text-white shadow-rose-600/20';
+        return 'bg-error text-white hover:brightness-110 shadow-sm';
       case 'warning':
-        return 'bg-amber-600 hover:bg-amber-700 text-white shadow-amber-600/20';
+        return 'bg-warning text-white hover:brightness-110 shadow-sm';
       case 'success':
-        return 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20';
+        return 'bg-success text-white hover:brightness-110 shadow-sm';
       case 'info':
-        return 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-600/20';
+        return 'bg-info text-white hover:brightness-110 shadow-sm';
       case 'default':
       default:
-        return 'bg-[#bfce7f] hover:bg-[#a8b868] text-[#1d1f18] shadow-[#bfce7f]/20';
+        return 'bg-primary-button-bg text-primary-foreground hover:brightness-110 shadow-sm';
     }
   };
 
@@ -128,20 +109,20 @@ export default function SecurityConfirmDialog({
         onClick={() => {
           if (!isLoading) onClose?.();
         }}
-      ></div>
+      />
 
       {/* Modal Dialog Content */}
       <div 
         role="dialog"
         aria-modal="true"
-        className="relative w-[480px] max-w-[calc(100vw-32px)] min-w-[300px] bg-[#161a21] border border-[#2d3748] rounded-2xl shadow-2xl p-6 z-10 animate-in zoom-in-95 duration-200 flex flex-col items-start text-left box-border"
+        className="relative w-[480px] max-w-[calc(100vw-32px)] min-w-[300px] bg-surface-elevated border border-border rounded-2xl shadow-2xl p-6 z-10 animate-in zoom-in-95 duration-200 flex flex-col items-start text-left box-border transition-colors text-foreground"
       >
         {/* Close X Button */}
         <button
           type="button"
           disabled={isLoading}
           onClick={onClose}
-          className="absolute top-4 right-4 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-[#212631] transition-colors disabled:opacity-50 cursor-pointer"
+          className="absolute top-4 right-4 p-1.5 rounded-lg text-foreground-muted hover:text-foreground hover:bg-hover transition-colors disabled:opacity-50 cursor-pointer"
           aria-label="Cerrar modal"
         >
           <X size={16} />
@@ -153,25 +134,25 @@ export default function SecurityConfirmDialog({
         </div>
 
         {/* Title */}
-        <h3 className="text-lg md:text-xl font-bold text-white mb-2 tracking-tight w-full">
+        <h3 className="text-lg md:text-xl font-bold font-sans text-foreground mb-2 tracking-tight w-full">
           {title}
         </h3>
 
         {/* Description */}
         {description && (
-          <div className="text-xs text-slate-300 mb-5 leading-relaxed font-medium w-full">
+          <div className="text-xs text-foreground-secondary mb-5 leading-relaxed font-medium w-full font-sans">
             {description}
           </div>
         )}
 
         {/* Technical Details Mini Card */}
         {details && (
-          <div className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl p-3.5 mb-5 space-y-2 text-xs font-mono">
+          <div className="w-full bg-surface-subtle border border-border rounded-xl p-3.5 mb-5 space-y-2 text-xs font-mono">
             {Array.isArray(details) ? (
               details.map((item, idx) => (
                 <div key={idx} className="flex justify-between items-center text-xs gap-2">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase shrink-0">{item.label}:</span>
-                  <span className={`font-bold text-white truncate max-w-[260px] ${item.isCode ? 'bg-[#161a21] px-2 py-0.5 rounded border border-[#2d3748] font-mono text-slate-300' : ''}`}>
+                  <span className="text-[10px] text-foreground-muted font-bold uppercase shrink-0">{item.label}:</span>
+                  <span className={`font-bold text-foreground truncate max-w-[260px] ${item.isCode ? 'bg-surface px-2 py-0.5 rounded border border-border font-mono text-foreground-secondary' : ''}`}>
                     {item.value || '—'}
                   </span>
                 </div>
@@ -184,7 +165,7 @@ export default function SecurityConfirmDialog({
 
         {/* Extra Content (e.g. checkbox) */}
         {extraContent && (
-          <div className="w-full mb-5 font-mono text-xs">
+          <div className="w-full mb-5 font-mono text-xs text-foreground-secondary">
             {extraContent}
           </div>
         )}
@@ -195,7 +176,7 @@ export default function SecurityConfirmDialog({
             type="button"
             disabled={isLoading}
             onClick={onClose} 
-            className="flex-1 py-2.5 px-4 rounded-xl border border-[#2d3748] bg-[#0e1117] hover:bg-[#1f242d] text-slate-300 font-bold text-xs transition-colors disabled:opacity-50 cursor-pointer text-center"
+            className="flex-1 py-2.5 px-4 rounded-xl border border-border bg-surface hover:bg-hover text-foreground-secondary font-bold text-xs transition-colors disabled:opacity-50 cursor-pointer text-center"
           >
             {cancelLabel}
           </button>

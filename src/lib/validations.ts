@@ -104,3 +104,50 @@ export function validateRequiredText(text: string, fieldLabel = "Este campo", ma
   }
   return { isValid: true, message: "", sanitized };
 }
+
+export function validatePasswordPolicy(password: string): { 
+  isValid: boolean; 
+  message: string; 
+  details: { 
+    minLength: boolean; 
+    hasUpper: boolean; 
+    hasLower: boolean; 
+    hasNumber: boolean; 
+    hasSymbol: boolean 
+  } 
+} {
+  if (!password || typeof password !== 'string') {
+    return {
+      isValid: false,
+      message: "La contraseña es obligatoria.",
+      details: { minLength: false, hasUpper: false, hasLower: false, hasNumber: false, hasSymbol: false }
+    };
+  }
+
+  const minLength = password.length >= 8 && password.length <= 128;
+  const hasUpper = /[A-Z]/.test(password);
+  const hasLower = /[a-z]/.test(password);
+  const hasNumber = /[0-9]/.test(password);
+  const hasSymbol = /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password);
+
+  const isValid = minLength && hasUpper && hasLower && hasNumber && hasSymbol;
+
+  let message = "";
+  if (!minLength) {
+    message = password.length < 8 ? "La contraseña debe tener al menos 8 caracteres." : "La contraseña no puede exceder 128 caracteres.";
+  } else if (!hasUpper) {
+    message = "La contraseña debe incluir al menos una letra mayúscula.";
+  } else if (!hasLower) {
+    message = "La contraseña debe incluir al menos una letra minúscula.";
+  } else if (!hasNumber) {
+    message = "La contraseña debe incluir al menos un número.";
+  } else if (!hasSymbol) {
+    message = "La contraseña debe incluir al menos un carácter especial (!@#$%^&*...).";
+  }
+
+  return {
+    isValid,
+    message,
+    details: { minLength, hasUpper, hasLower, hasNumber, hasSymbol }
+  };
+}

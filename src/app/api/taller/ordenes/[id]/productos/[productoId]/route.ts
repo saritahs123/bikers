@@ -3,6 +3,7 @@ import { getPool } from "@/lib/db";
 import { getWorkshopSession } from "@/lib/workshop-session";
 import { recalculateWorkOrderTotals } from "@/lib/workshop/recalculateWorkOrderTotals";
 import { validateOrderInRepair } from "@/lib/workshop/validateOrderState";
+import { recordUserActivity, recordUserAudit } from "@/lib/auditLogger";
 
 export async function PUT(
   req: Request,
@@ -94,16 +95,15 @@ export async function PUT(
     // Recalculate order totals inside transaction
     await recalculateWorkOrderTotals(client, ordenId);
 
-    // Register history event
+    // Register history event using PostgreSQL sequence
     await client.query(
       `
       INSERT INTO admin.orden_historial_estado (
-        orden_historial_estado_id, orden_trabajo_id, estado_anterior_id, estado_nuevo_id,
+        orden_trabajo_id, estado_anterior_id, estado_nuevo_id,
         usuario_cambio, comentario, fecha_cambio, activo, fecha_registro
       ) VALUES (
-        (SELECT COALESCE(MAX(orden_historial_estado_id), 0) + 1 FROM admin.orden_historial_estado),
         $1, $2, $2, $3, $4, NOW(), true, NOW()
-      )
+      ) RETURNING orden_historial_estado_id
       `,
       [
         ordenId,
@@ -113,7 +113,32 @@ export async function PUT(
       ]
     );
 
+    await recordUserAudit({
+      userId: session.usuario_id,
+      accion: "ACTUALIZAR_PRODUCTO_ORDEN",
+      valorNuevo: {
+        orden_producto_id: ordenProductoId,
+        orden_trabajo_id: ordenId,
+        cantidad,
+        precio_unitario: precioUnitario,
+        subtotal
+      },
+      motivo: "Actualización de producto en orden",
+      resultado: "COMPLETADO",
+      client,
+      throwOnError: true
+    });
+
     await client.query("COMMIT");
+
+    await recordUserActivity({
+      userId: session.usuario_id,
+      modulo: "TALLER_PRODUCTOS",
+      evento: "ORDER_PRODUCT_UPDATED",
+      descripcion: `Producto #${item.producto_id} actualizado en orden #${ordenId}`,
+      resultado: "Exitoso",
+      req
+    });
 
     return NextResponse.json({
       success: true,
@@ -205,16 +230,15 @@ export async function DELETE(
     // Recalculate order totals
     await recalculateWorkOrderTotals(client, ordenId);
 
-    // Register history event
+    // Register history event using PostgreSQL sequence
     await client.query(
       `
       INSERT INTO admin.orden_historial_estado (
-        orden_historial_estado_id, orden_trabajo_id, estado_anterior_id, estado_nuevo_id,
+        orden_trabajo_id, estado_anterior_id, estado_nuevo_id,
         usuario_cambio, comentario, fecha_cambio, activo, fecha_registro
       ) VALUES (
-        (SELECT COALESCE(MAX(orden_historial_estado_id), 0) + 1 FROM admin.orden_historial_estado),
         $1, $2, $2, $3, $4, NOW(), true, NOW()
-      )
+      ) RETURNING orden_historial_estado_id
       `,
       [
         ordenId,
@@ -224,7 +248,27 @@ export async function DELETE(
       ]
     );
 
+    await recordUserAudit({
+      userId: session.usuario_id,
+      accion: "ELIMINAR_PRODUCTO_ORDEN",
+      valorAnterior: { orden_producto_id: ordenProductoId, orden_trabajo_id: ordenId },
+      valorNuevo: null,
+      motivo: "Eliminación de producto de orden",
+      resultado: "COMPLETADO",
+      client,
+      throwOnError: true
+    });
+
     await client.query("COMMIT");
+
+    await recordUserActivity({
+      userId: session.usuario_id,
+      modulo: "TALLER_PRODUCTOS",
+      evento: "ORDER_PRODUCT_DELETED",
+      descripcion: `Producto #${ordenProductoId} (${item.nombre}) eliminado de la orden #${ordenId}`,
+      resultado: "Exitoso",
+      req
+    });
 
     return NextResponse.json({
       success: true,

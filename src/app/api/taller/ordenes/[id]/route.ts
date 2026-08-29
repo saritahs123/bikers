@@ -4,6 +4,7 @@ import { recalculateWorkOrderTotals } from "@/lib/workshop/recalculateWorkOrderT
 import { getCronometroStatus } from "@/lib/workshop/getCronometroStatus";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
 import { queryIncompleteServicesAndTimers } from "@/lib/workshop/validateOrderState";
+import { recordUserActivity, recordUserAudit, computeDiff } from "@/lib/auditLogger";
 
 // Helper for cleaning dates safely
 function cleanFecha(val: any) {
@@ -58,12 +59,12 @@ export async function GET(
       SELECT
         ot.orden_trabajo_id,
         ot.recepcion_id,
-        ot.usuario_registro,
+        ot.cliente_id,
         ot.estado_orden_id,
         ot.activo,
-        u_ot.empresa_id AS order_empresa_id
+        c.empresa_id AS order_empresa_id
       FROM admin.ordenes_trabajo ot
-      JOIN admin.usuario u_ot ON u_ot.usuario_id = ot.usuario_registro
+      JOIN admin.clientes c ON ot.cliente_id = c.cliente_id
       WHERE ot.orden_trabajo_id = $1 AND ot.activo = true
     `;
     const existenceRes = await query<any>(existenceCheckSql, [ordenId]);
@@ -78,14 +79,13 @@ export async function GET(
 
     const orderEmpresaId = otCheck.order_empresa_id ?? null;
     if (
-      otCheck.usuario_registro == null ||
       session.empresa_id == null ||
       orderEmpresaId == null ||
       Number(session.empresa_id) !== Number(orderEmpresaId)
     ) {
       return NextResponse.json(
-        { error: "FORBIDDEN_COMPANY", message: "No fue posible determinar la empresa de la orden." },
-        { status: 403 }
+        { error: "NOT_FOUND", message: "La orden solicitada no existe o no pertenece a su empresa." },
+        { status: 404 }
       );
     }
 
@@ -134,12 +134,11 @@ export async function GET(
         COALESCE(NULLIF(TRIM(CONCAT_WS(' ', ui_mec.nombre, ui_mec.apellido)), ''), ui_mec.correo_electronico, ('Mecánico #' || u_mec.usuario_id::text)) AS mecanico_nombre,
         c_mec.nombre AS mecanico_cargo,
         tu_mec.nombre AS mecanico_tipo,
-        u_ot.empresa_id AS empresa_id
+        u_mec.usuario_id AS mecanico_id_val,
+        c.empresa_id AS empresa_id
       FROM admin.ordenes_trabajo ot
+      JOIN admin.clientes c ON ot.cliente_id = c.cliente_id
       LEFT JOIN admin.recepciones r ON ot.recepcion_id = r.recepcion_id
-      JOIN admin.usuario u_ot ON u_ot.usuario_id = ot.usuario_registro
-      LEFT JOIN admin.clientes cliente_ot ON cliente_ot.cliente_id = ot.cliente_id
-      LEFT JOIN admin.clientes cliente_recepcion ON cliente_recepcion.cliente_id = r.cliente_id
       LEFT JOIN admin.bicicletas bicicleta_ot ON bicicleta_ot.bicicleta_id = ot.bicicleta_id
       LEFT JOIN admin.bicicletas bicicleta_recepcion ON bicicleta_recepcion.bicicleta_id = r.bicicleta_id
       LEFT JOIN admin.estado_orden_trabajo eot ON ot.estado_orden_id = eot.estado_orden_id
@@ -535,7 +534,7 @@ export async function PUT(
 
     await client.query("BEGIN");
 
-    // Lock Order Row & join usuarios for empresa_id safely
+    // Lock Order Row & join clientes for canonical empresa_id safely
     const orderRes = await client.query(`
       SELECT 
         ot.orden_trabajo_id, 
@@ -551,9 +550,9 @@ export async function PUT(
         ot.fecha_facturacion,
         ot.usuario_facturacion_id,
         COALESCE(ot.total_orden, ot.subtotal_general, 0) AS total_orden,
-        u_ot.empresa_id AS empresa_id
+        c.empresa_id AS empresa_id
       FROM admin.ordenes_trabajo ot
-      JOIN admin.usuario u_ot ON u_ot.usuario_id = ot.usuario_registro
+      JOIN admin.clientes c ON ot.cliente_id = c.cliente_id
       WHERE ot.orden_trabajo_id = $1 AND ot.activo = true
       FOR UPDATE OF ot
     `, [ordenId]);
@@ -570,7 +569,6 @@ export async function PUT(
     const currentStateId = currentOrder.estado_orden_id;
 
     if (
-      currentOrder.usuario_registro == null ||
       session.empresa_id == null ||
       currentOrder.empresa_id == null ||
       Number(session.empresa_id) !== Number(currentOrder.empresa_id)
@@ -578,11 +576,11 @@ export async function PUT(
       await client.query("ROLLBACK");
       return NextResponse.json(
         {
-          error: "FORBIDDEN_COMPANY",
-          title: "No puedes editar esta orden",
-          message: "No fue posible determinar la empresa de la orden."
+          error: "NOT_FOUND",
+          title: "Orden no encontrada",
+          message: "Orden de trabajo no encontrada."
         },
-        { status: 403 }
+        { status: 404 }
       );
     }
 
@@ -642,26 +640,100 @@ export async function PUT(
         );
       }
 
-      await client.query(`
+      let validatedMecanicoId = currentOrder.mecanico_id;
+      if (body.mecanico_id !== undefined) {
+        if (body.mecanico_id === null || body.mecanico_id === "" || body.mecanico_id === 0) {
+          validatedMecanicoId = null;
+        } else {
+          const mId = parseInt(body.mecanico_id, 10);
+          if (!isNaN(mId) && mId > 0) {
+            const mecCheck = await client.query(
+              `SELECT usuario_id FROM admin.usuario WHERE usuario_id = $1 AND empresa_id = $2 AND (estado = 'ACTIVO' OR estado IS NULL) LIMIT 1`,
+              [mId, session.empresa_id]
+            );
+            if (!mecCheck.rows.length) {
+              await client.query("ROLLBACK");
+              return NextResponse.json({
+                error: "INVALID_MECHANIC",
+                message: "El mecánico asignado no pertenece a su empresa o no está activo."
+              }, { status: 400 });
+            }
+            validatedMecanicoId = mId;
+          }
+        }
+      }
+
+      const updateRes = await client.query(`
         UPDATE admin.ordenes_trabajo
         SET 
           prioridad_orden_id = COALESCE($1, prioridad_orden_id),
           observacion_interna = COALESCE($2, observacion_interna),
           diagnostico_inicial = COALESCE($3, diagnostico_inicial),
           fecha_entrega_estimada = COALESCE($4, fecha_entrega_estimada),
+          mecanico_id = $5,
           fecha_actualizacion = NOW(),
-          usuario_actualizacion = $5
-        WHERE orden_trabajo_id = $6
+          usuario_actualizacion = $6
+        WHERE orden_trabajo_id = $7
+        RETURNING *
       `, [
         targetPrioridadId ? parseInt(targetPrioridadId, 10) : null,
         observacion_interna !== undefined ? observacion_interna : null,
         diagnostico_inicial !== undefined ? diagnostico_inicial : null,
         cleanFecha(fecha_entrega_estimada),
+        validatedMecanicoId,
         session.usuario_id,
         ordenId
       ]);
 
+      const afterOrder = updateRes.rows[0];
+      const diff = computeDiff(currentOrder, afterOrder);
+
+      if (diff.hasChanges) {
+        if (currentOrder.mecanico_id !== validatedMecanicoId) {
+          await recordUserAudit({
+            userId: session.usuario_id,
+            accion: "ASIGNAR_MECANICO_ORDEN",
+            valorAnterior: { mecanico_id: currentOrder.mecanico_id },
+            valorNuevo: { mecanico_id: validatedMecanicoId },
+            motivo: "Reasignación de mecánico de orden",
+            resultado: "COMPLETADO",
+            client,
+            throwOnError: true
+          });
+
+          await recordUserActivity({
+            userId: session.usuario_id,
+            modulo: "TALLER_ORDENES",
+            evento: "WORK_ORDER_MECHANIC_ASSIGNED",
+            descripcion: `Mecánico #${validatedMecanicoId || 'Ninguno'} asignado a la orden #${ordenId}`,
+            resultado: "Exitoso",
+            req
+          });
+        }
+
+        await recordUserAudit({
+          userId: session.usuario_id,
+          accion: "ACTUALIZAR_ORDEN_TRABAJO",
+          valorAnterior: diff.valorAnterior,
+          valorNuevo: diff.valorNuevo,
+          motivo: "Actualización de datos generales de la orden",
+          resultado: "COMPLETADO",
+          client,
+          throwOnError: true
+        });
+      }
+
       await client.query("COMMIT");
+
+      await recordUserActivity({
+        userId: session.usuario_id,
+        modulo: "TALLER_ORDENES",
+        evento: "WORK_ORDER_UPDATED",
+        descripcion: `Orden #${ordenId} (${currentOrder.codigo_orden}) actualizada exitosamente`,
+        resultado: "Exitoso",
+        req
+      });
+
       return NextResponse.json({
         success: true,
         message: "Orden de trabajo actualizada correctamente."
@@ -680,6 +752,14 @@ export async function PUT(
 
     if (!ALLOWED_TRANSITIONS[currentStateId]?.includes(targetStateId)) {
       await client.query("ROLLBACK");
+      await recordUserActivity({
+        userId: session.usuario_id,
+        modulo: "TALLER_ORDENES",
+        evento: "WORK_ORDER_STATE_CHANGE_DENIED",
+        descripcion: `Transición no permitida para orden #${ordenId} de estado #${currentStateId} a #${targetStateId}`,
+        resultado: "Denegado",
+        req
+      });
       return NextResponse.json(
         {
           error: "TRANSITION_NOT_ALLOWED",
@@ -772,6 +852,8 @@ export async function PUT(
     const mecanicoCargo = mecRes.rows[0]?.cargo_nombre || "Técnico de Taller";
 
     let historyComment = "";
+    const isReopening = (targetStateId === estadoReparacionId && currentStateId === estadoListaEntregaId);
+    let reopenedServiceCode: string | null = null;
 
     if (targetStateId === estadoEntregadaId) {
       // ATOMIC DELIVERY & INVOICING
@@ -920,7 +1002,7 @@ export async function PUT(
 
       // If an optional service was selected to be reopened
       const targetServiceId = body.orden_servicio_id || body.servicio_id_reabrir;
-      let reopenedServiceCode = null;
+      reopenedServiceCode = null;
 
       if (targetServiceId !== undefined && targetServiceId !== null && targetServiceId !== "" && !isNaN(Number(targetServiceId))) {
         const srvId = parseInt(String(targetServiceId), 10);
@@ -1012,16 +1094,14 @@ export async function PUT(
         : (body.motivo_reapertura || observacion_cambio_estado || observacion_interna || "Cambio de estado de la orden");
     }
 
-    // Insert Single History Record with table lock to prevent concurrent duplicate IDs
-    await client.query(`LOCK TABLE admin.orden_historial_estado IN EXCLUSIVE MODE`);
+    // Insert Single History Record using PostgreSQL sequence
     await client.query(`
       INSERT INTO admin.orden_historial_estado (
-        orden_historial_estado_id, orden_trabajo_id, estado_anterior_id, estado_nuevo_id,
+        orden_trabajo_id, estado_anterior_id, estado_nuevo_id,
         usuario_cambio, comentario, fecha_cambio, activo, fecha_registro
       ) VALUES (
-        (SELECT COALESCE(MAX(orden_historial_estado_id), 0) + 1 FROM admin.orden_historial_estado),
         $1, $2, $3, $4, $5, NOW(), true, NOW()
-      )
+      ) RETURNING orden_historial_estado_id
     `, [
       ordenId,
       currentStateId,
@@ -1030,10 +1110,54 @@ export async function PUT(
       historyComment
     ]);
 
-    await client.query("COMMIT");
-
     const estadoAnteriorObj = idToCodeMap.get(currentStateId) || { id: currentStateId, codigo: "DESCONOCIDO", nombre: "Desconocido" };
     const estadoNuevoObj = idToCodeMap.get(targetStateId) || { id: targetStateId, codigo: "DESCONOCIDO", nombre: "Desconocido" };
+
+    if (isReopening) {
+      await recordUserAudit({
+        userId: session.usuario_id,
+        accion: "REAPERTURA_ORDEN",
+        valorAnterior: { estado_orden_id: currentStateId, estado_codigo: estadoAnteriorObj.codigo },
+        valorNuevo: { estado_orden_id: targetStateId, estado_codigo: estadoNuevoObj.codigo, servicio_reabierto: reopenedServiceCode || null },
+        motivo: historyComment,
+        resultado: "COMPLETADO",
+        client,
+        throwOnError: true
+      });
+    } else {
+      await recordUserAudit({
+        userId: session.usuario_id,
+        accion: "CAMBIO_ESTADO_ORDEN",
+        valorAnterior: { estado_orden_id: currentStateId, estado_codigo: estadoAnteriorObj.codigo },
+        valorNuevo: { estado_orden_id: targetStateId, estado_codigo: estadoNuevoObj.codigo },
+        motivo: historyComment,
+        resultado: "COMPLETADO",
+        client,
+        throwOnError: true
+      });
+    }
+
+    await client.query("COMMIT");
+
+    if (isReopening) {
+      await recordUserActivity({
+        userId: session.usuario_id,
+        modulo: "TALLER_ORDENES",
+        evento: "WORK_ORDER_REOPENED",
+        descripcion: `Orden #${ordenId} reabierta a estado ${estadoNuevoObj.nombre}. Motivo: ${historyComment}`,
+        resultado: "Exitoso",
+        req
+      });
+    } else {
+      await recordUserActivity({
+        userId: session.usuario_id,
+        modulo: "TALLER_ORDENES",
+        evento: "WORK_ORDER_STATE_CHANGED",
+        descripcion: `Estado de orden #${ordenId} cambiado de ${estadoAnteriorObj.nombre} a ${estadoNuevoObj.nombre}`,
+        resultado: "Exitoso",
+        req
+      });
+    }
 
     return NextResponse.json({
       success: true,

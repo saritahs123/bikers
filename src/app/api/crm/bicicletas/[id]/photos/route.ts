@@ -1,16 +1,43 @@
 import { NextResponse } from "next/server";
-import { query } from "@/lib/db";
-import { getWorkshopSession } from "@/lib/workshop-session";
+import { query, withTransaction } from "@/lib/db";
+import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
 import { getPresignedDownloadUrl, deleteS3Object, verifyS3ObjectMetadata } from "@/lib/storage/s3";
+import { enqueueS3Cleanup, executeDurableS3Cleanup } from "@/lib/storage/s3CleanupQueue";
+import { recordUserActivity, recordUserAudit, computeDiff, sanitizeAuditPayload } from "@/lib/auditLogger";
+
+async function verifyBikeOwnership(bicicletaId: number, empresaId: number) {
+  const rows = await query(`
+    SELECT b.bicicleta_id, b.marca, b.modelo
+    FROM admin.bicicletas b
+    JOIN admin.clientes c ON b.cliente_id = c.cliente_id
+    WHERE b.bicicleta_id = $1 AND c.empresa_id = $2 AND b.fecha_eliminacion IS NULL
+  `, [bicicletaId, empresaId]);
+  return rows && rows.length > 0 ? rows[0] : null;
+}
 
 // GET /api/crm/bicicletas/[id]/photos
 export async function GET(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
+    const session = await getWorkshopSession();
+    if (!session || !session.empresa_id) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("BICICLETA", session.usuario_id);
+    if (!perms.puede_ver) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para ver fotografías de bicicletas." }, { status: 403 });
+    }
+
     const { id } = await context.params;
     const bicicletaId = parseInt(id, 10);
 
     if (isNaN(bicicletaId)) {
       return NextResponse.json({ error: "ID de bicicleta inválido." }, { status: 400 });
+    }
+
+    const bike = await verifyBikeOwnership(bicicletaId, session.empresa_id);
+    if (!bike) {
+      return NextResponse.json({ error: "Bicicleta no encontrada." }, { status: 404 });
     }
 
     const rows = await query(`
@@ -40,7 +67,7 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
 
     const mapped = await Promise.all(
       (rows || []).map(async (r: any) => {
-        let finalUrl = r.url_archivo || r.ruta_archivo || '/storage/bicicletas/default.png';
+        let finalUrl = (r.url_archivo && !r.url_archivo.includes("default.png")) ? r.url_archivo : null;
         const keyCandidate = r.ruta_archivo || '';
 
         // If stored path is an S3 Key structure (e.g. production/1/crm/bicicletas/125/uuid-foto.jpg)
@@ -86,8 +113,13 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
   let objectKeyToRollback: string | null = null;
   try {
     const session = await getWorkshopSession();
-    if (!session || !session.usuario_id) {
+    if (!session || !session.empresa_id) {
       return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("BICICLETA", session.usuario_id);
+    if (!perms.puede_crear && !perms.puede_editar) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para subir fotografías de bicicletas." }, { status: 403 });
     }
 
     const { id } = await context.params;
@@ -95,6 +127,11 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
 
     if (isNaN(bicicletaId)) {
       return NextResponse.json({ error: "ID de bicicleta inválido." }, { status: 400 });
+    }
+
+    const bike = await verifyBikeOwnership(bicicletaId, session.empresa_id);
+    if (!bike) {
+      return NextResponse.json({ error: "Bicicleta no encontrada o no pertenece a su empresa." }, { status: 404 });
     }
 
     const body = await req.json();
@@ -144,7 +181,6 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
         }, { status: 400 });
       }
 
-      // Generate temporary presigned download URL ONLY for HTTP JSON response
       try {
         const { downloadUrl } = await getPresignedDownloadUrl({ key: objectKey });
         clientResponseUrl = downloadUrl;
@@ -163,94 +199,75 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
       `, [bicicletaId]);
     }
 
-    // PERSISTENCE IN POSTGRESQL:
-    // ruta_archivo = objectKey
-    // url_archivo = NULL (NO presigned URLs containing X-Amz- are saved to DB!)
     const dbUrlValue: string | null = objectKey ? null : (rawUrl || null);
 
-    try {
-      const sql1 = `
-        INSERT INTO admin.bicicleta_fotos (
-          bicicleta_foto_id, bicicleta_id, bicicleta_componente_id, tipo_foto, nombre_archivo, ruta_archivo, url_archivo,
-          descripcion, fecha_captura, es_principal, orden_visual, activo, fecha_creacion
-        ) VALUES (
-          (SELECT COALESCE(MAX(bicicleta_foto_id), 0) + 1 FROM admin.bicicleta_fotos),
-          $1, $2, $3, $4, $5, $6,
-          $7, NOW(), $8, 0, true, NOW()
-        )
-        RETURNING *
-      `;
+    const sql = `
+      INSERT INTO admin.bicicleta_fotos (
+        bicicleta_foto_id, bicicleta_id, bicicleta_componente_id, tipo_foto, nombre_archivo, ruta_archivo, url_archivo,
+        descripcion, fecha_captura, es_principal, orden_visual, activo, fecha_creacion
+      ) VALUES (
+        (SELECT COALESCE(MAX(bicicleta_foto_id), 0) + 1 FROM admin.bicicleta_fotos),
+        $1, $2, $3, $4, $5, $6,
+        $7, NOW(), $8, 0, true, NOW()
+      )
+      RETURNING *
+    `;
 
-      const res1 = await query(sql1, [
-        bicicletaId,
-        bicicleta_componente_id,
-        tipo_foto,
-        filename,
-        ruta_archivo,
-        dbUrlValue,
-        descripcion || null,
-        es_principal
-      ]);
+    const res = await query(sql, [
+      bicicletaId,
+      bicicleta_componente_id,
+      tipo_foto,
+      filename,
+      ruta_archivo,
+      dbUrlValue,
+      descripcion || null,
+      es_principal
+    ]);
 
-      const r = res1[0] || {};
-      objectKeyToRollback = null; // Successfully persisted
+    const r = res[0] || {};
+    objectKeyToRollback = null; // Successfully persisted
 
-      return NextResponse.json({
-        id: r.bicicleta_foto_id ?? r.id,
-        bicicleta_foto_id: r.bicicleta_foto_id ?? r.id,
+    const createdPhoto = {
+      id: r.bicicleta_foto_id ?? r.id,
+      bicicleta_foto_id: r.bicicleta_foto_id ?? r.id,
+      bicicleta_id: bicicletaId,
+      bicicleta_componente_id: r.bicicleta_componente_id ?? bicicleta_componente_id,
+      tipo_foto: r.tipo_foto || tipo_foto,
+      nombre_archivo: r.nombre_archivo || filename,
+      ruta_archivo,
+      url_archivo: clientResponseUrl,
+      descripcion: r.descripcion || descripcion,
+      es_principal: r.es_principal ?? es_principal,
+      fecha_creacion: r.fecha_creacion || new Date().toISOString()
+    };
+
+    // Forensic logging
+    await recordUserActivity({
+      userId: session.usuario_id,
+      modulo: "BICICLETA",
+      evento: "BICYCLE_PHOTO_ADDED",
+      descripcion: `Fotografía (${tipo_foto}) agregada a bicicleta ID ${bicicletaId} [${filename}]`,
+      req
+    });
+
+    await recordUserAudit({
+      userId: session.usuario_id,
+      adminId: session.usuario_id,
+      accion: "CRM_PHOTO_ADDED",
+      valorAnterior: null,
+      valorNuevo: JSON.stringify(sanitizeAuditPayload({
+        foto_id: createdPhoto.id,
         bicicleta_id: bicicletaId,
-        bicicleta_componente_id: r.bicicleta_componente_id ?? bicicleta_componente_id,
-        tipo_foto: r.tipo_foto || tipo_foto,
-        nombre_archivo: r.nombre_archivo || filename,
-        ruta_archivo,
-        url_archivo: clientResponseUrl,
-        descripcion: r.descripcion || descripcion,
-        es_principal: r.es_principal ?? es_principal,
-        fecha_creacion: r.fecha_creacion || new Date().toISOString()
-      });
-
-    } catch (err1: any) {
-      console.warn("POST Try 1 failed, trying fallback query:", err1?.message);
-
-      const sql2 = `
-        INSERT INTO admin.bicicleta_fotos (
-          bicicleta_id, bicicleta_componente_id, tipo_foto, nombre_archivo, ruta_archivo, url_archivo,
-          descripcion, fecha_captura, es_principal, orden_visual, activo, fecha_creacion
-        ) VALUES (
-          $1, $2, $3, $4, $5, $6,
-          $7, NOW(), $8, 0, true, NOW()
-        )
-        RETURNING *
-      `;
-
-      const res2 = await query(sql2, [
-        bicicletaId,
-        bicicleta_componente_id,
         tipo_foto,
-        filename,
+        nombre_archivo: filename,
         ruta_archivo,
-        dbUrlValue,
-        descripcion || null,
         es_principal
-      ]);
+      })),
+      motivo: `Fotografía adjuntada a bicicleta ID ${bicicletaId}`,
+      req
+    });
 
-      const r2 = res2[0] || {};
-      objectKeyToRollback = null; // Successfully persisted
-
-      return NextResponse.json({
-        id: r2.bicicleta_foto_id ?? r2.id,
-        bicicleta_foto_id: r2.bicicleta_foto_id ?? r2.id,
-        bicicleta_id: bicicletaId,
-        bicicleta_componente_id: r2.bicicleta_componente_id ?? bicicleta_componente_id,
-        tipo_foto: r2.tipo_foto || tipo_foto,
-        nombre_archivo: r2.nombre_archivo || filename,
-        ruta_archivo,
-        url_archivo: clientResponseUrl,
-        descripcion: r2.descripcion || descripcion,
-        es_principal: r2.es_principal ?? es_principal,
-        fecha_creacion: r2.fecha_creacion || new Date().toISOString()
-      });
-    }
+    return NextResponse.json(createdPhoto);
 
   } catch (error: any) {
     if (objectKeyToRollback) {
@@ -258,13 +275,23 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
       await deleteS3Object(objectKeyToRollback);
     }
     console.error("Error in POST /api/crm/bicicletas/[id]/photos:", error);
-    return NextResponse.json({ error: "Error al guardar fotografía en la base de datos: " + error.message }, { status: 500 });
+    return NextResponse.json({ error: "Error al guardar fotografía: " + error.message }, { status: 500 });
   }
 }
 
 // PUT /api/crm/bicicletas/[id]/photos
 export async function PUT(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
+    const session = await getWorkshopSession();
+    if (!session || !session.empresa_id) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("BICICLETA", session.usuario_id);
+    if (!perms.puede_editar) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para modificar fotografías de bicicletas." }, { status: 403 });
+    }
+
     const { id } = await context.params;
     const bicicletaId = parseInt(id, 10);
 
@@ -272,11 +299,27 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
       return NextResponse.json({ error: "ID de bicicleta inválido." }, { status: 400 });
     }
 
+    const bike = await verifyBikeOwnership(bicicletaId, session.empresa_id);
+    if (!bike) {
+      return NextResponse.json({ error: "Bicicleta no encontrada o no pertenece a su empresa." }, { status: 404 });
+    }
+
     const body = await req.json();
     const photoId = parseInt(body.bicicleta_foto_id || body.id, 10);
     if (isNaN(photoId)) {
       return NextResponse.json({ error: "ID de fotografía inválido." }, { status: 400 });
     }
+
+    const beforeRows = await query(`
+      SELECT * FROM admin.bicicleta_fotos
+      WHERE bicicleta_foto_id = $1 AND bicicleta_id = $2
+    `, [photoId, bicicletaId]);
+
+    if (!beforeRows || beforeRows.length === 0) {
+      return NextResponse.json({ error: "Fotografía no encontrada para actualizar." }, { status: 404 });
+    }
+
+    const beforePhoto = beforeRows[0];
 
     const tipo_foto = (body.tipo_foto || 'GENERAL').trim().toUpperCase().substring(0, 30);
     const descripcion = (body.descripcion || '').trim().substring(0, 490);
@@ -315,7 +358,30 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
       return NextResponse.json({ error: "Fotografía no encontrada para actualizar." }, { status: 404 });
     }
 
-    return NextResponse.json(result[0]);
+    const updatedPhoto = result[0];
+    const diff = computeDiff(beforePhoto, updatedPhoto);
+
+    if (diff.hasChanges) {
+      await recordUserActivity({
+        userId: session.usuario_id,
+        modulo: "BICICLETA",
+        evento: "BICYCLE_PHOTO_UPDATED",
+        descripcion: `Modificación de fotografía ID ${photoId} en bicicleta ID ${bicicletaId}`,
+        req
+      });
+
+      await recordUserAudit({
+        userId: session.usuario_id,
+        adminId: session.usuario_id,
+        accion: "CRM_PHOTO_UPDATED",
+        valorAnterior: diff.valorAnterior,
+        valorNuevo: diff.valorNuevo,
+        motivo: `Modificación de fotografía ID ${photoId}`,
+        req
+      });
+    }
+
+    return NextResponse.json(updatedPhoto);
 
   } catch (error: any) {
     console.error("Error in PUT /api/crm/bicicletas/[id]/photos:", error);
@@ -326,6 +392,16 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
 // DELETE /api/crm/bicicletas/[id]/photos
 export async function DELETE(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
+    const session = await getWorkshopSession();
+    if (!session || !session.empresa_id) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("BICICLETA", session.usuario_id);
+    if (!perms.puede_eliminar && !perms.puede_editar) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para eliminar fotografías de bicicletas." }, { status: 403 });
+    }
+
     const { id } = await context.params;
     const bicicletaId = parseInt(id, 10);
 
@@ -336,30 +412,86 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
       return NextResponse.json({ error: "ID de bicicleta o foto inválido." }, { status: 400 });
     }
 
+    const bike = await verifyBikeOwnership(bicicletaId, session.empresa_id);
+    if (!bike) {
+      return NextResponse.json({ error: "Bicicleta no encontrada o no pertenece a su empresa." }, { status: 404 });
+    }
+
     const photoId = parseInt(photoIdParam, 10);
 
     // Domain-specific ownership check in DB before S3 deletion
     const photoRows = await query(`
-      SELECT f.ruta_archivo
+      SELECT f.*
       FROM admin.bicicleta_fotos f
-      JOIN admin.bicicletas b ON f.bicicleta_id = b.bicicleta_id
-      JOIN admin.clientes c ON b.cliente_id = c.cliente_id
       WHERE f.bicicleta_foto_id = $1 AND f.bicicleta_id = $2
     `, [photoId, bicicletaId]);
 
-    if (photoRows && photoRows.length > 0) {
-      const keyCandidate = photoRows[0].ruta_archivo || '';
-      if (keyCandidate && !keyCandidate.startsWith("http") && !keyCandidate.startsWith("/storage") && keyCandidate.includes("/")) {
-        await deleteS3Object(keyCandidate);
-      }
+    if (!photoRows || photoRows.length === 0) {
+      return NextResponse.json({ error: "Fotografía no encontrada." }, { status: 404 });
     }
 
-    await query(`
-      DELETE FROM admin.bicicleta_fotos
-      WHERE bicicleta_foto_id = $1 AND bicicleta_id = $2
-    `, [photoId, bicicletaId]);
+    const beforePhoto = photoRows[0];
+    const keyCandidate = beforePhoto.ruta_archivo || '';
+    const hasS3Key = Boolean(keyCandidate && !keyCandidate.startsWith("http") && !keyCandidate.startsWith("/storage") && keyCandidate.includes("/"));
 
-    return NextResponse.json({ message: "Fotografía eliminada permanentemente de S3 y base de datos." });
+    let cleanupId: number | null = null;
+
+    // 1. Transactional DB metadata deletion with persistent S3 cleanup obligation
+    await withTransaction(async (client) => {
+      if (hasS3Key) {
+        cleanupId = await enqueueS3Cleanup(client, {
+          empresaId: session.empresa_id,
+          objectKey: keyCandidate,
+          modulo: "BICICLETA",
+          entidad: "bicicleta_fotos",
+          entidadId: photoId,
+          usuarioId: session.usuario_id
+        });
+      }
+
+      await client.query(`
+        DELETE FROM admin.bicicleta_fotos
+        WHERE bicicleta_foto_id = $1 AND bicicleta_id = $2
+      `, [photoId, bicicletaId]);
+    });
+
+    // 2. Post-commit durable S3 execution
+    let s3Status = "NOT_APPLICABLE";
+    if (cleanupId && hasS3Key) {
+      const s3Res = await executeDurableS3Cleanup(cleanupId, keyCandidate);
+      s3Status = s3Res.success ? "COMPLETED" : "PENDING_RETRY";
+    }
+
+    // Forensic logging
+    await recordUserActivity({
+      userId: session.usuario_id,
+      modulo: "BICICLETA",
+      evento: "BICYCLE_PHOTO_DELETED",
+      descripcion: `Eliminación de fotografía ID ${photoId} de bicicleta ID ${bicicletaId}`,
+      req
+    });
+
+    await recordUserAudit({
+      userId: session.usuario_id,
+      adminId: session.usuario_id,
+      accion: "CRM_PHOTO_DELETED",
+      valorAnterior: JSON.stringify(sanitizeAuditPayload({
+        foto_id: photoId,
+        bicicleta_id: bicicletaId,
+        tipo_foto: beforePhoto.tipo_foto,
+        nombre_archivo: beforePhoto.nombre_archivo,
+        ruta_archivo: beforePhoto.ruta_archivo
+      })),
+      valorNuevo: null,
+      motivo: `Eliminación de fotografía ID ${photoId} de bicicleta ID ${bicicletaId}`,
+      req
+    });
+
+    return NextResponse.json({
+      message: "Fotografía eliminada correctamente.",
+      s3Status,
+      cleanupId
+    });
 
   } catch (error: any) {
     console.error("Error in DELETE /api/crm/bicicletas/[id]/photos:", error);

@@ -19,13 +19,22 @@ import {
   CheckCircle2,
   ChevronDown,
   Sparkles,
-  PackagePlus
+  PackagePlus,
+  UserPlus,
+  AlertTriangle,
+  Info
 } from "lucide-react";
 import ReceptionChecklistModal from "./ReceptionChecklistModal";
+import DigitalSignatureCanvasModal from "./DigitalSignatureCanvasModal";
+import CustomerFormDrawer from "@/components/crm/CustomerFormDrawer";
+import BikeFormDrawer from "@/components/crm/BikeFormDrawer";
+import SecurityConfirmDialog from "@/components/security/SecurityConfirmDialog";
 
 export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreated }) {
   const router = useRouter();
   const navigationStartedRef = useRef(false);
+  const idempotencyKeyRef = useRef(null);
+  const discardedStagingKeysRef = useRef([]);
 
   // Initial Data & Catalog States
   const [loadingInit, setLoadingInit] = useState(true);
@@ -42,6 +51,10 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  // CRM Permissions
+  const [canCreateClient, setCanCreateClient] = useState(true);
+  const [canCreateBike, setCanCreateBike] = useState(true);
+
   // Client Autocomplete State
   const [clientSearch, setClientSearch] = useState("");
   const [selectedClient, setSelectedClient] = useState(null);
@@ -50,12 +63,17 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
   const comboboxRef = useRef(null);
   const searchInputRef = useRef(null);
 
-  // Bicycle Selection State & Components for selected bike
+  // Bicycle Autocomplete & Selection State
+  const [bikeSearch, setBikeSearch] = useState("");
   const [clientBicycles, setClientBicycles] = useState([]);
   const [selectedBike, setSelectedBike] = useState(null);
+  const [isBikeDropdownOpen, setIsBikeDropdownOpen] = useState(false);
+  const [activeBikeIndex, setActiveBikeIndex] = useState(-1);
   const [loadingBikes, setLoadingBikes] = useState(false);
   const [bikeComponents, setBikeComponents] = useState([]);
   const [loadingComponents, setLoadingComponents] = useState(false);
+  const bikeComboboxRef = useRef(null);
+  const bikeSearchInputRef = useRef(null);
 
   // Multi-Service State & Draft Validation Errors
   const [serviciosList, setServiciosList] = useState([]);
@@ -86,11 +104,9 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
     precio_estimado: ""
   });
 
-  // Refs for service sub-form focus & validation
-  const selectTypeRef = useRef(null);
-  const inputPriceRef = useRef(null);
-
   // General Reception Notes & Budget
+  const [observacionesCliente, setObservacionesCliente] = useState("");
+  const [diagnosticoPreliminar, setDiagnosticoPreliminar] = useState("");
   const [presupuestoEstimado, setPresupuestoEstimado] = useState("0.00");
   const [requiereAprobacion, setRequiereAprobacion] = useState(true);
 
@@ -99,22 +115,41 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
   const [prioridadId, setPrioridadId] = useState("");
   const [observacionesOT, setObservacionesOT] = useState("");
 
+  // Digital Signature State
+  const [signatureData, setSignatureData] = useState(null);
+  const [isSignatureModalOpen, setIsSignatureModalOpen] = useState(false);
+
   // Sub-modals State
   const [checklistState, setChecklistState] = useState([]);
   const [isChecklistOpen, setIsChecklistOpen] = useState(false);
+  const [isCustomerDrawerOpen, setIsCustomerDrawerOpen] = useState(false);
+  const [isBikeDrawerOpen, setIsBikeDrawerOpen] = useState(false);
+
+  // Confirmation Modals State
+  const [isCloseConfirmOpen, setIsCloseConfirmOpen] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
+      if (!idempotencyKeyRef.current) {
+        idempotencyKeyRef.current =
+          typeof crypto !== "undefined" && crypto.randomUUID
+            ? crypto.randomUUID()
+            : "rec_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9);
+      }
+      discardedStagingKeysRef.current = [];
       navigationStartedRef.current = false;
       loadInitialData();
     }
   }, [isOpen]);
 
-  // Click outside to close client dropdown
+  // Click outside to close client & bike dropdowns
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (comboboxRef.current && !comboboxRef.current.contains(e.target)) {
         setIsDropdownOpen(false);
+      }
+      if (bikeComboboxRef.current && !bikeComboboxRef.current.contains(e.target)) {
+        setIsBikeDropdownOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -125,19 +160,33 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
     setLoadingInit(true);
     setError("");
     try {
-      const [resClients, resCats] = await Promise.all([
-        fetch("/api/crm/clientes").then((r) => r.json()),
-        fetch("/api/taller/catalogos").then((r) => r.json())
+      const [resClients, resCats, resBikes] = await Promise.all([
+        fetch("/api/crm/clientes"),
+        fetch("/api/taller/catalogos"),
+        fetch("/api/crm/bicicletas")
       ]);
 
-      const clientArr = Array.isArray(resClients)
-        ? resClients
-        : Array.isArray(resClients?.data)
-        ? resClients.data
+      // Check RBAC permissions from headers
+      const clientPermCrear = resClients.headers.get("x-perm-crear");
+      if (clientPermCrear !== null) {
+        setCanCreateClient(clientPermCrear === "true");
+      }
+      const bikePermCrear = resBikes.headers.get("x-perm-crear");
+      if (bikePermCrear !== null) {
+        setCanCreateBike(bikePermCrear === "true");
+      }
+
+      const clientsJson = await resClients.json().catch(() => []);
+      const catsJson = await resCats.json().catch(() => ({}));
+
+      const clientArr = Array.isArray(clientsJson)
+        ? clientsJson
+        : Array.isArray(clientsJson?.data)
+        ? clientsJson.data
         : [];
       setClients(clientArr);
 
-      const catObj = resCats?.data || resCats || {};
+      const catObj = catsJson?.data || catsJson || {};
       setCatalogs({
         tipos_servicio: catObj.tipos_servicio || [],
         prioridades: catObj.prioridades || [],
@@ -148,8 +197,10 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
         estados_componente: catObj.estados_componente || []
       });
 
-      if (catObj.prioridades?.length > 0) {
-        setPrioridadId(String(catObj.prioridades[0].prioridad_id || catObj.prioridades[0].prioridad_orden_trabajo_id));
+      if (catObj.prioridades?.length > 0 && !prioridadId) {
+        setPrioridadId(
+          String(catObj.prioridades[0].prioridad_id || catObj.prioridades[0].prioridad_orden_trabajo_id)
+        );
       }
     } catch (err) {
       console.error("Error cargando datos iniciales para recepción:", err);
@@ -159,21 +210,108 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
     }
   };
 
+  // Check if form is dirty (has unsaved modifications)
+  const isFormDirty = () => {
+    return Boolean(
+      selectedClient ||
+      selectedBike ||
+      serviciosList.length > 0 ||
+      observacionesCliente.trim() ||
+      diagnosticoPreliminar.trim() ||
+      checklistState.length > 0 ||
+      signatureData ||
+      attachedNewComponent
+    );
+  };
+
+  // Attempt to close modal with unsaved changes verification
+  const handleAttemptClose = () => {
+    if (isFormDirty()) {
+      setIsCloseConfirmOpen(true);
+    } else {
+      performActualClose();
+    }
+  };
+
+  // Handle photo replacement during checklist evaluation
+  const handleChecklistPhotoReplaced = (oldKey, oldToken) => {
+    if (oldKey) {
+      discardedStagingKeysRef.current.push({ object_key: oldKey, upload_token: oldToken });
+    }
+  };
+
+  // Final Close: Clean staging photos and notify parent
+  const performActualClose = async () => {
+    // Collect staging entries from checklistState & discarded
+    const stagingEntries = [];
+    checklistState.forEach((c) => {
+      const key = c.object_key || c.s3_key || c.ruta_archivo;
+      if (key && typeof key === "string" && key.startsWith("staging/")) {
+        stagingEntries.push({ object_key: key, upload_token: c.upload_token });
+      }
+    });
+    discardedStagingKeysRef.current.forEach((item) => {
+      const key = typeof item === "string" ? item : item?.object_key;
+      const token = typeof item === "object" ? item?.upload_token : null;
+      if (key && typeof key === "string" && key.startsWith("staging/")) {
+        stagingEntries.push({ object_key: key, upload_token: token });
+      }
+    });
+
+    if (stagingEntries.length > 0) {
+      fetch("/api/taller/evidencias/cleanup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entries: stagingEntries })
+      }).catch(() => {});
+    }
+
+    idempotencyKeyRef.current = null;
+    discardedStagingKeysRef.current = [];
+    setIsCloseConfirmOpen(false);
+    onClose();
+  };
+
   // Select Client & Load Bicycles
-  const handleSelectClient = async (clientObj) => {
+  const handleSelectClient = (clientObj) => {
+    if (!clientObj) return;
+
+    const currentClientId = selectedClient?.id || selectedClient?.cliente_id;
+    const newClientId = clientObj.id || clientObj.cliente_id;
+
+    if (currentClientId && currentClientId === newClientId) {
+      setIsDropdownOpen(false);
+      return;
+    }
+
+    applyClientSelection(clientObj);
+  };
+
+  const applyClientSelection = async (clientObj) => {
     setSelectedClient(clientObj);
     setClientSearch(clientObj.nombre_completo || "");
     setIsDropdownOpen(false);
     setActiveIndex(-1);
+
+    // Invalidate dependent items
     setSelectedBike(null);
     setClientBicycles([]);
     setBikeComponents([]);
     setCurrentBicicletaComponenteId("");
     setAttachedNewComponent(null);
     setIsAddingNewComponent(false);
+    setSignatureData(null); // Signature is strictly invalid if customer changes
 
-    if (!clientObj) return;
+    // Clear bike component references from services
+    const sanitizedServices = serviciosList.map((s) => {
+      if (s.bicicleta_componente_id) {
+        return { ...s, bicicleta_componente_id: null, componente_nombre: null };
+      }
+      return s;
+    });
+    setServiciosList(sanitizedServices);
 
+    // Fetch bicycles for the selected client
     setLoadingBikes(true);
     try {
       const clientId = clientObj.id || clientObj.cliente_id;
@@ -194,10 +332,14 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
   // Select Bike & Load Components strictly belonging to this bike
   const handleSelectBike = async (bikeObj) => {
     setSelectedBike(bikeObj);
+    setBikeSearch(bikeObj ? `${bikeObj.marca || "Bicicleta"} ${bikeObj.modelo || ""}`.trim() : "");
+    setIsBikeDropdownOpen(false);
+    setActiveBikeIndex(-1);
     setBikeComponents([]);
     setCurrentBicicletaComponenteId("");
     setAttachedNewComponent(null);
     setIsAddingNewComponent(false);
+    setSignatureData(null); // Invalidate signature if bike changes
 
     if (!bikeObj) return;
 
@@ -217,16 +359,33 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
     }
   };
 
+  const handleClearBike = () => {
+    setSelectedBike(null);
+    setBikeSearch("");
+    setBikeComponents([]);
+    setCurrentBicicletaComponenteId("");
+    setAttachedNewComponent(null);
+    setIsAddingNewComponent(false);
+    setSignatureData(null);
+    setIsBikeDropdownOpen(false);
+    if (bikeSearchInputRef.current) {
+      bikeSearchInputRef.current.focus();
+    }
+  };
+
   const handleClearClient = () => {
     setSelectedClient(null);
     setClientSearch("");
     setSelectedBike(null);
+    setBikeSearch("");
     setClientBicycles([]);
     setBikeComponents([]);
     setCurrentBicicletaComponenteId("");
     setAttachedNewComponent(null);
     setIsAddingNewComponent(false);
+    setSignatureData(null);
     setIsDropdownOpen(false);
+    setIsBikeDropdownOpen(false);
     if (searchInputRef.current) {
       searchInputRef.current.focus();
     }
@@ -251,6 +410,28 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
   });
 
   const displayedClients = filteredClientsList.slice(0, 6);
+
+  const filteredBikesList = clientBicycles.filter((b) => {
+    if (!bikeSearch.trim()) return true;
+    const q = normalizeText(bikeSearch);
+    const marca = normalizeText(b.marca);
+    const modelo = normalizeText(b.modelo);
+    const sn = normalizeText(b.numero_serie_cuadro);
+    const qr = normalizeText(b.codigo_qr);
+    const tipo = normalizeText(b.tipo_bicicleta);
+    const color = normalizeText(b.color);
+
+    return (
+      marca.includes(q) ||
+      modelo.includes(q) ||
+      sn.includes(q) ||
+      qr.includes(q) ||
+      tipo.includes(q) ||
+      color.includes(q)
+    );
+  });
+
+  const displayedBikes = filteredBikesList.slice(0, 6);
 
   const getInitials = (name) => {
     if (!name) return "CL";
@@ -287,6 +468,32 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
     }
   };
 
+  const handleBikeKeyDown = (e) => {
+    if (!isBikeDropdownOpen) {
+      if (e.key === "ArrowDown" || e.key === "Enter") {
+        setIsBikeDropdownOpen(true);
+        return;
+      }
+    }
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveBikeIndex((prev) => (prev < displayedBikes.length - 1 ? prev + 1 : 0));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveBikeIndex((prev) => (prev > 0 ? prev - 1 : displayedBikes.length - 1));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (activeBikeIndex >= 0 && activeBikeIndex < displayedBikes.length) {
+        handleSelectBike(displayedBikes[activeBikeIndex]);
+      }
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setIsBikeDropdownOpen(false);
+      setActiveBikeIndex(-1);
+    }
+  };
+
   // Handle choice of service type in sub-form
   const handleSelectServiceType = (sId) => {
     setCurrentServicioId(sId);
@@ -310,24 +517,22 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
       e.stopPropagation();
     }
 
-    const errors = {
+    const errs = {
       categoria_componente_id: "",
       estado_componente_id: "",
       numero_serie: ""
     };
 
     if (!newComponentDraft.categoria_componente_id) {
-      errors.categoria_componente_id = "Seleccione una categoría para el componente.";
+      errs.categoria_componente_id = "Seleccione una categoría para el componente.";
     } else {
-      // Check if this category already exists on the bike
       const alreadyOnBike = bikeComponents.some(
         (c) => String(c.categoria_componente_id) === String(newComponentDraft.categoria_componente_id)
       );
       if (alreadyOnBike) {
-        errors.categoria_componente_id = "Ya existe un componente de esta categoría en la bicicleta.";
+        errs.categoria_componente_id = "Ya existe un componente de esta categoría en la bicicleta.";
       }
 
-      // Check if this category is already in another service draft in the current list
       const alreadyInList = serviciosList.some(
         (s) =>
           s.nuevo_componente &&
@@ -335,16 +540,16 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
           s.tempId !== editingTempId
       );
       if (alreadyInList) {
-        errors.categoria_componente_id = "Ya agregaste un nuevo componente con esta categoría en la lista.";
+        errs.categoria_componente_id = "Ya agregaste un nuevo componente con esta categoría en la lista.";
       }
     }
 
     if (!newComponentDraft.estado_componente_id) {
-      errors.estado_componente_id = "Seleccione un estado de uso para el componente.";
+      errs.estado_componente_id = "Seleccione un estado de uso para el componente.";
     }
 
-    if (errors.categoria_componente_id || errors.estado_componente_id) {
-      setNewComponentErrors(errors);
+    if (errs.categoria_componente_id || errs.estado_componente_id) {
+      setNewComponentErrors(errs);
       return;
     }
 
@@ -358,8 +563,8 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
     const preparedDraft = {
       categoria_componente_id: Number(newComponentDraft.categoria_componente_id),
       categoria_nombre: catObj ? catObj.nombre : "Componente",
-      estado_componente_id: Number(newComponentDraft.estado_componente_id || 1),
-      estado_nombre: estObj ? estObj.nombre : "Bueno",
+      estado_componente_id: Number(newComponentDraft.estado_componente_id),
+      estado_nombre: estObj ? estObj.nombre : "Nuevo",
       marca: (newComponentDraft.marca || "").trim(),
       numero_serie: (newComponentDraft.numero_serie || "").trim()
     };
@@ -379,117 +584,93 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
 
     if (addingServiceProcessing) return;
 
-    const errors = {
+    const errs = {
       tipo_servicio_id: "",
       precio_estimado: ""
     };
 
     if (!Number(currentServicioId)) {
-      errors.tipo_servicio_id = "Selecciona un tipo de servicio.";
+      errs.tipo_servicio_id = "Selecciona un tipo de servicio.";
     }
 
     const numPrecio = parseFloat(currentPrecio);
     if (isNaN(numPrecio) || numPrecio < 0) {
-      errors.precio_estimado = "El precio debe ser un número mayor o igual a cero.";
+      errs.precio_estimado = "Ingrese un precio estimado válido (≥ 0.00).";
     }
 
-    // Check duplicate service with same component
-    const isDuplicate = serviciosList.some(
-      (s) =>
-        String(s.tipo_servicio_id) === String(currentServicioId) &&
-        String(s.bicicleta_componente_id || "") === String(currentBicicletaComponenteId || "") &&
-        !s.nuevo_componente &&
-        !attachedNewComponent &&
-        s.tempId !== editingTempId
-    );
-    if (isDuplicate) {
-      errors.tipo_servicio_id = "Este tipo de servicio con el mismo componente ya fue agregado a la lista.";
-    }
-
-    if (errors.tipo_servicio_id || errors.precio_estimado) {
-      setServiceDraftErrors(errors);
+    if (errs.tipo_servicio_id || errs.precio_estimado) {
+      setServiceDraftErrors(errs);
       return;
     }
 
     setAddingServiceProcessing(true);
 
-    const typeObj = catalogs.tipos_servicio.find((t) => String(t.tipo_servicio_id) === String(currentServicioId));
-    const serviceName = typeObj ? typeObj.nombre : "Servicio de Taller";
+    const sType = catalogs.tipos_servicio.find((t) => String(t.tipo_servicio_id) === String(currentServicioId));
+    const compObj = bikeComponents.find((c) => String(c.bicicleta_componente_id) === String(currentBicicletaComponenteId));
 
-    let compId = null;
-    let nuevoComp = null;
-    let componentName = "Servicio general";
-
-    if (attachedNewComponent) {
-      compId = null;
-      nuevoComp = { ...attachedNewComponent };
-      componentName = `Nuevo: ${attachedNewComponent.categoria_nombre}${attachedNewComponent.marca ? ` — ${attachedNewComponent.marca}` : ""}`;
-    } else if (currentBicicletaComponenteId) {
-      compId = Number(currentBicicletaComponenteId);
-      nuevoComp = null;
-      const compObj = bikeComponents.find((c) => String(c.bicicleta_componente_id || c.id) === String(currentBicicletaComponenteId));
-      componentName = compObj
-        ? `${compObj.categoria_nombre || compObj.categoria || "Componente"} ${compObj.marca || ""} ${compObj.modelo || ""}`.trim()
-        : "Componente";
-    }
-
-    const newServiceItem = {
-      tempId: editingTempId || Date.now(),
-      tipo_servicio_id: currentServicioId,
-      nombre: serviceName,
+    const serviceItem = {
+      tempId: editingTempId || "srv_" + Date.now() + "_" + Math.random().toString(36).substring(2, 6),
+      tipo_servicio_id: Number(currentServicioId),
+      nombre_servicio: sType ? sType.nombre : `Servicio #${currentServicioId}`,
       precio_estimado: numPrecio.toFixed(2),
-      diagnostico_preliminar: null,
-      bicicleta_componente_id: compId,
-      nuevo_componente: nuevoComp,
-      componente_nombre: componentName
+      bicicleta_componente_id: attachedNewComponent ? null : compObj ? Number(compObj.bicicleta_componente_id) : null,
+      componente_nombre: attachedNewComponent
+        ? `[Nuevo] ${attachedNewComponent.categoria_nombre}${attachedNewComponent.marca ? ` (${attachedNewComponent.marca})` : ""}`
+        : compObj
+        ? `${compObj.categoria_nombre || "Componente"}${compObj.marca ? ` - ${compObj.marca}` : ""}`
+        : null,
+      nuevo_componente: attachedNewComponent ? { ...attachedNewComponent } : null
     };
 
-    let updatedList = [];
+    let updatedList;
     if (editingTempId) {
-      updatedList = serviciosList.map((s) => (s.tempId === editingTempId ? newServiceItem : s));
-      setEditingTempId(null);
+      updatedList = serviciosList.map((s) => (s.tempId === editingTempId ? serviceItem : s));
       setServiceSuccessMsg("Servicio actualizado correctamente.");
     } else {
-      updatedList = [...serviciosList, newServiceItem];
-      setServiceSuccessMsg("Servicio agregado a la lista.");
+      updatedList = [...serviciosList, serviceItem];
+      setServiceSuccessMsg("Servicio agregado.");
     }
 
     setServiciosList(updatedList);
     recalculateBudget(updatedList);
+    setSignatureData(null); // Invalidate signature on services modification
 
-    // Clear sub-form input state
+    // Reset sub-form
     setCurrentServicioId("");
     setCurrentPrecio("");
     setCurrentBicicletaComponenteId("");
     setAttachedNewComponent(null);
     setIsAddingNewComponent(false);
-    setNewComponentDraft({ categoria_componente_id: "", estado_componente_id: "1", marca: "", numero_serie: "" });
+    setEditingTempId(null);
+    setServiceDraftErrors({ tipo_servicio_id: "", precio_estimado: "" });
     setNewComponentErrors({ categoria_componente_id: "", estado_componente_id: "", numero_serie: "" });
-    setServiceDraftErrors({
-      tipo_servicio_id: "",
-      precio_estimado: ""
-    });
-
     setAddingServiceProcessing(false);
-    setTimeout(() => setServiceSuccessMsg(""), 3000);
+
+    setTimeout(() => {
+      setServiceSuccessMsg("");
+    }, 3000);
   };
 
   const handleEditServiceClick = (item) => {
     setEditingTempId(item.tempId);
     setCurrentServicioId(String(item.tipo_servicio_id));
-    setCurrentPrecio(String(item.precio_estimado || ""));
+    setCurrentPrecio(String(item.precio_estimado));
+    setCurrentBicicletaComponenteId(item.bicicleta_componente_id ? String(item.bicicleta_componente_id) : "");
     if (item.nuevo_componente) {
-      setAttachedNewComponent({ ...item.nuevo_componente });
-      setCurrentBicicletaComponenteId("");
+      setAttachedNewComponent(item.nuevo_componente);
+      setNewComponentDraft({
+        categoria_componente_id: String(item.nuevo_componente.categoria_componente_id || ""),
+        estado_componente_id: String(item.nuevo_componente.estado_componente_id || "1"),
+        marca: item.nuevo_componente.marca || "",
+        numero_serie: item.nuevo_componente.numero_serie || ""
+      });
+      setIsAddingNewComponent(false);
     } else {
       setAttachedNewComponent(null);
-      setCurrentBicicletaComponenteId(item.bicicleta_componente_id ? String(item.bicicleta_componente_id) : "");
+      setIsAddingNewComponent(false);
     }
-    setIsAddingNewComponent(false);
-    setServiceDraftErrors({
-      tipo_servicio_id: "",
-      precio_estimado: ""
-    });
+    setServiceDraftErrors({ tipo_servicio_id: "", precio_estimado: "" });
+    setNewComponentErrors({ categoria_componente_id: "", estado_componente_id: "", numero_serie: "" });
     setServiceSuccessMsg("");
   };
 
@@ -497,6 +678,7 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
     const updated = serviciosList.filter((s) => s.tempId !== tempId);
     setServiciosList(updated);
     recalculateBudget(updated);
+    setSignatureData(null); // Invalidate signature
     if (editingTempId === tempId) {
       setEditingTempId(null);
       setCurrentServicioId("");
@@ -512,6 +694,41 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
     setPresupuestoEstimado(total.toFixed(2));
   };
 
+  // Quick Customer Creation Callback
+  const handleCustomerCreated = (newClient) => {
+    setIsCustomerDrawerOpen(false);
+    if (newClient) {
+      setClients((prev) => [newClient, ...prev]);
+      applyClientSelection(newClient);
+    }
+  };
+
+  // Quick Bicycle Creation Callback
+  const handleBikeCreated = (newBikeId) => {
+    setIsBikeDrawerOpen(false);
+    if (selectedClient) {
+      const clientId = selectedClient.id || selectedClient.cliente_id;
+      fetch(`/api/crm/bicicletas?cliente_id=${clientId}`)
+        .then((r) => r.json())
+        .then((data) => {
+          const bikesArr = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+          setClientBicycles(bikesArr);
+          const found = bikesArr.find(
+            (b) => Number(b.id || b.bicicleta_id) === Number(newBikeId?.id || newBikeId?.bicicleta_id || newBikeId)
+          );
+          if (found) {
+            handleSelectBike(found);
+          } else if (typeof newBikeId === "object" && newBikeId !== null) {
+            handleSelectBike(newBikeId);
+          } else if (bikesArr.length > 0) {
+            handleSelectBike(bikesArr[bikesArr.length - 1]);
+          }
+        })
+        .catch((err) => console.error("Error refreshing bikes:", err));
+    }
+  };
+
+  // Final Submit
   const handleSubmit = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
 
@@ -538,6 +755,8 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
       const payload = {
         cliente_id: selectedClient.id || selectedClient.cliente_id,
         bicicleta_id: selectedBike.id || selectedBike.bicicleta_id,
+        observaciones_cliente: observacionesCliente.trim() || null,
+        diagnostico_preliminar: diagnosticoPreliminar.trim() || null,
         servicios: serviciosList.map((s) => ({
           tipo_servicio_id: parseInt(s.tipo_servicio_id, 10),
           precio_estimado: parseFloat(s.precio_estimado || "0"),
@@ -545,7 +764,7 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
           nuevo_componente: s.nuevo_componente
             ? {
                 categoria_componente_id: parseInt(s.nuevo_componente.categoria_componente_id, 10),
-                estado_componente_id: parseInt(s.nuevo_componente.estado_componente_id || 1, 10),
+                estado_componente_id: parseInt(s.nuevo_componente.estado_componente_id, 10),
                 marca: s.nuevo_componente.marca || null,
                 numero_serie: s.nuevo_componente.numero_serie || null
               }
@@ -563,7 +782,11 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
           filename: c.filename || null,
           evidencia_foto: Boolean(c.object_key || c.upload_token || c.s3_key)
         })),
+        firma_digital: signatureData?.firma_digital || null,
+        version_terminos: signatureData?.version_terminos || null,
         generar_orden_trabajo: generarOrdenTrabajo,
+        idempotency_key: idempotencyKeyRef.current,
+        replaced_staging_keys: discardedStagingKeysRef.current,
         orden_trabajo: generarOrdenTrabajo
           ? {
               prioridad_id: prioridadId ? parseInt(prioridadId, 10) : null,
@@ -578,7 +801,7 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
         body: JSON.stringify(payload)
       });
 
-      const json = await res.json();
+      const json = await res.json().catch(() => ({}));
 
       if (!res.ok) {
         throw new Error(json.message || json.error || "Error al registrar la recepción.");
@@ -587,16 +810,13 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
       const rawOrderId = json?.data?.orden_trabajo_id ?? json?.orden_trabajo_id;
       const orderId = Number(rawOrderId);
 
-      if (generarOrdenTrabajo) {
-        if (!Number.isInteger(orderId) || orderId <= 0) {
-          setError("La recepción fue creada, pero el servidor no devolvió la orden generada.");
-          setSubmitting(false);
-          return;
-        }
+      // Reset idempotency key upon full success
+      idempotencyKeyRef.current = null;
+      discardedStagingKeysRef.current = [];
 
+      if (generarOrdenTrabajo && Number.isInteger(orderId) && orderId > 0) {
         if (navigationStartedRef.current) return;
         navigationStartedRef.current = true;
-
         router.push(`/work-orders?order_id=${orderId}`);
         return;
       }
@@ -606,7 +826,7 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
       onClose();
     } catch (err) {
       console.error("Error al enviar recepción:", err);
-      setError(err.message || "Error de red al guardar la recepción.");
+      setError(err.message || "Error al guardar la recepción. Puede reintentar.");
     } finally {
       setSubmitting(false);
     }
@@ -615,532 +835,460 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-4xl max-h-[90vh] bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden text-slate-100 font-sans">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950/50">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400">
-              <Wrench size={18} />
+    <>
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="relative w-full max-w-4xl h-full sm:h-auto sm:max-h-[92vh] bg-card border border-border sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden text-foreground font-sans">
+          {/* Header */}
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-border bg-surface shrink-0">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-primary-muted border border-primary/20 rounded-xl text-primary">
+                <Wrench size={18} />
+              </div>
+              <div>
+                <h2 className="text-sm sm:text-base font-bold text-foreground leading-snug">
+                  Nueva Recepción de Bicicleta
+                </h2>
+                <p className="text-xs text-foreground-muted">Registro de ingreso y servicios iniciales</p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-base font-bold text-slate-100 leading-snug">Nueva Recepción de Bicicleta</h2>
-              <p className="text-xs text-slate-400">Registro de ingreso y servicios iniciales</p>
-            </div>
+            <button
+              type="button"
+              onClick={handleAttemptClose}
+              className="p-1.5 text-foreground-muted hover:text-foreground hover:bg-hover rounded-lg transition-colors cursor-pointer"
+            >
+              <X size={18} />
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-          >
-            <X size={18} />
-          </button>
-        </div>
 
-        {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
-          {error && (
-            <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl flex items-start gap-2.5 text-xs text-rose-300">
-              <AlertCircle size={16} className="shrink-0 mt-0.5" />
-              <span>{error}</span>
-            </div>
-          )}
+          {/* Modal Body */}
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 custom-scrollbar">
+            {error && (
+              <div className="p-3.5 bg-error-muted border border-error/30 rounded-xl flex items-start gap-2.5 text-xs text-error">
+                <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                <span>{error}</span>
+              </div>
+            )}
 
-          {loadingInit ? (
-            <div className="p-12 flex flex-col items-center justify-center gap-3 text-slate-400">
-              <Loader2 className="w-6 h-6 animate-spin text-emerald-400" />
-              <span className="text-xs">Cargando catálogos de recepción...</span>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {/* Step 1: Cliente Combobox Search */}
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-slate-300 block">
-                  1. Selección de Cliente <span className="text-rose-400">*</span>
-                </label>
-
-                {!selectedClient ? (
-                  <div className="relative" ref={comboboxRef}>
-                    <div className="relative">
-                      <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                      <input
-                        ref={searchInputRef}
-                        type="text"
-                        value={clientSearch}
-                        onChange={(e) => {
-                          setClientSearch(e.target.value);
-                          setIsDropdownOpen(true);
-                          setActiveIndex(-1);
-                        }}
-                        onFocus={() => setIsDropdownOpen(true)}
-                        onKeyDown={handleKeyDown}
-                        placeholder="Escribe nombre, documento, teléfono o correo..."
-                        className="w-full pl-10 pr-10 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/30 transition-all font-mono"
-                      />
-                      <ChevronDown className="w-4 h-4 absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
-                    </div>
-
-                    {isDropdownOpen && (
-                      <div className="absolute left-0 right-0 top-full mt-1.5 bg-[#161a21] border border-[#2d3748] rounded-xl shadow-2xl z-50 overflow-hidden font-mono text-xs max-h-64 overflow-y-auto custom-scrollbar animate-in fade-in duration-100">
-                        {displayedClients.length === 0 ? (
-                          <div className="p-4 text-center text-slate-400 space-y-1">
-                            <p className="font-semibold text-slate-300">Sin coincidencias encontradas</p>
-                            <p className="text-[11px] text-slate-500">Verifique el término ingresado o registre al cliente en el CRM.</p>
-                          </div>
-                        ) : (
-                          displayedClients.map((client, idx) => (
-                            <div
-                              key={client.id || client.cliente_id}
-                              onClick={() => handleSelectClient(client)}
-                              onMouseEnter={() => setActiveIndex(idx)}
-                              className={`p-3 border-b border-slate-800/60 last:border-0 cursor-pointer flex items-center justify-between transition-colors ${
-                                activeIndex === idx ? "bg-[#252c37] text-white" : "hover:bg-[#1f242d] text-slate-200"
-                              }`}
-                            >
-                              <div className="flex items-center gap-3 min-w-0">
-                                <div className="w-8 h-8 rounded-full bg-[#bfce7f]/15 border border-[#bfce7f]/30 text-[#bfce7f] flex items-center justify-center font-bold text-xs shrink-0">
-                                  {getInitials(client.nombre_completo)}
-                                </div>
-                                <div className="min-w-0">
-                                  <p className="font-bold text-slate-100 truncate">{client.nombre_completo}</p>
-                                  <p className="text-[11px] text-slate-400 truncate">
-                                    {client.identificacion ? `Doc: ${client.identificacion} • ` : ""}
-                                    {client.telefono_principal || client.correo || "Sin contacto"}
-                                  </p>
-                                </div>
-                              </div>
-                              <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-400 font-sans border border-slate-700 shrink-0 ml-2">
-                                {client.tipo_cliente || "Cliente"}
-                              </span>
-                            </div>
-                          ))
-                        )}
-                      </div>
+            {loadingInit ? (
+              <div className="p-12 flex flex-col items-center justify-center gap-3 text-foreground-muted">
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                <span className="text-xs">Cargando catálogos de recepción...</span>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* Step 1: Cliente Combobox Search & Quick Create */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-foreground-secondary block">
+                      1. Selección de Cliente <span className="text-error">*</span>
+                    </label>
+                    {canCreateClient && (
+                      <button
+                        type="button"
+                        onClick={() => setIsCustomerDrawerOpen(true)}
+                        className="text-xs text-primary hover:underline flex items-center gap-1 font-semibold cursor-pointer"
+                      >
+                        <UserPlus size={13} />
+                        <span>+ Registrar Cliente</span>
+                      </button>
                     )}
                   </div>
-                ) : (
-                  <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-center justify-between font-mono">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center font-bold text-xs shrink-0">
-                        {getInitials(selectedClient.nombre_completo)}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className="text-xs font-bold text-slate-100">{selectedClient.nombre_completo}</p>
-                          <span className="text-[10px] px-2 py-0.2 rounded bg-emerald-500/20 text-emerald-400 font-sans font-semibold border border-emerald-500/30">
-                            Seleccionado
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-slate-400 mt-0.5">
-                          {selectedClient.identificacion ? `Doc: ${selectedClient.identificacion} • ` : ""}
-                          Tel: {selectedClient.telefono_principal || "N/A"} • Correo: {selectedClient.correo || "N/A"}
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleClearClient}
-                      className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors text-xs flex items-center gap-1 font-semibold cursor-pointer"
-                      title="Cambiar cliente"
-                    >
-                      <X size={14} /> Cambiar
-                    </button>
-                  </div>
-                )}
-              </div>
 
-              {/* Step 2: Bicicleta Selection */}
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-slate-300 block">
-                  2. Bicicleta a Ingresar <span className="text-rose-400">*</span>
-                </label>
-
-                {!selectedClient ? (
-                  <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl text-center text-slate-500 text-xs font-mono">
-                    Selecciona un cliente primero para ver sus bicicletas registradas.
-                  </div>
-                ) : loadingBikes ? (
-                  <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-center gap-2 text-slate-400 text-xs">
-                    <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
-                    <span>Cargando bicicletas del cliente...</span>
-                  </div>
-                ) : clientBicycles.length === 0 ? (
-                  <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl text-center text-amber-300 text-xs font-mono">
-                    Este cliente no tiene bicicletas registradas en el sistema. Debe registrar una bicicleta en CRM primero.
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {clientBicycles.map((bike) => {
-                      const isSelected = selectedBike?.id === bike.id || selectedBike?.bicicleta_id === bike.bicicleta_id;
-                      return (
-                        <div
-                          key={bike.id || bike.bicicleta_id}
-                          onClick={() => handleSelectBike(bike)}
-                          className={`p-3.5 border rounded-xl cursor-pointer transition-all flex items-center justify-between ${
-                            isSelected
-                              ? "bg-emerald-500/10 border-emerald-500/50 text-slate-100 ring-1 ring-emerald-500/30"
-                              : "bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700"
-                          }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <Bike className={`w-5 h-5 ${isSelected ? "text-emerald-400" : "text-slate-400"}`} />
-                            <div>
-                              <p className="text-xs font-bold font-mono">
-                                {bike.marca} {bike.modelo}
-                              </p>
-                              <p className="text-[11px] text-slate-400">
-                                Año: {bike.ano || "N/A"} • SN: {bike.numero_serie_cuadro || "N/A"}
-                              </p>
-                            </div>
-                          </div>
-                          {isSelected && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Step 3: Multi-Service & Component Selection */}
-              <div className="space-y-4 pt-2 border-t border-slate-800">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-slate-300 flex items-center gap-2">
-                    <span>3. Servicios Solicitados & Diagnóstico Preliminar</span>
-                    <span className="text-[11px] font-normal text-slate-400 font-mono">({serviciosList.length} agregados)</span>
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setGenerarOrdenTrabajo(!generarOrdenTrabajo)}
-                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all border flex items-center gap-1.5 cursor-pointer ${
-                      generarOrdenTrabajo
-                        ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
-                        : "bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200"
-                    }`}
-                    title="Alternar creación automática de orden de trabajo"
-                  >
-                    <Wrench className="w-3.5 h-3.5" />
-                    <span>Generar OT automática</span>
-                    <span className={`w-2 h-2 rounded-full ${generarOrdenTrabajo ? "bg-emerald-400 animate-pulse" : "bg-slate-500"}`} />
-                  </button>
-                </div>
-
-                {/* Sub-form to Add/Edit a Service */}
-                <div className="bg-slate-950/80 p-4 border border-slate-800 rounded-xl space-y-3">
-                  <p className="text-xs font-semibold text-slate-200">
-                    {editingTempId ? "Editar Servicio Seleccionado" : "Agregar Nuevo Servicio a la Recepción"}
-                  </p>
-
-                  <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-                    {/* Tipo de servicio */}
-                    <div className="md:col-span-4">
-                      <label className="text-[11px] text-slate-400 mb-1 block">Tipo de Servicio *</label>
-                      <select
-                        ref={selectTypeRef}
-                        value={currentServicioId}
-                        onChange={(e) => handleSelectServiceType(e.target.value)}
-                        className={`w-full text-xs bg-slate-900 border rounded-xl px-3 py-2.5 text-slate-200 focus:outline-none transition-colors ${
-                          serviceDraftErrors.tipo_servicio_id
-                            ? "border-rose-500/80 bg-rose-500/10 focus:border-rose-500"
-                            : "border-slate-800 focus:border-slate-700"
-                        }`}
-                      >
-                        <option value="">Seleccione tipo de servicio...</option>
-                        {catalogs.tipos_servicio.map((t) => (
-                          <option key={t.tipo_servicio_id} value={t.tipo_servicio_id}>
-                            {t.nombre} (RD$ {Number(t.precio_base || 0).toLocaleString()})
-                          </option>
-                        ))}
-                      </select>
-                      {serviceDraftErrors.tipo_servicio_id && (
-                        <p className="text-[11px] text-rose-400 mt-1 flex items-center gap-1">
-                          <AlertCircle className="w-3 h-3 shrink-0" />
-                          <span>{serviceDraftErrors.tipo_servicio_id}</span>
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Precio Estimado */}
-                    <div className="md:col-span-3">
-                      <label className="text-[11px] text-slate-400 mb-1 block">Precio Estimado (RD$)</label>
-                      <input
-                        ref={inputPriceRef}
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        placeholder="0.00"
-                        value={currentPrecio}
-                        readOnly
-                        className={`w-full text-xs bg-slate-900/60 border rounded-xl px-3 py-2.5 text-slate-300 focus:outline-none font-mono transition-colors cursor-not-allowed opacity-90 ${
-                          serviceDraftErrors.precio_estimado
-                            ? "border-rose-500/80 bg-rose-500/10"
-                            : "border-slate-800"
-                        }`}
-                      />
-                      {serviceDraftErrors.precio_estimado && (
-                        <p className="text-[11px] text-rose-400 mt-1 flex items-center gap-1">
-                          <AlertCircle className="w-3 h-3 shrink-0" />
-                          <span>{serviceDraftErrors.precio_estimado}</span>
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Componente afectado & Inline New Component Feature */}
-                    <div className="md:col-span-5 space-y-2">
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-[11px] text-slate-400 font-semibold block">
-                          Componente afectado
-                        </label>
-                        {selectedBike && !loadingComponents && !editingTempId && !attachedNewComponent && !isAddingNewComponent && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setIsAddingNewComponent(true);
-                              setNewComponentDraft({ categoria_componente_id: "", estado_componente_id: "1", marca: "", numero_serie: "" });
-                              setNewComponentErrors({ categoria_componente_id: "", estado_componente_id: "", numero_serie: "" });
-                            }}
-                            className="text-[11px] text-emerald-400 hover:text-emerald-300 hover:underline cursor-pointer flex items-center gap-1 font-semibold"
-                          >
-                            <Plus size={12} />
-                            <span>Agregar Nuevo</span>
-                          </button>
-                        )}
+                  {!selectedClient ? (
+                    <div className="relative" ref={comboboxRef}>
+                      <div className="relative">
+                        <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-foreground-muted pointer-events-none" />
+                        <input
+                          ref={searchInputRef}
+                          type="text"
+                          value={clientSearch}
+                          onChange={(e) => {
+                            setClientSearch(e.target.value);
+                            setIsDropdownOpen(true);
+                            setActiveIndex(-1);
+                          }}
+                          onFocus={() => setIsDropdownOpen(true)}
+                          onKeyDown={handleKeyDown}
+                          placeholder="Buscar por nombre, cédula, RNC o teléfono..."
+                          className="w-full pl-10 pr-10 py-2.5 bg-surface border border-border rounded-xl text-xs text-foreground placeholder-foreground-muted focus:outline-none focus:border-primary transition-all font-mono"
+                        />
+                        <ChevronDown className="w-4 h-4 absolute right-3.5 top-1/2 -translate-y-1/2 text-foreground-muted pointer-events-none" />
                       </div>
 
-                      {/* State A: An inline component draft is currently attached */}
-                      {attachedNewComponent ? (
-                        <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-1.5 font-mono text-xs animate-in fade-in duration-150">
-                          <div className="flex items-center justify-between">
-                            <span className="font-bold text-amber-400 text-[10px] uppercase tracking-wider flex items-center gap-1.5">
-                              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                              NUEVO COMPONENTE — PENDIENTE DE GUARDAR
-                            </span>
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setNewComponentDraft({
-                                    categoria_componente_id: String(attachedNewComponent.categoria_componente_id),
-                                    estado_componente_id: String(attachedNewComponent.estado_componente_id),
-                                    marca: attachedNewComponent.marca || "",
-                                    numero_serie: attachedNewComponent.numero_serie || ""
-                                  });
-                                  setAttachedNewComponent(null);
-                                  setIsAddingNewComponent(true);
-                                }}
-                                className="text-[11px] text-amber-300 hover:underline cursor-pointer font-bold"
-                              >
-                                Editar borrador
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setAttachedNewComponent(null)}
-                                className="text-[11px] text-rose-400 hover:underline cursor-pointer font-bold"
-                              >
-                                Quitar borrador
-                              </button>
-                            </div>
-                          </div>
-                          <div className="text-[11px] text-slate-200">
-                            <p>
-                              <strong>Categoría:</strong> {attachedNewComponent.categoria_nombre} • <strong>Estado:</strong> {attachedNewComponent.estado_nombre}
-                            </p>
-                            {(attachedNewComponent.marca || attachedNewComponent.numero_serie) && (
-                              <p className="text-slate-400">
-                                {attachedNewComponent.marca ? `Marca: ${attachedNewComponent.marca}` : ""}
-                                {attachedNewComponent.marca && attachedNewComponent.numero_serie ? " • " : ""}
-                                {attachedNewComponent.numero_serie ? `SN: ${attachedNewComponent.numero_serie}` : ""}
-                              </p>
-                            )}
-                          </div>
-                          <p className="text-[10px] text-amber-400/80 pt-1 border-t border-amber-500/20 italic">
-                            El componente se registrará al confirmar la recepción y generar la orden de trabajo.
-                          </p>
-                        </div>
-                      ) : isAddingNewComponent ? (
-                        /* State B: Inline creation form for a new component draft */
-                        <div className="p-3 bg-slate-900 border border-emerald-500/40 rounded-xl space-y-3 font-mono text-xs animate-in slide-in-from-top-2 duration-150">
-                          <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
-                            <span className="font-bold text-emerald-400 text-[11px] flex items-center gap-1.5">
-                              <PackagePlus size={14} />
-                              Nuevo Componente para esta Bicicleta
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setIsAddingNewComponent(false);
-                                setNewComponentErrors({ categoria_componente_id: "", estado_componente_id: "", numero_serie: "" });
-                              }}
-                              className="text-[11px] text-slate-400 hover:text-white cursor-pointer"
-                            >
-                              Cancelar
-                            </button>
-                          </div>
-
-                          <div className="space-y-2">
-                            {/* Categoría */}
-                            <div>
-                              <label className="text-[10px] text-slate-300 block mb-0.5">Categoría del Componente *</label>
-                              <select
-                                value={newComponentDraft.categoria_componente_id}
-                                onChange={(e) => {
-                                  setNewComponentDraft((prev) => ({ ...prev, categoria_componente_id: e.target.value }));
-                                  setNewComponentErrors((prev) => ({ ...prev, categoria_componente_id: "" }));
-                                }}
-                                className={`w-full text-xs bg-slate-950 border rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none ${
-                                  newComponentErrors.categoria_componente_id
-                                    ? "border-rose-500/80 bg-rose-500/10"
-                                    : "border-slate-800 focus:border-emerald-500/50"
-                                }`}
-                              >
-                                <option value="">Seleccione categoría...</option>
-                                {catalogs.categorias_componente.map((cat) => {
-                                  const alreadyExists = bikeComponents.some(
-                                    (bc) => String(bc.categoria_componente_id) === String(cat.categoria_componente_id)
-                                  );
-                                  return (
-                                    <option
-                                      key={cat.categoria_componente_id}
-                                      value={cat.categoria_componente_id}
-                                      disabled={alreadyExists}
-                                    >
-                                      {cat.nombre} {alreadyExists ? "(Ya existe en la bicicleta)" : ""}
-                                    </option>
-                                  );
-                                })}
-                              </select>
-                              {newComponentErrors.categoria_componente_id && (
-                                <p className="text-[10px] text-rose-400 mt-0.5">{newComponentErrors.categoria_componente_id}</p>
+                      {isDropdownOpen && (
+                        <div className="absolute left-0 right-0 top-full mt-1.5 bg-card border border-border rounded-xl shadow-2xl z-50 overflow-hidden font-mono text-xs max-h-64 overflow-y-auto custom-scrollbar animate-in fade-in duration-100">
+                          {displayedClients.length === 0 ? (
+                            <div className="p-4 text-center space-y-2">
+                              <p className="font-semibold text-foreground">Sin coincidencias encontradas</p>
+                              {canCreateClient ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setIsDropdownOpen(false);
+                                    setIsCustomerDrawerOpen(true);
+                                  }}
+                                  className="mt-2 px-3.5 py-2 bg-primary-button-bg text-primary-foreground font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 mx-auto hover:bg-primary-button-hover transition-colors cursor-pointer"
+                                >
+                                  <UserPlus size={14} />
+                                  <span>Crear Cliente &quot;{clientSearch}&quot;</span>
+                                </button>
+                              ) : (
+                                <p className="text-[11px] text-foreground-muted flex items-center justify-center gap-1">
+                                  <Info size={13} className="text-info" />
+                                  <span>No tienes permiso para registrar clientes. Selecciona uno existente.</span>
+                                </p>
                               )}
                             </div>
-
-                            {/* Estado actual */}
-                            <div>
-                              <label className="text-[10px] text-slate-300 block mb-0.5">Estado Actual *</label>
-                              <select
-                                value={newComponentDraft.estado_componente_id}
-                                onChange={(e) => {
-                                  setNewComponentDraft((prev) => ({ ...prev, estado_componente_id: e.target.value }));
-                                  setNewComponentErrors((prev) => ({ ...prev, estado_componente_id: "" }));
-                                }}
-                                className="w-full text-xs bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-emerald-500/50"
+                          ) : (
+                            displayedClients.map((client, idx) => (
+                              <div
+                                key={client.id || client.cliente_id}
+                                onClick={() => handleSelectClient(client)}
+                                className={`p-3 flex items-center justify-between cursor-pointer border-b border-border-subtle last:border-0 transition-colors ${
+                                  activeIndex === idx ? "bg-hover text-foreground" : "hover:bg-hover"
+                                }`}
                               >
-                                {catalogs.estados_componente.map((st) => (
-                                  <option key={st.estado_componente_id} value={st.estado_componente_id}>
-                                    {st.nombre}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-
-                            {/* Marca y Serie (opcionales) */}
-                            <div className="grid grid-cols-2 gap-2">
-                              <div>
-                                <label className="text-[10px] text-slate-400 block mb-0.5">Marca (Opcional)</label>
-                                <input
-                                  type="text"
-                                  placeholder="Ej. Shimano, Fox..."
-                                  value={newComponentDraft.marca}
-                                  onChange={(e) => setNewComponentDraft((prev) => ({ ...prev, marca: e.target.value }))}
-                                  className="w-full text-xs bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-emerald-500/50"
-                                />
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-lg bg-surface border border-border flex items-center justify-center font-bold text-primary shrink-0">
+                                    {getInitials(client.nombre_completo)}
+                                  </div>
+                                  <div>
+                                    <p className="font-bold text-foreground">{client.nombre_completo}</p>
+                                    <p className="text-[11px] text-foreground-muted">
+                                      {client.identificacion || "Sin ID"} • {client.telefono_principal || "Sin teléfono"}
+                                    </p>
+                                  </div>
+                                </div>
+                                <span className="text-[10px] uppercase font-bold text-foreground-muted bg-surface px-2 py-0.5 rounded">
+                                  {client.tipo_cliente || "Persona"}
+                                </span>
                               </div>
-                              <div>
-                                <label className="text-[10px] text-slate-400 block mb-0.5">Nº de Serie (Opcional)</label>
-                                <input
-                                  type="text"
-                                  placeholder="SN-12345"
-                                  value={newComponentDraft.numero_serie}
-                                  onChange={(e) => setNewComponentDraft((prev) => ({ ...prev, numero_serie: e.target.value }))}
-                                  className="w-full text-xs bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-emerald-500/50"
-                                />
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-800">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setIsAddingNewComponent(false);
-                                setNewComponentErrors({ categoria_componente_id: "", estado_componente_id: "", numero_serie: "" });
-                              }}
-                              className="px-2.5 py-1 text-xs text-slate-400 hover:text-white bg-slate-800 rounded-lg cursor-pointer"
-                            >
-                              Cancelar
-                            </button>
-                            <button
-                              type="button"
-                              onClick={handleAttachNewComponentToService}
-                              className="px-3 py-1 text-xs font-semibold bg-emerald-500 text-slate-950 rounded-lg hover:bg-emerald-400 transition-colors cursor-pointer"
-                            >
-                              Agregar componente al servicio
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        /* State C: Standard select with link to add new component */
-                        <div>
-                          <select
-                            value={currentBicicletaComponenteId}
-                            disabled={!selectedBike || loadingComponents}
-                            onChange={(e) => {
-                              setCurrentBicicletaComponenteId(e.target.value);
-                              setServiceSuccessMsg("");
-                            }}
-                            className="w-full text-xs bg-slate-900 border border-slate-800 text-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:border-slate-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-                          >
-                            <option value="">— Seleccione un componente de la bicicleta —</option>
-                            <option value="">Sin componente específico (Servicio General)</option>
-                            {bikeComponents.map((c) => {
-                              const cid = c.bicicleta_componente_id || c.id;
-                              const cName = `${c.categoria_nombre || c.categoria || "Componente"} ${c.marca || ""} ${c.modelo || ""}`.trim();
-                              const snText = c.numero_serie ? ` (SN: ${c.numero_serie})` : "";
-                              const stText = c.estado_nombre ? ` [${c.estado_nombre}]` : "";
-                              return (
-                                <option key={cid} value={cid}>
-                                  {cName}{snText}{stText}
-                                </option>
-                              );
-                            })}
-                          </select>
-
-                          {selectedBike && !loadingComponents && bikeComponents.length === 0 && (
-                            <p className="mt-1.5 text-[11px] text-amber-400/90 font-mono">
-                              Esta bicicleta no tiene componentes registrados.
-                            </p>
+                            ))
                           )}
                         </div>
                       )}
                     </div>
+                  ) : (
+                    <div className="p-3.5 bg-surface border border-border rounded-xl flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-primary-muted border border-primary/30 flex items-center justify-center font-bold text-primary shrink-0 font-mono">
+                          {getInitials(selectedClient.nombre_completo)}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-foreground text-xs">{selectedClient.nombre_completo}</span>
+                            <span className="text-[10px] uppercase font-bold text-primary bg-primary-muted px-2 py-0.5 rounded">
+                              {selectedClient.tipo_cliente || "Persona"}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-foreground-muted font-mono mt-0.5">
+                            Doc: {selectedClient.identificacion || "—"} | Tel: {selectedClient.telefono_principal || "—"}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleClearClient}
+                        className="p-1.5 text-foreground-muted hover:text-error hover:bg-error-muted rounded-lg transition-colors cursor-pointer"
+                        title="Cambiar cliente"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Step 2: Selección de Bicicleta & Quick Create */}
+                {selectedClient && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold text-foreground-secondary block">
+                        2. Bicicleta a Recibir <span className="text-error">*</span>
+                      </label>
+                      {canCreateBike && (
+                        <button
+                          type="button"
+                          onClick={() => setIsBikeDrawerOpen(true)}
+                          className="text-xs text-primary hover:underline flex items-center gap-1 font-semibold cursor-pointer"
+                        >
+                          <Plus size={13} />
+                          <span>+ Registrar Bicicleta</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {loadingBikes ? (
+                      <div className="p-4 bg-surface border border-border rounded-xl flex items-center justify-center gap-2 text-xs text-foreground-muted font-mono">
+                        <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                        <span>Cargando bicicletas del cliente...</span>
+                      </div>
+                    ) : !selectedBike ? (
+                      <div className="relative" ref={bikeComboboxRef}>
+                        <div className="relative">
+                          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-foreground-muted pointer-events-none" />
+                          <input
+                            ref={bikeSearchInputRef}
+                            type="text"
+                            value={bikeSearch}
+                            onChange={(e) => {
+                              setBikeSearch(e.target.value);
+                              setIsBikeDropdownOpen(true);
+                              setActiveBikeIndex(-1);
+                            }}
+                            onFocus={() => setIsBikeDropdownOpen(true)}
+                            onKeyDown={handleBikeKeyDown}
+                            placeholder={
+                              clientBicycles.length === 0
+                                ? "No hay bicicletas registradas para este cliente..."
+                                : "Buscar por marca, modelo, tipo, color o número de serie..."
+                            }
+                            className="w-full pl-10 pr-10 py-2.5 bg-surface border border-border rounded-xl text-xs text-foreground placeholder-foreground-muted focus:outline-none focus:border-primary transition-all font-mono"
+                          />
+                          <ChevronDown className="w-4 h-4 absolute right-3.5 top-1/2 -translate-y-1/2 text-foreground-muted pointer-events-none" />
+                        </div>
+
+                        {isBikeDropdownOpen && (
+                          <div className="absolute left-0 right-0 top-full mt-1.5 bg-card border border-border rounded-xl shadow-2xl z-50 overflow-hidden font-mono text-xs max-h-64 overflow-y-auto custom-scrollbar animate-in fade-in duration-100">
+                            {clientBicycles.length === 0 ? (
+                              <div className="p-4 text-center space-y-2">
+                                <p className="text-xs text-foreground-muted">Este cliente no tiene bicicletas registradas.</p>
+                                {canCreateBike ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setIsBikeDropdownOpen(false);
+                                      setIsBikeDrawerOpen(true);
+                                    }}
+                                    className="px-3.5 py-2 bg-primary-button-bg text-primary-foreground font-bold rounded-xl text-xs inline-flex items-center gap-1.5 hover:bg-primary-button-hover transition-colors cursor-pointer"
+                                  >
+                                    <Bike size={14} />
+                                    <span>Registrar Primera Bicicleta</span>
+                                  </button>
+                                ) : (
+                                  <p className="text-[11px] text-foreground-muted flex items-center justify-center gap-1">
+                                    <Info size={13} className="text-info" />
+                                    <span>No posees permisos para registrar bicicletas en el CRM.</span>
+                                  </p>
+                                )}
+                              </div>
+                            ) : displayedBikes.length === 0 ? (
+                              <div className="p-4 text-center space-y-2">
+                                <p className="font-semibold text-foreground">Sin coincidencias encontradas</p>
+                                {canCreateBike ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setIsBikeDropdownOpen(false);
+                                      setIsBikeDrawerOpen(true);
+                                    }}
+                                    className="mt-2 px-3.5 py-2 bg-primary-button-bg text-primary-foreground font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 mx-auto hover:bg-primary-button-hover transition-colors cursor-pointer"
+                                  >
+                                    <Plus size={14} />
+                                    <span>Registrar Bicicleta &quot;{bikeSearch}&quot;</span>
+                                  </button>
+                                ) : (
+                                  <p className="text-[11px] text-foreground-muted flex items-center justify-center gap-1">
+                                    <Info size={13} className="text-info" />
+                                    <span>No posees permisos para registrar bicicletas en el CRM.</span>
+                                  </p>
+                                )}
+                              </div>
+                            ) : (
+                              displayedBikes.map((bike, idx) => (
+                                <div
+                                  key={bike.id || bike.bicicleta_id}
+                                  onClick={() => handleSelectBike(bike)}
+                                  className={`p-3 flex items-center justify-between cursor-pointer border-b border-border-subtle last:border-0 transition-colors ${
+                                    activeBikeIndex === idx ? "bg-hover text-foreground" : "hover:bg-hover"
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-lg bg-surface border border-border flex items-center justify-center font-bold text-primary shrink-0">
+                                      <Bike size={16} />
+                                    </div>
+                                    <div>
+                                      <p className="font-bold text-foreground">
+                                        {bike.marca || "Bicicleta"} {bike.modelo || ""}
+                                      </p>
+                                      <p className="text-[11px] text-foreground-muted">
+                                        {bike.tipo_bicicleta || "General"} {bike.color ? `• ${bike.color}` : ""}{" "}
+                                        {bike.numero_serie_cuadro ? `• S/N: ${bike.numero_serie_cuadro}` : ""}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <span className="text-[10px] uppercase font-bold text-primary bg-primary-muted px-2 py-0.5 rounded">
+                                    {bike.tipo_bicicleta || "Bicicleta"}
+                                  </span>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="p-3.5 bg-surface border border-border rounded-xl flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-primary-muted border border-primary/30 flex items-center justify-center font-bold text-primary shrink-0 font-mono">
+                            <Bike size={20} />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-foreground text-xs">
+                                {selectedBike.marca || "Bicicleta"} {selectedBike.modelo || ""}
+                              </span>
+                              <span className="text-[10px] uppercase font-bold text-primary bg-primary-muted px-2 py-0.5 rounded">
+                                {selectedBike.tipo_bicicleta || "Bicicleta"}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-foreground-muted font-mono mt-0.5">
+                              {selectedBike.color ? `Color: ${selectedBike.color} | ` : ""}
+                              {selectedBike.numero_serie_cuadro ? `S/N: ${selectedBike.numero_serie_cuadro} | ` : ""}
+                              QR: {selectedBike.codigo_qr || "Sin QR"}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleClearBike}
+                          className="p-1.5 text-foreground-muted hover:text-error hover:bg-error-muted rounded-lg transition-colors cursor-pointer"
+                          title="Cambiar bicicleta"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Step 3: Observaciones del Cliente vs Diagnóstico Preliminar */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-foreground-secondary block">
+                      Motivo de Ingreso (Declarado por el Cliente)
+                    </label>
+                    <textarea
+                      value={observacionesCliente}
+                      onChange={(e) => {
+                        setObservacionesCliente(e.target.value);
+                        setSignatureData(null);
+                      }}
+                      placeholder="Indique los síntomas, ruidos o requerimientos que expresa el cliente..."
+                      rows={2}
+                      className="w-full p-2.5 bg-surface border border-border rounded-xl text-xs text-foreground focus:outline-none focus:border-primary resize-none"
+                    />
                   </div>
 
-                  <div className="flex items-center justify-between pt-1">
-                    {serviceSuccessMsg ? (
-                      <p className="text-xs font-semibold text-emerald-400 flex items-center gap-1.5 animate-in fade-in">
-                        <Check className="w-4 h-4" />
-                        <span>{serviceSuccessMsg}</span>
-                      </p>
-                    ) : <div />}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-foreground-secondary block">
+                      Diagnóstico Preliminar (Técnico / Taller)
+                    </label>
+                    <textarea
+                      value={diagnosticoPreliminar}
+                      onChange={(e) => {
+                        setDiagnosticoPreliminar(e.target.value);
+                        setSignatureData(null);
+                      }}
+                      placeholder="Evaluación inicial de estado o trabajo técnico requerido..."
+                      rows={2}
+                      className="w-full p-2.5 bg-surface border border-border rounded-xl text-xs text-foreground focus:outline-none focus:border-primary resize-none"
+                    />
+                  </div>
+                </div>
 
-                    <div className="flex items-center gap-2">
+                {/* Step 4: Multi-Service Configuration */}
+                <div className="space-y-3 pt-2 border-t border-border-subtle">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-foreground-secondary block">
+                      3. Servicios a Realizar <span className="text-error">*</span>
+                    </label>
+                    <span className="text-xs font-mono text-primary font-bold">
+                      Presupuesto: RD$ {presupuestoEstimado}
+                    </span>
+                  </div>
+
+                  {/* Sub-form to Add/Edit Service */}
+                  <div className="p-3.5 bg-surface border border-border rounded-xl space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
+                      <div className="sm:col-span-5">
+                        <label className="block text-[11px] text-foreground-muted mb-1">Tipo de Servicio</label>
+                        <select
+                          value={currentServicioId}
+                          onChange={(e) => handleSelectServiceType(e.target.value)}
+                          className="w-full p-2 bg-card border border-border rounded-lg text-xs text-foreground focus:outline-none focus:border-primary"
+                        >
+                          <option value="">Seleccione servicio...</option>
+                          {catalogs.tipos_servicio.map((ts) => (
+                            <option key={ts.tipo_servicio_id} value={ts.tipo_servicio_id}>
+                              {ts.nombre} (RD$ {Number(ts.precio_base || 0).toFixed(2)})
+                            </option>
+                          ))}
+                        </select>
+                        {serviceDraftErrors.tipo_servicio_id && (
+                          <p className="text-error text-[10px] mt-1">{serviceDraftErrors.tipo_servicio_id}</p>
+                        )}
+                      </div>
+
+                      <div className="sm:col-span-3">
+                        <label className="block text-[11px] text-foreground-muted mb-1">Precio Estimado (RD$)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={currentPrecio}
+                          onChange={(e) => {
+                            setCurrentPrecio(e.target.value);
+                            setServiceDraftErrors((prev) => ({ ...prev, precio_estimado: "" }));
+                          }}
+                          placeholder="0.00"
+                          className="w-full p-2 bg-card border border-border rounded-lg text-xs text-foreground focus:outline-none focus:border-primary font-mono"
+                        />
+                        {serviceDraftErrors.precio_estimado && (
+                          <p className="text-error text-[10px] mt-1">{serviceDraftErrors.precio_estimado}</p>
+                        )}
+                      </div>
+
+                      <div className="sm:col-span-4">
+                        <label className="block text-[11px] text-foreground-muted mb-1">Componente Vinculado</label>
+                        {attachedNewComponent ? (
+                          <div className="p-2 bg-primary-muted border border-primary/30 rounded-lg text-xs text-primary flex items-center justify-between">
+                            <span className="truncate">{attachedNewComponent.categoria_nombre}</span>
+                            <button
+                              type="button"
+                              onClick={() => setAttachedNewComponent(null)}
+                              className="text-foreground-muted hover:text-error text-xs"
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        ) : (
+                          <select
+                            value={currentBicicletaComponenteId}
+                            onChange={(e) => setCurrentBicicletaComponenteId(e.target.value)}
+                            disabled={!selectedBike || bikeComponents.length === 0}
+                            className="w-full p-2 bg-card border border-border rounded-lg text-xs text-foreground focus:outline-none focus:border-primary disabled:opacity-50"
+                          >
+                            <option value="">General (Sin componente específico)</option>
+                            {bikeComponents.map((c) => (
+                              <option key={c.bicicleta_componente_id} value={c.bicicleta_componente_id}>
+                                {c.categoria_nombre || "Componente"}{c.marca ? ` - ${c.marca}` : ""}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2">
                       {editingTempId && (
                         <button
                           type="button"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
+                          onClick={() => {
                             setEditingTempId(null);
                             setCurrentServicioId("");
                             setCurrentPrecio("");
                             setCurrentBicicletaComponenteId("");
                             setAttachedNewComponent(null);
-                            setIsAddingNewComponent(false);
-                            setServiceDraftErrors({
-                              tipo_servicio_id: "",
-                              precio_estimado: ""
-                            });
-                            setServiceSuccessMsg("");
                           }}
-                          className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 bg-slate-800 rounded-lg cursor-pointer"
+                          className="px-3 py-1.5 text-xs text-foreground-muted hover:text-foreground"
                         >
                           Cancelar Edición
                         </button>
@@ -1148,233 +1296,237 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
                       <button
                         type="button"
                         onClick={handleAddOrUpdateService}
-                        disabled={addingServiceProcessing}
-                        className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-slate-950 bg-emerald-400 hover:bg-emerald-300 rounded-xl transition-colors cursor-pointer disabled:opacity-50"
+                        className="px-4 py-1.5 bg-primary-button-bg text-primary-foreground font-bold text-xs rounded-lg hover:bg-primary-button-hover transition-colors flex items-center gap-1.5"
                       >
-                        {addingServiceProcessing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                        {editingTempId ? "Guardar Cambios del Servicio" : "Agregar Servicio a la Lista"}
+                        <Plus size={14} />
+                        <span>{editingTempId ? "Actualizar Servicio" : "Agregar Servicio"}</span>
                       </button>
                     </div>
                   </div>
+
+                  {/* List of Added Services */}
+                  {serviciosList.length > 0 && (
+                    <div className="space-y-1.5">
+                      {serviciosList.map((srv) => (
+                        <div
+                          key={srv.tempId}
+                          className="p-2.5 bg-surface border border-border rounded-xl flex items-center justify-between text-xs"
+                        >
+                          <div>
+                            <span className="font-bold text-foreground">{srv.nombre_servicio}</span>
+                            {srv.componente_nombre && (
+                              <span className="ml-2 text-[11px] text-foreground-muted font-mono">
+                                ({srv.componente_nombre})
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="font-mono font-bold text-primary">
+                              RD$ {parseFloat(srv.precio_estimado).toFixed(2)}
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleEditServiceClick(srv)}
+                                className="p-1 text-foreground-muted hover:text-foreground"
+                              >
+                                <Edit2 size={13} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteServiceClick(srv.tempId)}
+                                className="p-1 text-foreground-muted hover:text-error"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
-                {/* Table / List of Added Services */}
-                {serviciosList.length > 0 && (
-                  <div className="border border-slate-800 rounded-xl overflow-hidden bg-slate-950/40">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-slate-900/80 text-slate-400 border-b border-slate-800 font-semibold uppercase text-[10px]">
-                        <tr>
-                          <th className="py-2.5 px-3">Servicio</th>
-                          <th className="py-2.5 px-3">Componente Afectado</th>
-                          <th className="py-2.5 px-3 text-right">Precio Est.</th>
-                          <th className="py-2.5 px-3 text-center">Acciones</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800/60 text-slate-200">
-                        {serviciosList.map((srv) => (
-                          <tr key={srv.tempId} className="hover:bg-slate-800/40 transition-colors">
-                            <td className="py-2.5 px-3 font-semibold text-emerald-400">{srv.nombre}</td>
-                            <td className="py-2.5 px-3 font-mono">
-                              <div className="flex items-center gap-2">
-                                <span className={srv.nuevo_componente ? "text-amber-300" : "text-slate-300"}>
-                                  {srv.componente_nombre || "Servicio general"}
-                                </span>
-                                {srv.nuevo_componente && (
-                                  <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[9px] font-bold border border-amber-500/40 uppercase tracking-wider">
-                                    PENDIENTE DE CREAR
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="py-2.5 px-3 text-right font-mono text-slate-100">RD$ {Number(srv.precio_estimado || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                            <td className="py-2.5 px-3 text-center">
-                              <div className="flex items-center justify-center gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() => handleEditServiceClick(srv)}
-                                  className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors cursor-pointer"
-                                  title="Editar servicio"
-                                >
-                                  <Edit2 size={13} />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteServiceClick(srv.tempId)}
-                                  className="p-1 text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 rounded transition-colors cursor-pointer"
-                                  title="Eliminar servicio"
-                                >
-                                  <Trash2 size={13} />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                {/* Step 5: Checklist & Digital Signature Action Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-border-subtle">
+                  {/* Checklist Card */}
+                  <div
+                    onClick={() => setIsChecklistOpen(true)}
+                    className="p-4 bg-surface border border-border rounded-xl cursor-pointer hover:border-primary/50 transition-colors flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-primary-muted border border-primary/20 rounded-lg text-primary">
+                        <ClipboardCheck size={18} />
+                      </div>
+                      <div>
+                        <p className="font-bold text-xs text-foreground">Checklist de Inspección</p>
+                        <p className="text-[11px] text-foreground-muted">
+                          {checklistState.length > 0
+                            ? `${checklistState.length} puntos evaluados`
+                            : "Completar inspección previa"}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-xs text-primary font-semibold">
+                      {checklistState.length > 0 ? "Modificar" : "Abrir"}
+                    </span>
                   </div>
-                )}
 
-                {/* General Observations & Total Budget */}
-                <div className="grid grid-cols-1 gap-4">
-                  <div className="flex items-center justify-between p-3.5 bg-slate-950 border border-slate-800 rounded-xl">
-                    <div>
-                      <p className="text-xs font-semibold text-slate-200">Presupuesto Estimado Total</p>
-                      <p className="text-[11px] text-slate-400">Suma total calculada de los servicios incluidos</p>
+                  {/* Digital Signature Card */}
+                  <div
+                    onClick={() => setIsSignatureModalOpen(true)}
+                    className="p-4 bg-surface border border-border rounded-xl cursor-pointer hover:border-primary/50 transition-colors flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-primary-muted border border-primary/20 rounded-lg text-primary">
+                        <FileSignature size={18} />
+                      </div>
+                      <div>
+                        <p className="font-bold text-xs text-foreground">Firma de Consentimiento</p>
+                        <p className="text-[11px] text-foreground-muted">
+                          {signatureData ? "Firma capturada ✓" : "Capturar firma del cliente"}
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-slate-400">RD$</span>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={presupuestoEstimado}
-                        onChange={(e) => setPresupuestoEstimado(e.target.value)}
-                        className="w-36 text-sm font-bold bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-emerald-400 text-right font-mono focus:outline-none"
-                      />
-                    </div>
+                    <span className="text-xs text-primary font-semibold">
+                      {signatureData ? "Ver/Cambiar" : "Firmar"}
+                    </span>
                   </div>
                 </div>
 
-                {/* Work Order Fields */}
-                {generarOrdenTrabajo && (
-                  <div className="p-4 bg-slate-950/80 border border-emerald-500/20 rounded-xl space-y-4 animate-in fade-in duration-150">
-                    <div className="flex items-center gap-2 text-emerald-400 text-xs font-semibold uppercase tracking-wider">
-                      <Wrench size={14} />
-                      <span>Parámetros de la Orden de Trabajo (OT)</span>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div className="sm:col-span-2">
-                        <label className="text-xs text-slate-400 mb-1 block">Prioridad de la Orden</label>
+                {/* Step 6: Orden de Trabajo Auto-Generation Settings */}
+                <div className="p-4 bg-surface border border-border rounded-xl space-y-3">
+                  <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={generarOrdenTrabajo}
+                      onChange={(e) => setGenerarOrdenTrabajo(e.target.checked)}
+                      className="rounded border-border text-primary focus:ring-primary h-4 w-4 bg-card"
+                    />
+                    <span className="font-bold text-xs text-foreground">
+                      Generar automáticamente Orden de Trabajo (OT) al registrar la recepción
+                    </span>
+                  </label>
+
+                  {generarOrdenTrabajo && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                      <div>
+                        <label className="block text-[11px] text-foreground-muted mb-1">Prioridad de OT</label>
                         <select
                           value={prioridadId}
                           onChange={(e) => setPrioridadId(e.target.value)}
-                          className="w-full text-xs bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-200 focus:outline-none focus:border-slate-700 font-medium"
+                          className="w-full p-2 bg-card border border-border rounded-lg text-xs text-foreground focus:outline-none focus:border-primary"
                         >
                           {catalogs.prioridades.map((p) => (
-                            <option key={p.prioridad_id || p.prioridad_orden_trabajo_id} value={p.prioridad_id || p.prioridad_orden_trabajo_id}>
+                            <option key={p.prioridad_id} value={p.prioridad_id}>
                               {p.nombre}
                             </option>
                           ))}
                         </select>
                       </div>
 
-                      <div className="sm:col-span-2">
-                        <label className="text-xs text-slate-400 mb-1 block">Observaciones Internas para la Orden de Trabajo</label>
-                        <textarea
-                          rows={2}
+                      <div>
+                        <label className="block text-[11px] text-foreground-muted mb-1">Observaciones Internas de OT</label>
+                        <input
+                          type="text"
                           value={observacionesOT}
                           onChange={(e) => setObservacionesOT(e.target.value)}
-                          placeholder="Instrucciones adicionales para el taller..."
-                          className="w-full text-xs bg-slate-900 border border-slate-800 rounded-xl p-3 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-slate-700"
+                          placeholder="Instrucciones para el equipo técnico..."
+                          className="w-full p-2 bg-card border border-border rounded-lg text-xs text-foreground focus:outline-none focus:border-primary"
                         />
                       </div>
                     </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Step 4: Triggers for Checklist & Signature */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-800">
-                <button
-                  id="btn-checklist-inspeccion"
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setIsChecklistOpen(true);
-                  }}
-                  className={`p-4 rounded-xl border flex items-center justify-between text-left transition-all cursor-pointer relative z-10 ${
-                    checklistState.length > 0
-                      ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
-                      : "bg-slate-950/60 border-slate-800 text-slate-300 hover:border-slate-700"
-                  }`}
-                >
-                  <div className="flex items-center gap-3 pointer-events-none">
-                    <ClipboardCheck className="w-5 h-5 text-emerald-400" />
-                    <div>
-                      <p className="text-xs font-semibold">Checklist de Inspección</p>
-                      <p className="text-[11px] text-slate-400">
-                        {checklistState.length > 0 ? `${checklistState.length} ítems evaluados` : "Completar evaluación inicial"}
-                      </p>
-                    </div>
-                  </div>
-                  {checklistState.length > 0 && <Check className="w-4 h-4 text-emerald-400" />}
-                </button>
-
-                {/* Signature Card Disabled Visually */}
-                <div
-                  id="btn-firma-digital"
-                  aria-disabled="true"
-                  tabIndex={-1}
-                  className="p-4 rounded-xl border flex items-center justify-between text-left opacity-50 cursor-not-allowed bg-slate-950/40 border-slate-800 text-slate-400 select-none relative"
-                >
-                  <div className="flex items-center gap-3">
-                    <FileSignature className="w-5 h-5 text-slate-500" />
-                    <div>
-                      <p className="text-xs font-semibold">Firma Digital del Cliente</p>
-                      <p className="text-[11px] text-slate-500">Módulo no requerido en esta fase</p>
-                    </div>
-                  </div>
+                  )}
                 </div>
               </div>
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-800 bg-slate-950/60">
-          <div className="text-xs text-slate-400">
-            {selectedBike ? (
-              <span>
-                Bicicleta: <strong className="text-slate-200">{selectedBike.marca} {selectedBike.modelo}</strong>
-              </span>
-            ) : (
-              <span>Seleccione un cliente y una bicicleta para continuar</span>
             )}
           </div>
 
-          <div className="flex items-center gap-3">
+          {/* Footer Actions */}
+          <div className="p-4 border-t border-border bg-surface flex items-center justify-between shrink-0">
             <button
               type="button"
-              onClick={onClose}
               disabled={submitting}
-              className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-slate-200 bg-slate-800/80 hover:bg-slate-800 rounded-xl transition-colors cursor-pointer disabled:opacity-50"
+              onClick={handleAttemptClose}
+              className="px-4 py-2 bg-surface border border-border hover:bg-hover text-foreground-muted hover:text-foreground font-mono text-xs rounded-xl transition-all cursor-pointer"
             >
               Cancelar
             </button>
+
             <button
               type="button"
+              disabled={submitting || !selectedClient || !selectedBike}
               onClick={handleSubmit}
-              disabled={submitting || !selectedClient || !selectedBike || loadingInit}
-              className="flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-slate-950 bg-emerald-400 hover:bg-emerald-300 rounded-xl transition-all shadow-lg shadow-emerald-500/20 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-6 py-2.5 bg-primary-button-bg text-primary-foreground hover:bg-primary-button-hover font-mono text-xs font-bold rounded-xl flex items-center gap-2 shadow-sm transition-all cursor-pointer disabled:opacity-50"
             >
               {submitting ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Procesando...</span>
+                  <Loader2 size={15} className="animate-spin" />
+                  <span>Procesando Recepción...</span>
                 </>
               ) : (
-                <span>Confirmar & Generar Orden de Trabajo</span>
+                <>
+                  <Check size={15} />
+                  <span>Registrar Recepción</span>
+                </>
               )}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Checklist Sub-Modal */}
-      {isChecklistOpen && (
-        <ReceptionChecklistModal
-          isOpen={isChecklistOpen}
-          onClose={() => setIsChecklistOpen(false)}
-          itemsCatalog={catalogs.items_checklist}
-          estadosCatalog={catalogs.estados_checklist}
-          initialChecklist={checklistState}
-          onSave={(updatedList) => {
-            setChecklistState(updatedList);
-            setIsChecklistOpen(false);
-          }}
-        />
-      )}
-    </div>
+      {/* Sub-Modal: Quick Customer Creation (CRM Drawer) */}
+      <CustomerFormDrawer
+        isOpen={isCustomerDrawerOpen}
+        onClose={() => setIsCustomerDrawerOpen(false)}
+        onSuccess={handleCustomerCreated}
+      />
+
+      {/* Sub-Modal: Quick Bicycle Registration (CRM Drawer) */}
+      <BikeFormDrawer
+        isOpen={isBikeDrawerOpen}
+        lockCliente={true}
+        preselectedClienteId={selectedClient?.id || selectedClient?.cliente_id}
+        preselectedClienteName={selectedClient?.nombre_completo}
+        clientes={clients}
+        onClose={() => setIsBikeDrawerOpen(false)}
+        onSuccess={handleBikeCreated}
+      />
+
+      {/* Sub-Modal: Checklist */}
+      <ReceptionChecklistModal
+        isOpen={isChecklistOpen}
+        onClose={() => setIsChecklistOpen(false)}
+        itemsCatalog={catalogs.items_checklist}
+        estadosCatalog={catalogs.estados_checklist}
+        checklistState={checklistState}
+        onChangeChecklist={(newItems) => {
+          setChecklistState(newItems);
+          setSignatureData(null); // Invalidate signature on checklist modification
+        }}
+        onPhotoReplaced={handleChecklistPhotoReplaced}
+      />
+
+      {/* Sub-Modal: Digital Signature */}
+      <DigitalSignatureCanvasModal
+        isOpen={isSignatureModalOpen}
+        onClose={() => setIsSignatureModalOpen(false)}
+        onConfirm={(sigData) => {
+          setSignatureData(sigData);
+        }}
+      />
+
+      {/* Confirmation Dialog: Unsaved Changes on Exit */}
+      <SecurityConfirmDialog
+        isOpen={isCloseConfirmOpen}
+        onClose={() => setIsCloseConfirmOpen(false)}
+        onConfirm={performActualClose}
+        title="Cambios Sin Guardar"
+        description="Tienes cambios sin guardar en esta recepción. Si sales ahora, se descartarán los datos capturados y las fotos temporales. ¿Deseas salir?"
+        confirmLabel="Descartar y Salir"
+        cancelLabel="Continuar Editando"
+        variant="danger"
+      />
+    </>
   );
 }

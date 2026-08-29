@@ -24,6 +24,8 @@ export interface ModulePermissions {
   puede_eliminar: boolean;
 }
 
+import { validateAndTouchSession } from "@/lib/sessionLifecycle";
+
 export async function getWorkshopSession(): Promise<WorkshopSession | null> {
   try {
     const cookieStore = await cookies();
@@ -33,42 +35,38 @@ export async function getWorkshopSession(): Promise<WorkshopSession | null> {
       return null;
     }
 
-    const sessions = await query(
+    const validation = await validateAndTouchSession(tokenCookie);
+    if (!validation.valid) {
+      return null;
+    }
+
+    const userRows = await query(
       `SELECT
-         s.usuario_id,
-         s.estado,
-         s.fecha_expiracion,
+         u.usuario_id,
          u.empresa_id,
          u.rol_principal_id,
          ui.nombre,
          ui.apellido,
          ui.correo_electronico AS email
-       FROM admin.usuario_sesion s
-       JOIN admin.usuario u
-         ON u.usuario_id = s.usuario_id
+       FROM admin.usuario u
        LEFT JOIN admin.usuario_identidad ui
          ON ui.usuario_id = u.usuario_id
-       WHERE s.token_identificador = $1
-         AND s.estado = 'ACTIVA'
-         AND (
-           s.fecha_expiracion IS NULL
-           OR s.fecha_expiracion > NOW()
-         )
+       WHERE u.usuario_id = $1 AND (u.estado = 'ACTIVO' OR u.estado IS NULL)
        LIMIT 1`,
-      [tokenCookie.trim()]
+      [validation.userId]
     );
 
-    if (!sessions || sessions.length === 0) {
+    if (!userRows || userRows.length === 0) {
       return null;
     }
 
-    const s = sessions[0];
+    const u = userRows[0];
     return {
-      usuario_id: s.usuario_id,
-      empresa_id: s.empresa_id,
-      rol_principal_id: s.rol_principal_id,
-      nombre_usuario: `${s.nombre || ''} ${s.apellido || ''}`.trim() || s.email || 'Usuario',
-      email: s.email || ''
+      usuario_id: u.usuario_id,
+      empresa_id: u.empresa_id,
+      rol_principal_id: u.rol_principal_id,
+      nombre_usuario: `${u.nombre || ''} ${u.apellido || ''}`.trim() || u.email || 'Usuario',
+      email: u.email || ''
     };
   } catch (err) {
     return null;

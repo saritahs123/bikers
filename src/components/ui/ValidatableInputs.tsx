@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { AlertCircle } from "lucide-react";
 import { 
   validateRNC, 
@@ -8,7 +8,6 @@ import {
   validatePhoneDR, 
   validateEmail, 
   validateURL, 
-  validateRequiredText 
 } from "@/lib/validations";
 
 interface InputProps {
@@ -22,6 +21,8 @@ interface InputProps {
   maxLength?: number;
   icon?: React.ReactNode;
 }
+
+const baseInputStyles = `w-full bg-input border rounded-xl px-3 py-2.5 text-xs text-foreground placeholder:text-foreground-disabled focus:outline-none transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-surface-subtle`;
 
 // ----------------------------------------------------
 // 1. RNC INPUT (9 or 11 digits, DR format)
@@ -49,8 +50,8 @@ export function RNCInput({
   return (
     <div className={`space-y-1 ${className}`}>
       {label && (
-        <label className="font-mono text-[10px] text-slate-300 font-bold tracking-wider uppercase block">
-          {label} {required && <span className="text-rose-400">*</span>}
+        <label className="font-mono text-[11px] text-foreground-secondary font-bold tracking-wider uppercase block">
+          {label} {required && <span className="text-error">*</span>}
         </label>
       )}
       <input
@@ -60,13 +61,13 @@ export function RNCInput({
         value={value}
         onChange={handleChange}
         placeholder={placeholder}
-        className={`w-full bg-[#0e1117] border rounded-xl px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none transition-all ${
-          error ? "border-rose-500 focus:border-rose-500" : "border-[#2d3748] focus:border-[#bfce7f]"
+        className={`${baseInputStyles} ${
+          error ? "border-error focus:border-error text-error" : "border-border focus:border-primary"
         }`}
       />
       {error && (
-        <div className="flex items-center gap-1 mt-1 text-[11px] text-rose-400 font-mono">
-          <AlertCircle size={12} className="shrink-0" />
+        <div className="flex items-center gap-1 mt-1 text-[11px] text-error font-mono">
+          <AlertCircle size={12} className="shrink-0 text-error" />
           <span>{error}</span>
         </div>
       )}
@@ -91,7 +92,7 @@ export function PhoneInput({
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value;
-    const { formatted, digits } = formatPhoneDR(raw);
+    const { formatted } = formatPhoneDR(raw);
     const valRes = validatePhoneDR(formatted, required);
     const err = valRes.isValid ? "" : valRes.message;
     setError(err);
@@ -101,9 +102,9 @@ export function PhoneInput({
   return (
     <div className={`space-y-1 ${className}`}>
       {label && (
-        <label className="font-mono text-[10px] text-slate-300 font-bold tracking-wider uppercase block flex items-center gap-1">
+        <label className="font-mono text-[11px] text-foreground-secondary font-bold tracking-wider uppercase block flex items-center gap-1">
           {icon}
-          <span>{label}</span> {required && <span className="text-rose-400">*</span>}
+          <span>{label}</span> {required && <span className="text-error">*</span>}
         </label>
       )}
       <input
@@ -112,13 +113,13 @@ export function PhoneInput({
         value={value}
         onChange={handleChange}
         placeholder={placeholder}
-        className={`w-full bg-[#0e1117] border rounded-xl px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none transition-all ${
-          error ? "border-rose-500 focus:border-rose-500" : "border-[#2d3748] focus:border-[#bfce7f]"
+        className={`${baseInputStyles} ${
+          error ? "border-error focus:border-error text-error" : "border-border focus:border-primary"
         }`}
       />
       {error && (
-        <div className="flex items-center gap-1 mt-1 text-[11px] text-rose-400 font-mono">
-          <AlertCircle size={12} className="shrink-0" />
+        <div className="flex items-center gap-1 mt-1 text-[11px] text-error font-mono">
+          <AlertCircle size={12} className="shrink-0 text-error" />
           <span>{error}</span>
         </div>
       )}
@@ -152,9 +153,9 @@ export function EmailInput({
   return (
     <div className={`space-y-1 ${className}`}>
       {label && (
-        <label className="font-mono text-[10px] text-slate-300 font-bold tracking-wider uppercase block flex items-center gap-1">
+        <label className="font-mono text-[11px] text-foreground-secondary font-bold tracking-wider uppercase block flex items-center gap-1">
           {icon}
-          <span>{label}</span> {required && <span className="text-rose-400">*</span>}
+          <span>{label}</span> {required && <span className="text-error">*</span>}
         </label>
       )}
       <input
@@ -163,13 +164,13 @@ export function EmailInput({
         value={value}
         onChange={handleChange}
         placeholder={placeholder}
-        className={`w-full bg-[#0e1117] border rounded-xl px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none transition-all ${
-          error ? "border-rose-500 focus:border-rose-500" : "border-[#2d3748] focus:border-[#bfce7f]"
+        className={`${baseInputStyles} ${
+          error ? "border-error focus:border-error text-error" : "border-border focus:border-primary"
         }`}
       />
       {error && (
-        <div className="flex items-center gap-1 mt-1 text-[11px] text-rose-400 font-mono">
-          <AlertCircle size={12} className="shrink-0" />
+        <div className="flex items-center gap-1 mt-1 text-[11px] text-error font-mono">
+          <AlertCircle size={12} className="shrink-0 text-error" />
           <span>{error}</span>
         </div>
       )}
@@ -203,9 +204,9 @@ export function URLInput({
   return (
     <div className={`space-y-1 ${className}`}>
       {label && (
-        <label className="font-mono text-[10px] text-slate-300 font-bold tracking-wider uppercase block flex items-center gap-1">
+        <label className="font-mono text-[11px] text-foreground-secondary font-bold tracking-wider uppercase block flex items-center gap-1">
           {icon}
-          <span>{label}</span> {required && <span className="text-rose-400">*</span>}
+          <span>{label}</span> {required && <span className="text-error">*</span>}
         </label>
       )}
       <input
@@ -214,13 +215,13 @@ export function URLInput({
         value={value}
         onChange={handleChange}
         placeholder={placeholder}
-        className={`w-full bg-[#0e1117] border rounded-xl px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none transition-all ${
-          error ? "border-rose-500 focus:border-rose-500" : "border-[#2d3748] focus:border-[#bfce7f]"
+        className={`${baseInputStyles} ${
+          error ? "border-error focus:border-error text-error" : "border-border focus:border-primary"
         }`}
       />
       {error && (
-        <div className="flex items-center gap-1 mt-1 text-[11px] text-rose-400 font-mono">
-          <AlertCircle size={12} className="shrink-0" />
+        <div className="flex items-center gap-1 mt-1 text-[11px] text-error font-mono">
+          <AlertCircle size={12} className="shrink-0 text-error" />
           <span>{error}</span>
         </div>
       )}
@@ -259,9 +260,9 @@ export function ValidatableTextInput({
   return (
     <div className={`space-y-1 ${className}`}>
       {label && (
-        <label className="font-mono text-[10px] text-slate-300 font-bold tracking-wider uppercase block flex items-center gap-1">
+        <label className="font-mono text-[11px] text-foreground-secondary font-bold tracking-wider uppercase block flex items-center gap-1">
           {icon}
-          <span>{label}</span> {required && <span className="text-rose-400">*</span>}
+          <span>{label}</span> {required && <span className="text-error">*</span>}
         </label>
       )}
       <input
@@ -271,13 +272,13 @@ export function ValidatableTextInput({
         value={value}
         onChange={handleChange}
         placeholder={placeholder}
-        className={`w-full bg-[#0e1117] border rounded-xl px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none transition-all ${
-          error ? "border-rose-500 focus:border-rose-500" : "border-[#2d3748] focus:border-[#bfce7f]"
+        className={`${baseInputStyles} ${
+          error ? "border-error focus:border-error text-error" : "border-border focus:border-primary"
         }`}
       />
       {error && (
-        <div className="flex items-center gap-1 mt-1 text-[11px] text-rose-400 font-mono">
-          <AlertCircle size={12} className="shrink-0" />
+        <div className="flex items-center gap-1 mt-1 text-[11px] text-error font-mono">
+          <AlertCircle size={12} className="shrink-0 text-error" />
           <span>{error}</span>
         </div>
       )}

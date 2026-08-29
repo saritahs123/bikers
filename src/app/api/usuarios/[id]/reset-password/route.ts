@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { generateSecurePassword, hashPassword, maskEmail } from "@/lib/auth";
 import { sendResetPasswordEmail } from "@/lib/email";
-import { validateEmail } from "@/lib/validations";
+import { validateEmail, validatePasswordPolicy } from "@/lib/validations";
+import { authorizeUserUpdate } from "@/lib/userAuth";
+import { recordUserActivity, recordUserAudit } from "@/lib/auditLogger";
 
 const parseNum = (val: any) => {
   if (val === null || val === undefined || val === '') return null;
@@ -16,96 +18,161 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const userId = parseInt(id.replace(/\D/g, ""), 10);
-
-    if (!userId || isNaN(userId)) {
-      return NextResponse.json({ error: "ID de usuario inválido." }, { status: 400 });
+    
+    // 1. Authorize caller via session and module SEGURIDAD permissions
+    const authResult = await authorizeUserUpdate(id);
+    if (!authResult.success) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: authResult.error, 
+          message: authResult.message,
+          ...(authResult.field ? { field: authResult.field } : {})
+        },
+        { status: authResult.status }
+      );
     }
 
-    // 1. Validate user existence and status
+    const { authUserId, targetUserId } = authResult;
+
+    // 2. Validate target user existence and status
     const userResult = await query(
       `SELECT u.usuario_id, u.estado, u.estado_activacion,
               ui.nombre, ui.apellido, ui.correo_electronico, ui.numero_documento
        FROM admin.usuario u
        LEFT JOIN admin.usuario_identidad ui ON u.usuario_id = ui.usuario_id
        WHERE u.usuario_id = $1`,
-      [userId]
+      [targetUserId]
     );
 
     if (!userResult || userResult.length === 0) {
-      return NextResponse.json({ error: "El usuario no existe." }, { status: 404 });
+      return NextResponse.json({ success: false, error: "NOT_FOUND", message: "El usuario no existe." }, { status: 404 });
     }
 
     const userRow = userResult[0];
     if (userRow.estado === 'ELIMINADO' || userRow.estado === 'INCOMPATIBLE') {
-      return NextResponse.json({ error: "La cuenta del usuario se encuentra inhabilitada o eliminada." }, { status: 400 });
+      return NextResponse.json({ success: false, error: "INVALID_STATE", message: "La cuenta del usuario se encuentra inhabilitada o eliminada." }, { status: 400 });
     }
 
-    // 2. Fetch access configuration from admin.usuario_seguridad
+    const body = await req.json().catch(() => ({}));
+    const mode = body.mode === 'manual' ? 'manual' : (body.newPassword ? 'manual' : 'automatic');
+
+    // ----------------------------------------------------
+    // MODE A: MANUAL PASSWORD RESET BY ADMINISTRATOR
+    // ----------------------------------------------------
+    if (mode === 'manual') {
+      const newPassword = typeof body.newPassword === 'string' ? body.newPassword.trim() : '';
+      const confirmPassword = typeof body.confirmPassword === 'string' ? body.confirmPassword.trim() : '';
+      const forceChange = body.forceChangeOnNextLogin !== undefined ? Boolean(body.forceChangeOnNextLogin) : true;
+
+      if (!newPassword) {
+        return NextResponse.json(
+          { success: false, error: "VALIDATION_ERROR", message: "Debe ingresar una nueva contraseña." },
+          { status: 400 }
+        );
+      }
+
+      if (confirmPassword && newPassword !== confirmPassword) {
+        return NextResponse.json(
+          { success: false, error: "VALIDATION_ERROR", message: "Las contraseñas no coinciden." },
+          { status: 400 }
+        );
+      }
+
+      const policyCheck = validatePasswordPolicy(newPassword);
+      if (!policyCheck.isValid) {
+        return NextResponse.json(
+          { success: false, error: "VALIDATION_ERROR", message: policyCheck.message },
+          { status: 400 }
+        );
+      }
+
+      // Hash password using secure scrypt (never plain text)
+      const passwordHash = hashPassword(newPassword);
+
+      // Verify or initialize admin.usuario_seguridad
+      const secCheck = await query(`SELECT usuario_seguridad_id FROM admin.usuario_seguridad WHERE usuario_id = $1`, [targetUserId]);
+      if (!secCheck || secCheck.length === 0) {
+        const nextSegRes = await query(`SELECT COALESCE(MAX(usuario_seguridad_id), 0) + 1 AS next_id FROM admin.usuario_seguridad`);
+        const nextSegId = parseNum(nextSegRes[0]?.next_id) || 1;
+        await query(
+          `INSERT INTO admin.usuario_seguridad (usuario_seguridad_id, usuario_id, metodo_acceso_principal, identificador_principal, mfa_activo, password, requiere_cambio_clave, forzar_cambio_clave, fecha_ultimo_cambio_password, intentos_fallidos, bloqueado_hasta)
+           VALUES ($1, $2, 'EMAIL', $3, false, $4, $5, $5, NOW(), 0, NULL)`,
+          [nextSegId, targetUserId, userRow.correo_electronico || 'usuario@bikers.com', passwordHash, forceChange]
+        );
+      } else {
+        await query(
+          `UPDATE admin.usuario_seguridad
+           SET password = $1,
+               requiere_cambio_clave = $2,
+               forzar_cambio_clave = $2,
+               fecha_ultimo_cambio_password = NOW(),
+               intentos_fallidos = 0,
+               bloqueado_hasta = NULL,
+               motivo_bloqueo = NULL,
+               detalle_estado = 'Contraseña manual asignada por administrador'
+           WHERE usuario_id = $3`,
+          [passwordHash, forceChange, targetUserId]
+        );
+      }
+
+      // Register audit in admin.usuario_auditoria with authentic admin_id
+      await recordUserAudit({
+        userId: targetUserId,
+        adminId: authUserId,
+        accion: 'PASSWORD_RESET_MANUAL',
+        valorAnterior: 'Credencial de acceso previa',
+        valorNuevo: 'Credencial restablecida manualmente',
+        motivo: 'Restablecimiento manual de credenciales por administrador',
+        resultado: 'COMPLETADO',
+        req
+      });
+
+      // Register activity in admin.usuario_actividad
+      await recordUserActivity({
+        userId: targetUserId,
+        modulo: 'Seguridad',
+        evento: 'RESET_PASSWORD_MANUAL',
+        descripcion: 'Restablecimiento manual de contraseña por administrador',
+        resultado: 'Exitoso',
+        req
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: "Contraseña restablecida correctamente."
+      });
+    }
+
+    // ----------------------------------------------------
+    // MODE B: AUTOMATIC EMAIL TEMPORARY PASSWORD RESET
+    // ----------------------------------------------------
     const configResult = await query(
       `SELECT usuario_id, correo_acceso, enviar_invitacion_correo, generar_clave_automatica, forzar_cambio_clave
        FROM admin.usuario_seguridad
        WHERE usuario_id = $1`,
-      [userId]
+      [targetUserId]
     );
 
-    if (!configResult || configResult.length === 0) {
-      return NextResponse.json({ error: "No se encontró la configuración de acceso del usuario." }, { status: 400 });
-    }
+    const configRow = configResult && configResult.length > 0 ? configResult[0] : null;
+    const recoveryEmail = configRow?.correo_acceso?.trim() || userRow.correo_electronico?.trim();
 
-    const configRow = configResult[0];
-
-    // 3. Pre-validations
-    // Check 3.1: Recovery Email exists
-    if (!configRow.correo_acceso || !configRow.correo_acceso.trim()) {
+    if (!recoveryEmail) {
       return NextResponse.json(
-        { error: "El usuario no tiene un correo de recuperación configurado." },
+        { success: false, error: "CONFIG_ERROR", message: "El usuario no tiene un correo electrónico configurado para el envío." },
         { status: 400 }
       );
     }
 
-    const recoveryEmail = configRow.correo_acceso.trim();
-
-    // Check 3.2: Recovery Email Format
     const emailValidation = validateEmail(recoveryEmail, true);
     if (!emailValidation.isValid) {
       return NextResponse.json(
-        { error: "El correo de recuperación no tiene un formato válido." },
+        { success: false, error: "VALIDATION_ERROR", message: "El correo electrónico no tiene un formato válido." },
         { status: 400 }
       );
     }
 
-    // Check 3.3: Enviar Invitación (Email) Enabled
-    if (configRow.enviar_invitacion_correo !== true) {
-      return NextResponse.json(
-        { error: "El envío de invitaciones por correo no está habilitado para este usuario." },
-        { status: 400 }
-      );
-    }
-
-    // 4. Verify admin.usuario_seguridad record exists
-    const securityResult = await query(
-      `SELECT usuario_id, metodo_acceso_principal, identificador_principal, password
-       FROM admin.usuario_seguridad
-       WHERE usuario_id = $1`,
-      [userId]
-    );
-
-    let securityRow = securityResult && securityResult.length > 0 ? securityResult[0] : null;
-
-    if (!securityRow) {
-      // If missing, initialize security row
-      const maxSegRes = await query(`SELECT COALESCE(MAX(usuario_seguridad_id), 0) + 1 AS next_id FROM admin.usuario_seguridad`);
-      const nextSegId = parseNum(maxSegRes[0]?.next_id) || 1;
-
-      await query(
-        `INSERT INTO admin.usuario_seguridad (usuario_seguridad_id, usuario_id, metodo_acceso_principal, identificador_principal, mfa_activo)
-         VALUES ($1, $2, 'EMAIL', $3, false)`,
-        [nextSegId, userId, userRow.correo_electronico || recoveryEmail]
-      );
-    }
-
-    // 5. Generate secure temporary password in backend
+    // Generate secure temporary password in backend
     const tempPassword = generateSecurePassword({
       first_name: userRow.nombre,
       last_name: userRow.apellido,
@@ -113,10 +180,7 @@ export async function POST(
       document_number: userRow.numero_documento
     });
 
-    // 6. Hash temporary password
     const passwordHash = hashPassword(tempPassword);
-
-    // 7. Calculate expiration date (7 days policy)
     const expirationDays = 7;
     const expiresAtDate = new Date(Date.now() + expirationDays * 24 * 60 * 60 * 1000);
     const expiresAtISO = expiresAtDate.toISOString();
@@ -129,19 +193,16 @@ export async function POST(
       hour12: true
     });
 
-    // 8. Prepare email details
     const fullName = `${userRow.nombre || ''} ${userRow.apellido || ''}`.trim() || 'Usuario';
-    const accessIdentifier = securityRow?.identificador_principal || userRow.correo_electronico || userRow.numero_documento || recoveryEmail;
-    
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || process.env.FRONTEND_URL || "http://localhost:3000";
     const loginUrl = `${baseUrl.replace(/\/$/, '')}/login`;
 
-    // 9. Send email BEFORE committing password change to prevent locking user out if email fails
+    // Send email before committing
     const emailRes = await sendResetPasswordEmail({
       to: recoveryEmail,
       subject: "Restablecimiento de contraseña - Bikers’ Fort",
       fullName,
-      accessIdentifier,
+      accessIdentifier: userRow.correo_electronico || recoveryEmail,
       tempPassword,
       expiresAtFormatted,
       loginUrl
@@ -149,12 +210,12 @@ export async function POST(
 
     if (!emailRes.success) {
       return NextResponse.json(
-        { error: "No fue posible enviar el correo de recuperación. No se aplicaron cambios a la contraseña." },
+        { success: false, error: "EMAIL_ERROR", message: "No fue posible enviar el correo de recuperación. No se aplicaron cambios." },
         { status: 500 }
       );
     }
 
-    // 10. Update admin.usuario_seguridad with hashed password and forced change flags
+    // Update admin.usuario_seguridad
     await query(
       `UPDATE admin.usuario_seguridad
        SET password = $1,
@@ -165,24 +226,35 @@ export async function POST(
            fecha_expiracion_invitacion = NOW() + INTERVAL '7 days',
            intentos_fallidos = 0,
            bloqueado_hasta = NULL,
-           detalle_estado = 'Contraseña temporal generada por administrador'
+           motivo_bloqueo = NULL,
+           detalle_estado = 'Contraseña temporal enviada por correo'
        WHERE usuario_id = $2`,
-      [passwordHash, userId]
+      [passwordHash, targetUserId]
     );
 
-    // 12. Register audit log
     const masked = maskEmail(recoveryEmail);
-    await query(
-      `INSERT INTO admin.usuario_auditoria
-       (auditoria_id, usuario_id, admin_id, fecha_hora, accion, valor_anterior, valor_nuevo, motivo, resultado, direccion_ip, dispositivo)
-       VALUES ((SELECT COALESCE(MAX(auditoria_id), 0) + 1 FROM admin.usuario_auditoria), $1, 1, NOW(), 'RESET_PASSWORD', 'Estado: Anterior', $2, 'Restablecimiento forzado de contraseña por administrador', 'COMPLETADO', '127.0.0.1', 'Navegador Web')`,
-      [
-        userId,
-        `Destinatario: ${masked} | Expiración: ${expiresAtISO}`
-      ]
-    );
 
-    // 13. Return safe success response (NEVER return plain password or hash)
+    // Register audit and activity with authentic admin_id
+    await recordUserAudit({
+      userId: targetUserId,
+      adminId: authUserId,
+      accion: 'PASSWORD_RESET_EMAIL',
+      valorAnterior: 'Credencial previa',
+      valorNuevo: `Contraseña temporal enviada a ${masked}`,
+      motivo: 'Restablecimiento de contraseña por correo electrónico',
+      resultado: 'COMPLETADO',
+      req
+    });
+
+    await recordUserActivity({
+      userId: targetUserId,
+      modulo: 'Seguridad',
+      evento: 'RESET_PASSWORD_EMAIL',
+      descripcion: `Envío de contraseña temporal por correo a ${masked}`,
+      resultado: 'Exitoso',
+      req
+    });
+
     return NextResponse.json({
       success: true,
       message: "Contraseña temporal generada y enviada correctamente.",
@@ -193,7 +265,7 @@ export async function POST(
   } catch (error: any) {
     console.error("Error in reset-password endpoint:", error);
     return NextResponse.json(
-      { error: error.message || "Error interno al restablecer la contraseña." },
+      { success: false, error: "INTERNAL_ERROR", message: error.message || "Error interno al restablecer la contraseña." },
       { status: 500 }
     );
   }

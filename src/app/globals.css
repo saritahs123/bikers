@@ -1,53 +1,50 @@
 @import "tailwindcss";
 
+/* --------------------------------------------------------------------------
+   THEME DESIGN TOKENS (Tailwind v4 theme mappings)
+   -------------------------------------------------------------------------- */
 @theme {
-  --color-surface-container-low: #1c1b1b;
-  --color-surface-container-highest: #353534;
-  --color-surface-container-high: #2a2a2a;
-  --color-on-background: #e5e2e1;
-  --color-secondary-fixed-dim: #c8c6c5;
-  --color-error: #ffb4ab;
-  --color-on-primary-fixed-variant: #3d4c05;
-  --color-tertiary-fixed-dim: #c8c6c5;
-  --color-outline: #909282;
-  --color-surface-dim: #131313;
-  --color-inverse-on-surface: #313030;
-  --color-on-error-container: #ffdad6;
-  --color-on-secondary-container: #b7b5b4;
-  --color-secondary-container: #474746;
-  --color-on-primary: #293500;
-  --color-on-secondary: #313030;
-  --color-surface-tint: #bbcf7c;
-  --color-on-tertiary-fixed: #1b1c1c;
-  --color-primary: #bbcf7c;
-  --color-on-surface-variant: #c6c8b6;
-  --color-on-error: #690005;
-  --color-surface: #131313;
-  --color-tertiary-fixed: #e4e2e1;
-  --color-on-secondary-fixed-variant: #474746;
-  --color-surface-container: #201f1f;
-  --color-inverse-primary: #54651e;
-  --color-surface-variant: #353534;
-  --color-tertiary-container: #929090;
-  --color-surface-bright: #3a3939;
-  --color-on-secondary-fixed: #1c1b1b;
-  --color-on-tertiary-fixed-variant: #474746;
-  --color-on-primary-fixed: #161e00;
-  --color-error-container: #93000a;
-  --color-tertiary: #c8c6c5;
-  --color-primary-fixed: #d7ec95;
-  --color-on-tertiary-container: #2a2a2a;
-  --color-on-tertiary: #303030;
-  --color-inverse-surface: #e5e2e1;
-  --color-primary-container: #86984c;
-  --color-secondary-fixed: #e5e2e1;
-  --color-secondary: #c8c6c5;
-  --color-on-surface: #e5e2e1;
-  --color-on-primary-container: #232e00;
-  --color-outline-variant: #46483b;
-  --color-surface-container-lowest: #0e0e0e;
-  --color-background: #131313;
-  --color-primary-fixed-dim: #bbcf7c;
+  --color-background: var(--bg-background);
+  --color-surface: var(--bg-surface);
+  --color-surface-subtle: var(--bg-surface-subtle);
+  --color-surface-elevated: var(--bg-surface-elevated);
+  --color-card: var(--bg-card);
+  --color-popover: var(--bg-popover);
+  --color-input: var(--bg-input);
+
+  --color-foreground: var(--text-foreground);
+  --color-foreground-secondary: var(--text-foreground-secondary);
+  --color-foreground-muted: var(--text-foreground-muted);
+  --color-foreground-disabled: var(--text-foreground-disabled);
+  --color-foreground-inverse: var(--text-foreground-inverse);
+
+  --color-border: var(--border-default);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-strong: var(--border-strong);
+
+  --color-primary: var(--color-primary);
+  --color-primary-hover: var(--color-primary-hover);
+  --color-primary-muted: var(--color-primary-muted);
+  --color-primary-foreground: var(--color-primary-foreground);
+  --color-primary-button-bg: var(--color-primary-button-bg);
+  --color-primary-button-hover: var(--color-primary-button-hover);
+
+  --color-success: var(--color-success);
+  --color-success-muted: var(--color-success-muted);
+  --color-warning: var(--color-warning);
+  --color-warning-muted: var(--color-warning-muted);
+  --color-error: var(--color-error);
+  --color-error-muted: var(--color-error-muted);
+  --color-info: var(--color-info);
+  --color-info-muted: var(--color-info-muted);
+
+  --color-hover: var(--color-hover);
+  --color-selected: var(--color-selected);
+  --color-focus-ring: var(--color-focus-ring);
+  --color-disabled: var(--color-disabled);
+
+  --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
   --spacing-gutter: 24px;
   --spacing-md: 16px;
@@ -56,36 +53,238 @@
   --spacing-sm: 8px;
   --spacing-lg: 24px;
   --spacing-container-max: 1440px;
-  --spacing-base: 4px;
+}
 
-  --font-label-caps: 'JetBrains Mono', monospace;
-  --font-display-lg: 'Inter', sans-serif;
-  --font-headline-lg: 'Inter', sans-serif;
-  --font-title-md: 'Inter', sans-serif;
-  --font-body-sm: 'Inter', sans-serif;
-  --font-stats-number: 'Inter', sans-serif;
-  --font-body-lg: 'Inter', sans-serif;
+/* --------------------------------------------------------------------------
+   CSS VARIABLES — DARK MODE (DEFAULT)
+   -------------------------------------------------------------------------- */
+:root,
+[data-theme="dark"],
+.dark {
+  /* Backgrounds */
+  --bg-background: #0a0a0a;
+  --bg-surface: #0e1117;
+  --bg-surface-subtle: #161a21;
+  --bg-surface-elevated: #1c2129;
+  --bg-card: #161a21;
+  --bg-popover: #1c2129;
+  --bg-input: #0a0c10;
+
+  /* Legacy Variable Aliases */
+  --bg-color: #0a0a0a;
+  --bg-elevated: #161a21;
+  --surface-container-low: #161a21;
+  --surface-container-lowest: #0e1117;
+  --surface-container-high: #212631;
+  --surface-container-highest: #2d3748;
+
+  /* Foregrounds / Typography */
+  --text-foreground: #f8fafc;
+  --text-foreground-secondary: #cbd5e1;
+  --text-foreground-muted: #94a3b8;
+  --text-foreground-disabled: #64748b;
+  --text-foreground-inverse: #0f172a;
+
+  /* Legacy Typography Aliases */
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --on-surface: #f8fafc;
+  --on-surface-variant: #94a3b8;
+  --on-primary: #161e00;
+
+  /* Borders */
+  --border-default: #2d3748;
+  --border-subtle: rgba(45, 55, 72, 0.6);
+  --border-strong: #4a5568;
+  --border-color: #2d3748;
+  --outline-variant: #2d3748;
+
+  /* Brand / Olive Accent */
+  --color-primary: #bfce7f;
+  --color-primary-hover: #d0e092;
+  --color-primary-muted: rgba(191, 206, 127, 0.15);
+  --color-primary-foreground: #161e00;
+  --color-primary-button-bg: #84924a;
+  --color-primary-button-hover: #97a655;
+  --primary-fixed: #bfce7f;
+
+  /* Status Colors */
+  --color-success: #10b981;
+  --color-success-muted: rgba(16, 185, 129, 0.15);
+  --color-warning: #f59e0b;
+  --color-warning-muted: rgba(245, 158, 11, 0.15);
+  --color-error: #f43f5e;
+  --color-error-muted: rgba(244, 63, 94, 0.15);
+  --color-info: #0ea5e9;
+  --color-info-muted: rgba(14, 165, 233, 0.15);
+
+  /* Interactive States */
+  --color-hover: rgba(255, 255, 255, 0.05);
+  --color-selected: rgba(191, 206, 127, 0.12);
+  --color-focus-ring: rgba(191, 206, 127, 0.45);
+  --color-disabled: #334155;
+
+  /* Scrollbars */
+  --scrollbar-track: #0e1117;
+  --scrollbar-thumb: #2d3748;
+}
+
+/* --------------------------------------------------------------------------
+   CSS VARIABLES — LIGHT MODE (OPTIONAL)
+   -------------------------------------------------------------------------- */
+[data-theme="light"],
+.light:not([data-theme="dark"]) {
+  /* Backgrounds */
+  --bg-background: #f8fafc;
+  --bg-surface: #ffffff;
+  --bg-surface-subtle: #f1f5f9;
+  --bg-surface-elevated: #ffffff;
+  --bg-card: #ffffff;
+  --bg-popover: #ffffff;
+  --bg-input: #ffffff;
+
+  /* Legacy Variable Aliases */
+  --bg-color: #f8fafc;
+  --bg-elevated: #ffffff;
+  --surface-container-low: #ffffff;
+  --surface-container-lowest: #f8fafc;
+  --surface-container-high: #f1f5f9;
+  --surface-container-highest: #e2e8f0;
+
+  /* Foregrounds / Typography */
+  --text-foreground: #0f172a;
+  --text-foreground-secondary: #334155;
+  --text-foreground-muted: #64748b;
+  --text-foreground-disabled: #94a3b8;
+  --text-foreground-inverse: #f8fafc;
+
+  /* Legacy Typography Aliases */
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --on-surface: #0f172a;
+  --on-surface-variant: #64748b;
+  --on-primary: #ffffff;
+
+  /* Borders */
+  --border-default: #e2e8f0;
+  --border-subtle: #f1f5f9;
+  --border-strong: #cbd5e1;
+  --border-color: #e2e8f0;
+  --outline-variant: #e2e8f0;
+
+  /* Brand / Olive Accent (High contrast for light surfaces) */
+  --color-primary: #5c701b;
+  --color-primary-hover: #475713;
+  --color-primary-muted: rgba(92, 112, 27, 0.10);
+  --color-primary-foreground: #ffffff;
+  --color-primary-button-bg: #687e22;
+  --color-primary-button-hover: #54671a;
+  --primary-fixed: #5c701b;
+
+  /* Status Colors */
+  --color-success: #059669;
+  --color-success-muted: rgba(5, 150, 105, 0.12);
+  --color-warning: #d97706;
+  --color-warning-muted: rgba(217, 119, 6, 0.12);
+  --color-error: #e11d48;
+  --color-error-muted: rgba(225, 29, 72, 0.12);
+  --color-info: #0284c7;
+  --color-info-muted: rgba(2, 132, 199, 0.12);
+
+  /* Interactive States */
+  --color-hover: #f1f5f9;
+  --color-selected: rgba(92, 112, 27, 0.08);
+  --color-focus-ring: rgba(92, 112, 27, 0.35);
+  --color-disabled: #e2e8f0;
+
+  /* Scrollbars */
+  --scrollbar-track: #f8fafc;
+  --scrollbar-thumb: #cbd5e1;
+}
+
+/* --------------------------------------------------------------------------
+   BASE ELEMENTS
+   -------------------------------------------------------------------------- */
+html {
+  color-scheme: dark;
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
 }
 
 body {
-  background-color: #0A0A0A;
-  color: #e5e2e1;
-}
-
-:root {
-  --text-primary: var(--color-on-surface);
-  --text-muted: var(--color-on-surface-variant);
-  --bg-color: #0A0A0A;
-  --bg-elevated: var(--color-surface-container-low);
-  --border-color: var(--color-surface-container-highest);
+  background-color: var(--bg-background);
+  color: var(--text-foreground);
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 .material-symbols-outlined {
   font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
 }
 
-.industrial-border { border: 1px solid #262626; }
-.olive-glow { box-shadow: 0 0 15px rgba(187, 207, 124, 0.15); }
-.custom-scrollbar::-webkit-scrollbar { width: 4px; }
-.custom-scrollbar::-webkit-scrollbar-track { background: #131313; }
-.custom-scrollbar::-webkit-scrollbar-thumb { background: #46483b; border-radius: 2px; }
+/* Custom Scrollbars */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 3px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  filter: brightness(1.2);
+}
+
+/* Reusable Semantic Typography Tokens / Utility Classes */
+.text-page-title {
+  font-family: var(--font-sans);
+  font-size: 1.5rem; /* 24px */
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: var(--text-foreground);
+}
+
+.text-section-title {
+  font-family: var(--font-sans);
+  font-size: 1.125rem; /* 18px */
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--text-foreground);
+}
+
+.text-card-title {
+  font-family: var(--font-sans);
+  font-size: 0.875rem; /* 14px */
+  font-weight: 600;
+  color: var(--text-foreground);
+}
+
+.text-kpi-value {
+  font-family: var(--font-mono);
+  font-size: 1.5rem; /* 24px */
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--text-foreground);
+}
+
+.text-code-badge {
+  font-family: var(--font-mono);
+  font-size: 0.75rem; /* 12px */
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.text-field-label {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem; /* 11px */
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-foreground-secondary);
+}

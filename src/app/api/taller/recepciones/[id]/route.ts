@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { query } from "@/lib/db";
+import { getPool, query } from "@/lib/db";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { recordUserActivity, recordUserAudit, computeDiff } from "@/lib/auditLogger";
 
 // GET /api/taller/recepciones/[id]
 export async function GET(
@@ -24,27 +25,34 @@ export async function GET(
       return NextResponse.json({ error: "ID de recepción inválido." }, { status: 400 });
     }
 
-    // Multitenant Check + Header Fetch
+    // Multitenant Check + Header Fetch + Factual OT & User Identity
     const rows = await query(
       `SELECT r.recepcion_id, r.codigo_recepcion, r.token_seguimiento, r.fecha_recepcion,
               r.fecha_entrega_estimada, r.diagnostico_preliminar, r.observaciones_cliente,
               r.observaciones_recepcion, r.presupuesto_estimado, r.requiere_aprobacion, r.aprobado_cliente,
-              r.fecha_aprobacion_cliente, r.convertido_orden_id,
+              r.fecha_aprobacion_cliente, r.convertido_orden_id, r.recibido_por_usuario_id,
               c.cliente_id, c.nombre_completo as cliente_nombre, c.telefono_principal as cliente_telefono,
               c.correo as cliente_correo, c.identificacion as cliente_identificacion,
               b.bicicleta_id, b.marca as bicicleta_marca, b.modelo as bicicleta_modelo,
               b.color as bicicleta_color, b.numero_serie_cuadro as bicicleta_serie,
               b.tipo_bicicleta as bicicleta_tipo, b.ano as bicicleta_ano, b.talla as bicicleta_talla,
               b.notas_tecnicas as bicicleta_notas,
-              er.estado_recepcion_id, er.nombre as estado_nombre, er.codigo as estado_codigo,
-              ts.tipo_servicio_id, ts.nombre as tipo_servicio_nombre
+              er.estado_recepcion_id, er.nombre as estado_nombre, er.codigo as estado_codigo, er.permite_edicion,
+              ts.tipo_servicio_id, ts.nombre as tipo_servicio_nombre,
+              ot.codigo_orden, ot.orden_trabajo_id as ot_id,
+              uip.nombre as receptor_nombre, uip.apellido as receptor_apellido,
+              uip.correo_electronico as receptor_correo_personal,
+              us.correo_acceso as receptor_correo_acceso,
+              us.identificador_principal as receptor_identificador
        FROM admin.recepciones r
-       LEFT JOIN admin.clientes c ON r.cliente_id = c.cliente_id
+       JOIN admin.clientes c ON r.cliente_id = c.cliente_id
        LEFT JOIN admin.bicicletas b ON r.bicicleta_id = b.bicicleta_id
        LEFT JOIN admin.estado_recepcion er ON r.estado_recepcion_id = er.estado_recepcion_id
        LEFT JOIN admin.tipo_servicio ts ON r.tipo_servicio_id = ts.tipo_servicio_id
-       LEFT JOIN admin.usuario u ON r.recibido_por_usuario_id = u.usuario_id
-       WHERE r.recepcion_id = $1 AND (u.empresa_id = $2 OR u.empresa_id IS NULL OR $2 = 1) AND (r.activo = true OR r.activo IS NULL) AND r.fecha_eliminacion IS NULL
+       LEFT JOIN admin.ordenes_trabajo ot ON r.convertido_orden_id = ot.orden_trabajo_id
+       LEFT JOIN admin.usuario_identidad uip ON r.recibido_por_usuario_id = uip.usuario_id
+       LEFT JOIN admin.usuario_seguridad us ON r.recibido_por_usuario_id = us.usuario_id
+       WHERE r.recepcion_id = $1 AND c.empresa_id = $2 AND (r.activo = true OR r.activo IS NULL) AND r.fecha_eliminacion IS NULL
        LIMIT 1`,
       [recepcion_id, session.empresa_id]
     );
@@ -69,9 +77,9 @@ export async function GET(
       [recepcion_id]
     );
 
-    // Fetch Signature DTO (Safe fields)
+    // Fetch Signature DTO (Safe fields + version_terminos)
     const firmaRows = await query(
-      `SELECT firma_recepcion_id, tipo_firma, firma_digital, terminos_aceptados, fecha_firma
+      `SELECT firma_recepcion_id, tipo_firma, firma_digital, terminos_aceptados, version_terminos, fecha_firma
        FROM admin.firma_recepcion
        WHERE recepcion_id = $1 AND (activo = true OR activo IS NULL)
        ORDER BY firma_recepcion_id DESC
@@ -84,8 +92,13 @@ export async function GET(
       tipo_firma: firmaRows[0].tipo_firma,
       firma_digital: firmaRows[0].firma_digital,
       terminos_aceptados: Boolean(firmaRows[0].terminos_aceptados),
+      version_terminos: firmaRows[0].version_terminos || null,
       fecha_firma: firmaRows[0].fecha_firma
     } : null;
+
+    // Resolve Factual Receiving User Display
+    const fullNameCandidate = [r.receptor_nombre, r.receptor_apellido].filter(Boolean).join(" ").trim();
+    const receptorDisplay = fullNameCandidate || r.receptor_correo_personal || r.receptor_correo_acceso || r.receptor_identificador || (r.recibido_por_usuario_id ? `Usuario #${r.recibido_por_usuario_id}` : null);
 
     return NextResponse.json({
       success: true,
@@ -102,7 +115,14 @@ export async function GET(
         requiere_aprobacion: Boolean(r.requiere_aprobacion),
         aprobado_cliente: r.aprobado_cliente,
         fecha_aprobacion_cliente: r.fecha_aprobacion_cliente,
-        convertido_orden_id: r.convertido_orden_id,
+        convertido_orden_id: r.convertido_orden_id || null,
+        codigo_orden: r.codigo_orden || null,
+        orden_trabajo_id: r.ot_id || r.convertido_orden_id || null,
+        usuario_receptor: {
+          usuario_id: r.recibido_por_usuario_id || null,
+          nombre_completo: receptorDisplay || "No asignado",
+          correo: r.receptor_correo_personal || r.receptor_correo_acceso || null
+        },
         cliente: {
           cliente_id: r.cliente_id,
           nombre_completo: r.cliente_nombre || "Cliente General",
@@ -124,7 +144,8 @@ export async function GET(
         estado: {
           estado_recepcion_id: r.estado_recepcion_id,
           nombre: r.estado_nombre || "INGRESADO",
-          codigo: r.estado_codigo || "INGRESADO"
+          codigo: r.estado_codigo || "INGRESADO",
+          permite_edicion: r.permite_edicion !== undefined ? Boolean(r.permite_edicion) : true
         },
         tipo_servicio: r.tipo_servicio_id ? {
           tipo_servicio_id: r.tipo_servicio_id,
@@ -161,6 +182,9 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const pool = getPool();
+  const client = await pool.connect();
+
   try {
     const session = await getWorkshopSession();
     if (!session) {
@@ -180,12 +204,13 @@ export async function PATCH(
 
     const body = await req.json();
 
-    // Check reception exists
+    // Check reception exists with canonical client company isolation & real state permissions
     const existing = await query(
-      `SELECT r.recepcion_id, r.convertido_orden_id
+      `SELECT r.*, er.permite_edicion, er.codigo as estado_codigo, er.nombre as estado_nombre
        FROM admin.recepciones r
-       LEFT JOIN admin.usuario u ON r.recibido_por_usuario_id = u.usuario_id
-       WHERE r.recepcion_id = $1 AND (u.empresa_id = $2 OR u.empresa_id IS NULL OR $2 = 1) AND (r.activo = true OR r.activo IS NULL) AND r.fecha_eliminacion IS NULL
+       JOIN admin.clientes c ON r.cliente_id = c.cliente_id
+       LEFT JOIN admin.estado_recepcion er ON r.estado_recepcion_id = er.estado_recepcion_id
+       WHERE r.recepcion_id = $1 AND c.empresa_id = $2 AND (r.activo = true OR r.activo IS NULL) AND r.fecha_eliminacion IS NULL
        LIMIT 1`,
       [recepcion_id, session.empresa_id]
     );
@@ -194,9 +219,25 @@ export async function PATCH(
       return NextResponse.json({ error: "NOT_FOUND", message: "La recepción no existe o no pertenece a su empresa." }, { status: 404 });
     }
 
-    if (existing[0].convertido_orden_id) {
-      return NextResponse.json({ error: "LOCKED", message: "No se puede editar una recepción que ya fue convertida a Orden de Trabajo." }, { status: 400 });
+    const currentRec = existing[0];
+
+    // P0: Inmutabilidad Post-Firma y Post-Conversión a OT
+    if (currentRec.permite_edicion === false || currentRec.convertido_orden_id) {
+      await recordUserActivity({
+        userId: session.usuario_id,
+        modulo: "TALLER_RECEPCIONES",
+        evento: "RECEPTION_UPDATE_DENIED",
+        descripcion: `Intento de edición denegado: Recepción #${recepcion_id} se encuentra bloqueada (${currentRec.estado_codigo || "LOCKED"})`,
+        resultado: "Denegado",
+        req
+      });
+      return NextResponse.json({
+        error: "RECEPTION_LOCKED",
+        message: "La recepción ya fue confirmada y no puede modificarse."
+      }, { status: 409 });
     }
+
+    const beforeState = currentRec;
 
     // Allowed Fields
     const updates: string[] = [];
@@ -239,6 +280,8 @@ export async function PATCH(
       return NextResponse.json({ error: "Debe enviar al menos un campo permitido para actualizar." }, { status: 400 });
     }
 
+    await client.query("BEGIN");
+
     updateParams.push(session.usuario_id);
     const userIdx = updateParams.length;
     updates.push(`usuario_modificacion = $${userIdx}`);
@@ -251,9 +294,37 @@ export async function PATCH(
       UPDATE admin.recepciones
       SET ${updates.join(", ")}
       WHERE recepcion_id = $${idIdx}
+      RETURNING *
     `;
 
-    await query(sql, updateParams);
+    const updateRes = await client.query(sql, updateParams);
+    const afterState = updateRes.rows[0];
+
+    const diff = computeDiff(beforeState, afterState);
+
+    if (diff.hasChanges) {
+      await recordUserAudit({
+        userId: session.usuario_id,
+        accion: "ACTUALIZAR_RECEPCION",
+        valorAnterior: diff.valorAnterior,
+        valorNuevo: diff.valorNuevo,
+        motivo: "Actualización de datos de recepción",
+        resultado: "COMPLETADO",
+        client,
+        throwOnError: true
+      });
+    }
+
+    await client.query("COMMIT");
+
+    await recordUserActivity({
+      userId: session.usuario_id,
+      modulo: "TALLER_RECEPCIONES",
+      evento: "RECEPTION_UPDATED",
+      descripcion: `Recepción #${recepcion_id} (${beforeState.codigo_recepcion}) actualizada exitosamente`,
+      resultado: "Exitoso",
+      req
+    });
 
     return NextResponse.json({
       success: true,
@@ -261,16 +332,25 @@ export async function PATCH(
     });
 
   } catch (error: any) {
+    await client.query("ROLLBACK").catch(() => {});
     console.error("Error in PATCH /api/taller/recepciones/[id]:", error);
     return NextResponse.json({ error: error.message || "Error al actualizar la recepción." }, { status: 500 });
+  } finally {
+    client.release();
   }
 }
 
-// DELETE /api/taller/recepciones/[id] (Soft Delete Exclusivo)
+// PUT /api/taller/recepciones/[id] (Alias to PATCH)
+export const PUT = PATCH;
+
+// DELETE /api/taller/recepciones/[id] (Soft Delete con integridad de bloqueo)
 export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const pool = getPool();
+  const client = await pool.connect();
+
   try {
     const session = await getWorkshopSession();
     if (!session) {
@@ -288,12 +368,14 @@ export async function DELETE(
       return NextResponse.json({ error: "ID de recepción inválido." }, { status: 400 });
     }
 
-    // Verify reception exists
+    // Verify reception exists with canonical client company isolation & state permissions
     const existing = await query(
-      `SELECT r.recepcion_id
+      `SELECT r.recepcion_id, r.codigo_recepcion, r.convertido_orden_id,
+              er.permite_edicion, er.codigo as estado_codigo
        FROM admin.recepciones r
-       LEFT JOIN admin.usuario u ON r.recibido_por_usuario_id = u.usuario_id
-       WHERE r.recepcion_id = $1 AND (u.empresa_id = $2 OR u.empresa_id IS NULL OR $2 = 1) AND (r.activo = true OR r.activo IS NULL) AND r.fecha_eliminacion IS NULL
+       JOIN admin.clientes c ON r.cliente_id = c.cliente_id
+       LEFT JOIN admin.estado_recepcion er ON r.estado_recepcion_id = er.estado_recepcion_id
+       WHERE r.recepcion_id = $1 AND c.empresa_id = $2 AND (r.activo = true OR r.activo IS NULL) AND r.fecha_eliminacion IS NULL
        LIMIT 1`,
       [recepcion_id, session.empresa_id]
     );
@@ -302,8 +384,27 @@ export async function DELETE(
       return NextResponse.json({ error: "NOT_FOUND", message: "La recepción no existe o no pertenece a su empresa." }, { status: 404 });
     }
 
+    const currentRec = existing[0];
+
+    // Check if signature exists
+    const sigCheck = await query(
+      `SELECT COUNT(*)::int as count FROM admin.firma_recepcion WHERE recepcion_id = $1 AND (activo = true OR activo IS NULL)`,
+      [recepcion_id]
+    );
+    const hasSignature = (sigCheck[0]?.count || 0) > 0;
+
+    // Integrity rule: Block deletion if reception is confirmed, signed, or converted to OT
+    if (currentRec.permite_edicion === false || currentRec.convertido_orden_id || hasSignature) {
+      return NextResponse.json({
+        error: "RECEPTION_LOCKED",
+        message: "No es posible eliminar una recepción confirmada o con orden de trabajo asociada."
+      }, { status: 409 });
+    }
+
+    await client.query("BEGIN");
+
     // Soft delete
-    await query(
+    await client.query(
       `UPDATE admin.recepciones
        SET activo = false,
            fecha_eliminacion = NOW(),
@@ -312,13 +413,38 @@ export async function DELETE(
       [session.usuario_id, recepcion_id]
     );
 
+    await recordUserAudit({
+      userId: session.usuario_id,
+      accion: "ELIMINAR_RECEPCION",
+      valorAnterior: { recepcion_id, codigo_recepcion: currentRec.codigo_recepcion, activo: true },
+      valorNuevo: { recepcion_id, codigo_recepcion: currentRec.codigo_recepcion, activo: false },
+      motivo: "Inactivación de recepción",
+      resultado: "COMPLETADO",
+      client,
+      throwOnError: true
+    });
+
+    await client.query("COMMIT");
+
+    await recordUserActivity({
+      userId: session.usuario_id,
+      modulo: "TALLER_RECEPCIONES",
+      evento: "RECEPTION_DELETED",
+      descripcion: `Recepción #${recepcion_id} (${currentRec.codigo_recepcion}) inactivada exitosamente`,
+      resultado: "Exitoso",
+      req
+    });
+
     return NextResponse.json({
       success: true,
       message: "Recepción inactivada correctamente."
     });
 
   } catch (error: any) {
+    await client.query("ROLLBACK").catch(() => {});
     console.error("Error in DELETE /api/taller/recepciones/[id]:", error);
     return NextResponse.json({ error: error.message || "Error al inactivar la recepción." }, { status: 500 });
+  } finally {
+    client.release();
   }
 }

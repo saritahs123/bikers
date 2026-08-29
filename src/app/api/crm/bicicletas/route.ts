@@ -1,33 +1,32 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
-
-const getFallbackPhotoUrl = (tipo: string) => {
-  const t = String(tipo || "MTB").toUpperCase();
-  if (t.includes("ROAD") || t.includes("RUTA")) {
-    return "https://images.unsplash.com/photo-1485965120184-e220f721d03e?auto=format&fit=crop&w=800&q=80";
-  }
-  if (t.includes("E-BIKE") || t.includes("ELECTRICA")) {
-    return "https://images.unsplash.com/photo-1532298229144-0ec0c57515c7?auto=format&fit=crop&w=800&q=80";
-  }
-  if (t.includes("GRAVEL")) {
-    return "https://images.unsplash.com/photo-1507035895480-2b3156c31fc8?auto=format&fit=crop&w=800&q=80";
-  }
-  return "https://images.unsplash.com/photo-1576435728678-68d0fbf94e91?auto=format&fit=crop&w=800&q=80";
-};
+import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { recordUserActivity, recordUserAudit, sanitizeAuditPayload } from "@/lib/auditLogger";
 
 // GET /api/crm/bicicletas
 export async function GET(req: Request) {
   try {
+    const session = await getWorkshopSession();
+    if (!session || !session.empresa_id) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("BICICLETA", session.usuario_id);
+    if (!perms.puede_ver) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para ver el catálogo de bicicletas." }, { status: 403 });
+    }
+
     const { searchParams } = new URL(req.url);
-    const clienteIdParam = searchParams.get("cliente_id");
-    const params: any[] = [];
-    let whereClause = "WHERE b.fecha_eliminacion IS NULL";
+    const clienteIdParam = searchParams.get("clienteId") || searchParams.get("cliente_id");
+
+    let whereClause = `WHERE c.empresa_id = $1 AND b.fecha_eliminacion IS NULL`;
+    const params: any[] = [session.empresa_id];
 
     if (clienteIdParam) {
-      const cId = parseInt(clienteIdParam, 10);
-      if (!isNaN(cId) && cId > 0) {
-        params.push(cId);
-        whereClause += ` AND b.cliente_id = $${params.length}`;
+      const parsedClienteId = parseInt(clienteIdParam, 10);
+      if (!isNaN(parsedClienteId)) {
+        whereClause += ` AND b.cliente_id = $2`;
+        params.push(parsedClienteId);
       }
     }
 
@@ -36,6 +35,7 @@ export async function GET(req: Request) {
         b.bicicleta_id AS id,
         b.bicicleta_id,
         b.cliente_id,
+        c.empresa_id,
         c.nombre_completo AS cliente_nombre,
         c.correo AS cliente_correo,
         c.telefono_principal AS cliente_telefono,
@@ -59,7 +59,7 @@ export async function GET(req: Request) {
         b.usuario_modificacion,
         f.url_archivo AS foto_url
       FROM admin.bicicletas b
-      LEFT JOIN admin.clientes c ON b.cliente_id = c.cliente_id
+      JOIN admin.clientes c ON b.cliente_id = c.cliente_id
       LEFT JOIN LATERAL (
         SELECT url_archivo
         FROM admin.bicicleta_fotos
@@ -77,6 +77,7 @@ export async function GET(req: Request) {
       id: r.bicicleta_id,
       bicicleta_id: r.bicicleta_id,
       cliente_id: r.cliente_id,
+      empresa_id: r.empresa_id,
       cliente_nombre: r.cliente_nombre || 'Cliente sin nombre',
       cliente_correo: r.cliente_correo || '',
       cliente_telefono: r.cliente_telefono || '',
@@ -94,151 +95,182 @@ export async function GET(req: Request) {
       fecha_ultima_revision: r.fecha_ultima_revision ? String(r.fecha_ultima_revision).substring(0, 10) : null,
       notas_tecnicas: r.notas_tecnicas || '',
       foto_url: (r.foto_url && !r.foto_url.includes("default.png")) ? r.foto_url : null,
+      salud: null,
       activo: r.activo !== false,
       fecha_creacion: r.fecha_creacion ? String(r.fecha_creacion).substring(0, 10) : null
     }));
 
-    return NextResponse.json(mapped);
+    const res = NextResponse.json(mapped);
+    res.headers.set("x-perm-ver", String(perms.puede_ver));
+    res.headers.set("x-perm-crear", String(perms.puede_crear));
+    res.headers.set("x-perm-editar", String(perms.puede_editar));
+    res.headers.set("x-perm-eliminar", String(perms.puede_eliminar));
+    res.headers.set("x-perm-exportar", String(perms.puede_exportar));
+    return res;
   } catch (error: any) {
     console.error("Error in GET /api/crm/bicicletas:", error);
-    return NextResponse.json({ error: error?.stack || error?.message || "Error al obtener bicicletas" }, { status: 500 });
+    return NextResponse.json({ error: error?.message || "Error al obtener bicicletas" }, { status: 500 });
   }
 }
 
 // POST /api/crm/bicicletas
 export async function POST(req: Request) {
   try {
+    const session = await getWorkshopSession();
+    if (!session || !session.empresa_id) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("BICICLETA", session.usuario_id);
+    if (!perms.puede_crear) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para crear bicicletas." }, { status: 403 });
+    }
+
     const body = await req.json();
+    const {
+      cliente_id,
+      marca,
+      modelo,
+      tipo_bicicleta,
+      ano,
+      color,
+      talla,
+      numero_serie_cuadro,
+      descripcion,
+      kilometraje_actual,
+      notas_tecnicas
+    } = body;
 
-    const cliente_id = parseInt(body.cliente_id, 10);
-    const marca = (body.marca || '').trim();
-    const modelo = (body.modelo || '').trim();
-    const tipo_bicicleta = (body.tipo_bicicleta || 'MTB').trim();
-    const ano = body.ano ? parseInt(body.ano, 10) : new Date().getFullYear();
-    const color = (body.color || '').trim();
-    const talla = (body.talla || '').trim();
-    const numero_serie_cuadro = (body.numero_serie_cuadro || '').trim();
-    const descripcion = (body.descripcion || '').trim();
-    const kilometraje_actual = body.kilometraje_actual ? parseInt(body.kilometraje_actual, 10) : 0;
-    const notas_tecnicas = (body.notas_tecnicas || '').trim();
-
-    if (isNaN(cliente_id)) {
-      return NextResponse.json({ error: "Debe seleccionar un cliente propietario." }, { status: 400 });
+    // Strict Validations
+    if (!cliente_id) {
+      return NextResponse.json({ error: "El cliente propietario es obligatorio." }, { status: 400 });
     }
-    if (!marca) {
-      return NextResponse.json({ error: "La Marca de la bicicleta es obligatoria." }, { status: 400 });
+    if (!marca || !marca.trim()) {
+      return NextResponse.json({ error: "La marca de la bicicleta es obligatoria." }, { status: 400 });
     }
-    if (!modelo) {
-      return NextResponse.json({ error: "El Modelo de la bicicleta es obligatorio." }, { status: 400 });
+    if (!modelo || !modelo.trim()) {
+      return NextResponse.json({ error: "El modelo de la bicicleta es obligatorio." }, { status: 400 });
     }
 
-    // Auto-generate QR code strings
+    // Verify client belongs to current empresa
+    const clientCheck = await query(`
+      SELECT cliente_id, nombre_completo FROM admin.clientes
+      WHERE cliente_id = $1 AND empresa_id = $2 AND fecha_eliminacion IS NULL
+    `, [cliente_id, session.empresa_id]);
+
+    if (!clientCheck || clientCheck.length === 0) {
+      return NextResponse.json({ error: "El cliente seleccionado no existe o no pertenece a su empresa." }, { status: 404 });
+    }
+
+    // Generate QR Codes
+    const countRows = await query(`SELECT COUNT(*) AS total FROM admin.bicicletas`);
+    const nextId = parseInt(countRows?.[0]?.total || "0", 10) + 1;
     const randomCode = Math.floor(100000 + Math.random() * 900000);
-    const codigo_qr = (body.codigo_qr || `BF-QR-${randomCode}`).trim();
-    const url_qr = (body.url_qr || `/assets/bikes/${codigo_qr}`).trim();
+    const codigo_qr = `BF-QR-${nextId}-${randomCode}`;
+    const url_qr = `/qr/bike/${codigo_qr}`;
+
+    const sql = `
+      INSERT INTO admin.bicicletas (
+        bicicleta_id,
+        cliente_id,
+        codigo_qr,
+        url_qr,
+        marca,
+        modelo,
+        tipo_bicicleta,
+        ano,
+        color,
+        talla,
+        numero_serie_cuadro,
+        descripcion,
+        kilometraje_actual,
+        notas_tecnicas,
+        activo,
+        fecha_creacion,
+        usuario_creacion
+      )
+      VALUES (
+        (SELECT COALESCE(MAX(bicicleta_id), 0) + 1 FROM admin.bicicletas),
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, true, NOW(), $14
+      )
+      RETURNING *
+    `;
 
     const params = [
       cliente_id,
       codigo_qr,
       url_qr,
-      marca,
-      modelo,
-      tipo_bicicleta || null,
-      ano || null,
-      color || null,
-      talla || null,
-      numero_serie_cuadro || null,
-      descripcion || null,
-      kilometraje_actual || 0,
-      notas_tecnicas || null
+      marca.trim(),
+      modelo.trim(),
+      tipo_bicicleta ? tipo_bicicleta.trim() : 'MTB',
+      ano ? parseInt(ano, 10) : new Date().getFullYear(),
+      color ? color.trim() : null,
+      talla ? talla.trim() : null,
+      numero_serie_cuadro ? numero_serie_cuadro.trim() : null,
+      descripcion ? descripcion.trim() : null,
+      kilometraje_actual ? parseInt(kilometraje_actual, 10) : 0,
+      notas_tecnicas ? notas_tecnicas.trim() : null,
+      session.usuario_id
     ];
 
-    // Attempt 1: Standard INSERT
-    try {
-      const sql1 = `
-        INSERT INTO admin.bicicletas (
-          cliente_id, codigo_qr, url_qr, marca, modelo,
-          tipo_bicicleta, ano, color, talla, numero_serie_cuadro,
-          descripcion, kilometraje_actual, fecha_ultima_revision, notas_tecnicas,
-          activo, fecha_creacion
-        ) VALUES (
-          $1, $2, $3, $4, $5,
-          $6, $7, $8, $9, $10,
-          $11, $12, NOW(), $13,
-          true, NOW()
-        )
-        RETURNING *
-      `;
+    const result = await query(sql, params);
+    const r = result[0] || {};
 
-      const result1 = await query(sql1, params);
-      const r1 = result1[0] || {};
+    // Update customer's bike count
+    await query(`
+      UPDATE admin.clientes
+      SET cantidad_bicicletas = (
+        SELECT COUNT(*)::integer FROM admin.bicicletas WHERE cliente_id = $1 AND fecha_eliminacion IS NULL
+      )
+      WHERE cliente_id = $1 AND empresa_id = $2
+    `, [cliente_id, session.empresa_id]);
 
-      if (cliente_id) {
-        await query(`
-          UPDATE admin.clientes
-          SET cantidad_bicicletas = (
-            SELECT COUNT(*) FROM admin.bicicletas WHERE cliente_id = $1 AND fecha_eliminacion IS NULL
-          )
-          WHERE cliente_id = $1
-        `, [cliente_id]);
-      }
+    const bikeData = {
+      id: r.bicicleta_id || nextId,
+      bicicleta_id: r.bicicleta_id || nextId,
+      cliente_id: r.cliente_id || cliente_id,
+      marca: r.marca || marca,
+      modelo: r.modelo || modelo,
+      tipo_bicicleta: r.tipo_bicicleta || tipo_bicicleta,
+      ano: r.ano || ano,
+      color: r.color || color,
+      talla: r.talla || talla,
+      numero_serie_cuadro: r.numero_serie_cuadro || numero_serie_cuadro,
+      salud: null,
+      activo: true,
+      fecha_creacion: r.fecha_creacion || new Date().toISOString()
+    };
 
-      return NextResponse.json({
-        id: r1.bicicleta_id,
-        bicicleta_id: r1.bicicleta_id,
-        cliente_id: r1.cliente_id,
-        marca: r1.marca || marca,
-        modelo: r1.modelo || modelo,
-        tipo_bicicleta: r1.tipo_bicicleta || tipo_bicicleta,
-        activo: true,
-        fecha_creacion: r1.fecha_creacion || new Date().toISOString()
-      });
-    } catch (err1: any) {
-      console.warn("POST Try 1 failed, attempting explicit bicicleta_id calculation:", err1?.message);
+    // Forensic Activity & Audit Logging
+    await recordUserActivity({
+      userId: session.usuario_id,
+      modulo: "BICICLETA",
+      evento: "BICYCLE_CREATED",
+      descripcion: `Registro de bicicleta ${marca} ${modelo} (ID: ${bikeData.bicicleta_id}) para el cliente ${clientCheck[0].nombre_completo}`,
+      req
+    });
 
-      const sql2 = `
-        INSERT INTO admin.bicicletas (
-          bicicleta_id, cliente_id, codigo_qr, url_qr, marca, modelo,
-          tipo_bicicleta, ano, color, talla, numero_serie_cuadro,
-          descripcion, kilometraje_actual, fecha_ultima_revision, notas_tecnicas,
-          activo, fecha_creacion
-        ) VALUES (
-          (SELECT COALESCE(MAX(bicicleta_id), 0) + 1 FROM admin.bicicletas),
-          $1, $2, $3, $4, $5,
-          $6, $7, $8, $9, $10,
-          $11, $12, NOW(), $13,
-          true, NOW()
-        )
-        RETURNING *
-      `;
+    await recordUserAudit({
+      userId: session.usuario_id,
+      adminId: session.usuario_id,
+      accion: "CRM_BICYCLE_CREATED",
+      valorAnterior: null,
+      valorNuevo: JSON.stringify(sanitizeAuditPayload({
+        bicicleta_id: bikeData.bicicleta_id,
+        cliente_id: bikeData.cliente_id,
+        marca: bikeData.marca,
+        modelo: bikeData.modelo,
+        tipo_bicicleta: bikeData.tipo_bicicleta,
+        ano: bikeData.ano,
+        numero_serie_cuadro: bikeData.numero_serie_cuadro
+      })),
+      motivo: `Creación de nueva bicicleta ID ${bikeData.bicicleta_id}`,
+      req
+    });
 
-      const result2 = await query(sql2, params);
-      const r2 = result2[0] || {};
-
-      if (cliente_id) {
-        await query(`
-          UPDATE admin.clientes
-          SET cantidad_bicicletas = (
-            SELECT COUNT(*) FROM admin.bicicletas WHERE cliente_id = $1 AND fecha_eliminacion IS NULL
-          )
-          WHERE cliente_id = $1
-        `, [cliente_id]);
-      }
-
-      return NextResponse.json({
-        id: r2.bicicleta_id,
-        bicicleta_id: r2.bicicleta_id,
-        cliente_id: r2.cliente_id,
-        marca: r2.marca || marca,
-        modelo: r2.modelo || modelo,
-        tipo_bicicleta: r2.tipo_bicicleta || tipo_bicicleta,
-        activo: true,
-        fecha_creacion: r2.fecha_creacion || new Date().toISOString()
-      });
-    }
-
+    return NextResponse.json(bikeData);
   } catch (error: any) {
     console.error("Error in POST /api/crm/bicicletas:", error);
-    return NextResponse.json({ error: error.message || "Error al crear bicicleta" }, { status: 500 });
+    return NextResponse.json({ error: error?.message || "Error al crear la bicicleta" }, { status: 500 });
   }
 }

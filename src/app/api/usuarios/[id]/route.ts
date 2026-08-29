@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { authorizeUserAccess, authorizeUserUpdate } from "@/lib/userAuth";
 import { getModulePermissions } from "@/lib/workshop-session";
+import { recordUserActivity, recordUserAudit } from "@/lib/auditLogger";
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -80,9 +81,27 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     }
 
     const u = usersRes[0];
+    const primaryAccessValue = u.identificador_principal || u.correo_acceso || u.email || u.document_number || (u.id ? `ID #${u.id}` : '—');
     const fullNameComputed = (u.first_name || u.last_name)
       ? `${u.first_name || ''} ${u.last_name || ''}`.trim()
-      : null;
+      : (u.email || u.identificador_principal || (u.id ? `Usuario #${u.id}` : 'Usuario'));
+
+    const scopeRes = await query(`SELECT usuario_alcance_id, nivel_alcance, incluir_herencia_jerarquica FROM admin.usuario_alcance WHERE usuario_id = $1`, [requestedUserId]);
+    let scopeType = 'COMPANY';
+    let includeChildren = true;
+    let scopeEntityIds: number[] = [];
+
+    if (scopeRes && scopeRes.length > 0) {
+      const dbNivel = scopeRes[0].nivel_alcance;
+      if (dbNivel === 'POR_AGRUPACION' || dbNivel === 'POR_DEPARTAMENTO' || dbNivel === 'DEPARTMENT') scopeType = 'DEPARTMENT';
+      else if (dbNivel === 'POR_TERRITORIO' || dbNivel === 'POR_AREA' || dbNivel === 'AREA') scopeType = 'AREA';
+      else if (dbNivel === 'POR_AGENCIA' || dbNivel === 'POR_SUCURSAL' || dbNivel === 'BRANCH' || dbNivel === 'SUCURSAL') scopeType = 'BRANCH';
+      else scopeType = 'COMPANY';
+
+      includeChildren = scopeRes[0].incluir_herencia_jerarquica ?? true;
+      const scopeDetailRes = await query(`SELECT referencia_id FROM admin.usuario_alcance_detalle WHERE usuario_alcance_id = $1`, [scopeRes[0].usuario_alcance_id]);
+      scopeEntityIds = (scopeDetailRes || []).map((r: any) => Number(r.referencia_id));
+    }
 
     const mappedUser = {
       id: u.id,
@@ -103,9 +122,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       role: u.role ?? null,
       user_type: u.user_type ?? null,
       primary_access_type: u.primary_access_type ?? 'EMAIL',
-      login_identifiers: u.identificador_principal
-        ? [{ is_primary: true, identifier_value: u.identificador_principal }]
-        : [],
+      identificador_principal: primaryAccessValue,
+      login_identifiers: [
+        {
+          is_primary: true,
+          identifier_type: u.primary_access_type || (primaryAccessValue.includes('@') ? 'EMAIL' : 'DOCUMENT'),
+          identifier_value: primaryAccessValue
+        }
+      ],
       last_login_at: u.last_login_at ?? null,
       mfaEnabled: Boolean(u.mfaEnabled),
       mfa_method: u.mfa_method ?? null,
@@ -131,7 +155,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       fecha_activacion: u.fecha_activacion ?? null,
       fecha_ultima_invitacion: u.fecha_ultima_invitacion ?? null,
       permissionsOverride: false,
-      scope_type: 'GLOBAL'
+      scope_type: scopeType,
+      include_children: includeChildren,
+      scope_entity_ids: scopeEntityIds
     };
 
     return NextResponse.json(mappedUser);
@@ -433,6 +459,60 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       );
     }
 
+    // 5. Update admin.usuario_alcance and admin.usuario_alcance_detalle if scope fields are provided
+    let prevScopeNivel: string | null = null;
+    let dbNivel = 'TODA_EMPRESA';
+    if (body.scope_type !== undefined || body.nivel_alcance !== undefined || body.scope_entity_ids !== undefined) {
+      const prevScopeRes = await query<{ nivel_alcance: string }>(`SELECT nivel_alcance FROM admin.usuario_alcance WHERE usuario_id = $1`, [targetUserId]);
+      prevScopeNivel = prevScopeRes?.[0]?.nivel_alcance || 'TODA_EMPRESA';
+
+      const rawScope = body.scope_type || body.nivel_alcance || 'COMPANY';
+      if (rawScope === 'POR_AGRUPACION' || rawScope === 'DEPARTMENT' || rawScope === 'POR_DEPARTAMENTO') dbNivel = 'POR_AGRUPACION';
+      else if (rawScope === 'POR_TERRITORIO' || rawScope === 'AREA' || rawScope === 'POR_AREA') dbNivel = 'POR_TERRITORIO';
+      else if (rawScope === 'POR_AGENCIA' || rawScope === 'BRANCH' || rawScope === 'POR_SUCURSAL' || rawScope === 'SUCURSAL') dbNivel = 'POR_AGENCIA';
+      else dbNivel = 'TODA_EMPRESA';
+
+      const includeChildren = body.include_children !== undefined ? Boolean(body.include_children) : true;
+      const entityIds = Array.isArray(body.scope_entity_ids) ? body.scope_entity_ids.map(Number).filter((n: number) => !isNaN(n)) : [];
+
+      const currentScope = await query(`SELECT usuario_alcance_id FROM admin.usuario_alcance WHERE usuario_id = $1`, [targetUserId]);
+      let scopeId: number;
+
+      if (currentScope && currentScope.length > 0) {
+        scopeId = currentScope[0].usuario_alcance_id;
+        await query(
+          `UPDATE admin.usuario_alcance
+           SET nivel_alcance = $1, incluir_herencia_jerarquica = $2
+           WHERE usuario_alcance_id = $3`,
+          [dbNivel, includeChildren, scopeId]
+        );
+      } else {
+        const nextScopeRes = await query(`SELECT COALESCE(MAX(usuario_alcance_id), 0) + 1 AS next_id FROM admin.usuario_alcance`);
+        scopeId = Number(nextScopeRes[0].next_id);
+        await query(
+          `INSERT INTO admin.usuario_alcance (usuario_alcance_id, usuario_id, nivel_alcance, incluir_herencia_jerarquica)
+           VALUES ($1, $2, $3, $4)`,
+          [scopeId, targetUserId, dbNivel, includeChildren]
+        );
+      }
+
+      await query(`DELETE FROM admin.usuario_alcance_detalle WHERE usuario_alcance_id = $1`, [scopeId]);
+
+      if (dbNivel !== 'TODA_EMPRESA' && entityIds.length > 0) {
+        let detalleTipo = 'AGRUPACION';
+        if (dbNivel === 'POR_TERRITORIO') detalleTipo = 'TERRITORIO';
+        if (dbNivel === 'POR_AGENCIA') detalleTipo = 'AGENCIA';
+
+        for (const refId of entityIds) {
+          await query(
+            `INSERT INTO admin.usuario_alcance_detalle (usuario_alcance_detalle_id, usuario_alcance_id, alcance, referencia_id)
+             VALUES ((SELECT COALESCE(MAX(usuario_alcance_detalle_id), 0) + 1 FROM admin.usuario_alcance_detalle), $1, $2, $3)`,
+            [scopeId, detalleTipo, refId]
+          );
+        }
+      }
+    }
+
     // Re-query updated real data and construct usuarioActualizado
     const fetchUpdatedSql = `
       SELECT 
@@ -442,95 +522,97 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         u.fecha_creacion,
         u.empresa_id AS "companyId",
         emp.nombre_comercial AS empresa_nombre,
-        ui.nombre AS first_name,
-        ui.apellido AS last_name,
+        u.rol_principal_id AS "primaryRoleId",
+        r.nombre AS "role",
+        u.tipo_usuario_id AS "userTypeId",
+        tu.nombre AS tipo_usuario_nombre,
+        ui.nombre AS "firstName",
+        ui.apellido AS "lastName",
         ui.correo_electronico AS email,
         ui.telefono AS phone,
-        ui.numero_documento AS document_number,
-        ui.departamento_id,
-        dep.nombre AS departamento_nombre,
-        ui.area_id,
-        ar.nombre AS area_nombre,
-        ui.cargo_id,
-        cg.nombre AS cargo_nombre,
-        r.nombre AS role,
-        tu.nombre AS user_type,
-        us.metodo_acceso_principal AS primary_access_type,
-        us.identificador_principal,
-        us.fecha_ultimo_acceso AS last_login_at,
-        us.mfa_activo AS "mfaEnabled",
-        us.mfa_tipo AS mfa_method,
-        us.detalle_estado AS activation,
-        us.correo_acceso,
-        us.enviar_invitacion_correo,
-        us.generar_clave_automatica,
-        us.forzar_cambio_clave,
-        us.idioma_preferido,
-        us.zona_horaria,
-        us.formato_fecha,
-        us.intentos_fallidos,
-        us.bloqueado_hasta,
-        us.estado_verificacion_correo,
-        us.canales_permitidos,
-        us.restriccion_ip,
-        us.restriccion_horaria AS horario_acceso,
-        us.expiracion_acceso,
-        us.fecha_credenciales_generada AS fecha_activacion,
-        us.fecha_expiracion_invitacion AS fecha_ultima_invitacion
+        ui.numero_documento AS "documentNumber",
+        ui.departamento_id AS "departmentId",
+        d.nombre AS departamento_nombre,
+        ui.area_id AS "areaId",
+        a.nombre AS area_nombre,
+        ui.cargo_id AS "positionId",
+        c.nombre AS cargo_nombre,
+        useg.metodo_acceso_principal,
+        useg.idioma_preferido,
+        useg.zona_horaria,
+        useg.formato_fecha,
+        useg.mfa_activo,
+        useg.requiere_cambio_clave,
+        useg.forzar_cambio_clave,
+        useg.fecha_ultimo_login,
+        useg.fecha_ultimo_cambio_password,
+        useg.fecha_credenciales_generada,
+        useg.fecha_expiracion_invitacion,
+        useg.intentos_fallidos,
+        useg.bloqueado_hasta,
+        useg.motivo_bloqueo,
+        useg.detalle_estado,
+        useg.canales_permitidos,
+        useg.restriccion_ip,
+        useg.horario_acceso,
+        useg.expiracion_acceso,
+        useg.fecha_activacion,
+        useg.fecha_ultima_invitacion,
+        alc.nivel_alcance,
+        alc.incluir_herencia_jerarquica
       FROM admin.usuario u
-      LEFT JOIN admin.usuario_identidad ui ON u.usuario_id = ui.usuario_id
-      LEFT JOIN admin.usuario_seguridad us ON u.usuario_id = us.usuario_id
-      LEFT JOIN admin.rol_funcional r ON u.rol_principal_id = r.rol_funcional_id
-      LEFT JOIN admin.tipo_usuario tu ON u.tipo_usuario_id = tu.tipo_usuario_id
       LEFT JOIN admin.empresa emp ON u.empresa_id = emp.empresa_id
-      LEFT JOIN admin.departamento dep ON ui.departamento_id = dep.departamento_id
-      LEFT JOIN admin.area ar ON ui.area_id = ar.area_id
-      LEFT JOIN admin.cargo cg ON ui.cargo_id = cg.cargo_id
+      LEFT JOIN admin.rol r ON u.rol_principal_id = r.rol_id
+      LEFT JOIN admin.tipo_usuario tu ON u.tipo_usuario_id = tu.tipo_usuario_id
+      LEFT JOIN admin.usuario_identidad ui ON u.usuario_id = ui.usuario_id
+      LEFT JOIN admin.departamento d ON ui.departamento_id = d.departamento_id
+      LEFT JOIN admin.area a ON ui.area_id = a.area_id
+      LEFT JOIN admin.cargo c ON ui.cargo_id = c.cargo_id
+      LEFT JOIN admin.usuario_seguridad useg ON u.usuario_id = useg.usuario_id
+      LEFT JOIN admin.usuario_alcance alc ON u.usuario_id = alc.usuario_id
       WHERE u.usuario_id = $1
     `;
-    const updatedUsersRes = await query(fetchUpdatedSql, [targetUserId]);
-    const updatedRow = updatedUsersRes && updatedUsersRes.length > 0 ? updatedUsersRes[0] : null;
+    const updatedRows = await query(fetchUpdatedSql, [targetUserId]);
+    const updatedRow = updatedRows?.[0] || {};
 
-    const usuarioActualizado = updatedRow ? {
+    const usuarioActualizado: any = updatedRow ? {
       id: updatedRow.id,
-      full_name: `${updatedRow.first_name || ''} ${updatedRow.last_name || ''}`.trim() || null,
-      first_name: updatedRow.first_name ?? null,
-      last_name: updatedRow.last_name ?? null,
+      nombre: `${updatedRow.firstName || ''} ${updatedRow.lastName || ''}`.trim() || updatedRow.email || 'Sin nombre',
+      firstName: updatedRow.firstName ?? null,
+      lastName: updatedRow.lastName ?? null,
       email: updatedRow.email ?? null,
       phone: updatedRow.phone ?? null,
-      document_number: updatedRow.document_number ?? null,
+      documentNumber: updatedRow.documentNumber ?? null,
       companyId: updatedRow.companyId ?? null,
       empresa_nombre: updatedRow.empresa_nombre ?? null,
-      department_id: updatedRow.departamento_id ?? null,
-      departamento_nombre: updatedRow.departamento_nombre ?? null,
-      area_id: updatedRow.area_id ?? null,
-      area_nombre: updatedRow.area_nombre ?? null,
-      cargo_id: updatedRow.cargo_id ?? null,
-      cargo_nombre: updatedRow.cargo_nombre ?? null,
+      userTypeId: updatedRow.userTypeId ?? null,
+      tipo_usuario_nombre: updatedRow.tipo_usuario_nombre ?? null,
+      primaryRoleId: updatedRow.primaryRoleId ?? null,
       role: updatedRow.role ?? null,
-      user_type: updatedRow.user_type ?? null,
-      primary_access_type: updatedRow.primary_access_type ?? 'EMAIL',
-      login_identifiers: updatedRow.identificador_principal
-        ? [{ is_primary: true, identifier_value: updatedRow.identificador_principal }]
-        : [],
-      last_login_at: updatedRow.last_login_at ?? null,
-      mfaEnabled: Boolean(updatedRow.mfaEnabled),
-      mfa_method: updatedRow.mfa_method ?? null,
-      status: updatedRow.estado ?? null,
-      estado: updatedRow.estado ?? null,
-      estado_activacion: updatedRow.estado_activacion ?? null,
-      activation: updatedRow.activation ?? null,
-      fecha_creacion: updatedRow.fecha_creacion ?? null,
-      correo_acceso: updatedRow.correo_acceso ?? null,
-      enviar_invitacion_correo: Boolean(updatedRow.enviar_invitacion_correo),
-      generar_clave_automatica: Boolean(updatedRow.generar_clave_automatica),
+      departmentId: updatedRow.departmentId ?? null,
+      departamento_nombre: updatedRow.departamento_nombre ?? null,
+      areaId: updatedRow.areaId ?? null,
+      area_nombre: updatedRow.area_nombre ?? null,
+      positionId: updatedRow.positionId ?? null,
+      cargo_nombre: updatedRow.cargo_nombre ?? null,
+      estado: updatedRow.estado || 'ACTIVO',
+      estado_activacion: updatedRow.estado_activacion || 'Activo',
+      status: updatedRow.estado || 'ACTIVO',
+      created_at: updatedRow.fecha_creacion ?? null,
+      last_login: updatedRow.fecha_ultimo_login ?? null,
+      idioma_preferido: updatedRow.idioma_preferido || 'es',
+      zona_horaria: updatedRow.zona_horaria || 'America/Santo_Domingo',
+      formato_fecha: updatedRow.formato_fecha || 'DD/MM/YYYY',
+      mfa_activo: Boolean(updatedRow.mfa_activo),
+      requiere_cambio_clave: Boolean(updatedRow.requiere_cambio_clave),
       forzar_cambio_clave: Boolean(updatedRow.forzar_cambio_clave),
-      idioma_preferido: updatedRow.idioma_preferido ?? 'es',
-      zona_horaria: updatedRow.zona_horaria ?? 'America/Santo_Domingo',
-      formato_fecha: updatedRow.formato_fecha ?? 'DD/MM/YYYY',
-      intentos_fallidos: Number(updatedRow.intentos_fallidos ?? 0),
+      fecha_ultimo_cambio_password: updatedRow.fecha_ultimo_cambio_password ?? null,
+      fecha_credenciales_generada: updatedRow.fecha_credenciales_generada ?? null,
+      fecha_expiracion_invitacion: updatedRow.fecha_expiracion_invitacion ?? null,
+      intentos_fallidos: updatedRow.intentos_fallidos ?? 0,
       bloqueado_hasta: updatedRow.bloqueado_hasta ?? null,
-      estado_verificacion_correo: updatedRow.estado_verificacion_correo ?? null,
+      motivo_bloqueo: updatedRow.motivo_bloqueo ?? null,
+      detalle_estado: updatedRow.detalle_estado ?? null,
       canales_permitidos: updatedRow.canales_permitidos ?? null,
       restriccion_ip: updatedRow.restriccion_ip ?? null,
       horario_acceso: updatedRow.horario_acceso ?? null,
@@ -538,6 +620,110 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       fecha_activacion: updatedRow.fecha_activacion ?? null,
       fecha_ultima_invitacion: updatedRow.fecha_ultima_invitacion ?? null
     } : null;
+
+    // Build field-level diff for forensic audit
+    const changedFields: { field: string; oldVal: string; newVal: string }[] = [];
+    if (updatedFirstName !== current.nombre) {
+      changedFields.push({ field: 'Nombre', oldVal: current.nombre || '—', newVal: updatedFirstName || '—' });
+    }
+    if (updatedLastName !== current.apellido) {
+      changedFields.push({ field: 'Apellido', oldVal: current.apellido || '—', newVal: updatedLastName || '—' });
+    }
+    if (updatedPhone !== current.telefono) {
+      changedFields.push({ field: 'Teléfono', oldVal: current.telefono || '—', newVal: updatedPhone || '—' });
+    }
+    if (updatedDocument !== current.numero_documento) {
+      changedFields.push({ field: 'Documento', oldVal: current.numero_documento || '—', newVal: updatedDocument || '—' });
+    }
+    if (finalDeptId !== current.departamento_id) {
+      changedFields.push({ field: 'Departamento', oldVal: String(current.departamento_id || '—'), newVal: String(finalDeptId || '—') });
+    }
+    if (finalAreaId !== current.area_id) {
+      changedFields.push({ field: 'Área', oldVal: String(current.area_id || '—'), newVal: String(finalAreaId || '—') });
+    }
+    if (finalCargoId !== current.cargo_id) {
+      changedFields.push({ field: 'Cargo', oldVal: String(current.cargo_id || '—'), newVal: String(finalCargoId || '—') });
+    }
+    if (newRolId !== current.rol_principal_id) {
+      changedFields.push({ field: 'Rol Principal', oldVal: String(current.rol_principal_id || '—'), newVal: String(newRolId || '—') });
+    }
+    if (newTipoUsuarioId !== current.tipo_usuario_id) {
+      changedFields.push({ field: 'Tipo de Usuario', oldVal: String(current.tipo_usuario_id || '—'), newVal: String(newTipoUsuarioId || '—') });
+    }
+    if (newEstado !== current.estado) {
+      changedFields.push({ field: 'Estado', oldVal: current.estado || '—', newVal: String(newEstado || '—') });
+    }
+    if (newEstadoActivacion !== current.estado_activacion) {
+      changedFields.push({ field: 'Activación', oldVal: current.estado_activacion || '—', newVal: String(newEstadoActivacion || '—') });
+    }
+    if (prevScopeNivel && prevScopeNivel !== dbNivel) {
+      changedFields.push({ field: 'Alcance de Datos', oldVal: prevScopeNivel, newVal: dbNivel });
+    }
+
+    let auditAction = 'USER_UPDATED';
+    let activityEvent = 'EDITAR_USUARIO';
+    let activityDesc = changedFields.length > 0
+      ? `Actualización de campos: ${changedFields.map(f => f.field).join(', ')}`
+      : 'Actualización de perfil y configuración';
+    let auditMotivo = body.motivo || 'Actualización de datos del usuario';
+
+    if (newEstado !== current.estado) {
+      if (newEstado === 'ACTIVO') {
+        auditAction = 'USER_ACTIVATED';
+        activityEvent = 'CAMBIO_ESTADO';
+        activityDesc = `Activación de cuenta de usuario (${current.estado} → ${newEstado})`;
+      } else if (newEstado === 'INACTIVO' || newEstado === 'BLOQUEADO') {
+        auditAction = 'USER_DEACTIVATED';
+        activityEvent = 'CAMBIO_ESTADO';
+        activityDesc = `Desactivación/bloqueo de cuenta de usuario (${current.estado} → ${newEstado})`;
+      } else {
+        auditAction = 'STATUS_CHANGE';
+        activityEvent = 'CAMBIO_ESTADO';
+        activityDesc = `Cambio de estado de ${current.estado} a ${newEstado}`;
+      }
+      auditMotivo = body.motivo_bloqueo || `Cambio de estado a ${newEstado}`;
+    } else if (newRolId !== current.rol_principal_id) {
+      auditAction = 'ROLE_CHANGED';
+      activityEvent = 'CAMBIO_ROL';
+      activityDesc = `Cambio de rol principal a ID #${newRolId}`;
+      auditMotivo = 'Actualización de rol y permisos';
+    } else if (body.dataScopes !== undefined || body.scope_type !== undefined || body.scopeType !== undefined) {
+      auditAction = 'DATA_SCOPE_CHANGED';
+      activityEvent = 'DATA_SCOPE_CHANGED';
+      activityDesc = `Modificación del alcance de datos a ${dbNivel}`;
+      auditMotivo = 'Actualización de alcance de datos y RLS';
+    }
+
+    const valorAnteriorStr = changedFields.length > 0
+      ? JSON.stringify(Object.fromEntries(changedFields.map(f => [f.field, f.oldVal])))
+      : JSON.stringify({ estado: current.estado || '—', rol_principal_id: current.rol_principal_id || '—' });
+    const valorNuevoStr = changedFields.length > 0
+      ? JSON.stringify(Object.fromEntries(changedFields.map(f => [f.field, f.newVal])))
+      : JSON.stringify({ estado: updatedRow?.estado || '—', rol_principal_id: newRolId || '—' });
+
+    try {
+      await recordUserAudit({
+        userId: targetUserId,
+        adminId: authUserId,
+        accion: auditAction,
+        valorAnterior: valorAnteriorStr,
+        valorNuevo: valorNuevoStr,
+        motivo: auditMotivo,
+        resultado: 'COMPLETADO',
+        req
+      });
+
+      await recordUserActivity({
+        userId: targetUserId,
+        modulo: 'Seguridad',
+        evento: activityEvent,
+        descripcion: activityDesc,
+        resultado: 'Exitoso',
+        req
+      });
+    } catch (auditErr) {
+      console.warn("Could not insert usuario_auditoria/actividad record:", auditErr);
+    }
 
     return NextResponse.json({
       success: true,

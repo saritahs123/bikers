@@ -3,6 +3,7 @@ import { getPool } from "@/lib/db";
 import { recalculateWorkOrderTotals } from "@/lib/workshop/recalculateWorkOrderTotals";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
 import { validateOrderInRepair } from "@/lib/workshop/validateOrderState";
+import { recordUserActivity, recordUserAudit } from "@/lib/auditLogger";
 
 // POST /api/taller/ordenes/[id]/servicios/[servicioId]/productos
 export async function POST(
@@ -49,6 +50,16 @@ export async function POST(
       return orderStateCheck.response;
     }
 
+    // Verify service belongs to this order
+    const servCheckRes = await client.query(`
+      SELECT orden_servicio_id FROM admin.orden_servicios WHERE orden_servicio_id = $1 AND orden_trabajo_id = $2 AND (activo IS DISTINCT FROM false)
+    `, [servId, ordenId]);
+
+    if (servCheckRes.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return NextResponse.json({ error: "NOT_FOUND", message: "Servicio no encontrado en esta orden de trabajo." }, { status: 404 });
+    }
+
     // Verify product in catalog
     const prodCatalogRes = await client.query(`
       SELECT producto_id, nombre, precio_venta
@@ -70,10 +81,9 @@ export async function POST(
     const valorDesc = Math.min(bruto, Math.round((bruto * (descPct / 100.0)) * 100) / 100);
     const subtotal = Math.max(0, bruto - valorDesc);
 
-    // Insert Product Row
+    // Insert Product Row using PostgreSQL sequence
     const insertProdSql = `
       INSERT INTO admin.orden_productos (
-        orden_producto_id,
         orden_trabajo_id,
         orden_servicio_id,
         producto_id,
@@ -87,7 +97,6 @@ export async function POST(
         fecha_registro,
         usuario_registro
       ) VALUES (
-        (SELECT COALESCE(MAX(orden_producto_id), 0) + 1 FROM admin.orden_productos),
         $1, $2, $3, $4, $5, $6, $7, $8, $9, 2, NOW(), $10
       )
       RETURNING orden_producto_id
@@ -109,11 +118,40 @@ export async function POST(
     // Recalculate Order Financial Totals
     await recalculateWorkOrderTotals(client, ordenId);
 
+    const newOpId = newProdRes.rows[0].orden_producto_id;
+
+    await recordUserAudit({
+      userId: sessionUserId,
+      accion: "AGREGAR_PRODUCTO_SERVICIO",
+      valorNuevo: {
+        orden_producto_id: newOpId,
+        producto_id: parseInt(producto_id, 10),
+        orden_servicio_id: servId,
+        orden_trabajo_id: ordenId,
+        cantidad: qty,
+        precio_unitario: price,
+        subtotal
+      },
+      motivo: "Repuesto asignado a servicio",
+      resultado: "COMPLETADO",
+      client,
+      throwOnError: true
+    });
+
     await client.query("COMMIT");
+
+    await recordUserActivity({
+      userId: sessionUserId,
+      modulo: "TALLER_PRODUCTOS",
+      evento: "ORDER_PRODUCT_ADDED",
+      descripcion: `Repuesto #${producto_id} agregado a servicio #${servId} (Orden #${ordenId})`,
+      resultado: "Exitoso",
+      req
+    });
 
     return NextResponse.json({
       success: true,
-      data: { orden_producto_id: newProdRes.rows[0].orden_producto_id },
+      data: { orden_producto_id: newOpId },
       message: "Repuesto agregado exitosamente."
     });
   } catch (err: any) {
@@ -163,17 +201,18 @@ export async function DELETE(
   try {
     await client.query("BEGIN");
 
-    // Lock Order Row Exclusively
+    // Lock Order Row Exclusively with canonical client company check
     const orderRes = await client.query(`
-      SELECT orden_trabajo_id, estado_orden_id
-      FROM admin.ordenes_trabajo
-      WHERE orden_trabajo_id = $1 AND activo = true
-      FOR UPDATE OF ordenes_trabajo
+      SELECT ot.orden_trabajo_id, ot.estado_orden_id, c.empresa_id
+      FROM admin.ordenes_trabajo ot
+      JOIN admin.clientes c ON ot.cliente_id = c.cliente_id
+      WHERE ot.orden_trabajo_id = $1 AND ot.activo = true
+      FOR UPDATE OF ot
     `, [ordenId]);
 
-    if (orderRes.rows.length === 0) {
+    if (orderRes.rows.length === 0 || Number(orderRes.rows[0].empresa_id) !== Number(session.empresa_id)) {
       await client.query("ROLLBACK");
-      return NextResponse.json({ error: "Orden de trabajo no encontrada." }, { status: 404 });
+      return NextResponse.json({ error: "NOT_FOUND", message: "Orden de trabajo no encontrada." }, { status: 404 });
     }
 
     const estadoOrdenId = orderRes.rows[0].estado_orden_id;
@@ -200,17 +239,15 @@ export async function DELETE(
       DELETE FROM admin.orden_productos WHERE orden_producto_id = $1
     `, [ordenProductoId]);
 
-    // Recalculate Order Financial Totals
     await recalculateWorkOrderTotals(client, ordenId);
 
-    // History Record
+    // History Record using PostgreSQL sequence
     await client.query(`
       INSERT INTO admin.orden_historial_estado (
-        orden_historial_estado_id, orden_trabajo_id, estado_anterior_id, estado_nuevo_id, usuario_cambio, comentario, fecha_cambio, activo, fecha_registro
+        orden_trabajo_id, estado_anterior_id, estado_nuevo_id, usuario_cambio, comentario, fecha_cambio, activo, fecha_registro
       ) VALUES (
-        (SELECT COALESCE(MAX(orden_historial_estado_id), 0) + 1 FROM admin.orden_historial_estado),
         $1, $2, $2, $3, $4, NOW(), true, NOW()
-      )
+      ) RETURNING orden_historial_estado_id
     `, [
       ordenId,
       estadoOrdenId,
@@ -218,7 +255,31 @@ export async function DELETE(
       `Repuesto anulado de servicio #${servicioId}: ${motivoAnulacion}`
     ]);
 
+    await recordUserAudit({
+      userId: sessionUserId,
+      accion: "ELIMINAR_PRODUCTO_SERVICIO",
+      valorAnterior: {
+        orden_producto_id: ordenProductoId,
+        orden_servicio_id: servId,
+        orden_trabajo_id: ordenId
+      },
+      valorNuevo: null,
+      motivo: motivoAnulacion,
+      resultado: "COMPLETADO",
+      client,
+      throwOnError: true
+    });
+
     await client.query("COMMIT");
+
+    await recordUserActivity({
+      userId: sessionUserId,
+      modulo: "TALLER_PRODUCTOS",
+      evento: "ORDER_PRODUCT_DELETED",
+      descripcion: `Repuesto #${ordenProductoId} eliminado de servicio #${servId} (Orden #${ordenId})`,
+      resultado: "Exitoso",
+      req
+    });
 
     return NextResponse.json({
       success: true,
@@ -250,6 +311,7 @@ export async function PUT(
   if (!session || !session.usuario_id) {
     return NextResponse.json({ error: "NO_SESSION", message: "Sesión no válida o expirada." }, { status: 401 });
   }
+  const sessionUserId = session.usuario_id;
 
   const perms = await getModulePermissions("TALLER", session.usuario_id);
   if (!perms.puede_editar) {
@@ -271,16 +333,18 @@ export async function PUT(
 
     await client.query("BEGIN");
 
+    // Lock Order Row Exclusively with canonical client company check
     const orderRes = await client.query(`
-      SELECT orden_trabajo_id, estado_orden_id
-      FROM admin.ordenes_trabajo
-      WHERE orden_trabajo_id = $1 AND activo = true
-      FOR UPDATE OF ordenes_trabajo
+      SELECT ot.orden_trabajo_id, ot.estado_orden_id, c.empresa_id
+      FROM admin.ordenes_trabajo ot
+      JOIN admin.clientes c ON ot.cliente_id = c.cliente_id
+      WHERE ot.orden_trabajo_id = $1 AND ot.activo = true
+      FOR UPDATE OF ot
     `, [ordenId]);
 
-    if (orderRes.rows.length === 0) {
+    if (orderRes.rows.length === 0 || Number(orderRes.rows[0].empresa_id) !== Number(session.empresa_id)) {
       await client.query("ROLLBACK");
-      return NextResponse.json({ error: "Orden de trabajo no encontrada." }, { status: 404 });
+      return NextResponse.json({ error: "NOT_FOUND", message: "Orden de trabajo no encontrada." }, { status: 404 });
     }
 
     const qty = Math.max(1, parseInt(cantidad || "1", 10));
@@ -301,7 +365,34 @@ export async function PUT(
     `, [qty, price, descPct, valorDesc, subtotal, opId, servId, ordenId]);
 
     await recalculateWorkOrderTotals(client, ordenId);
+
+    await recordUserAudit({
+      userId: sessionUserId,
+      accion: "ACTUALIZAR_PRODUCTO_SERVICIO",
+      valorNuevo: {
+        orden_producto_id: opId,
+        orden_servicio_id: servId,
+        orden_trabajo_id: ordenId,
+        cantidad: qty,
+        precio_unitario: price,
+        subtotal
+      },
+      motivo: "Actualización de repuesto en servicio",
+      resultado: "COMPLETADO",
+      client,
+      throwOnError: true
+    });
+
     await client.query("COMMIT");
+
+    await recordUserActivity({
+      userId: sessionUserId,
+      modulo: "TALLER_PRODUCTOS",
+      evento: "ORDER_PRODUCT_UPDATED",
+      descripcion: `Repuesto #${opId} actualizado en servicio #${servId} (Orden #${ordenId})`,
+      resultado: "Exitoso",
+      req
+    });
 
     return NextResponse.json({
       success: true,

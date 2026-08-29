@@ -3,8 +3,8 @@ import React, { useState, useMemo, useEffect } from 'react';
 import SecurityConfirmDialog from '@/components/security/SecurityConfirmDialog';
 import { createPortal } from 'react-dom';
 import { 
-  Shield, Key, CheckSquare, Square, Save, RotateCw, Search, 
-  Info, AlertTriangle, Check, ArrowRight, Activity, Users, Settings, PanelLeftOpen, Loader2, Plus, Edit2, Trash2, ArrowUp, ArrowDown, ArrowUpDown
+  Shield, Key, CheckSquare, Square, Save, Search, 
+  Info, Check, Activity, Users, PanelLeftOpen, Loader2, Plus, Edit2, Trash2, ArrowUp, ArrowDown, ArrowUpDown
 } from 'lucide-react';
 
 const ALL_ACTIONS = [
@@ -27,7 +27,6 @@ const apiBase = '/api';
 export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
   const [activeRole, setActiveRole] = useState('');
   const [matrixState, setMatrixState] = useState({});
-  const [initialMatrixState, setInitialMatrixState] = useState({});
   const [modules, setModules] = useState([]);
   const [roles, setRoles] = useState([]);
   
@@ -91,7 +90,6 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
       setModules(data.modules || []);
       setRoles(data.roles || []);
       setMatrixState(data.matrix || {});
-      setInitialMatrixState(JSON.parse(JSON.stringify(data.matrix || {})));
       
       if (data.roles && data.roles.length > 0 && !activeRole) {
         setActiveRole(data.roles[0].nombre);
@@ -136,11 +134,9 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
     const rolePerms = { ...currentPermissions };
     const currentActions = rolePerms[moduleId] || [];
     
-    // If all are selected, unselect all
     if (currentActions.length === ALL_ACTIONS.length) {
       delete rolePerms[moduleId];
     } else {
-      // Otherwise, select all
       rolePerms[moduleId] = ALL_ACTIONS.map(a => a.id);
     }
 
@@ -155,26 +151,32 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
   };
 
   const handleExecuteSave = async () => {
+    setShowSaveConfirmModal(false);
+    setSaving(true);
     try {
-      setShowSaveConfirmModal(false);
-      setSaving(true);
-      const res = await fetch(`${apiBase}/matriz-acceso-rol`, {
-        method: 'PUT',
+      const targetRole = roles.find(r => r.nombre === activeRole);
+      if (!targetRole) throw new Error('Rol no seleccionado');
+
+      const rolePerms = matrixState[activeRole] || {};
+      const payload = {
+        role_id: targetRole.numericId,
+        permissions: rolePerms
+      };
+
+      const res = await fetch(`${apiBase}/matriz-acceso-rol/role/${targetRole.numericId}`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(matrixState)
+        body: JSON.stringify(payload)
       });
-      
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Failed to save');
-      }
-      
-      setInitialMatrixState(JSON.parse(JSON.stringify(matrixState)));
-      setSuccessMessage('Los cambios en la matriz de acceso han sido aplicados y guardados correctamente.');
+
+      if (!res.ok) throw new Error('Error al guardar matriz');
+
+      showToast('Matriz de permisos guardada exitosamente');
+      setSuccessMessage('Los permisos para el rol han sido actualizados en la base de datos.');
       setShowSuccessModal(true);
     } catch (error) {
-      console.error('Error saving RBAC:', error);
-      showToast('Error al guardar la matriz', 'error');
+      console.error('Error saving permissions:', error);
+      showToast('Error al guardar la matriz de permisos', 'error');
     } finally {
       setSaving(false);
     }
@@ -186,7 +188,7 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
     
     try {
       setAddingModule(true);
-      const res = await fetch(`${apiBase}/matriz-acceso-rol`, {
+      const res = await fetch(`${apiBase}/matriz-acceso-rol/module`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nombre: newModuleName.trim() })
@@ -197,8 +199,6 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
       setShowAddModuleModal(false);
       setNewModuleName('');
       showToast('Módulo agregado con éxito');
-      
-      // Refresh matrix data to get the new module
       fetchMatrix(true);
       setSuccessMessage('El módulo ha sido agregado exitosamente.');
       setShowSuccessModal(true);
@@ -232,8 +232,6 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
       setEditingModule(null);
       setEditModuleName('');
       showToast('Módulo editado con éxito');
-      
-      // Refresh matrix data to get the updated name
       fetchMatrix(true);
       setSuccessMessage('El módulo ha sido editado exitosamente.');
       setShowSuccessModal(true);
@@ -393,51 +391,53 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full min-h-[400px]">
-        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="p-6 md:p-8 space-y-6 flex flex-col h-[calc(100vh-4rem)] animate-in fade-in duration-300">
+    <div className="p-6 md:p-8 space-y-6 flex flex-col h-[calc(100vh-4rem)] animate-in fade-in duration-300 font-sans text-foreground">
       
       {/* Toast Alert */}
       {toast && (
-        <div className={`fixed bottom-6 right-6 z-50 bg-surface-container-low border shadow-2xl p-4 rounded-xl flex items-center gap-3 ${toast.type === 'error' ? 'border-red-500/50' : 'border-primary/30'}`}>
-          <div className={`w-2.5 h-2.5 rounded-full animate-ping ${toast.type === 'error' ? 'bg-red-500' : 'bg-emerald-500'}`}></div>
-          <span className="text-[13px] font-bold text-on-surface">{toast.message}</span>
+        <div className={`fixed bottom-6 right-6 z-50 bg-surface-elevated border shadow-2xl p-4 rounded-xl flex items-center gap-3 ${toast.type === 'error' ? 'border-error/50' : 'border-primary/30'}`}>
+          <div className={`w-2.5 h-2.5 rounded-full animate-ping ${toast.type === 'error' ? 'bg-error' : 'bg-success'}`} />
+          <span className="text-[13px] font-bold text-foreground">{toast.message}</span>
         </div>
       )}
 
       {/* Header */}
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-outline-variant pb-5 shrink-0">
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-border pb-5 shrink-0">
         <div className="flex items-center gap-3">
           <button 
-            className="md:hidden p-1.5 rounded-lg bg-surface-container-low border border-outline-variant text-on-surface-variant hover:text-primary shadow-sm"
+            type="button"
+            className="md:hidden p-1.5 rounded-lg bg-surface-subtle border border-border text-foreground-muted hover:text-primary shadow-sm"
             onClick={onOpenSidebar}
+            aria-label="Abrir barra lateral"
           >
             <PanelLeftOpen size={16} />
           </button>
           <div>
-            <div className="flex items-center gap-2 text-xs font-bold text-on-surface-variant bg-surface-container-low border border-outline-variant w-max px-2.5 py-1 rounded-full uppercase tracking-wider">
+            <div className="flex items-center gap-2 text-xs font-bold text-foreground-muted bg-surface-subtle border border-border w-max px-2.5 py-1 rounded-full uppercase tracking-wider font-mono">
               <Shield size={12} className="text-primary" />
               Gobernanza y Autenticación
             </div>
-            <h1 className="text-2xl md:text-3xl font-black text-on-surface tracking-tight mt-1.5 flex items-center gap-2">
+            <h1 className="text-2xl md:text-3xl font-extrabold text-foreground tracking-tight mt-1.5 flex items-center gap-2 font-sans">
               Matriz de Roles
             </h1>
-            <p className="text-[13px] text-on-surface-variant mt-1 font-medium">
+            <p className="text-[13px] text-foreground-muted mt-1 font-medium font-sans">
               Configura los permisos predeterminados heredados por los usuarios según su rol funcional asignado.
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2.5 shrink-0 w-full md:w-auto">
-
           <button 
+            type="button"
             onClick={handleSaveClick}
             disabled={saving}
-            className="flex-1 md:flex-initial bg-primary text-on-primary hover:bg-primary-fixed text-on-primary font-bold text-xs px-4 py-2.5 rounded-xl shadow-sm hover:shadow transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            className="flex-1 md:flex-initial bg-primary-button-bg hover:brightness-110 text-primary-foreground font-mono font-bold text-xs px-4 py-2.5 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
           >
             {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
             {saving ? 'Guardando...' : 'Guardar Cambios'}
@@ -447,33 +447,33 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
 
       {/* Statistics Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-surface-container-low border border-outline-variant p-5 rounded-2xl flex items-center gap-4 shadow-sm">
+        <div className="bg-card border border-border p-5 rounded-2xl flex items-center gap-4 shadow-sm">
           <div className="p-3 bg-primary/10 text-primary rounded-xl">
             <Shield size={22} />
           </div>
           <div>
-            <span className="block text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Rol Activo</span>
-            <span className="text-base font-black text-on-surface block mt-0.5">{activeRole}</span>
+            <span className="block text-[11px] font-mono font-bold uppercase tracking-wider text-foreground-muted">Rol Activo</span>
+            <span className="text-base font-black text-foreground block mt-0.5 font-sans">{activeRole}</span>
           </div>
         </div>
 
-        <div className="bg-surface-container-low border border-outline-variant p-5 rounded-2xl flex items-center gap-4 shadow-sm">
-          <div className="p-3 bg-indigo-500/10 text-indigo-500 rounded-xl">
+        <div className="bg-card border border-border p-5 rounded-2xl flex items-center gap-4 shadow-sm">
+          <div className="p-3 bg-info/15 text-info rounded-xl">
             <Key size={22} />
           </div>
           <div>
-            <span className="block text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Permisos Concedidos</span>
-            <span className="text-base font-black text-on-surface block mt-0.5">{totalActivePermissions} reglas activas</span>
+            <span className="block text-[11px] font-mono font-bold uppercase tracking-wider text-foreground-muted">Permisos Concedidos</span>
+            <span className="text-base font-black text-foreground block mt-0.5 font-sans">{totalActivePermissions} reglas activas</span>
           </div>
         </div>
 
-        <div className="bg-surface-container-low border border-outline-variant p-5 rounded-2xl flex items-center gap-4 shadow-sm">
-          <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl">
+        <div className="bg-card border border-border p-5 rounded-2xl flex items-center gap-4 shadow-sm">
+          <div className="p-3 bg-success/15 text-success rounded-xl">
             <Activity size={22} />
           </div>
           <div>
-            <span className="block text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Módulos Intervenidos</span>
-            <span className="text-base font-black text-on-surface block mt-0.5">{activeModuleCount} de {modules.length} módulos</span>
+            <span className="block text-[11px] font-mono font-bold uppercase tracking-wider text-foreground-muted">Módulos Intervenidos</span>
+            <span className="text-base font-black text-foreground block mt-0.5 font-sans">{activeModuleCount} de {modules.length} módulos</span>
           </div>
         </div>
       </div>
@@ -482,40 +482,46 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
       <div className="flex-1 flex flex-col lg:flex-row gap-6 min-h-0 overflow-hidden pb-6">
         
         {/* Left Panel: Role List */}
-        <div className="w-full lg:w-72 bg-surface-container-low border border-outline-variant rounded-2xl p-4 flex flex-col shrink-0">
+        <div className="w-full lg:w-72 bg-card border border-border rounded-2xl p-4 flex flex-col shrink-0 shadow-sm">
           <div className="flex justify-between items-center mb-3 px-2">
-            <h3 className="font-extrabold text-[12px] text-on-surface uppercase tracking-wider flex items-center gap-2">
+            <h3 className="font-extrabold text-[12px] text-foreground uppercase tracking-wider flex items-center gap-2 font-mono">
               <Users size={14} className="text-primary" />
               Roles Funcionales
             </h3>
             <button 
+              type="button"
               onClick={() => setShowAddRoleModal(true)}
-              className="bg-primary text-on-primary hover:bg-primary-fixed text-on-primary p-1 rounded-md shadow-sm transition-colors"
+              className="bg-primary-button-bg text-primary-foreground hover:brightness-110 p-1.5 rounded-lg shadow-sm transition-all cursor-pointer"
               title="Nuevo Rol"
             >
               <Plus size={14} className="stroke-[2.5]" />
             </button>
           </div>
           
-          <div className="space-y-1 overflow-y-auto custom-scrollbar flex-1 pr-1">
+          <div className="space-y-1.5 overflow-y-auto custom-scrollbar flex-1 pr-1">
             {roles.map((role) => {
               const isActive = role.nombre === activeRole;
               const permissionsCount = Object.values(matrixState[role.nombre] || {}).reduce((a, b) => a + b.length, 0);
 
               return (
-                <div key={role.numericId} className={`w-full text-left px-3 py-2.5 rounded-xl text-[12px] font-bold transition-all flex items-center justify-between group cursor-pointer ${
-                  isActive 
-                    ? 'bg-primary text-on-primary shadow-xs' 
-                    : 'text-[var(--text-secondary)] hover:bg-surface-container-lowest hover:text-on-surface border border-transparent'
-                }`} onClick={() => setActiveRole(role.nombre)}>
-                  <span className="truncate pr-2 flex-1">{role.nombre}</span>
+                <div 
+                  key={role.numericId} 
+                  className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-between group cursor-pointer border ${
+                    isActive 
+                      ? 'bg-primary text-primary-foreground border-primary shadow-sm' 
+                      : 'bg-surface-subtle/50 text-foreground-secondary hover:bg-hover hover:text-foreground border-border'
+                  }`} 
+                  onClick={() => setActiveRole(role.nombre)}
+                >
+                  <span className="truncate pr-2 flex-1 font-sans">{role.nombre}</span>
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black tracking-wide ${
-                      isActive ? 'bg-white/20 text-white' : 'bg-surface-container-lowest text-on-surface-variant group-hover:bg-[var(--border-color)]'
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold tracking-wide ${
+                      isActive ? 'bg-black/20 text-primary-foreground' : 'bg-surface text-foreground-muted border border-border'
                     }`}>
                       {permissionsCount}
                     </span>
                     <button
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         setEditingRole(role);
@@ -523,19 +529,20 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
                         setShowEditRoleModal(true);
                       }}
                       className={`p-1 rounded-md transition-colors ${
-                        isActive ? 'text-white/70 hover:text-white hover:bg-white/20' : 'text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10'
+                        isActive ? 'text-primary-foreground/80 hover:text-primary-foreground hover:bg-black/20' : 'text-foreground-muted hover:text-primary hover:bg-hover'
                       }`}
                       title="Editar Rol"
                     >
                       <Edit2 size={12} className="stroke-[2.5]" />
                     </button>
                     <button
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleDeleteRole(role);
                       }}
                       className={`p-1 rounded-md transition-colors ${
-                        isActive ? 'text-white/70 hover:text-white hover:bg-white/20' : 'text-slate-400 hover:text-primary hover:bg-rose-50 dark:hover:bg-primary/10'
+                        isActive ? 'text-primary-foreground/80 hover:text-primary-foreground hover:bg-black/20' : 'text-foreground-muted hover:text-error hover:bg-error/10'
                       }`}
                       title="Eliminar Rol"
                     >
@@ -549,28 +556,29 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
         </div>
 
         {/* Right Panel: Permissions Matrix Table */}
-        <div className="flex-1 bg-surface-container-low border border-outline-variant rounded-2xl p-5 flex flex-col overflow-hidden min-h-[500px]">
+        <div className="flex-1 bg-card border border-border rounded-2xl p-5 flex flex-col overflow-hidden min-h-[500px] shadow-sm">
           
           {/* Table Header Filter */}
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4 pb-4 border-b border-outline-variant shrink-0">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4 pb-4 border-b border-border shrink-0">
             <div>
-              <h3 className="font-black text-sm text-on-surface">Matriz de Acceso</h3>
-              <p className="text-[11px] text-on-surface-variant font-medium mt-0.5">Controla qué acciones específicas puede realizar el rol sobre cada módulo.</p>
+              <h3 className="font-extrabold text-sm text-foreground font-sans">Matriz de Acceso</h3>
+              <p className="text-[11px] text-foreground-muted font-medium mt-0.5 font-sans">Controla qué acciones específicas puede realizar el rol sobre cada módulo.</p>
             </div>
             <div className="flex items-center gap-2 w-full sm:w-auto">
               <div className="relative w-full sm:w-56">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-on-surface-variant" />
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground-muted" />
                 <input
                   type="text"
                   placeholder="Buscar módulo..."
-                  className="w-full bg-surface-container-lowest border border-outline-variant rounded-lg pl-8 pr-3 py-1.5 text-xs font-semibold text-on-surface focus:outline-none focus:border-primary"
+                  className="w-full bg-input border border-border rounded-xl pl-8 pr-3 py-1.5 text-xs font-semibold text-foreground placeholder:text-foreground-disabled focus:outline-none focus:border-primary font-sans"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
               <button 
+                type="button"
                 onClick={() => setShowAddModuleModal(true)}
-                className="bg-primary text-on-primary hover:bg-primary-fixed text-on-primary px-3 py-1.5 rounded-lg shadow-sm transition-colors flex-shrink-0 flex items-center gap-1.5 text-[11px] font-bold"
+                className="bg-primary-button-bg text-primary-foreground hover:brightness-110 px-3 py-1.5 rounded-xl shadow-sm transition-all flex-shrink-0 flex items-center gap-1.5 text-xs font-mono font-bold cursor-pointer"
                 title="Nuevo Módulo"
               >
                 <Plus size={14} className="stroke-[2.5]" />
@@ -580,71 +588,71 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
           </div>
 
           {/* Table Container */}
-          <div className="flex-1 overflow-auto custom-scrollbar border border-outline-variant rounded-xl">
-            <table className="w-full text-left border-collapse text-[11px] min-w-[800px]">
+          <div className="flex-1 overflow-auto custom-scrollbar border border-border rounded-xl">
+            <table className="w-full text-left border-collapse text-xs min-w-[800px]">
               <thead>
-                <tr className="border-b border-outline-variant text-[11px] font-black text-on-surface uppercase tracking-wider bg-surface-container-low dark:bg-surface-container-low select-none sticky top-0 z-10">
-                  <th className="py-3 px-4 group cursor-pointer hover:bg-surface-container-lowest transition-colors" onClick={() => handleSort('label')}>
-                    <div className="flex items-center gap-1.5">
-                      Módulo / Sección
+                <tr className="border-b border-border text-[11px] font-mono font-bold text-primary uppercase tracking-wider bg-surface-subtle select-none sticky top-0 z-10">
+                  <th className="py-3 px-4 group cursor-pointer hover:bg-hover transition-colors" onClick={() => handleSort('label')}>
+                    <div className="flex items-center gap-1.5 text-foreground">
+                      <span>Módulo / Sección</span>
                       {sortConfig.key === 'label' ? (
                         sortConfig.direction === 'asc' ? <ArrowUp size={12} className="text-primary" /> : <ArrowDown size={12} className="text-primary" />
                       ) : (
-                        <ArrowUpDown size={12} className="text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <ArrowUpDown size={12} className="text-foreground-disabled opacity-0 group-hover:opacity-100 transition-opacity" />
                       )}
                     </div>
                   </th>
-                  <th className="py-3 px-1.5 text-center w-16 text-primary group cursor-pointer hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors" onClick={() => handleSort('FULL')}>
+                  <th className="py-3 px-1.5 text-center w-16 text-primary group cursor-pointer hover:bg-hover transition-colors" onClick={() => handleSort('FULL')}>
                     <div className="flex items-center justify-center gap-1">
-                      FULL
+                      <span>FULL</span>
                       {sortConfig.key === 'FULL' ? (
                         sortConfig.direction === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />
                       ) : (
-                        <ArrowUpDown size={12} className="text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <ArrowUpDown size={12} className="text-foreground-disabled opacity-0 group-hover:opacity-100 transition-opacity" />
                       )}
                     </div>
                   </th>
                   {ALL_ACTIONS.map(act => (
-                    <th key={act.id} className="py-3 px-1.5 text-center w-16 group cursor-pointer hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors" onClick={() => handleSort(act.id)}>
+                    <th key={act.id} className="py-3 px-1.5 text-center w-16 text-foreground-secondary group cursor-pointer hover:bg-hover transition-colors" onClick={() => handleSort(act.id)}>
                       <div className="flex items-center justify-center gap-1">
-                        {act.label}
+                        <span>{act.label}</span>
                         {sortConfig.key === act.id ? (
                           sortConfig.direction === 'asc' ? <ArrowUp size={12} className="text-primary" /> : <ArrowDown size={12} className="text-primary" />
                         ) : (
-                          <ArrowUpDown size={12} className="text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          <ArrowUpDown size={12} className="text-foreground-disabled opacity-0 group-hover:opacity-100 transition-opacity" />
                         )}
                       </div>
                     </th>
                   ))}
-                  <th className="py-3 px-1.5 text-center w-16">OPCIONES</th>
+                  <th className="py-3 px-1.5 text-center w-16 text-foreground-muted">OPCIONES</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[var(--border-color)]">
+              <tbody className="divide-y divide-border">
                 {filteredModules.length === 0 ? (
                   <tr>
-                    <td colSpan={ALL_ACTIONS.length + 3} className="py-12 text-center text-on-surface-variant italic font-semibold">
+                    <td colSpan={ALL_ACTIONS.length + 3} className="py-12 text-center text-foreground-muted italic font-semibold font-mono">
                       No se encontraron módulos coincidentes.
                     </td>
                   </tr>
                 ) : (
                   filteredModules.map(mod => {
                     return (
-                      <tr key={mod.id} className="transition-colors hover:bg-slate-100 dark:hover:bg-slate-700/50">
-                        <td className="py-2.5 px-4 font-bold text-on-surface">
+                      <tr key={mod.id} className="transition-colors hover:bg-hover">
+                        <td className="py-2.5 px-4 font-bold text-foreground font-sans">
                           {mod.label}
                         </td>
                         
-                        <td className="py-2 px-1.5 text-center border-r border-outline-variant">
+                        <td className="py-2 px-1.5 text-center border-r border-border">
                           {(() => {
                             const isFull = currentPermissions[mod.id]?.length === ALL_ACTIONS.length;
                             return (
                               <button
                                 type="button"
                                 onClick={() => handleToggleFull(mod.id)}
-                                className={`p-2 rounded-lg border transition-all hover:scale-105 cursor-pointer flex items-center justify-center ${
+                                className={`p-2 rounded-lg border transition-all hover:scale-105 cursor-pointer flex items-center justify-center mx-auto ${
                                   isFull 
-                                    ? 'bg-primary border-primary text-on-primary shadow-[0_0_10px_rgba(187,207,124,0.3)]' 
-                                    : 'bg-surface-container-lowest border-outline-variant text-on-surface-variant hover:bg-surface-container-low hover:text-white'
+                                    ? 'bg-primary border-primary text-primary-foreground shadow-sm' 
+                                    : 'bg-surface border-border text-foreground-muted hover:border-primary/40 hover:text-foreground'
                                 }`}
                                 title={isFull ? 'Desmarcar todos' : 'Marcar todos'}
                               >
@@ -666,10 +674,10 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
                               <button
                                 type="button"
                                 onClick={() => handleTogglePermission(mod.id, act.id)}
-                                className={`p-2 rounded-lg border transition-all hover:scale-105 cursor-pointer flex items-center justify-center ${
+                                className={`p-2 rounded-lg border transition-all hover:scale-105 cursor-pointer flex items-center justify-center mx-auto ${
                                   isChecked 
-                                    ? 'bg-primary border-primary text-on-primary shadow-[0_0_10px_rgba(187,207,124,0.3)]' 
-                                    : 'bg-surface-container-lowest border-outline-variant text-on-surface-variant hover:bg-surface-container-low hover:text-white'
+                                    ? 'bg-primary border-primary text-primary-foreground shadow-sm' 
+                                    : 'bg-surface border-border text-foreground-muted hover:border-primary/40 hover:text-foreground'
                                 }`}
                                 title={`${isChecked ? 'Remover' : 'Conceder'} permiso ${act.label} para ${mod.label}`}
                               >
@@ -683,9 +691,10 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
                           );
                         })}
                         
-                        <td className="py-2 px-1.5 text-center border-l border-outline-variant">
-                          <div className="flex items-center gap-1">
+                        <td className="py-2 px-1.5 text-center border-l border-border">
+                          <div className="flex items-center justify-center gap-1">
                             <button
+                              type="button"
                               onClick={() => {
                                 setEditingModule(mod);
                                 setEditModuleName(mod.label);
@@ -693,14 +702,15 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
                                 setEditModuleStatus(mod.estado);
                                 setShowEditModuleModal(true);
                               }}
-                              className="p-1.5 text-slate-400 hover:text-blue-500 transition-colors rounded-lg hover:bg-blue-50 dark:hover:bg-blue-500/10"
+                              className="p-1.5 text-foreground-muted hover:text-primary transition-colors rounded-lg hover:bg-hover cursor-pointer"
                               title="Editar módulo"
                             >
                               <Edit2 size={14} className="stroke-[2.5]" />
                             </button>
                             <button
+                              type="button"
                               onClick={() => handleDeleteModule(mod)}
-                              className="p-1.5 text-slate-400 hover:text-primary transition-colors rounded-lg hover:bg-rose-50 dark:hover:bg-primary/10"
+                              className="p-1.5 text-foreground-muted hover:text-error transition-colors rounded-lg hover:bg-error/10 cursor-pointer"
                               title="Eliminar módulo"
                             >
                               <Trash2 size={14} className="stroke-[2.5]" />
@@ -716,10 +726,10 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
           </div>
 
           {/* Footer Info alert */}
-          <div className="mt-4 p-3 bg-indigo-50/50 dark:bg-indigo-950/15 border border-indigo-100 dark:border-indigo-900/30 rounded-xl flex items-start gap-2.5 shrink-0 animate-in fade-in">
-            <Info size={15} className="text-indigo-500 shrink-0 mt-0.5" />
-            <span className="text-[10.5px] leading-relaxed text-on-surface-variant font-medium">
-              <strong>Nota:</strong> Los cambios realizados en esta matriz modificarán el comportamiento heredado predeterminado de los usuarios. Las cuentas que tengan configurados "Permisos Personalizados" individuales en su perfil no se verán afectadas por este cambio.
+          <div className="mt-4 p-3 bg-surface-subtle border border-border rounded-xl flex items-start gap-2.5 shrink-0 animate-in fade-in">
+            <Info size={15} className="text-primary shrink-0 mt-0.5" />
+            <span className="text-[11px] leading-relaxed text-foreground-secondary font-medium font-sans">
+              <strong>Nota:</strong> Los cambios realizados en esta matriz modificarán el comportamiento heredado predeterminado de los usuarios. Las cuentas que tengan configurados &quot;Permisos Personalizados&quot; individuales en su perfil no se verán afectadas por este cambio.
             </span>
           </div>
 
@@ -733,7 +743,7 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
         onConfirm={handleExecuteSave}
         variant="default"
         title="¿Confirmar guardado?"
-        description="¿Desea guardar los cambios realizados en las políticas de seguridad?"
+        description="¿Desea guardar los cambios realizados en las políticas de seguridad de este rol?"
         confirmLabel="Guardar cambios"
       />
 
@@ -755,20 +765,21 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
 
       {/* Delete Success Modal */}
       {showDeleteSuccessModal && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
-          <div className="bg-surface-container-low border-outline-variant rounded-3xl shadow-xl w-[400px] overflow-hidden p-8 text-center">
-            <div className="w-20 h-20 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-surface-elevated border border-border rounded-3xl shadow-xl w-[400px] overflow-hidden p-8 text-center text-foreground">
+            <div className="w-20 h-20 bg-success/15 text-success rounded-full flex items-center justify-center mx-auto mb-6">
               <Check size={40} className="stroke-[3]" />
             </div>
-            <h3 className="text-2xl font-black text-on-surface mb-3 tracking-tight">
+            <h3 className="text-2xl font-black text-foreground mb-3 tracking-tight font-sans">
               ¡Eliminado Exitosamente!
             </h3>
-            <p className="text-[15px] text-on-surface-variant font-medium leading-relaxed mb-8 px-2">
+            <p className="text-[14px] text-foreground-secondary font-medium leading-relaxed mb-8 px-2 font-sans">
               El registro ha sido eliminado correctamente de la base de datos.
             </p>
             <button 
+              type="button"
               onClick={() => setShowDeleteSuccessModal(false)}
-              className="w-full bg-[#00C985] hover:bg-[#00b377] text-white font-bold py-3.5 rounded-2xl shadow-sm hover:shadow transition-all text-[15px]"
+              className="w-full bg-primary-button-bg text-primary-foreground font-mono font-bold py-3.5 rounded-2xl shadow-sm hover:brightness-110 transition-all text-sm cursor-pointer"
             >
               Entendido
             </button>
@@ -778,20 +789,21 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
 
       {/* Success Modal */}
       {showSuccessModal && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
-          <div className="bg-surface-container-low border border-outline-variant rounded-3xl shadow-xl w-[400px] overflow-hidden p-8 text-center">
-            <div className="w-20 h-20 bg-primary/10 text-primary rounded-full flex items-center justify-center mx-auto mb-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-surface-elevated border border-border rounded-3xl shadow-xl w-[400px] overflow-hidden p-8 text-center text-foreground">
+            <div className="w-20 h-20 bg-primary/15 text-primary rounded-full flex items-center justify-center mx-auto mb-6">
               <Check size={40} className="stroke-[3]" />
             </div>
-            <h3 className="text-2xl font-black text-on-surface mb-3 tracking-tight">
+            <h3 className="text-2xl font-black text-foreground mb-3 tracking-tight font-sans">
               ¡Guardado Exitosamente!
             </h3>
-            <p className="text-[15px] text-on-surface-variant font-medium leading-relaxed mb-8 px-2">
+            <p className="text-[14px] text-foreground-secondary font-medium leading-relaxed mb-8 px-2 font-sans">
               {successMessage}
             </p>
             <button 
+              type="button"
               onClick={() => setShowSuccessModal(false)}
-              className="w-full bg-primary hover:bg-primary-fixed text-on-primary font-bold py-3.5 rounded-2xl shadow-sm hover:shadow transition-all text-[15px]"
+              className="w-full bg-primary-button-bg text-primary-foreground font-mono font-bold py-3.5 rounded-2xl shadow-sm hover:brightness-110 transition-all text-sm cursor-pointer"
             >
               Entendido
             </button>
@@ -801,18 +813,18 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
 
       {/* Add Module Modal */}
       {showAddModuleModal && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
-          <div className="bg-surface-container-low border-outline-variant rounded-2xl shadow-xl w-[400px] overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-surface-elevated border border-border rounded-2xl shadow-xl w-[400px] overflow-hidden text-foreground">
             <form onSubmit={handleAddModule}>
               <div className="p-6">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="p-2 bg-primary/10 text-primary rounded-lg">
                     <Plus size={20} className="stroke-[2.5]" />
                   </div>
-                  <h3 className="text-lg font-bold text-on-surface">Nuevo Módulo</h3>
+                  <h3 className="text-lg font-bold text-foreground font-sans">Nuevo Módulo</h3>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider">
+                  <label className="text-[11px] font-mono font-bold text-foreground-secondary uppercase tracking-wider">
                     Nombre del Módulo
                   </label>
                   <input
@@ -820,27 +832,27 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
                     required
                     autoFocus
                     placeholder="Ej: Reportes Financieros"
-                    className="w-full bg-surface-container-lowest border border-outline-variant rounded-xl px-4 py-2.5 text-sm font-semibold text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                    className="w-full bg-input border border-border rounded-xl px-4 py-2.5 text-sm font-semibold text-foreground placeholder:text-foreground-disabled focus:outline-none focus:border-primary transition-all font-sans"
                     value={newModuleName}
                     onChange={(e) => setNewModuleName(e.target.value)}
                   />
                 </div>
               </div>
-              <div className="p-5 pt-0 flex items-center gap-3 bg-surface-container-low border-t border-outline-variant rounded-b-2xl">
+              <div className="p-5 pt-0 flex items-center gap-3 bg-surface-subtle border-t border-border rounded-b-2xl">
                 <button 
                   type="button"
                   onClick={() => {
                     setShowAddModuleModal(false);
                     setNewModuleName('');
                   }}
-                  className="flex-1 bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface font-bold py-2.5 rounded-xl transition-colors text-sm"
+                  className="flex-1 bg-surface hover:bg-hover text-foreground font-mono font-bold py-2.5 rounded-xl transition-colors text-xs border border-border"
                 >
                   Cancelar
                 </button>
                 <button 
                   type="submit"
                   disabled={addingModule || !newModuleName.trim()}
-                  className="flex-1 bg-primary text-on-primary hover:bg-primary-fixed text-on-primary font-bold py-2.5 rounded-xl shadow-sm hover:shadow transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
+                  className="flex-1 bg-primary-button-bg text-primary-foreground hover:brightness-110 font-mono font-bold py-2.5 rounded-xl shadow-sm transition-all text-xs disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
                 >
                   {addingModule ? <Loader2 size={16} className="animate-spin" /> : 'Agregar'}
                 </button>
@@ -852,27 +864,27 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
 
       {/* Edit Module Modal */}
       {showEditModuleModal && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
-          <div className="bg-surface-container-low border-outline-variant rounded-2xl shadow-xl w-[400px] overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-surface-elevated border border-border rounded-2xl shadow-xl w-[400px] overflow-hidden text-foreground">
             <form onSubmit={handleEditModule}>
               <div className="p-6 pb-4">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="p-2 bg-primary/10 text-primary rounded-lg">
                     <Edit2 size={20} className="stroke-[2.5]" />
                   </div>
-                  <h3 className="text-lg font-bold text-on-surface">Editar Módulo</h3>
+                  <h3 className="text-lg font-bold text-foreground font-sans">Editar Módulo</h3>
                 </div>
                 
                 <div className="space-y-4">
                   <div className="space-y-1">
-                    <label className="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider">
+                    <label className="text-[11px] font-mono font-bold text-foreground-secondary uppercase tracking-wider">
                       Nombre del Módulo
                     </label>
                     <input
                       type="text"
                       required
                       autoFocus
-                      className="w-full bg-surface-container-lowest border border-outline-variant rounded-xl px-4 py-2.5 text-sm font-semibold text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                      className="w-full bg-input border border-border rounded-xl px-4 py-2.5 text-sm font-semibold text-foreground placeholder:text-foreground-disabled focus:outline-none focus:border-primary transition-all font-sans"
                       value={editModuleName}
                       onChange={(e) => setEditModuleName(e.target.value)}
                     />
@@ -880,24 +892,24 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
 
                   <div className="flex gap-4">
                     <div className="space-y-1 w-1/3">
-                      <label className="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider">
+                      <label className="text-[11px] font-mono font-bold text-foreground-secondary uppercase tracking-wider">
                         Orden
                       </label>
                       <input
                         type="number"
                         required
-                        className="w-full bg-surface-container-lowest border border-outline-variant rounded-xl px-4 py-2.5 text-sm font-semibold text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                        className="w-full bg-input border border-border rounded-xl px-4 py-2.5 text-sm font-mono font-semibold text-foreground focus:outline-none focus:border-primary transition-all"
                         value={editModuleOrder}
                         onChange={(e) => setEditModuleOrder(e.target.value)}
                       />
                     </div>
 
                     <div className="space-y-1 w-2/3">
-                      <label className="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider">
+                      <label className="text-[11px] font-mono font-bold text-foreground-secondary uppercase tracking-wider">
                         Estado
                       </label>
                       <select
-                        className="w-full bg-surface-container-lowest border border-outline-variant rounded-xl px-4 py-2.5 text-sm font-semibold text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                        className="w-full bg-input border border-border rounded-xl px-4 py-2.5 text-sm font-mono font-semibold text-foreground focus:outline-none focus:border-primary transition-all"
                         value={editModuleStatus}
                         onChange={(e) => setEditModuleStatus(e.target.value)}
                       >
@@ -908,21 +920,21 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
                   </div>
                 </div>
               </div>
-              <div className="p-5 flex items-center gap-3 bg-surface-container-low border-t border-outline-variant rounded-b-2xl">
+              <div className="p-5 flex items-center gap-3 bg-surface-subtle border-t border-border rounded-b-2xl">
                 <button 
                   type="button"
                   onClick={() => {
                     setShowEditModuleModal(false);
                     setEditingModule(null);
                   }}
-                  className="flex-1 bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface font-bold py-2.5 rounded-xl transition-colors text-sm"
+                  className="flex-1 bg-surface hover:bg-hover text-foreground font-mono font-bold py-2.5 rounded-xl transition-colors text-xs border border-border"
                 >
                   Cancelar
                 </button>
                 <button 
                   type="submit"
                   disabled={savingEditModule || !editModuleName.trim()}
-                  className="flex-1 bg-primary text-on-primary hover:bg-primary-fixed text-on-primary font-bold py-2.5 rounded-xl shadow-sm hover:shadow transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
+                  className="flex-1 bg-primary-button-bg text-primary-foreground hover:brightness-110 font-mono font-bold py-2.5 rounded-xl shadow-sm transition-all text-xs disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
                 >
                   {savingEditModule ? <Loader2 size={16} className="animate-spin" /> : 'Guardar Cambios'}
                 </button>
@@ -934,46 +946,46 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
 
       {/* Add Role Modal */}
       {showAddRoleModal && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
-          <div className="bg-surface-container-low border-outline-variant rounded-2xl shadow-xl w-[400px] overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-surface-elevated border border-border rounded-2xl shadow-xl w-[400px] overflow-hidden text-foreground">
             <form onSubmit={handleAddRole}>
               <div className="p-6">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="p-2 bg-primary/10 text-primary rounded-lg">
                     <Plus size={20} className="stroke-[2.5]" />
                   </div>
-                  <h3 className="text-lg font-bold text-on-surface">Nuevo Rol Funcional</h3>
+                  <h3 className="text-lg font-bold text-foreground font-sans">Nuevo Rol Funcional</h3>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider">
+                  <label className="text-[11px] font-mono font-bold text-foreground-secondary uppercase tracking-wider">
                     Nombre del Rol
                   </label>
                   <input
                     type="text"
                     required
                     autoFocus
-                    className="w-full bg-surface-container-lowest border border-outline-variant rounded-xl px-4 py-2.5 text-sm font-semibold text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                    className="w-full bg-input border border-border rounded-xl px-4 py-2.5 text-sm font-semibold text-foreground placeholder:text-foreground-disabled focus:outline-none focus:border-primary transition-all font-sans"
                     placeholder="Ej. Auditor de Operaciones"
                     value={newRoleName}
                     onChange={(e) => setNewRoleName(e.target.value)}
                   />
                 </div>
               </div>
-              <div className="p-5 pt-0 flex items-center gap-3 bg-surface-container-low border-t border-outline-variant rounded-b-2xl">
+              <div className="p-5 pt-0 flex items-center gap-3 bg-surface-subtle border-t border-border rounded-b-2xl">
                 <button 
                   type="button"
                   onClick={() => {
                     setShowAddRoleModal(false);
                     setNewRoleName('');
                   }}
-                  className="flex-1 bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface font-bold py-2.5 rounded-xl transition-colors text-sm"
+                  className="flex-1 bg-surface hover:bg-hover text-foreground font-mono font-bold py-2.5 rounded-xl transition-colors text-xs border border-border"
                 >
                   Cancelar
                 </button>
                 <button 
                   type="submit"
                   disabled={addingRole || !newRoleName.trim()}
-                  className="flex-1 bg-primary text-on-primary hover:bg-primary-fixed text-on-primary font-bold py-2.5 rounded-xl shadow-sm hover:shadow transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
+                  className="flex-1 bg-primary-button-bg text-primary-foreground hover:brightness-110 font-mono font-bold py-2.5 rounded-xl shadow-sm transition-all text-xs disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
                 >
                   {addingRole ? <Loader2 size={16} className="animate-spin" /> : 'Agregar Rol'}
                 </button>
@@ -985,45 +997,45 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
 
       {/* Edit Role Modal */}
       {showEditRoleModal && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
-          <div className="bg-surface-container-low border-outline-variant rounded-2xl shadow-xl w-[400px] overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-surface-elevated border border-border rounded-2xl shadow-xl w-[400px] overflow-hidden text-foreground">
             <form onSubmit={handleEditRole}>
               <div className="p-6">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="p-2 bg-primary/10 text-primary rounded-lg">
                     <Edit2 size={20} className="stroke-[2.5]" />
                   </div>
-                  <h3 className="text-lg font-bold text-on-surface">Editar Rol</h3>
+                  <h3 className="text-lg font-bold text-foreground font-sans">Editar Rol</h3>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider">
+                  <label className="text-[11px] font-mono font-bold text-foreground-secondary uppercase tracking-wider">
                     Nombre del Rol
                   </label>
                   <input
                     type="text"
                     required
                     autoFocus
-                    className="w-full bg-surface-container-lowest border border-outline-variant rounded-xl px-4 py-2.5 text-sm font-semibold text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                    className="w-full bg-input border border-border rounded-xl px-4 py-2.5 text-sm font-semibold text-foreground placeholder:text-foreground-disabled focus:outline-none focus:border-primary transition-all font-sans"
                     value={editRoleName}
                     onChange={(e) => setEditRoleName(e.target.value)}
                   />
                 </div>
               </div>
-              <div className="p-5 pt-0 flex items-center gap-3 bg-surface-container-low border-t border-outline-variant rounded-b-2xl">
+              <div className="p-5 pt-0 flex items-center gap-3 bg-surface-subtle border-t border-border rounded-b-2xl">
                 <button 
                   type="button"
                   onClick={() => {
                     setShowEditRoleModal(false);
                     setEditingRole(null);
                   }}
-                  className="flex-1 bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant hover:text-on-surface font-bold py-2.5 rounded-xl transition-colors text-sm"
+                  className="flex-1 bg-surface hover:bg-hover text-foreground font-mono font-bold py-2.5 rounded-xl transition-colors text-xs border border-border"
                 >
                   Cancelar
                 </button>
                 <button 
                   type="submit"
                   disabled={savingEditRole || !editRoleName.trim()}
-                  className="flex-1 bg-primary text-on-primary hover:bg-primary-fixed text-on-primary font-bold py-2.5 rounded-xl shadow-sm hover:shadow transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
+                  className="flex-1 bg-primary-button-bg text-primary-foreground hover:brightness-110 font-mono font-bold py-2.5 rounded-xl shadow-sm transition-all text-xs disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
                 >
                   {savingEditRole ? <Loader2 size={16} className="animate-spin" /> : 'Guardar Cambios'}
                 </button>

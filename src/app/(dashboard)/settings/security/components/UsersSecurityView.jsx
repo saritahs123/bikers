@@ -6,14 +6,11 @@ import {
   Users, UserPlus, Download, Edit2, ShieldAlert,
   MoreVertical, X, Save, Search, Check, CheckCircle2, AlertCircle, 
   RotateCw, RefreshCw, ChevronLeft, ChevronRight, ChevronDown, Filter, SlidersHorizontal, ToggleLeft, ToggleRight,
-  ShieldCheck, Shield, Key, Trash2, Mail, Phone, Building2, Eye, EyeOff, PanelLeftOpen, LayoutGrid, List,
+  ShieldCheck, Shield, Key, KeyRound, Trash2, Mail, Phone, Building2, Eye, EyeOff, PanelLeftOpen, LayoutGrid, List,
   FileText, Calendar, Clock, Laptop, ShieldX, CheckSquare, Square, Info, AlertTriangle, ArrowRight, Settings, Printer
 } from 'lucide-react';
-import { validateRNC, validatePhoneDR, formatPhoneDR, validateEmail } from '@/lib/validations';
+import { validateRNC, validatePhoneDR, formatPhoneDR, validateEmail, validatePasswordPolicy } from '@/lib/validations';
 import { usersService } from '@/services/usersService';
-import { catalogosService } from '@/services/catalogosService';
-import { INITIAL_USERS_DATA, USER_ROLES, DATA_SCOPES, USER_TYPES, INITIAL_ACTIVITY_DATA, INITIAL_AUDIT_DATA, PREDEFINED_JOB_TITLES, PREDEFINED_DEPARTMENTS, PREDEFINED_AGENCIES, INITIAL_DEPARTMENTS_DATA, INITIAL_AREAS_DATA } from '@/config/catalogs/usersCatalog';
-import { INITIAL_COMPANIES_DATA } from '@/config/catalogs/companiesCatalog';
 import SecurityConfirmDialog from '@/components/security/SecurityConfirmDialog';
 
 const ALL_ACTIONS = [
@@ -89,8 +86,8 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
   const [data, setData] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [profileLoadError, setProfileLoadError] = useState(null);
-  const [activities, setActivities] = useState(() => (typeof window !== 'undefined' ? window.activitiesData : null) || INITIAL_ACTIVITY_DATA);
-  const [audits, setAudits] = useState(() => (typeof window !== 'undefined' ? window.auditData : null) || INITIAL_AUDIT_DATA);
+  const [activities, setActivities] = useState([]);
+  const [audits, setAudits] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [areas, setAreas] = useState([]);
@@ -130,6 +127,136 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
   const [cargosError, setCargosError] = useState(null);
   const [departamentosError, setDepartamentosError] = useState(null);
   const [areasError, setAreasError] = useState(null);
+
+  // Manual Reset Password Modal State
+  const [isResetPasswordModalOpen, setIsResetPasswordModalOpen] = useState(false);
+  const [resetPasswordUser, setResetPasswordUser] = useState(null);
+  const [resetNewPassword, setResetNewPassword] = useState('');
+  const [resetConfirmPassword, setResetConfirmPassword] = useState('');
+  const [showResetNewPassword, setShowResetNewPassword] = useState(false);
+  const [showResetConfirmPassword, setShowResetConfirmPassword] = useState(false);
+  const [resetForceChange, setResetForceChange] = useState(true);
+  const [resetPasswordError, setResetPasswordError] = useState('');
+  const [isManualResetting, setIsManualResetting] = useState(false);
+
+  const getLoginAccessIdentifier = (u) => {
+    if (!u) return '—';
+    if (Array.isArray(u.login_identifiers) && u.login_identifiers.length > 0) {
+      const prim = u.login_identifiers.find(id => id.is_primary) || u.login_identifiers[0];
+      if (prim?.identifier_value && String(prim.identifier_value).trim()) {
+        return String(prim.identifier_value).trim();
+      }
+    }
+    if (typeof u.login_identifiers === 'string' && u.login_identifiers.trim()) {
+      return u.login_identifiers.trim();
+    }
+    if (u.identificador_principal && String(u.identificador_principal).trim()) {
+      return String(u.identificador_principal).trim();
+    }
+    if (u.correo_acceso && String(u.correo_acceso).trim()) {
+      return String(u.correo_acceso).trim();
+    }
+    if (u.email && String(u.email).trim()) {
+      return String(u.email).trim();
+    }
+    if (u.document_number && String(u.document_number).trim()) {
+      return String(u.document_number).trim();
+    }
+    if (u.phone && String(u.phone).trim()) {
+      return String(u.phone).trim();
+    }
+    return u.id ? `ID #${u.id}` : '—';
+  };
+
+  const getUserDisplayName = (u) => {
+    if (!u) return 'Usuario';
+    const computedName = `${u.first_name || ''} ${u.last_name || ''}`.trim();
+    if (computedName) return computedName;
+    if (u.full_name && u.full_name !== 'Desconocido' && u.full_name.trim()) {
+      return u.full_name.trim();
+    }
+    const access = getLoginAccessIdentifier(u);
+    if (access && !access.startsWith('ID #') && access !== '—') {
+      return access;
+    }
+    return u.id ? `Usuario #${u.id}` : 'Usuario';
+  };
+
+  const handleOpenResetPasswordModal = async (user) => {
+    setResetPasswordUser(user);
+    setResetNewPassword('');
+    setResetConfirmPassword('');
+    setShowResetNewPassword(false);
+    setShowResetConfirmPassword(false);
+    setResetForceChange(true);
+    setResetPasswordError('');
+    setIsManualResetting(false);
+    setIsResetPasswordModalOpen(true);
+
+    try {
+      const full = await usersService.getUserById(user.id);
+      if (full) {
+        setResetPasswordUser(prev => ({ ...(prev || {}), ...full }));
+      }
+    } catch (e) {
+      console.warn('Could not fetch full user detail for reset password modal:', e);
+    }
+  };
+
+  const handleCloseResetPasswordModal = () => {
+    if (isManualResetting) return;
+    setIsResetPasswordModalOpen(false);
+    setResetPasswordUser(null);
+    setResetNewPassword('');
+    setResetConfirmPassword('');
+    setResetPasswordError('');
+  };
+
+  const handleSubmitManualResetPassword = async (e) => {
+    if (e) e.preventDefault();
+    setResetPasswordError('');
+
+    if (!resetNewPassword) {
+      setResetPasswordError('Debe ingresar una nueva contraseña.');
+      return;
+    }
+
+    if (resetNewPassword !== resetConfirmPassword) {
+      setResetPasswordError('Las contraseñas no coinciden.');
+      return;
+    }
+
+    const policy = validatePasswordPolicy(resetNewPassword);
+    if (!policy.isValid) {
+      setResetPasswordError(policy.message);
+      return;
+    }
+
+    setIsManualResetting(true);
+    try {
+      await usersService.resetPassword(resetPasswordUser.id, {
+        mode: 'manual',
+        newPassword: resetNewPassword,
+        confirmPassword: resetConfirmPassword,
+        forceChangeOnNextLogin: resetForceChange
+      });
+
+      handleCloseResetPasswordModal();
+      showToastNotification(
+        'Contraseña Restablecida',
+        `La contraseña para "${resetPasswordUser.full_name || resetPasswordUser.email}" ha sido actualizada exitosamente.`,
+        'success'
+      );
+      await fetchUsers();
+      if (detailUser && detailUser.id === resetPasswordUser.id) {
+        fetchUserAudits(resetPasswordUser.id);
+      }
+    } catch (err) {
+      setResetPasswordError(err.message || 'Error al restablecer la contraseña.');
+    } finally {
+      setIsManualResetting(false);
+    }
+  };
 
   const fetchUsers = async () => {
     try {
@@ -590,10 +717,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
       setIsEditing360(false);
       setWizardData(null);
-
-      addAuditLog(updatedUser.id, 'Modificación de Usuario', 'users', 'Perfil anterior', 'Perfil actualizado', 'Cambios guardados por administrador desde Editar Usuario');
-      addActivityLog(updatedUser.id, 'Cuenta Actualizada', 'Información del perfil de usuario modificada correctamente.');
-
       setToastNotification({
         type: 'success',
         title: 'Cambios guardados',
@@ -756,21 +879,23 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
   const filteredJobTitles = useMemo(() => {
     const query = (wizardData?.job_title || '').toLowerCase();
-    if (!query) return PREDEFINED_JOB_TITLES;
-    return PREDEFINED_JOB_TITLES.filter(title => title.toLowerCase().includes(query));
-  }, [wizardData?.job_title]);
+    const cargoNames = (cargos || []).map(c => c.nombre || c.name || '').filter(Boolean);
+    if (!query) return cargoNames;
+    return cargoNames.filter(title => title.toLowerCase().includes(query));
+  }, [wizardData?.job_title, cargos]);
 
   const filteredUserTypes = useMemo(() => {
     const query = (wizardData?.user_type || '').toLowerCase();
     if (!query) return userTypes;
-    return userTypes.filter(type => type.name.toLowerCase().includes(query));
+    return (userTypes || []).filter(type => (type.nombre || type.name || '').toLowerCase().includes(query));
   }, [wizardData?.user_type, userTypes]);
 
   const filteredDepartments = useMemo(() => {
     const query = (wizardData?.department || '').toLowerCase();
-    if (!query) return PREDEFINED_DEPARTMENTS;
-    return PREDEFINED_DEPARTMENTS.filter(dept => dept.toLowerCase().includes(query));
-  }, [wizardData?.department]);
+    const deptNames = (departments || []).map(d => d.nombre || d.name || '').filter(Boolean);
+    if (!query) return deptNames;
+    return deptNames.filter(dept => dept.toLowerCase().includes(query));
+  }, [wizardData?.department, departments]);
 
   const handleViewDetail = async (item, tab = 'resumen') => {
     const targetTab = tab === 'activacion' ? 'resumen' : tab;
@@ -931,43 +1056,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
   const syncData = (newData) => {
     setData(newData);
-  };
-
-  const syncAudits = (newAudits) => {
-    setAudits(newAudits);
-    if (typeof window !== 'undefined') window.auditData = newAudits;
-  };
-
-  const addAuditLog = (userId, action, entity, before, after, reason) => {
-    const newLog = {
-      id: `AUD-NEW-${Date.now()}`,
-      user_id: userId,
-      action,
-      entity,
-      before_value: before,
-      after_value: after,
-      performed_by: 'Admin',
-      performed_at: new Date().toISOString(),
-      reason: reason || 'Acción administrativa ordinaria',
-      ip_address: '186.6.14.99',
-      result: 'Exitoso'
-    };
-    const updated = [newLog, ...audits];
-    syncAudits(updated);
-  };
-
-  const addActivityLog = (userId, event, desc) => {
-    const newAct = {
-      id: `ACT-NEW-${Date.now()}`,
-      user_id: userId,
-      event,
-      desc,
-      timestamp: new Date().toISOString(),
-      ip: '186.6.14.99'
-    };
-    const updated = [newAct, ...activities];
-    setActivities(updated);
-    if (typeof window !== 'undefined') window.activitiesData = updated;
   };
 
   // Filters matching logic
@@ -1204,8 +1292,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     const updated = data.map(u => {
       if (selectedIds.includes(u.id)) {
         const newStatus = u.status === 'Activo' ? 'Inactivo' : 'Activo';
-        addAuditLog(u.id, 'Cambio de Estado Masivo', 'users', `Estado: ${u.status}`, `Estado: ${newStatus}`, 'Rotación de estado masiva');
-        addActivityLog(u.id, 'Estado Modificado (Masivo)', `Estado cambiado a ${newStatus} por lote.`);
         return { ...u, status: newStatus, updatedAt: timestamp };
       }
       return u;
@@ -1324,7 +1410,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       const rId = sourceUser.role_id || sourceUser.rol_principal_id || sourceUser.rol_id || matchedRoleObj?.id || (roles && roles[0] ? roles[0].id : 1);
       const rName = sourceUser.role_name || sourceUser.role || sourceUser.rol || matchedRoleObj?.name || matchedRoleObj?.nombre || 'Administrador General';
 
-      const compId = sourceUser.companyId || sourceUser.empresa_id || (empresas && empresas.length > 0 ? empresas[0].id : 1);
+      const compId = sourceUser.companyId || sourceUser.empresa_id || (companies && companies.length > 0 ? (companies[0].id || companies[0].empresa_id) : 1);
       const userTypeId = sourceUser.tipo_usuario_id || (userTypes && userTypes.length > 0 ? userTypes[0].id : 1);
 
       return {
@@ -1395,7 +1481,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     }
     if (!firstName) firstName = 'Usuario';
 
-    const companyId = wizardData.companyId || wizardData.empresa_id || (empresas && empresas[0] ? empresas[0].id : 1);
+    const companyId = wizardData.companyId || wizardData.empresa_id || (companies && companies[0] ? (companies[0].id || companies[0].empresa_id) : 1);
     const roleName = wizardData.role || wizardData.role_name || 'Administrador General';
     const roleId = wizardData.rol_id || wizardData.role_id || (roles.find(r => (r.name || r.nombre) === roleName)?.id) || 1;
 
@@ -1446,8 +1532,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       if (activeTab360 === 'auditoria') {
         fetchUserAudits(finalUser.id);
       }
-      addAuditLog(finalUser.id, 'Edición de Cuenta', 'user_account', 'Datos Anteriores', 'Datos Actualizados', 'Modificación de perfil mediante formulario inline.');
-      addActivityLog(finalUser.id, 'Perfil Actualizado', 'Se guardaron cambios al perfil y parámetros de seguridad del usuario.');
       setIsEditing360(false);
       setWizardData(null);
       setEdit360Error('');
@@ -1782,8 +1866,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         setIsSaving(false);
         fetchUsers();
         handleCancel();
-        addAuditLog(res.usuario_id || cleanUser.id, 'Creación de Usuario', 'users', '—', `Cuenta creada con rol ${cleanUser.role || 'Asignado'}.`, `Creación de cuenta en IAM`);
-        addActivityLog(res.usuario_id || cleanUser.id, 'Cuenta Creada', `Usuario creado por administrador.`);
         setSuccessWizardMessage(res.message || 'El usuario ha sido creado correctamente en la base de datos.');
         setShowSuccessWizardModal(true);
         showToast(res.emailSent ? 'Usuario creado y correo enviado con éxito.' : 'Usuario creado con éxito.');
@@ -1810,10 +1892,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         if (originalUser.status !== cleanUser.status) changeDesc.push(`Estado: ${originalUser.status} -> ${cleanUser.status}`);
         
         const desc = changeDesc.length > 0 ? 'Modificaciones: ' + changeDesc.join(', ') : 'Perfil editado';
-
-        addAuditLog(cleanUser.id, 'Modificación de Usuario', 'users', JSON.stringify(originalUser), JSON.stringify(cleanUser), 'Actualización de perfil');
-        addActivityLog(cleanUser.id, 'Cuenta Actualizada', desc);
-
         setSuccessWizardMessage('Los cambios en el perfil del usuario han sido guardados correctamente en la base de datos.');
         setShowSuccessWizardModal(true);
         showToast('Usuario actualizado con éxito.');
@@ -1859,9 +1937,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
         updatedUsers = data.map(u => u.id === userId ? { ...u, status: afterStatus, estado: afterEstado, updatedAt: timestamp } : u);
         syncData(updatedUsers);
-
-        addAuditLog(userId, 'Cambio de Estado', 'users', `Estado: ${beforeStatus}`, `Estado: ${afterEstado}`, reasonText);
-        addActivityLog(userId, 'Estado Modificado', `Estado cambiado de ${beforeStatus} a ${afterEstado}. Motivo: ${reasonText}`);
         showToast(`Estado de usuario cambiado a ${afterEstado}.`);
       } 
     
@@ -1873,9 +1948,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
       updatedUsers = data.map(u => u.id === userId ? { ...u, role: afterRole, updatedAt: timestamp } : u);
       syncData(updatedUsers);
-
-      addAuditLog(userId, 'Cambio de Rol', 'users', `Rol: ${beforeRole}`, `Rol: ${afterRole}`, reasonText);
-      addActivityLog(userId, 'Rol Modificado', `Rol cambiado de ${beforeRole} a ${afterRole}. Motivo: ${reasonText}`);
       showToast(`Rol principal cambiado a ${afterRole}.`);
     }
 
@@ -1895,9 +1967,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         updatedAt: timestamp 
       } : u);
       syncData(updatedUsers);
-
-      addAuditLog(userId, 'Cambio de Alcance', 'user_operational_scope', `Alcance: ${beforeScope}`, `Alcance: ${afterScope}`, reasonText);
-      addActivityLog(userId, 'Alcance Modificado', `Alcance modificado de ${beforeScope} a ${afterScope}. Motivo: ${reasonText}`);
       showToast(`Alcance operativo actualizado con éxito.`);
     }
 
@@ -1930,8 +1999,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         const tempPass = generateRandomPassword(isDocAccess);
         setTempPassword(tempPass);
         setShowPassModal(true);
-        addAuditLog(user.id, 'Restablecer Contraseña', 'user_access', 'must_change_password: false', 'must_change_password: true', 'Restablecimiento forzado de contraseña por administrador');
-        addActivityLog(user.id, 'Contraseña Restablecida', 'Administrador forzó la renovación de credenciales.');
         showToast(isDocAccess ? 'PIN temporal restablecido.' : 'Contraseña temporal restablecida.');
       }
     });
@@ -1942,7 +2009,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
       navigator.clipboard.writeText(link);
       showToast('Enlace de activación copiado al portapapeles.');
-      addActivityLog(user.id, 'Enlace Copiado', 'Se copió el enlace de activación manualmente.');
     } else {
       showToast('Error al copiar al portapapeles.', 'error');
     }
@@ -1968,8 +2034,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       return u;
     });
     syncData(updated);
-    addAuditLog(user.id, 'Envío de Invitación', 'users', 'activation_status: INVITATION_PENDING', 'activation_status: INVITATION_SENT', 'Invitación enviada por el administrador.');
-    addActivityLog(user.id, 'Invitación Enviada', 'Correo electrónico de invitación despachado.');
     showToast('Invitación enviada con éxito.');
   };
 
@@ -1992,7 +2056,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       return u;
     });
     syncData(updated);
-    addActivityLog(user.id, 'Invitación Reenviada', 'Correo electrónico de invitación reenviado.');
     showToast('Invitación reenviada con éxito.');
   };
 
@@ -2028,8 +2091,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
           return u;
         });
         syncData(updated);
-        addAuditLog(user.id, 'Revocación de Invitación', 'users', 'Invitación Activa', 'Borrador / Inactivo', 'Invitación revocada por administrador.');
-        addActivityLog(user.id, 'Invitación Revocada', 'Invitación anulada y cuenta convertida a borrador.');
         showToast('Invitación revocada. El usuario ha sido inhabilitado.');
       }
     });
@@ -2055,8 +2116,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       return u;
     });
     syncData(updated);
-    addAuditLog(user.id, 'Regeneración de Invitación', 'users', 'activation_status: INVITATION_EXPIRED', 'activation_status: INVITATION_SENT', 'Invitación regenerada tras expirar.');
-    addActivityLog(user.id, 'Invitación Regenerada', 'Enlace de invitación renovado con expiración extendida.');
     showToast('Invitación regenerada y enviada.');
   };
 
@@ -2076,7 +2135,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       return u;
     });
     syncData(updated);
-    addActivityLog(user.id, 'Recordatorio Enviado', 'Recordatorio de inicio de sesión enviado.');
     showToast('Recordatorio de onboarding enviado.');
   };
 
@@ -2112,7 +2170,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         syncData(updated);
         setTempPassword(newCred);
         setShowPassModal(true);
-        addActivityLog(user.id, 'PIN Regenerado', 'Nuevo PIN generado manualmente por administrador.');
         showToast('PIN regenerado exitosamente.');
       }
     });
@@ -2134,7 +2191,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       return u;
     });
     syncData(updated);
-    addActivityLog(user.id, 'Instrucciones Entregadas', 'Se marcaron las credenciales temporales como entregadas físicamente.');
     showToast('Instrucciones marcadas como entregadas.');
   };
 
@@ -2175,8 +2231,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     try {
       await usersService.revokeAllUserSessions(userToRevokeAll, keepCurrentSessionOnRevokeAll);
       fetchUserSessions(userToRevokeAll);
-      addAuditLog(userToRevokeAll, 'Revocación de Sesiones', 'user_sessions', 'Sesiones Activas', 'Sesiones Expiradas', 'Revocación forzada por administrador.');
-      addActivityLog(userToRevokeAll, 'Sesiones Revocadas', 'Sesiones web/móvil terminadas forzosamente.');
       setShowRevokeAllConfirmModal(false);
       showToast('Sesiones revocadas con éxito.');
     } catch (error) {
@@ -2211,6 +2265,16 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
   };
 
   const [realUserActivity, setRealUserActivity] = useState([]);
+  const [activityTotalRecords, setActivityTotalRecords] = useState(0);
+  const [activityTotalPages, setActivityTotalPages] = useState(1);
+  const [activitySummaryStats, setActivitySummaryStats] = useState({
+    total_eventos: 0,
+    eventos_hoy: 0,
+    eventos_7dias: 0,
+    eventos_error: 0,
+    eventos_exito: 0
+  });
+  const [activityAvailableModules, setActivityAvailableModules] = useState([]);
   const [isLoadingActivity, setIsLoadingActivity] = useState(false);
   const [sortConfigActividad, setSortConfigActividad] = useState({ key: 'timestamp', direction: 'desc' });
   const [selectedActivityDetail, setSelectedActivityDetail] = useState(null);
@@ -2240,17 +2304,43 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     setSortConfigActividad({ key, direction });
   };
 
-  const fetchUserActivity = async (userId) => {
+  const fetchUserActivity = async (userId, customParams = {}) => {
+    if (!userId) return;
     setIsLoadingActivity(true);
     try {
       if (typeof usersService?.getUserActivity === 'function') {
-        const data = await usersService.getUserActivity(userId);
-        setRealUserActivity(data || []);
+        const queryParams = {
+          page: customParams.page !== undefined ? customParams.page : activityCurrentPage,
+          pageSize: customParams.pageSize !== undefined ? customParams.pageSize : activityPageSize,
+          fechaDesde: customParams.fechaDesde !== undefined ? customParams.fechaDesde : activityDateFrom,
+          fechaHasta: customParams.fechaHasta !== undefined ? customParams.fechaHasta : activityDateTo,
+          modulo: customParams.modulo !== undefined ? customParams.modulo : activityModuleFilter,
+          evento: customParams.evento !== undefined ? customParams.evento : activityActionTypeFilter,
+          resultado: customParams.resultado !== undefined ? customParams.resultado : activityResultFilter,
+          search: customParams.search !== undefined ? customParams.search : activitySearchText
+        };
+        const res = await usersService.getUserActivity(userId, queryParams);
+        if (res && Array.isArray(res.items)) {
+          setRealUserActivity(res.items);
+          setActivityTotalRecords(res.total || 0);
+          setActivityTotalPages(res.totalPages || 1);
+          if (res.summaryStats) setActivitySummaryStats(res.summaryStats);
+          if (Array.isArray(res.availableModules)) setActivityAvailableModules(res.availableModules);
+        } else if (Array.isArray(res)) {
+          setRealUserActivity(res);
+          setActivityTotalRecords(res.length);
+          setActivityTotalPages(1);
+        } else {
+          setRealUserActivity([]);
+          setActivityTotalRecords(0);
+          setActivityTotalPages(1);
+        }
       } else {
         setRealUserActivity([]);
       }
     } catch (error) {
       console.error('Error fetching activity:', error);
+      setRealUserActivity([]);
     } finally {
       setIsLoadingActivity(false);
     }
@@ -2348,7 +2438,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     if (activeTab360 === 'actividad' && detailUser?.id) {
       fetchUserActivity(detailUser.id);
     }
-  }, [activeTab360, detailUser?.id]);
+  }, [activeTab360, detailUser?.id, activityCurrentPage, activityPageSize, activityModuleFilter, activityResultFilter, activityActionTypeFilter, activityDateFrom, activityDateTo]);
 
   const [realUserAudits, setRealUserAudits] = useState([]);
   const [auditTotalRecords, setAuditTotalRecords] = useState(0);
@@ -2850,13 +2940,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
   // Auto-calculated variables for steps
 
-  // Territories Mock DB
-  const DOMINICAN_REGIONS = ['Metropolitana', 'Norte (Cibao)', 'Sur', 'Este'];
-  const DOMINICAN_PROVINCES = ['Santo Domingo', 'Distrito Nacional', 'Santiago', 'La Altagracia', 'San Cristóbal'];
-  const DOMINICAN_MUNICIPIOS = ['Santo Domingo Este', 'Santo Domingo Oeste', 'Santiago de los Caballeros', 'Higüey', 'San Cristóbal', 'Distrito Nacional'];
-  const DOMINICAN_DISTRITOS_MUNICIPALES = ['Hato Nuevo', 'San Luis', 'La Caleta', 'Pantoja', 'Hato Damas', 'Palmarejo-Villa Linda'];
-  const DOMINICAN_SECTORES = ['Piantini', 'Naco', 'Bella Vista', 'Gazcue', 'Los Mina', 'Gurabo', 'Pueblo Nuevo'];
-
   const renderDropdownItems = (item) => {
     const accessMethod = item.activation?.access_method || 'EMAIL';
     const actStatus = item.activation?.activation_status || 'DRAFT';
@@ -2870,10 +2953,17 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     items.push(
       <button 
         key="edit-profile"
-        className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5" 
+        className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5 cursor-pointer" 
         onClick={() => handleStartEdit360(item, 'resumen')}
       >
         <Edit2 size={13} className="text-[var(--text-muted)]" /> Editar perfil
+      </button>,
+      <button 
+        key="reset-password-manual"
+        className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5 cursor-pointer" 
+        onClick={() => handleOpenResetPasswordModal(item)}
+      >
+        <KeyRound size={13} className="text-primary" /> Restablecer contraseña
       </button>
     );
 
@@ -3179,7 +3269,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
     // Use "Estado no disponible" only when there is insufficient data to determine status
     if (!finalStatus) {
-      return <span className="px-2 py-0.5 rounded text-[10px] font-bold border border-slate-200 bg-slate-50 text-slate-500 dark:bg-slate-800 dark:text-slate-400">Estado no disponible</span>;
+      return <span className="px-2 py-0.5 rounded text-[10px] font-bold border border-slate-200 bg-slate-50 text-foreground-disabled dark:bg-surface-subtle dark:text-foreground-muted">Estado no disponible</span>;
     }
 
     const isEmail = method === 'EMAIL';
@@ -3188,7 +3278,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       switch (finalStatus) {
         case 'DRAFT':
         case 'INVITATION_PENDING':
-          return <span className="px-2 py-0.5 rounded text-[10px] font-bold border border-slate-200 bg-slate-50 text-slate-500 dark:bg-slate-800 dark:text-slate-400">Pendiente de envío</span>;
+          return <span className="px-2 py-0.5 rounded text-[10px] font-bold border border-slate-200 bg-slate-50 text-foreground-disabled dark:bg-surface-subtle dark:text-foreground-muted">Pendiente de envío</span>;
         case 'INVITATION_SENT':
           return <span className="px-2 py-0.5 rounded text-[10px] font-bold border border-blue-250 bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">Invitación enviada</span>;
         case 'INVITATION_OPENED':
@@ -3202,9 +3292,9 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         case 'INVITATION_BOUNCED':
           return <span className="px-2 py-0.5 rounded text-[10px] font-bold border border-rose-300 bg-rose-100 text-primary-fixed dark:bg-rose-700/10 dark:text-primary">Invitación rebotada</span>;
         case 'REVOKED':
-          return <span className="px-2 py-0.5 rounded text-[10px] font-bold border border-slate-300 bg-slate-100 text-slate-600 dark:bg-slate-700/10 dark:text-slate-400">Revocada</span>;
+          return <span className="px-2 py-0.5 rounded text-[10px] font-bold border border-slate-300 bg-slate-100 text-slate-600 dark:bg-slate-700/10 dark:text-foreground-muted">Revocada</span>;
         default:
-          return <span className="px-2 py-0.5 rounded text-[10px] font-bold border border-slate-200 bg-slate-50 text-slate-500 dark:bg-slate-800 dark:text-slate-400">Estado no disponible</span>;
+          return <span className="px-2 py-0.5 rounded text-[10px] font-bold border border-slate-200 bg-slate-50 text-foreground-disabled dark:bg-surface-subtle dark:text-foreground-muted">Estado no disponible</span>;
       }
     } else {
       switch (finalStatus) {
@@ -3219,9 +3309,9 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         case 'ACCESS_BLOCKED':
           return <span className="px-2 py-0.5 rounded text-[10px] font-bold border border-rose-350 bg-rose-50 text-primary-fixed dark:bg-rose-900/10 dark:text-primary">Acceso bloqueado</span>;
         case 'REVOKED':
-          return <span className="px-2 py-0.5 rounded text-[10px] font-bold border border-slate-300 bg-slate-100 text-slate-600 dark:bg-slate-700/10 dark:text-slate-400">Revocada</span>;
+          return <span className="px-2 py-0.5 rounded text-[10px] font-bold border border-slate-300 bg-slate-100 text-slate-600 dark:bg-slate-700/10 dark:text-foreground-muted">Revocada</span>;
         default:
-          return <span className="px-2 py-0.5 rounded text-[10px] font-bold border border-slate-200 bg-slate-50 text-slate-500 dark:bg-slate-800 dark:text-slate-400">Estado no disponible</span>;
+          return <span className="px-2 py-0.5 rounded text-[10px] font-bold border border-slate-200 bg-slate-50 text-foreground-disabled dark:bg-surface-subtle dark:text-foreground-muted">Estado no disponible</span>;
       }
     }
   };
@@ -3229,8 +3319,8 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
   function renderUserDetail() {
     if (isLoading && isSelfMode) {
       return (
-        <div className="p-12 text-center text-slate-400 font-mono">
-          <RotateCw className="w-8 h-8 animate-spin mx-auto mb-3 text-[#bfce7f]" />
+        <div className="p-12 text-center text-foreground-muted font-mono">
+          <RotateCw className="w-8 h-8 animate-spin mx-auto mb-3 text-primary" />
           <span>Cargando perfil...</span>
         </div>
       );
@@ -3238,14 +3328,14 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
     if (profileLoadError && isSelfMode) {
       return (
-        <div className="p-8 text-center bg-[#161a21] border border-rose-500/30 rounded-2xl my-8 font-mono shadow-xl max-w-xl mx-auto">
+        <div className="p-8 text-center bg-card border border-rose-500/30 rounded-2xl my-8 font-mono shadow-xl max-w-xl mx-auto">
           <AlertTriangle className="w-12 h-12 text-rose-400 mx-auto mb-4" />
-          <h3 className="text-lg font-bold text-white mb-2">Error de Carga</h3>
-          <p className="text-sm text-slate-300 mb-6">{profileLoadError}</p>
+          <h3 className="text-lg font-bold text-foreground mb-2">Error de Carga</h3>
+          <p className="text-sm text-foreground-secondary mb-6">{profileLoadError}</p>
           <button
             type="button"
             onClick={loadSelfProfile}
-            className="px-6 py-2.5 bg-[#bfce7f] text-[#2b3400] font-bold rounded-xl hover:bg-[#dbea98] transition-all shadow-lg cursor-pointer"
+            className="px-6 py-2.5 bg-primary text-primary-foreground font-bold rounded-xl hover:bg-primary/20 transition-all shadow-lg cursor-pointer"
           >
             Reintentar
           </button>
@@ -3268,32 +3358,32 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               {resetToast.type === 'error' ? <AlertTriangle size={18} className="shrink-0" /> : <CheckCircle2 size={18} className="shrink-0" />}
               <span className="font-bold">{resetToast.message}</span>
             </div>
-            <button onClick={() => setResetToast(null)} className="p-1 hover:opacity-80 cursor-pointer rounded-lg hover:bg-slate-800 transition-colors">
+            <button onClick={() => setResetToast(null)} className="p-1 hover:opacity-80 cursor-pointer rounded-lg hover:bg-surface-subtle transition-colors">
               <X size={14} />
             </button>
           </div>
         )}
 
         {/* 360 Header Banner */}
-        <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-6 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 font-mono">
+        <div className="bg-card border border-border rounded-2xl p-6 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 font-mono">
           
           <div className="flex items-center gap-4">
             {!isSelfMode && (
               <button 
                 type="button"
                 onClick={handleGoBack}
-                className="p-2 rounded-xl bg-[#0e1117] border border-[#2d3748] text-slate-400 hover:text-white hover:border-[#bfce7f] transition-all shadow-lg shrink-0 cursor-pointer"
+                className="p-2 rounded-xl bg-input border border-border text-foreground-muted hover:text-foreground hover:border-primary transition-all shadow-lg shrink-0 cursor-pointer"
                 title="Volver al listado"
               >
                 <ChevronLeft size={18} />
               </button>
             )}
-            <div className="w-12 h-12 rounded-xl bg-[#2d3748] text-[#bfce7f] border border-[#3b475a] flex items-center justify-center font-bold text-sm shrink-0 shadow-lg font-mono">
+            <div className="w-12 h-12 rounded-xl bg-surface-subtle text-primary border border-border flex items-center justify-center font-bold text-sm shrink-0 shadow-lg font-mono">
               {detailUser.full_name.split(' ').filter(Boolean).map(n => n[0]).join('').replace(/\./g, '').substring(0, 2).toUpperCase()}
             </div>
             <div>
               <div className="flex items-center gap-2.5 flex-wrap">
-                <h2 className="text-xl md:text-2xl font-black text-white font-mono">{detailUser.full_name}</h2>
+                <h2 className="text-xl md:text-2xl font-black text-foreground font-mono">{detailUser.full_name}</h2>
                 <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
                   (String(detailUser.status || detailUser.estado || '').toUpperCase() === 'ACTIVO' || String(detailUser.status || detailUser.estado || '').toUpperCase() === 'ACTIVE') 
                     ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' 
@@ -3301,8 +3391,8 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                 }`}>{detailUser.status || detailUser.estado}</span>
                 <span className="px-2.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/10 text-indigo-300 border border-indigo-500/30 uppercase tracking-wider">{detailUser.role}</span>
               </div>
-              <p className="text-xs text-slate-400 font-mono mt-1 flex items-center gap-2">
-                <span>{detailUser.login_identifiers?.find(id => id.is_primary)?.identifier_type === 'DOCUMENT' ? 'Documento' : 'Correo'}: <strong className="text-[#bfce7f]">{detailUser.login_identifiers?.find(id => id.is_primary)?.identifier_value || detailUser.email}</strong></span> • <span>MFA: <strong className="text-white">{detailUser.mfaEnabled ? 'Activo' : 'Inactivo'}</strong></span>
+              <p className="text-xs text-foreground-muted font-mono mt-1 flex items-center gap-2">
+                <span>{detailUser.login_identifiers?.find(id => id.is_primary)?.identifier_type === 'DOCUMENT' ? 'Documento' : 'Correo'}: <strong className="text-primary">{detailUser.login_identifiers?.find(id => id.is_primary)?.identifier_value || detailUser.email}</strong></span> • <span>MFA: <strong className="text-foreground">{detailUser.mfaEnabled ? 'Activo' : 'Inactivo'}</strong></span>
               </p>
             </div>
           </div>
@@ -3316,14 +3406,14 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                     setIsEditing360(false);
                     setWizardData(null);
                   }}
-                  className="px-4 py-2 rounded-xl border border-[#2d3748] bg-[#0e1117] hover:border-slate-500 text-slate-300 text-xs font-bold transition-all cursor-pointer"
+                  className="px-4 py-2 rounded-xl border border-border bg-input hover:border-slate-500 text-foreground-secondary text-xs font-bold transition-all cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button 
                   type="button"
                   onClick={() => handleTriggerSaveEdit360()}
-                  className="px-5 py-2 rounded-xl border border-[#bfce7f] bg-[#bfce7f] hover:bg-[#a9ba6b] text-[#1d1f18] text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-lg"
+                  className="px-5 py-2 rounded-xl border border-primary bg-primary hover:bg-primary text-primary-foreground text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-lg"
                 >
                   <Save size={14} /> Guardar
                 </button>
@@ -3335,7 +3425,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                   onClick={handleStartResetPassword}
                   disabled={isResettingPassword}
                   title="Generar y enviar una contraseña temporal"
-                  className="px-4 py-2 rounded-xl border border-[#bfce7f]/40 hover:bg-[#bfce7f]/20 text-xs font-bold transition-all text-[#bfce7f] bg-[#bfce7f]/10 flex items-center gap-2 cursor-pointer shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 rounded-xl border border-primary/40 hover:bg-primary/20 text-xs font-bold transition-all text-primary bg-primary/10 flex items-center gap-2 cursor-pointer shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <RotateCw size={13} className={isResettingPassword ? "animate-spin" : ""} />
                   <span>{isResettingPassword ? "Reseteando..." : "Resetear Password"}</span>
@@ -3345,20 +3435,20 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                   onClick={() => {
                     handleStartEdit360(detailUser, 'resumen');
                   }}
-                  className="px-4 py-2 rounded-xl border border-[#bfce7f]/40 hover:bg-[#bfce7f]/20 text-xs font-bold transition-all text-[#bfce7f] bg-[#bfce7f]/10 flex items-center gap-2 cursor-pointer shadow-lg"
+                  className="px-4 py-2 rounded-xl border border-primary/40 hover:bg-primary/20 text-xs font-bold transition-all text-primary bg-primary/10 flex items-center gap-2 cursor-pointer shadow-lg"
                 >
                   <Edit2 size={13} /> Editar
                 </button>
               </>
             )}
-            <button onClick={handleGoBack} className="p-2 text-slate-400 hover:text-white hover:bg-[#2d3748] rounded-xl transition-all cursor-pointer" title="Cerrar detalle">
+            <button onClick={handleGoBack} className="p-2 text-foreground-muted hover:text-foreground hover:bg-surface-subtle rounded-xl transition-all cursor-pointer" title="Cerrar detalle">
               <X size={20} />
             </button>
           </div>
         </div>
 
         {/* Tabs Selector */}
-        <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-2 flex items-center gap-2 font-mono text-xs overflow-x-auto scrollbar-none shadow-xl select-none">
+        <div className="bg-card border border-border rounded-2xl p-2 flex items-center gap-2 font-mono text-xs overflow-x-auto scrollbar-none shadow-xl select-none">
           {[
             { id: 'resumen', label: 'Resumen' },
             { id: 'permisos', label: 'Permisos' },
@@ -3374,8 +3464,8 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               }}
               className={`px-4 py-2.5 rounded-xl font-bold transition-all cursor-pointer text-xs ${
                 activeTab360 === t.id 
-                  ? 'bg-[#bfce7f]/10 border border-[#bfce7f]/40 text-[#bfce7f]' 
-                  : 'bg-transparent border border-transparent text-slate-400 hover:text-white hover:bg-[#0e1117]'
+                  ? 'bg-primary/10 border border-primary/40 text-primary' 
+                  : 'bg-transparent border border-transparent text-foreground-muted hover:text-foreground hover:bg-input'
               }`}
             >
               {t.label}
@@ -3393,44 +3483,44 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                   {/* Row 1 */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Información Personal Edit */}
-                    <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
-                      <h4 className="font-bold text-white text-xs border-b border-[#2d3748] pb-3 flex items-center gap-2 uppercase tracking-wider"><Users size={16} className="text-[#bfce7f]" /> Información Personal</h4>
+                    <div className="bg-card border border-border rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
+                      <h4 className="font-bold text-foreground text-xs border-b border-border pb-3 flex items-center gap-2 uppercase tracking-wider"><Users size={16} className="text-primary" /> Información Personal</h4>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="col-span-2 flex items-center gap-2 mb-1">
-                          <label className="font-bold text-slate-400 text-xs">Usuario ID:</label>
-                          <span className="font-mono font-bold text-white text-xs">{detailUser.id || detailUser.usuario_id || '—'}</span>
+                          <label className="font-bold text-foreground-muted text-xs">Usuario ID:</label>
+                          <span className="font-mono font-bold text-foreground text-xs">{detailUser.id || detailUser.usuario_id || '—'}</span>
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-y-3 gap-x-3 text-xs items-center">
-                        <span className="text-slate-400 font-bold">Nombre: <span className="text-red-400">*</span></span>
+                        <span className="text-foreground-muted font-bold">Nombre: <span className="text-red-400">*</span></span>
                         <div className="flex flex-col w-full">
                           <input
                             type="text"
                             value={wizardData.first_name || ''}
                             onChange={(e) => handleChange('first_name', e.target.value)}
-                            className={`px-3 py-2 text-xs rounded-xl border bg-[#0e1117] text-white font-mono font-bold focus:outline-none w-full ${formErrors360.first_name ? 'border-red-500 focus:border-red-500' : 'border-[#2d3748] focus:border-[#bfce7f]'}`}
+                            className={`px-3 py-2 text-xs rounded-xl border bg-input text-foreground font-mono font-bold focus:outline-none w-full ${formErrors360.first_name ? 'border-red-500 focus:border-red-500' : 'border-border focus:border-primary'}`}
                             placeholder="Nombre"
                           />
                           {formErrors360.first_name && <span className="text-red-400 text-[10px] mt-0.5 font-bold">{formErrors360.first_name}</span>}
                         </div>
-                        <span className="text-slate-400 font-bold">Apellido: <span className="text-red-400">*</span></span>
+                        <span className="text-foreground-muted font-bold">Apellido: <span className="text-red-400">*</span></span>
                         <div className="flex flex-col w-full">
                           <input
                             type="text"
                             value={wizardData.last_name || ''}
                             onChange={(e) => handleChange('last_name', e.target.value)}
-                            className={`px-3 py-2 text-xs rounded-xl border bg-[#0e1117] text-white font-mono font-bold focus:outline-none w-full ${formErrors360.last_name ? 'border-red-500 focus:border-red-500' : 'border-[#2d3748] focus:border-[#bfce7f]'}`}
+                            className={`px-3 py-2 text-xs rounded-xl border bg-input text-foreground font-mono font-bold focus:outline-none w-full ${formErrors360.last_name ? 'border-red-500 focus:border-red-500' : 'border-border focus:border-primary'}`}
                             placeholder="Apellido"
                           />
                           {formErrors360.last_name && <span className="text-red-400 text-[10px] mt-0.5 font-bold">{formErrors360.last_name}</span>}
                         </div>
-                        <span className="text-slate-400 font-bold">Documento:</span>
+                        <span className="text-foreground-muted font-bold">Documento:</span>
                         <div className="flex flex-col w-full">
                           <div className="flex gap-2 w-full">
                             <select
                               value={wizardData.document_type || 'Cédula'}
                               onChange={(e) => handleChange('document_type', e.target.value)}
-                              className="px-2 py-2 text-xs rounded-xl border border-[#2d3748] bg-[#0e1117] text-white font-mono font-bold focus:outline-none focus:border-[#bfce7f]"
+                              className="px-2 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary"
                             >
                               <option value="Cédula">Cédula</option>
                               <option value="DNI">DNI</option>
@@ -3444,24 +3534,24 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                                 handleChange('document_number', e.target.value);
                                 if (wizardData.primary_access_type === 'DOCUMENT') handleChange('identificador_principal', e.target.value);
                               }}
-                              className={`px-3 py-2 text-xs rounded-xl border bg-[#0e1117] text-white font-mono font-bold focus:outline-none flex-1 min-w-0 ${formErrors360.document_number ? 'border-red-500 focus:border-red-500' : 'border-[#2d3748] focus:border-[#bfce7f]'}`}
+                              className={`px-3 py-2 text-xs rounded-xl border bg-input text-foreground font-mono font-bold focus:outline-none flex-1 min-w-0 ${formErrors360.document_number ? 'border-red-500 focus:border-red-500' : 'border-border focus:border-primary'}`}
                               placeholder="Número"
                             />
                           </div>
                           {formErrors360.document_number && <span className="text-red-400 text-[10px] mt-0.5 font-bold">{formErrors360.document_number}</span>}
                         </div>
-                        <span className="text-slate-400 font-bold">Correo Electrónico:</span>
+                        <span className="text-foreground-muted font-bold">Correo Electrónico:</span>
                         <div className="flex flex-col w-full">
                           <input
                             type="email"
                             value={wizardData.email || ''}
                             onChange={(e) => handleChange('email', e.target.value)}
-                            className={`px-3 py-2 text-xs rounded-xl border bg-[#0e1117] text-white font-mono font-bold focus:outline-none w-full ${formErrors360.email ? 'border-red-500 focus:border-red-500' : 'border-[#2d3748] focus:border-[#bfce7f]'}`}
+                            className={`px-3 py-2 text-xs rounded-xl border bg-input text-foreground font-mono font-bold focus:outline-none w-full ${formErrors360.email ? 'border-red-500 focus:border-red-500' : 'border-border focus:border-primary'}`}
                             placeholder="Correo electrónico"
                           />
                           {formErrors360.email && <span className="text-red-400 text-[10px] mt-0.5 font-bold">{formErrors360.email}</span>}
                         </div>
-                        <span className="text-slate-400 font-bold">Departamento:</span>
+                        <span className="text-foreground-muted font-bold">Departamento:</span>
                         <select
                           value={wizardData.department_id || ''}
                           onChange={(e) => {
@@ -3470,7 +3560,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                             handleChange('department_id', deptId);
                             handleChange('department', deptObj ? deptObj.name : '');
                           }}
-                          className="px-3 py-2 text-xs rounded-xl border border-[#2d3748] bg-[#0e1117] text-white font-mono font-bold focus:outline-none focus:border-[#bfce7f] w-full"
+                          className="px-3 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary w-full"
                         >
                           <option value="">Seleccione Departamento</option>
                           {departments
@@ -3480,7 +3570,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                             ))
                           }
                         </select>
-                        <span className="text-slate-400 font-bold">Área:</span>
+                        <span className="text-foreground-muted font-bold">Área:</span>
                         <select
                           value={wizardData.area_id || ''}
                           onChange={(e) => {
@@ -3489,7 +3579,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                             handleChange('area_id', aId);
                             handleChange('area', aObj ? aObj.name : '');
                           }}
-                          className="px-3 py-2 text-xs rounded-xl border border-[#2d3748] bg-[#0e1117] text-white font-mono font-bold focus:outline-none focus:border-[#bfce7f] w-full"
+                          className="px-3 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary w-full"
                         >
                           <option value="">Seleccione Área</option>
                           {areas
@@ -3499,9 +3589,9 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                             ))
                           }
                         </select>
-                        <span className="text-slate-400 font-bold">Cargo / Posición:</span>
+                        <span className="text-foreground-muted font-bold">Cargo / Posición:</span>
                         <select value={wizardData.cargo_id || ''} onChange={(e) => { const cId = e.target.value; handleChange('cargo_id', cId); const cargoObj = cargos.find(c => c.id == cId); handleChange('job_title', cargoObj ? cargoObj.name : ''); }}
-                          className="px-3 py-2 text-xs rounded-xl border border-[#2d3748] bg-[#0e1117] text-white font-mono font-bold focus:outline-none focus:border-[#bfce7f] w-full"
+                          className="px-3 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary w-full"
                         >
                           <option value="">Seleccione Cargo</option>
                           {cargos.map(c => ( <option key={c.id} value={c.id}>{c.name}</option> ))}
@@ -3510,51 +3600,51 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                     </div>
  
                     {/* Parámetros de Acceso Edit */}
-                    <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
-                      <h4 className="font-bold text-white text-xs border-b border-[#2d3748] pb-3 flex items-center gap-2 uppercase tracking-wider"><Key size={16} className="text-[#bfce7f]" /> Parámetros de Acceso</h4>
+                    <div className="bg-card border border-border rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
+                      <h4 className="font-bold text-foreground text-xs border-b border-border pb-3 flex items-center gap-2 uppercase tracking-wider"><Key size={16} className="text-primary" /> Parámetros de Acceso</h4>
                       <div className="grid grid-cols-2 gap-y-3 gap-x-3 text-xs items-center">
-                        <span className="text-slate-400 font-bold">Método de acceso principal:</span>
+                        <span className="text-foreground-muted font-bold">Método de acceso principal:</span>
                         <select
                           value={wizardData.primary_access_type || 'EMAIL'}
                           onChange={(e) => handleChange('primary_access_type', e.target.value)}
-                          className="px-3 py-2 text-xs rounded-xl border border-[#2d3748] bg-[#0e1117] text-white font-mono font-bold focus:outline-none focus:border-[#bfce7f] w-full"
+                          className="px-3 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary w-full"
                         >
                           <option value="EMAIL">Correo electrónico</option>
                           <option value="DOCUMENT">Documento</option>
                         </select>
                         
-                        <span className="text-slate-400 font-bold">Identificador de acceso:</span>
+                        <span className="text-foreground-muted font-bold">Identificador de acceso:</span>
                         {wizardData.primary_access_type === 'EMAIL' ? (
                           <div className="flex flex-col w-full">
-                            <span className="font-mono font-bold text-slate-300 bg-[#0e1117] px-3 py-2 rounded-xl border border-[#2d3748] truncate opacity-70 cursor-not-allowed text-xs" title={wizardData.email}>
+                            <span className="font-mono font-bold text-foreground-secondary bg-input px-3 py-2 rounded-xl border border-border truncate opacity-70 cursor-not-allowed text-xs" title={wizardData.email}>
                               {wizardData.email || 'Se utilizará el correo indicado arriba'}
                             </span>
                           </div>
                         ) : (
                           <div className="flex flex-col w-full">
-                            <span className="font-mono font-bold text-slate-300 bg-[#0e1117] px-3 py-2 rounded-xl border border-[#2d3748] truncate opacity-70 cursor-not-allowed text-xs" title={wizardData.document_number}>
+                            <span className="font-mono font-bold text-foreground-secondary bg-input px-3 py-2 rounded-xl border border-border truncate opacity-70 cursor-not-allowed text-xs" title={wizardData.document_number}>
                               {wizardData.document_number || 'Se utilizará el documento indicado arriba'}
                             </span>
                           </div>
                         )}
                         
-                        <span className="text-slate-400 font-bold">Canales Permitidos:</span>
+                        <span className="text-foreground-muted font-bold">Canales Permitidos:</span>
                         <div className="flex gap-4 items-center font-mono">
-                          <label className="flex items-center gap-2 font-bold cursor-pointer select-none text-white">
+                          <label className="flex items-center gap-2 font-bold cursor-pointer select-none text-foreground">
                             <input
                               type="checkbox"
                               checked={!!wizardData.web_access_enabled}
                               onChange={(e) => handleChange('web_access_enabled', e.target.checked)}
-                              className="rounded border-[#2d3748] bg-[#0e1117] text-[#bfce7f] focus:ring-[#bfce7f] cursor-pointer w-4 h-4"
+                              className="rounded border-border bg-input text-primary focus:ring-primary cursor-pointer w-4 h-4"
                             />
                             Web
                           </label>
-                          <label className="flex items-center gap-2 font-bold cursor-pointer select-none text-white">
+                          <label className="flex items-center gap-2 font-bold cursor-pointer select-none text-foreground">
                             <input
                               type="checkbox"
                               checked={!!wizardData.mobile_access_enabled}
                               onChange={(e) => handleChange('mobile_access_enabled', e.target.checked)}
-                              className="rounded border-[#2d3748] bg-[#0e1117] text-[#bfce7f] focus:ring-[#bfce7f] cursor-pointer w-4 h-4"
+                              className="rounded border-border bg-input text-primary focus:ring-primary cursor-pointer w-4 h-4"
                             />
                             Móvil
                           </label>
@@ -3566,15 +3656,15 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                   {/* Row 2 */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Relación y Asignación Edit */}
-                    <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
-                      <h4 className="font-bold text-white text-xs border-b border-[#2d3748] pb-3 flex items-center gap-2 uppercase tracking-wider"><Building2 size={16} className="text-[#bfce7f]" /> Relación y Asignación</h4>
+                    <div className="bg-card border border-border rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
+                      <h4 className="font-bold text-foreground text-xs border-b border-border pb-3 flex items-center gap-2 uppercase tracking-wider"><Building2 size={16} className="text-primary" /> Relación y Asignación</h4>
                       <div className="grid grid-cols-2 gap-y-3 gap-x-3 text-xs items-center">
-                        <span className="text-slate-400 font-bold">Empresa: <span className="text-red-400">*</span></span>
+                        <span className="text-foreground-muted font-bold">Empresa: <span className="text-red-400">*</span></span>
                         <div className="flex flex-col w-full">
                           <select
                             value={wizardData.companyId || ''}
                             onChange={(e) => handleChange('companyId', e.target.value)}
-                            className={`px-3 py-2 text-xs rounded-xl border bg-[#0e1117] text-white font-mono font-bold focus:outline-none w-full ${formErrors360.companyId ? 'border-red-500 focus:border-red-500' : 'border-[#2d3748] focus:border-[#bfce7f]'}`}
+                            className={`px-3 py-2 text-xs rounded-xl border bg-input text-foreground font-mono font-bold focus:outline-none w-full ${formErrors360.companyId ? 'border-red-500 focus:border-red-500' : 'border-border focus:border-primary'}`}
                           >
                             <option value="">Seleccione Empresa</option>
                             {companies.map(c => (
@@ -3583,7 +3673,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                           </select>
                           {formErrors360.companyId && <span className="text-red-400 text-[10px] mt-0.5 font-bold">{formErrors360.companyId}</span>}
                         </div>
-                        <span className="text-slate-400 font-bold">Tipo de Usuario:</span>
+                        <span className="text-foreground-muted font-bold">Tipo de Usuario:</span>
                         <select
                           value={wizardData.tipo_usuario_id || ''}
                           onChange={(e) => {
@@ -3592,27 +3682,27 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                             handleChange('tipo_usuario_id', valId);
                             if (obj) handleChange('user_type', obj.name);
                           }}
-                          className="px-3 py-2 text-xs rounded-xl border border-[#2d3748] bg-[#0e1117] text-white font-mono font-bold focus:outline-none focus:border-[#bfce7f] w-full"
+                          className="px-3 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary w-full"
                         >
                           <option value="">Seleccione Tipo</option>
                           {userTypes.map(t => (
                             <option key={t.id} value={t.id}>{t.name}</option>
                           ))}
                         </select>
-                        <span className="text-slate-400 font-bold">Rol Asignado: <span className="text-red-400">*</span></span>
+                        <span className="text-foreground-muted font-bold">Rol Asignado: <span className="text-red-400">*</span></span>
                         <div className="flex flex-col w-full">
                           <select value={wizardData.rol_id || ''} onChange={(e) => { const rId = e.target.value; handleChange('rol_id', rId); const rolObj = roles.find(r => r.id == rId); handleChange('role', rolObj ? rolObj.name : ''); }}
-                            className={`px-3 py-2 text-xs rounded-xl border bg-[#0e1117] text-white font-mono font-bold focus:outline-none w-full ${formErrors360.rol_id ? 'border-red-500 focus:border-red-500' : 'border-[#2d3748] focus:border-[#bfce7f]'}`}
+                            className={`px-3 py-2 text-xs rounded-xl border bg-input text-foreground font-mono font-bold focus:outline-none w-full ${formErrors360.rol_id ? 'border-red-500 focus:border-red-500' : 'border-border focus:border-primary'}`}
                           >
                             <option value="">Seleccione Rol</option>
                             {roles.map(r => ( <option key={r.id} value={r.id}>{r.name}</option> ))}
                           </select>
                           {formErrors360.rol_id && <span className="text-red-400 text-[10px] mt-0.5 font-bold">{formErrors360.rol_id}</span>}
                         </div>
-                        <span className="text-slate-400 font-bold">Roles Adicionales:</span>
-                        <div className="flex flex-wrap gap-2 max-h-28 overflow-y-auto border border-[#2d3748] p-2.5 rounded-xl bg-[#0e1117] custom-scrollbar">
+                        <span className="text-foreground-muted font-bold">Roles Adicionales:</span>
+                        <div className="flex flex-wrap gap-2 max-h-28 overflow-y-auto border border-border p-2.5 rounded-xl bg-input custom-scrollbar">
 {roles.filter(r => r.id != wizardData.rol_id).map(r => (
-  <label key={r.id} className="flex items-center gap-2 font-bold cursor-pointer select-none text-xs text-white">
+  <label key={r.id} className="flex items-center gap-2 font-bold cursor-pointer select-none text-xs text-foreground">
     <input
       type="checkbox"
       checked={(wizardData.roles_additional || []).includes(r.id)}
@@ -3622,7 +3712,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
           : (wizardData.roles_additional || []).filter(roleId => roleId !== r.id);
         handleChange('roles_additional', newRoles);
       }}
-      className="rounded border-[#2d3748] bg-[#0e1117] text-[#bfce7f] focus:ring-[#bfce7f] cursor-pointer w-4 h-4"
+      className="rounded border-border bg-input text-primary focus:ring-primary cursor-pointer w-4 h-4"
     />
     {r.name}
   </label>
@@ -3632,17 +3722,17 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                     </div>
  
                     {/* Seguridad e Inicios Edit */}
-                    <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
-                      <h4 className="font-bold text-white text-xs border-b border-[#2d3748] pb-3 flex items-center gap-2 uppercase tracking-wider"><ShieldCheck size={16} className="text-[#bfce7f]" /> Seguridad e Inicios</h4>
+                    <div className="bg-card border border-border rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
+                      <h4 className="font-bold text-foreground text-xs border-b border-border pb-3 flex items-center gap-2 uppercase tracking-wider"><ShieldCheck size={16} className="text-primary" /> Seguridad e Inicios</h4>
                       <div className="grid grid-cols-2 gap-y-3 gap-x-3 text-xs items-center">
-                        <span className="text-slate-400 font-bold">Autenticación MFA:</span>
+                        <span className="text-foreground-muted font-bold">Autenticación MFA:</span>
                         <div className="flex gap-2 items-center">
-                          <label className="flex items-center gap-2 font-bold cursor-pointer select-none text-white">
+                          <label className="flex items-center gap-2 font-bold cursor-pointer select-none text-foreground">
                             <input
                               type="checkbox"
                               checked={!!wizardData.mfaEnabled}
                               onChange={(e) => handleChange('mfaEnabled', e.target.checked)}
-                              className="rounded border-[#2d3748] bg-[#0e1117] text-[#bfce7f] focus:ring-[#bfce7f] cursor-pointer w-4 h-4"
+                              className="rounded border-border bg-input text-primary focus:ring-primary cursor-pointer w-4 h-4"
                             />
                             Activo
                           </label>
@@ -3650,7 +3740,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                             <select
                               value={wizardData.mfa_method || 'App autenticadora'}
                               onChange={(e) => handleChange('mfa_method', e.target.value)}
-                              className="px-2 py-1 text-xs rounded-xl border border-[#2d3748] bg-[#0e1117] text-white font-mono font-bold focus:outline-none focus:border-[#bfce7f]"
+                              className="px-2 py-1 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary"
                             >
                               <option value="App autenticadora">App autenticadora</option>
                               <option value="SMS">SMS (Mensaje)</option>
@@ -3658,38 +3748,38 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                             </select>
                           )}
                         </div>
-                        <span className="text-slate-400 font-bold">Expiración de acceso:</span>
+                        <span className="text-foreground-muted font-bold">Expiración de acceso:</span>
                         <div className="flex gap-2 items-center w-full">
                           <input
                             type="date"
                             value={wizardData.access_expires_at ? wizardData.access_expires_at.split('T')[0] : ''}
                             onChange={(e) => handleChange('access_expires_at', e.target.value)}
-                            className="px-3 py-2 text-xs rounded-xl border border-[#2d3748] bg-[#0e1117] text-white font-mono font-bold focus:outline-none focus:border-[#bfce7f] flex-1"
+                            className="px-3 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary flex-1"
                           />
                           <button
                             type="button"
                             onClick={() => handleChange('access_expires_at', '')}
-                            className="px-3 py-2 text-xs bg-[#0e1117] hover:bg-[#2d3748] rounded-xl border border-[#2d3748] font-bold text-slate-300 transition-colors cursor-pointer"
+                            className="px-3 py-2 text-xs bg-input hover:bg-surface-subtle rounded-xl border border-border font-bold text-foreground-secondary transition-colors cursor-pointer"
                           >
                             Sin expiración
                           </button>
                         </div>
-                        <span className="text-slate-400 font-bold">Horario de acceso:</span>
+                        <span className="text-foreground-muted font-bold">Horario de acceso:</span>
                         <select
                           value={wizardData.allowed_hours || 'Cualquier horario'}
                           onChange={(e) => handleChange('allowed_hours', e.target.value)}
-                          className="px-3 py-2 text-xs rounded-xl border border-[#2d3748] bg-[#0e1117] text-white font-mono font-bold focus:outline-none focus:border-[#bfce7f] w-full"
+                          className="px-3 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary w-full"
                         >
                           <option value="Cualquier horario">Sin restricción horaria (24/7)</option>
                           <option value="Horario de oficina (08:00 - 18:00)">Horario comercial (08:00 - 18:00)</option>
                           <option value="Horario diurno (06:00 - 22:00)">Horario diurno (06:00 - 22:00)</option>
                         </select>
-                        <span className="text-slate-400 font-bold">Restricción IP:</span>
+                        <span className="text-foreground-muted font-bold">Restricción IP:</span>
                         <input
                           type="text"
                           value={wizardData.allowed_ips || '*'}
                           onChange={(e) => handleChange('allowed_ips', e.target.value)}
-                          className="px-3 py-2 text-xs rounded-xl border border-[#2d3748] bg-[#0e1117] text-white font-mono font-bold focus:outline-none focus:border-[#bfce7f] w-full"
+                          className="px-3 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary w-full"
                           placeholder="e.g. * o 192.168.1.1"
                         />
                       </div>
@@ -3697,41 +3787,41 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                   </div>
                   {/* Row 3 (Configuración Avanzada Edit) */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                    <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
-                      <h4 className="font-bold text-white text-xs border-b border-[#2d3748] pb-3 flex items-center gap-2 uppercase tracking-wider"><Settings size={16} className="text-[#bfce7f]" /> Configuración Avanzada</h4>
+                    <div className="bg-card border border-border rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
+                      <h4 className="font-bold text-foreground text-xs border-b border-border pb-3 flex items-center gap-2 uppercase tracking-wider"><Settings size={16} className="text-primary" /> Configuración Avanzada</h4>
                       <div className="grid grid-cols-2 gap-y-3 gap-x-3 text-xs items-center">
-                        <span className="text-slate-400 font-bold">Correo de Acceso:</span>
-                        <input type="email" value={wizardData.correo_acceso || ''} onChange={(e) => handleChange('correo_acceso', e.target.value)} className="px-3 py-2 text-xs rounded-xl border border-[#2d3748] bg-[#0e1117] text-white font-mono font-bold focus:outline-none focus:border-[#bfce7f] w-full" placeholder="recovery@ejemplo.com" />
+                        <span className="text-foreground-muted font-bold">Correo de Acceso:</span>
+                        <input type="email" value={wizardData.correo_acceso || ''} onChange={(e) => handleChange('correo_acceso', e.target.value)} className="px-3 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary w-full" placeholder="recovery@ejemplo.com" />
                         
-                        <span className="text-slate-400 font-bold">Enviar Invitación:</span>
-                        <label className="flex items-center gap-2 font-bold cursor-pointer select-none text-white">
-                          <input type="checkbox" checked={!!wizardData.enviar_invitacion_correo} onChange={(e) => handleChange('enviar_invitacion_correo', e.target.checked)} className="rounded border-[#2d3748] bg-[#0e1117] text-[#bfce7f] focus:ring-[#bfce7f] cursor-pointer w-4 h-4" /> Sí
+                        <span className="text-foreground-muted font-bold">Enviar Invitación:</span>
+                        <label className="flex items-center gap-2 font-bold cursor-pointer select-none text-foreground">
+                          <input type="checkbox" checked={!!wizardData.enviar_invitacion_correo} onChange={(e) => handleChange('enviar_invitacion_correo', e.target.checked)} className="rounded border-border bg-input text-primary focus:ring-primary cursor-pointer w-4 h-4" /> Sí
                         </label>
 
-                        <span className="text-slate-400 font-bold">Generar Clave Automática:</span>
-                        <label className="flex items-center gap-2 font-bold cursor-pointer select-none text-white">
-                          <input type="checkbox" checked={!!wizardData.generar_clave_automatica} onChange={(e) => handleChange('generar_clave_automatica', e.target.checked)} className="rounded border-[#2d3748] bg-[#0e1117] text-[#bfce7f] focus:ring-[#bfce7f] cursor-pointer w-4 h-4" /> Sí
+                        <span className="text-foreground-muted font-bold">Generar Clave Automática:</span>
+                        <label className="flex items-center gap-2 font-bold cursor-pointer select-none text-foreground">
+                          <input type="checkbox" checked={!!wizardData.generar_clave_automatica} onChange={(e) => handleChange('generar_clave_automatica', e.target.checked)} className="rounded border-border bg-input text-primary focus:ring-primary cursor-pointer w-4 h-4" /> Sí
                         </label>
 
-                        <span className="text-slate-400 font-bold">Forzar Cambio de Clave:</span>
-                        <label className="flex items-center gap-2 font-bold cursor-pointer select-none text-white">
-                          <input type="checkbox" checked={!!wizardData.forzar_cambio_clave} onChange={(e) => handleChange('forzar_cambio_clave', e.target.checked)} className="rounded border-[#2d3748] bg-[#0e1117] text-[#bfce7f] focus:ring-[#bfce7f] cursor-pointer w-4 h-4" /> Sí
+                        <span className="text-foreground-muted font-bold">Forzar Cambio de Clave:</span>
+                        <label className="flex items-center gap-2 font-bold cursor-pointer select-none text-foreground">
+                          <input type="checkbox" checked={!!wizardData.forzar_cambio_clave} onChange={(e) => handleChange('forzar_cambio_clave', e.target.checked)} className="rounded border-border bg-input text-primary focus:ring-primary cursor-pointer w-4 h-4" /> Sí
                         </label>
 
-                        <span className="text-slate-400 font-bold">Idioma Preferido:</span>
-                        <select value={wizardData.idioma_preferido || 'es'} onChange={(e) => handleChange('idioma_preferido', e.target.value)} className="px-3 py-2 text-xs rounded-xl border border-[#2d3748] bg-[#0e1117] text-white font-mono font-bold focus:outline-none focus:border-[#bfce7f] w-full">
+                        <span className="text-foreground-muted font-bold">Idioma Preferido:</span>
+                        <select value={wizardData.idioma_preferido || 'es'} onChange={(e) => handleChange('idioma_preferido', e.target.value)} className="px-3 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary w-full">
                           <option value="es">Español</option>
                           <option value="en">Inglés</option>
                         </select>
 
-                        <span className="text-slate-400 font-bold">Zona Horaria:</span>
-                        <select value={wizardData.zona_horaria || 'America/Santo_Domingo'} onChange={(e) => handleChange('zona_horaria', e.target.value)} className="px-3 py-2 text-xs rounded-xl border border-[#2d3748] bg-[#0e1117] text-white font-mono font-bold focus:outline-none focus:border-[#bfce7f] w-full">
+                        <span className="text-foreground-muted font-bold">Zona Horaria:</span>
+                        <select value={wizardData.zona_horaria || 'America/Santo_Domingo'} onChange={(e) => handleChange('zona_horaria', e.target.value)} className="px-3 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary w-full">
                           <option value="America/Santo_Domingo">América/Santo Domingo</option>
                           <option value="America/New_York">América/New York</option>
                         </select>
 
-                        <span className="text-slate-400 font-bold">Formato de Fecha:</span>
-                        <select value={wizardData.formato_fecha || 'DD/MM/YYYY'} onChange={(e) => handleChange('formato_fecha', e.target.value)} className="px-3 py-2 text-xs rounded-xl border border-[#2d3748] bg-[#0e1117] text-white font-mono font-bold focus:outline-none focus:border-[#bfce7f] w-full">
+                        <span className="text-foreground-muted font-bold">Formato de Fecha:</span>
+                        <select value={wizardData.formato_fecha || 'DD/MM/YYYY'} onChange={(e) => handleChange('formato_fecha', e.target.value)} className="px-3 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary w-full">
                           <option value="DD/MM/YYYY">DD/MM/YYYY</option>
                           <option value="MM/DD/YYYY">MM/DD/YYYY</option>
                           <option value="YYYY-MM-DD">YYYY-MM-DD</option>
@@ -3743,54 +3833,54 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               ) : (
                 // VIEW MODE (Original layout)
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
-                    <h4 className="font-bold text-white text-xs border-b border-[#2d3748] pb-3 flex items-center gap-2 uppercase tracking-wider"><Users size={16} className="text-[#bfce7f]" /> Información Personal</h4>
+                  <div className="bg-card border border-border rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
+                    <h4 className="font-bold text-foreground text-xs border-b border-border pb-3 flex items-center gap-2 uppercase tracking-wider"><Users size={16} className="text-primary" /> Información Personal</h4>
                     <div className="grid grid-cols-2 gap-y-2.5 text-xs">
-                      <span className="text-slate-400 font-bold">Usuario ID:</span>
-                      <span className="font-mono font-bold text-white">{detailUser.id || detailUser.usuario_id || '—'}</span>
-                      <span className="text-slate-400 font-bold">Nombre: <span className="text-red-400">*</span></span>
-                      <span className="font-bold text-white">{detailUser.first_name || '—'}</span>
-                      <span className="text-slate-400 font-bold">Apellido: <span className="text-red-400">*</span></span>
-                      <span className="font-bold text-white">{detailUser.last_name || '—'}</span>
-                      <span className="text-slate-400 font-bold">Documento:</span>
-                      <span className="font-bold text-white">
+                      <span className="text-foreground-muted font-bold">Usuario ID:</span>
+                      <span className="font-mono font-bold text-foreground">{detailUser.id || detailUser.usuario_id || '—'}</span>
+                      <span className="text-foreground-muted font-bold">Nombre: <span className="text-red-400">*</span></span>
+                      <span className="font-bold text-foreground">{detailUser.first_name || '—'}</span>
+                      <span className="text-foreground-muted font-bold">Apellido: <span className="text-red-400">*</span></span>
+                      <span className="font-bold text-foreground">{detailUser.last_name || '—'}</span>
+                      <span className="text-foreground-muted font-bold">Documento:</span>
+                      <span className="font-bold text-foreground">
                         {detailUser.document_number ? `${detailUser.document_type || 'Documento'}: ${detailUser.document_number}` : 'No registrado'}
                       </span>
-                      <span className="text-slate-400 font-bold">Correo Electrónico:</span>
-                      <span className="font-bold text-[#bfce7f] hover:underline cursor-pointer">
+                      <span className="text-foreground-muted font-bold">Correo Electrónico:</span>
+                      <span className="font-bold text-primary hover:underline cursor-pointer">
                         {detailUser.email || 'No registrado'}
                       </span>
-                      <span className="text-slate-400 font-bold">Departamento:</span>
-                      <span className="font-bold text-white">{detailUser.departamento_nombre || detailUser.department || 'No registrado'}</span>
-                      <span className="text-slate-400 font-bold">Área:</span>
-                      <span className="font-bold text-white">{detailUser.area_nombre || detailUser.area || 'No registrada'}</span>
-                      <span className="text-slate-400 font-bold">Cargo / Posición:</span>
-                      <span className="font-bold text-white">{detailUser.cargo_nombre || detailUser.job_title || 'No registrado'}</span>
+                      <span className="text-foreground-muted font-bold">Departamento:</span>
+                      <span className="font-bold text-foreground">{detailUser.departamento_nombre || detailUser.department || 'No registrado'}</span>
+                      <span className="text-foreground-muted font-bold">Área:</span>
+                      <span className="font-bold text-foreground">{detailUser.area_nombre || detailUser.area || 'No registrada'}</span>
+                      <span className="text-foreground-muted font-bold">Cargo / Posición:</span>
+                      <span className="font-bold text-foreground">{detailUser.cargo_nombre || detailUser.job_title || 'No registrado'}</span>
                     </div>
                   </div>
 
-                  <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
-                    <h4 className="font-bold text-white text-xs border-b border-[#2d3748] pb-3 flex items-center gap-2 uppercase tracking-wider"><Key size={16} className="text-[#bfce7f]" /> Parámetros de Acceso</h4>
+                  <div className="bg-card border border-border rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
+                    <h4 className="font-bold text-foreground text-xs border-b border-border pb-3 flex items-center gap-2 uppercase tracking-wider"><Key size={16} className="text-primary" /> Parámetros de Acceso</h4>
                     <div className="grid grid-cols-2 gap-y-2.5 text-xs">
-                      <span className="text-slate-400 font-bold">Método de acceso principal:</span>
-                      <span className="font-bold text-white">
+                      <span className="text-foreground-muted font-bold">Método de acceso principal:</span>
+                      <span className="font-bold text-foreground">
                         {detailUser.login_identifiers?.find(id => id.is_primary)?.identifier_type === 'DOCUMENT' ? 'Documento' : 'Correo electrónico'}
                       </span>
                       
-                      <span className="text-slate-400 font-bold">Identificador de acceso:</span>
-                      <span className="font-mono font-bold text-[#bfce7f]">
+                      <span className="text-foreground-muted font-bold">Identificador de acceso:</span>
+                      <span className="font-mono font-bold text-primary">
                         {detailUser.login_identifiers?.find(id => id.is_primary)?.identifier_value || '—'}
                       </span>
                       
-                      <span className="text-slate-400 font-bold">Estado de verificación:</span>
+                      <span className="text-foreground-muted font-bold">Estado de verificación:</span>
                       <span className={`font-bold px-2 py-0.5 rounded text-[10px] uppercase border tracking-wider ${
                         detailUser.estado_verificacion === 'Verificado' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
                       }`}>
                         {detailUser.estado_verificacion || 'No verificado'}
                       </span>
 
-                      <span className="text-slate-400 font-bold">Canales Permitidos:</span>
-                      <span className="font-bold text-white">
+                      <span className="text-foreground-muted font-bold">Canales Permitidos:</span>
+                      <span className="font-bold text-foreground">
                         {(() => {
                           const web = !!detailUser.web_access_enabled;
                           const mobile = !!detailUser.mobile_access_enabled;
@@ -3808,23 +3898,23 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               {/* Row 2 (Shown only in view mode since edit mode merges it all above) */}
               {!isEditing360 && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
-                    <h4 className="font-bold text-white text-xs border-b border-[#2d3748] pb-3 flex items-center gap-2 uppercase tracking-wider"><Building2 size={16} className="text-[#bfce7f]" /> Relación y Asignación</h4>
+                  <div className="bg-card border border-border rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
+                    <h4 className="font-bold text-foreground text-xs border-b border-border pb-3 flex items-center gap-2 uppercase tracking-wider"><Building2 size={16} className="text-primary" /> Relación y Asignación</h4>
                     <div className="grid grid-cols-2 gap-y-2.5 text-xs">
-                      <span className="text-slate-400 font-bold">Empresa: <span className="text-red-400">*</span></span>
-                      <span className="font-bold text-white">
+                      <span className="text-foreground-muted font-bold">Empresa: <span className="text-red-400">*</span></span>
+                      <span className="font-bold text-foreground">
                         {detailUser.empresa_nombre || companies.find(c => c.id == detailUser.companyId)?.name || 'Sin empresa asignada'}
                       </span>
-                      <span className="text-slate-400 font-bold">Tipo de Usuario:</span>
-                      <span className="bg-slate-800 border border-slate-700 text-slate-300 font-mono text-[10px] font-bold tracking-wider px-2 py-0.5 rounded w-fit">{detailUser.user_type || userTypes.find(t => t.id == detailUser.tipo_usuario_id)?.name || '—'}</span>
-                      <span className="text-slate-400 font-bold">Rol Asignado: <span className="text-red-400">*</span></span>
+                      <span className="text-foreground-muted font-bold">Tipo de Usuario:</span>
+                      <span className="bg-surface-subtle border border-border text-foreground-secondary font-mono text-[10px] font-bold tracking-wider px-2 py-0.5 rounded w-fit">{detailUser.user_type || userTypes.find(t => t.id == detailUser.tipo_usuario_id)?.name || '—'}</span>
+                      <span className="text-foreground-muted font-bold">Rol Asignado: <span className="text-red-400">*</span></span>
                       <span className="bg-indigo-500/10 text-indigo-300 border border-indigo-500/30 px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider w-fit">{detailUser.role || detailUser.role_name || '—'}</span>
-                      <span className="text-slate-400 font-bold">Permisos:</span>
-                      <span className="font-bold text-white">
+                      <span className="text-foreground-muted font-bold">Permisos:</span>
+                      <span className="font-bold text-foreground">
                         {Object.keys(detailUser.permissionsOverride || {}).length > 0 ? 'Específica (Permisos Adicionales)' : 'Heredados del rol'}
                       </span>
-                      <span className="text-slate-400 font-bold">Roles Adicionales:</span>
-                      <span className="font-bold text-white">
+                      <span className="text-foreground-muted font-bold">Roles Adicionales:</span>
+                      <span className="font-bold text-foreground">
                         {detailUser.roles_additional?.length > 0 
                           ? detailUser.roles_additional.map(id => roles.find(r => r.id == id)?.name || id).join(', ') 
                           : 'Ninguno'}
@@ -3832,25 +3922,25 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                     </div>
                   </div>
 
-                  <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
-                    <h4 className="font-bold text-white text-xs border-b border-[#2d3748] pb-3 flex items-center gap-2 uppercase tracking-wider"><ShieldCheck size={16} className="text-[#bfce7f]" /> Seguridad e Inicios</h4>
+                  <div className="bg-card border border-border rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
+                    <h4 className="font-bold text-foreground text-xs border-b border-border pb-3 flex items-center gap-2 uppercase tracking-wider"><ShieldCheck size={16} className="text-primary" /> Seguridad e Inicios</h4>
                     <div className="grid grid-cols-2 gap-y-2.5 text-xs">
-                      <span className="text-slate-400 font-bold">Autenticación MFA:</span>
-                      <span className="font-bold text-white">{detailUser.mfaEnabled ? `Sí (${detailUser.mfa_method || '—'})` : 'No'}</span>
-                      <span className="text-slate-400 font-bold">Expiración de acceso:</span>
-                      <span className="font-bold text-white">{formatExpiracionDate(detailUser.access_expires_at)}</span>
-                      <span className="text-slate-400 font-bold">Horario de acceso:</span>
-                      <span className="font-bold text-white">
+                      <span className="text-foreground-muted font-bold">Autenticación MFA:</span>
+                      <span className="font-bold text-foreground">{detailUser.mfaEnabled ? `Sí (${detailUser.mfa_method || '—'})` : 'No'}</span>
+                      <span className="text-foreground-muted font-bold">Expiración de acceso:</span>
+                      <span className="font-bold text-foreground">{formatExpiracionDate(detailUser.access_expires_at)}</span>
+                      <span className="text-foreground-muted font-bold">Horario de acceso:</span>
+                      <span className="font-bold text-foreground">
                         {!detailUser.allowed_hours || detailUser.allowed_hours === 'Cualquier horario' ? 'Sin restricción horaria' : detailUser.allowed_hours}
                       </span>
-                      <span className="text-slate-400 font-bold">Restricción IP:</span>
-                      <span className="font-bold text-white font-mono">
+                      <span className="text-foreground-muted font-bold">Restricción IP:</span>
+                      <span className="font-bold text-foreground font-mono">
                         {!detailUser.allowed_ips || detailUser.allowed_ips === '*' ? 'Sin restricción' : detailUser.allowed_ips}
                       </span>
-                      <span className="text-slate-400 font-bold">Creado El:</span>
-                      <span className="font-bold text-white">{formatSafeDate(detailUser.createdAt)}</span>
-                      <span className="text-slate-400 font-bold">Último Acceso:</span>
-                      <span className="font-bold text-white">{detailUser.last_login_at ? formatSafeDateTime(detailUser.last_login_at) : 'Nunca'}</span>
+                      <span className="text-foreground-muted font-bold">Creado El:</span>
+                      <span className="font-bold text-foreground">{formatSafeDate(detailUser.createdAt)}</span>
+                      <span className="text-foreground-muted font-bold">Último Acceso:</span>
+                      <span className="font-bold text-foreground">{detailUser.last_login_at ? formatSafeDateTime(detailUser.last_login_at) : 'Nunca'}</span>
                     </div>
                   </div>
                 </div>
@@ -3859,31 +3949,31 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               {/* Row 3 (Configuración Avanzada) */}
               {!isEditing360 && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                  <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
-                    <h4 className="font-bold text-white text-xs border-b border-[#2d3748] pb-3 flex items-center gap-2 uppercase tracking-wider"><Settings size={16} className="text-[#bfce7f]" /> Configuración Avanzada</h4>
+                  <div className="bg-card border border-border rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
+                    <h4 className="font-bold text-foreground text-xs border-b border-border pb-3 flex items-center gap-2 uppercase tracking-wider"><Settings size={16} className="text-primary" /> Configuración Avanzada</h4>
                     <div className="grid grid-cols-2 gap-y-2.5 text-xs">
-                      <span className="text-slate-400 font-bold">Correo de Acceso (Recovery):</span>
-                      <span className="font-bold text-[#bfce7f] font-mono">{detailUser.correo_acceso || 'No registrado'}</span>
+                      <span className="text-foreground-muted font-bold">Correo de Acceso (Recovery):</span>
+                      <span className="font-bold text-primary font-mono">{detailUser.correo_acceso || 'No registrado'}</span>
                       
-                      <span className="text-slate-400 font-bold">Enviar Invitación (Email):</span>
-                      <span className="font-bold text-white">{detailUser.enviar_invitacion_correo ? 'Sí' : 'No'}</span>
+                      <span className="text-foreground-muted font-bold">Enviar Invitación (Email):</span>
+                      <span className="font-bold text-foreground">{detailUser.enviar_invitacion_correo ? 'Sí' : 'No'}</span>
                       
-                      <span className="text-slate-400 font-bold">Generar Clave Automática:</span>
-                      <span className="font-bold text-white">{detailUser.generar_clave_automatica ? 'Sí' : 'No'}</span>
+                      <span className="text-foreground-muted font-bold">Generar Clave Automática:</span>
+                      <span className="font-bold text-foreground">{detailUser.generar_clave_automatica ? 'Sí' : 'No'}</span>
                       
-                      <span className="text-slate-400 font-bold">Forzar Cambio de Clave:</span>
-                      <span className="font-bold text-white">{detailUser.forzar_cambio_clave ? 'Sí' : 'No'}</span>
+                      <span className="text-foreground-muted font-bold">Forzar Cambio de Clave:</span>
+                      <span className="font-bold text-foreground">{detailUser.forzar_cambio_clave ? 'Sí' : 'No'}</span>
                       
-                      <span className="text-slate-400 font-bold">Idioma Preferido:</span>
-                      <span className="font-bold text-white">
+                      <span className="text-foreground-muted font-bold">Idioma Preferido:</span>
+                      <span className="font-bold text-foreground">
                         {detailUser.idioma_preferido === 'en' ? 'Inglés' : detailUser.idioma_preferido === 'es' ? 'Español' : (detailUser.idioma_preferido || 'es')}
                       </span>
                       
-                      <span className="text-slate-400 font-bold">Zona Horaria:</span>
-                      <span className="font-bold text-white">{detailUser.zona_horaria || 'America/Santo_Domingo'}</span>
+                      <span className="text-foreground-muted font-bold">Zona Horaria:</span>
+                      <span className="font-bold text-foreground">{detailUser.zona_horaria || 'America/Santo_Domingo'}</span>
                       
-                      <span className="text-slate-400 font-bold">Formato de Fecha:</span>
-                      <span className="font-bold text-white">{detailUser.formato_fecha || 'DD/MM/YYYY'}</span>
+                      <span className="text-foreground-muted font-bold">Formato de Fecha:</span>
+                      <span className="font-bold text-foreground">{detailUser.formato_fecha || 'DD/MM/YYYY'}</span>
                     </div>
                   </div>
                 </div>
@@ -3943,8 +4033,8 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
                 return (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-                    <div className="p-4 bg-[#161a21] border border-[#2d3748] rounded-2xl space-y-1 shadow-xl font-mono text-xs">
-                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Rol Principal</span>
+                    <div className="p-4 bg-card border border-border rounded-2xl space-y-1 shadow-xl font-mono text-xs">
+                      <span className="text-[10px] text-foreground-muted font-bold uppercase tracking-wider block mb-1">Rol Principal</span>
                       {isEditing360 && wizardData ? (
                         <select 
                           value={wizardData.rol_id || ''} 
@@ -3954,7 +4044,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                             const rolObj = roles.find(r => r.id == rId); 
                             handleChange('role', rolObj ? rolObj.name : ''); 
                           }}
-                          className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-2.5 py-1.5 text-xs font-bold text-[#bfce7f] focus:outline-none focus:border-[#bfce7f]"
+                          className="w-full bg-input border border-border rounded-xl px-2.5 py-1.5 text-xs font-bold text-primary focus:outline-none focus:border-primary"
                         >
                           <option value="">Seleccione un rol...</option>
                           {roles.map(r => (
@@ -3962,25 +4052,25 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                           ))}
                         </select>
                       ) : (
-                        <span className="text-sm font-black text-[#bfce7f] block mt-1">{userRole}</span>
+                        <span className="text-sm font-black text-primary block mt-1">{userRole}</span>
                       )}
                     </div>
-                    <div className="p-4 bg-[#161a21] border border-[#2d3748] rounded-2xl space-y-1 shadow-xl font-mono text-xs">
-                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Roles adicionales</span>
+                    <div className="p-4 bg-card border border-border rounded-2xl space-y-1 shadow-xl font-mono text-xs">
+                      <span className="text-[10px] text-foreground-muted font-bold uppercase tracking-wider block mb-1">Roles adicionales</span>
                       {isEditing360 && wizardData ? (
                         <div className="relative group">
-                          <div className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-2.5 py-1.5 text-xs font-bold text-white cursor-pointer flex justify-between items-center shadow-sm">
+                          <div className="w-full bg-input border border-border rounded-xl px-2.5 py-1.5 text-xs font-bold text-foreground cursor-pointer flex justify-between items-center shadow-sm">
                              <span className="truncate">
                                {(wizardData.roles_additional?.length || 0)} roles seleccionados
                              </span>
-                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-400"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-foreground-muted"><polyline points="6 9 12 15 18 9"></polyline></svg>
                           </div>
-                          <div className="absolute top-full left-0 w-full mt-1 bg-[#161a21] border border-[#2d3748] rounded-xl shadow-2xl z-50 hidden group-hover:block max-h-[160px] overflow-y-auto custom-scrollbar">
+                          <div className="absolute top-full left-0 w-full mt-1 bg-card border border-border rounded-xl shadow-2xl z-50 hidden group-hover:block max-h-[160px] overflow-y-auto custom-scrollbar">
                             {roles.filter(r => r.id != wizardData.rol_id).map(r => (
-                               <label key={r.id} className="flex items-center gap-2 px-3 py-2 hover:bg-[#0e1117] cursor-pointer border-b border-[#2d3748]/50 last:border-0 transition-colors">
+                               <label key={r.id} className="flex items-center gap-2 px-3 py-2 hover:bg-input cursor-pointer border-b border-border/50 last:border-0 transition-colors">
                                   <input 
                                     type="checkbox" 
-                                    className="rounded text-[#bfce7f] focus:ring-[#bfce7f] bg-[#0e1117] border-[#2d3748] cursor-pointer"
+                                    className="rounded text-primary focus:ring-primary bg-input border-border cursor-pointer"
                                     checked={(wizardData.roles_additional || []).includes(r.id)}
                                     onChange={() => {
                                       const newRoles = (wizardData.roles_additional || []).includes(r.id)
@@ -3989,37 +4079,37 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                                       handleChange('roles_additional', newRoles);
                                     }}
                                   />
-                                  <span className="text-xs font-semibold text-white">{r.name}</span>
+                                  <span className="text-xs font-semibold text-foreground">{r.name}</span>
                                </label>
                             ))}
                             {roles.filter(r => r.id != wizardData.rol_id).length === 0 && (
-                              <div className="px-3 py-2 text-[10px] text-slate-400 italic">No hay más roles disponibles.</div>
+                              <div className="px-3 py-2 text-[10px] text-foreground-muted italic">No hay más roles disponibles.</div>
                             )}
                           </div>
                         </div>
                       ) : (
-                        <span className="text-xs font-bold text-white block mt-1 truncate" title={detailUser.roles_additional?.length > 0 ? detailUser.roles_additional.map(id => roles.find(r => r.id == id)?.name || id).join(', ') : 'Ninguno'}>
+                        <span className="text-xs font-bold text-foreground block mt-1 truncate" title={detailUser.roles_additional?.length > 0 ? detailUser.roles_additional.map(id => roles.find(r => r.id == id)?.name || id).join(', ') : 'Ninguno'}>
                           {detailUser.roles_additional?.length > 0 
                             ? detailUser.roles_additional.map(id => roles.find(r => r.id == id)?.name || id).join(', ') 
                             : 'Ninguno'}
                         </span>
                       )}
                     </div>
-                    <div className="p-4 bg-[#161a21] border border-[#2d3748] rounded-2xl space-y-1 shadow-xl font-mono text-xs">
-                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Permisos adicionales creados</span>
+                    <div className="p-4 bg-card border border-border rounded-2xl space-y-1 shadow-xl font-mono text-xs">
+                      <span className="text-[10px] text-foreground-muted font-bold uppercase tracking-wider block">Permisos adicionales creados</span>
                       <span className="text-sm font-black text-amber-400 font-mono">
                         {overridesCount}
                       </span>
                     </div>
-                    <div className="p-4 bg-[#161a21] border border-[#2d3748] rounded-2xl space-y-1 shadow-xl font-mono text-xs">
-                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Módulos permitidos</span>
-                      <span className="text-sm font-black text-white font-mono">
+                    <div className="p-4 bg-card border border-border rounded-2xl space-y-1 shadow-xl font-mono text-xs">
+                      <span className="text-[10px] text-foreground-muted font-bold uppercase tracking-wider block">Módulos permitidos</span>
+                      <span className="text-sm font-black text-foreground font-mono">
                         {modulesCount} / {modules.length}
                       </span>
                     </div>
-                    <div className="p-4 bg-[#161a21] border border-[#2d3748] rounded-2xl space-y-1 shadow-xl font-mono text-xs col-span-1 sm:col-span-2 lg:col-span-1">
-                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Acciones críticas</span>
-                      <span className="text-xs font-bold text-[#bfce7f] truncate block" title={criticalsStr}>
+                    <div className="p-4 bg-card border border-border rounded-2xl space-y-1 shadow-xl font-mono text-xs col-span-1 sm:col-span-2 lg:col-span-1">
+                      <span className="text-[10px] text-foreground-muted font-bold uppercase tracking-wider block">Acciones críticas</span>
+                      <span className="text-xs font-bold text-primary truncate block" title={criticalsStr}>
                         {criticalsStr}
                       </span>
                     </div>
@@ -4027,19 +4117,19 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                 );
               })()}
 
-              <div className="flex flex-col sm:flex-row justify-between sm:items-center border-b border-[#2d3748] pb-3 gap-3 font-mono text-xs">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center border-b border-border pb-3 gap-3 font-mono text-xs">
                 <div>
-                  <h4 className="font-bold text-white text-xs uppercase tracking-wider">Matriz de Permisos Efectivos</h4>
-                  <p className="text-[11px] text-slate-400 mt-0.5">Consulta de permisos consolidados (Heredados + Adicionales). No modificable directamente.</p>
+                  <h4 className="font-bold text-foreground text-xs uppercase tracking-wider">Matriz de Permisos Efectivos</h4>
+                  <p className="text-[11px] text-foreground-muted mt-0.5">Consulta de permisos consolidados (Heredados + Adicionales). No modificable directamente.</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold select-none">
-                  <span className="text-[10px] text-slate-400 mr-1 uppercase tracking-wider">Filtrar:</span>
+                  <span className="text-[10px] text-foreground-muted mr-1 uppercase tracking-wider">Filtrar:</span>
                   <button 
                     onClick={() => setMatrixFilter('all')}
                     className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
                       matrixFilter === 'all'
-                        ? 'bg-[#bfce7f] text-[#1d1f18] border-[#bfce7f] shadow-lg'
-                        : 'bg-[#161a21] text-slate-400 border-[#2d3748] hover:text-white hover:bg-[#0e1117]'
+                        ? 'bg-primary text-primary-foreground border-primary shadow-lg'
+                        : 'bg-card text-foreground-muted border-border hover:text-foreground hover:bg-input'
                     }`}
                   >
                     Todos
@@ -4048,11 +4138,11 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                     onClick={() => setMatrixFilter('base')}
                     className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                       matrixFilter === 'base'
-                        ? 'bg-[#bfce7f]/20 text-[#bfce7f] border-[#bfce7f]/50 shadow-lg'
-                        : 'bg-[#161a21] text-slate-400 border-[#2d3748] hover:text-white hover:bg-[#0e1117]'
+                        ? 'bg-primary/20 text-primary border-primary/50 shadow-lg'
+                        : 'bg-card text-foreground-muted border-border hover:text-foreground hover:bg-input'
                     }`}
                   >
-                    <span className="w-2 h-2 rounded-full bg-[#bfce7f]"></span> 
+                    <span className="w-2 h-2 rounded-full bg-primary"></span> 
                     Rol Principal
                   </button>
                   <button 
@@ -4060,7 +4150,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                     className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                       matrixFilter === 'additional'
                         ? 'bg-amber-500/20 text-amber-400 border-amber-500/50 shadow-lg'
-                        : 'bg-[#161a21] text-slate-400 border-[#2d3748] hover:text-white hover:bg-[#0e1117]'
+                        : 'bg-card text-foreground-muted border-border hover:text-foreground hover:bg-input'
                     }`}
                   >
                     <span className="w-2 h-2 rounded-full bg-amber-400"></span> 
@@ -4069,16 +4159,16 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                 </div>
               </div>
 
-              <div className="overflow-x-auto border border-[#2d3748] rounded-2xl bg-[#161a21] custom-scrollbar shadow-xl">
+              <div className="overflow-x-auto border border-border rounded-2xl bg-card custom-scrollbar shadow-xl">
                 <table className="w-full text-left border-collapse text-xs font-mono">
                   <thead>
-                    <tr className="border-b border-[#2d3748] bg-[#0e1117] font-bold text-slate-400 text-[11px] uppercase tracking-wider">
-                      <th className="py-3.5 px-4 tracking-wider text-white">Módulo / Sección</th>
-                      <th className="py-3.5 px-1 text-center w-14 tracking-wider text-[#bfce7f]">FULL</th>
-                      {ALL_ACTIONS.map(act => <th key={act.id} className="py-3.5 px-1 text-center w-14 tracking-wider text-slate-400">{act.label}</th>)}
+                    <tr className="border-b border-border bg-input font-bold text-foreground-muted text-[11px] uppercase tracking-wider">
+                      <th className="py-3.5 px-4 tracking-wider text-foreground">Módulo / Sección</th>
+                      <th className="py-3.5 px-1 text-center w-14 tracking-wider text-primary">FULL</th>
+                      {ALL_ACTIONS.map(act => <th key={act.id} className="py-3.5 px-1 text-center w-14 tracking-wider text-foreground-muted">{act.label}</th>)}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#2d3748] bg-[#161a21]">
+                  <tbody className="divide-y divide-[#2d3748] bg-card">
                     {modules.map(mod => {
                       const activeUser = (isEditing360 && wizardData) ? wizardData : detailUser;
                       const userRole = activeUser.role || activeUser.role_name || '—';
@@ -4114,16 +4204,16 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                       });
 
                       return (
-                        <tr key={mod.id} className="hover:bg-[#1f242d] transition-colors">
-                          <td className="py-3 px-4 font-bold text-white text-xs uppercase">{mod.name || mod.label || mod.nombre || `Módulo ${mod.id}`}</td>
+                        <tr key={mod.id} className="hover:bg-hover transition-colors">
+                          <td className="py-3 px-4 font-bold text-foreground text-xs uppercase">{mod.name || mod.label || mod.nombre || `Módulo ${mod.id}`}</td>
                           
                           {/* FULL Column (Read Only) */}
                           <td className="py-3 px-1 text-center select-none">
                             <div className="flex justify-center">
                               {allChecked ? (
-                                <CheckSquare size={16} className="text-[#bfce7f]" />
+                                <CheckSquare size={16} className="text-primary" />
                               ) : (
-                                <Square size={16} className="text-[#2d3748] opacity-30" />
+                                <Square size={16} className="text-foreground-muted opacity-30" />
                               )}
                             </div>
                           </td>
@@ -4161,11 +4251,11 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                                       ) : source === 'additional' ? (
                                         <CheckSquare size={16} className="text-amber-400" />
                                       ) : (
-                                        <CheckSquare size={16} className="text-[#bfce7f]" />
+                                        <CheckSquare size={16} className="text-primary" />
                                       )}
                                     </div>
                                   ) : (
-                                    <Square size={16} className="text-[#2d3748] opacity-30" />
+                                    <Square size={16} className="text-foreground-muted opacity-30" />
                                   )}
                                 </div>
                               </td>
@@ -4233,13 +4323,13 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                 return (
                   <>
                     {/* Section Header & Bulk Revoke */}
-                    <div className="bg-[#161a21] border border-[#2d3748] p-4 rounded-2xl shadow-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                    <div className="bg-card border border-border p-4 rounded-2xl shadow-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                       <div>
-                        <h4 className="font-black text-white text-sm uppercase tracking-wider flex items-center gap-2">
-                          <ShieldCheck className="text-[#bfce7f]" size={18} />
+                        <h4 className="font-black text-foreground text-sm uppercase tracking-wider flex items-center gap-2">
+                          <ShieldCheck className="text-primary" size={18} />
                           HISTORIAL DE SESIONES
                         </h4>
-                        <p className="text-[11px] text-slate-400 mt-0.5">
+                        <p className="text-[11px] text-foreground-muted mt-0.5">
                           Monitor continuo de conexiones activas, historial de accesos e inactividad en Bikers’ Fort.
                         </p>
                       </div>
@@ -4247,10 +4337,10 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => fetchUserSessions(detailUser.id)}
-                          className="p-2.5 bg-[#0e1117] border border-[#2d3748] hover:border-[#bfce7f] text-slate-300 hover:text-white rounded-xl text-xs transition-all cursor-pointer"
+                          className="p-2.5 bg-input border border-border hover:border-primary text-foreground-secondary hover:text-foreground rounded-xl text-xs transition-all cursor-pointer"
                           title="Actualizar lista de sesiones"
                         >
-                          <RefreshCw size={14} className={isLoadingSessions ? "animate-spin text-[#bfce7f]" : ""} />
+                          <RefreshCw size={14} className={isLoadingSessions ? "animate-spin text-primary" : ""} />
                         </button>
                         <button 
                           onClick={() => handleRevokeAllSessions(detailUser.id)}
@@ -4263,7 +4353,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                     </div>
 
                     {/* Toolbar & Filters */}
-                    <div className="bg-[#161a21] border border-[#2d3748] p-4 rounded-2xl shadow-xl flex flex-col lg:flex-row items-center justify-between gap-4 text-xs">
+                    <div className="bg-card border border-border p-4 rounded-2xl shadow-xl flex flex-col lg:flex-row items-center justify-between gap-4 text-xs">
                       
                       {/* Filter pills */}
                       <div className="flex items-center gap-1.5 flex-wrap w-full lg:w-auto">
@@ -4283,13 +4373,13 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                             }}
                             className={`px-3 py-1.5 rounded-xl border font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                               sessionFilterStatus === f.key
-                                ? 'bg-[#bfce7f] text-[#1d1f18] border-[#bfce7f]'
-                                : 'bg-[#0e1117] text-slate-300 border-[#2d3748] hover:border-slate-500'
+                                ? 'bg-primary text-primary-foreground border-primary'
+                                : 'bg-input text-foreground-secondary border-border hover:border-slate-500'
                             }`}
                           >
                             <span>{f.label}</span>
                             <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${
-                              sessionFilterStatus === f.key ? 'bg-[#1d1f18]/20 text-[#1d1f18]' : 'bg-[#161a21] text-slate-400'
+                              sessionFilterStatus === f.key ? 'bg-surface-subtle/20 text-primary-foreground' : 'bg-card text-foreground-muted'
                             }`}>
                               {f.count}
                             </span>
@@ -4300,7 +4390,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                       {/* Search and Page Size */}
                       <div className="flex items-center gap-3 w-full lg:w-auto justify-end">
                         <div className="relative flex-1 sm:w-64">
-                          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-foreground-muted" />
                           <input
                             type="text"
                             placeholder="Buscar por IP o Dispositivo..."
@@ -4309,12 +4399,12 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                               setSessionSearchText(e.target.value);
                               setSessionCurrentPage(1);
                             }}
-                            className="w-full pl-9 pr-8 py-2 rounded-xl bg-[#0e1117] border border-[#2d3748] text-white text-xs placeholder:text-slate-500 focus:outline-none focus:border-[#bfce7f]"
+                            className="w-full pl-9 pr-8 py-2 rounded-xl bg-input border border-border text-foreground text-xs placeholder:text-foreground-disabled focus:outline-none focus:border-primary"
                           />
                           {sessionSearchText && (
                             <button
                               onClick={() => setSessionSearchText('')}
-                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-foreground-muted hover:text-foreground"
                             >
                               <X size={13} />
                             </button>
@@ -4327,7 +4417,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                             setSessionPageSize(Number(e.target.value));
                             setSessionCurrentPage(1);
                           }}
-                          className="py-2 px-3 rounded-xl bg-[#0e1117] border border-[#2d3748] text-white text-xs focus:outline-none focus:border-[#bfce7f] cursor-pointer"
+                          className="py-2 px-3 rounded-xl bg-input border border-border text-foreground text-xs focus:outline-none focus:border-primary cursor-pointer"
                         >
                           <option value={10}>10 por pág.</option>
                           <option value={25}>25 por pág.</option>
@@ -4337,51 +4427,51 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                     </div>
 
                     {/* Sessions Table */}
-                    <div className="border border-[#2d3748] rounded-2xl overflow-hidden bg-[#0e1117] shadow-xl">
+                    <div className="border border-border rounded-2xl overflow-hidden bg-input shadow-xl">
                       <div className="overflow-x-auto">
                         <table className="w-full text-left border-collapse text-xs">
                           <thead>
-                            <tr className="border-b border-[#2d3748] bg-[#161a21] select-none">
+                            <tr className="border-b border-border bg-card select-none">
                               <th 
-                                className="py-3.5 px-4 font-mono text-[10px] text-slate-300 font-bold tracking-wider uppercase cursor-pointer hover:text-white"
+                                className="py-3.5 px-4 font-mono text-[10px] text-foreground-secondary font-bold tracking-wider uppercase cursor-pointer hover:text-foreground"
                                 onClick={() => handleSortSesiones('device')}
                               >
                                 DISPOSITIVO / NAVEGADOR {sortConfigSesiones.key === 'device' && (sortConfigSesiones.direction === 'asc' ? '↑' : '↓')}
                               </th>
                               <th 
-                                className="py-3.5 px-4 font-mono text-[10px] text-slate-300 font-bold tracking-wider uppercase cursor-pointer hover:text-white"
+                                className="py-3.5 px-4 font-mono text-[10px] text-foreground-secondary font-bold tracking-wider uppercase cursor-pointer hover:text-foreground"
                                 onClick={() => handleSortSesiones('ip')}
                               >
                                 DIRECCIÓN IP {sortConfigSesiones.key === 'ip' && (sortConfigSesiones.direction === 'asc' ? '↑' : '↓')}
                               </th>
                               <th 
-                                className="py-3.5 px-4 font-mono text-[10px] text-slate-300 font-bold tracking-wider uppercase cursor-pointer hover:text-white"
+                                className="py-3.5 px-4 font-mono text-[10px] text-foreground-secondary font-bold tracking-wider uppercase cursor-pointer hover:text-foreground"
                                 onClick={() => handleSortSesiones('location')}
                               >
                                 UBICACIÓN {sortConfigSesiones.key === 'location' && (sortConfigSesiones.direction === 'asc' ? '↑' : '↓')}
                               </th>
                               <th 
-                                className="py-3.5 px-4 font-mono text-[10px] text-slate-300 font-bold tracking-wider uppercase cursor-pointer hover:text-white"
+                                className="py-3.5 px-4 font-mono text-[10px] text-foreground-secondary font-bold tracking-wider uppercase cursor-pointer hover:text-foreground"
                                 onClick={() => handleSortSesiones('login_time')}
                               >
                                 INICIO DE SESIÓN {sortConfigSesiones.key === 'login_time' && (sortConfigSesiones.direction === 'asc' ? '↑' : '↓')}
                               </th>
                               <th 
-                                className="py-3.5 px-4 font-mono text-[10px] text-slate-300 font-bold tracking-wider uppercase cursor-pointer hover:text-white"
+                                className="py-3.5 px-4 font-mono text-[10px] text-foreground-secondary font-bold tracking-wider uppercase cursor-pointer hover:text-foreground"
                                 onClick={() => handleSortSesiones('last_activity_at')}
                               >
                                 ÚLTIMA ACTIVIDAD {sortConfigSesiones.key === 'last_activity_at' && (sortConfigSesiones.direction === 'asc' ? '↑' : '↓')}
                               </th>
-                              <th className="py-3.5 px-4 font-mono text-[10px] text-slate-300 font-bold tracking-wider uppercase">
+                              <th className="py-3.5 px-4 font-mono text-[10px] text-foreground-secondary font-bold tracking-wider uppercase">
                                 DURACIÓN
                               </th>
                               <th 
-                                className="py-3.5 px-4 text-center font-mono text-[10px] text-slate-300 font-bold tracking-wider uppercase cursor-pointer hover:text-white"
+                                className="py-3.5 px-4 text-center font-mono text-[10px] text-foreground-secondary font-bold tracking-wider uppercase cursor-pointer hover:text-foreground"
                                 onClick={() => handleSortSesiones('estado')}
                               >
                                 ESTADO {sortConfigSesiones.key === 'estado' && (sortConfigSesiones.direction === 'asc' ? '↑' : '↓')}
                               </th>
-                              <th className="py-3.5 px-4 text-right pr-4 font-mono text-[10px] text-slate-300 font-bold tracking-wider uppercase">
+                              <th className="py-3.5 px-4 text-right pr-4 font-mono text-[10px] text-foreground-secondary font-bold tracking-wider uppercase">
                                 ACCIONES
                               </th>
                             </tr>
@@ -4389,7 +4479,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                           <tbody className="divide-y divide-[#2d3748]">
                             {paginated.length === 0 ? (
                               <tr>
-                                <td colSpan={8} className="py-8 px-4 text-center text-slate-400 font-mono text-xs italic">
+                                <td colSpan={8} className="py-8 px-4 text-center text-foreground-muted font-mono text-xs italic">
                                   No se encontraron sesiones registradas con los filtros seleccionados.
                                 </td>
                               </tr>
@@ -4398,33 +4488,33 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                                 <tr 
                                   key={session.id} 
                                   onClick={() => setSelectedSessionDetail(session)}
-                                  className="hover:bg-[#1f242d] transition-colors cursor-pointer group"
+                                  className="hover:bg-hover transition-colors cursor-pointer group"
                                 >
-                                  <td className="py-3.5 px-4 font-bold text-white font-mono text-xs">
+                                  <td className="py-3.5 px-4 font-bold text-foreground font-mono text-xs">
                                     <div className="flex items-center gap-2">
                                       <span>{session.device || session.dispositivo_navegador}</span>
                                       {session.is_current && (
-                                        <span className="px-2 py-0.5 rounded-md bg-[#bfce7f]/15 text-[#bfce7f] border border-[#bfce7f]/30 text-[9px] font-bold uppercase tracking-wider">
+                                        <span className="px-2 py-0.5 rounded-md bg-primary/15 text-primary border border-primary/30 text-[9px] font-bold uppercase tracking-wider">
                                           ★ Sesión actual
                                         </span>
                                       )}
                                     </div>
                                   </td>
                                   <td className="py-3.5 px-4 font-mono text-xs">
-                                    <span className="px-2.5 py-1 rounded-lg bg-[#0e1117] border border-[#2d3748] text-slate-300 font-mono">
+                                    <span className="px-2.5 py-1 rounded-lg bg-input border border-border text-foreground-secondary font-mono">
                                       {session.ip || session.direccion_ip}
                                     </span>
                                   </td>
-                                  <td className="py-3.5 px-4 font-mono text-xs text-slate-300">
+                                  <td className="py-3.5 px-4 font-mono text-xs text-foreground-secondary">
                                     {session.location || session.ubicacion || 'No disponible'}
                                   </td>
-                                  <td className="py-3.5 px-4 font-mono text-xs text-slate-300">
+                                  <td className="py-3.5 px-4 font-mono text-xs text-foreground-secondary">
                                     {formatSafeDateTime(session.login_time || session.fecha_inicio)}
                                   </td>
-                                  <td className="py-3.5 px-4 font-mono text-xs text-slate-300">
+                                  <td className="py-3.5 px-4 font-mono text-xs text-foreground-secondary">
                                     {formatSafeDateTime(session.last_activity_at || session.ultima_actividad)}
                                   </td>
-                                  <td className="py-3.5 px-4 font-mono text-xs text-[#bfce7f]">
+                                  <td className="py-3.5 px-4 font-mono text-xs text-primary">
                                     {session.duration || '—'}
                                   </td>
                                   <td className="py-3.5 px-4 text-center">
@@ -4437,7 +4527,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                                         ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
                                         : session.estado === 'EXPIRADA'
                                         ? 'bg-zinc-800 text-zinc-400 border border-zinc-700'
-                                        : 'bg-slate-800 text-slate-400 border border-slate-700'
+                                        : 'bg-surface-subtle text-foreground-muted border border-border'
                                     }`}>
                                       ● {session.estado}
                                     </span>
@@ -4450,7 +4540,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                                           e.stopPropagation();
                                           setSelectedSessionDetail(session);
                                         }}
-                                        className="p-1.5 rounded-lg bg-[#161a21] border border-[#2d3748] text-slate-400 hover:text-white hover:border-[#bfce7f] focus:outline-none focus:ring-1 focus:ring-[#bfce7f] transition-all cursor-pointer"
+                                        className="p-1.5 rounded-lg bg-card border border-border text-foreground-muted hover:text-foreground hover:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all cursor-pointer"
                                         title="Ver detalle de sesión"
                                         aria-label="Ver detalle de sesión"
                                       >
@@ -4480,8 +4570,8 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                       </div>
 
                       {/* Pagination Footer */}
-                      <div className="px-4 py-3 bg-[#161a21] border-t border-[#2d3748] flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-                        <span className="text-slate-400">
+                      <div className="px-4 py-3 bg-card border-t border-border flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+                        <span className="text-foreground-muted">
                           Mostrando {paginated.length > 0 ? (currentPage - 1) * sessionPageSize + 1 : 0} - {Math.min(currentPage * sessionPageSize, sorted.length)} de {sorted.length} sesiones
                         </span>
 
@@ -4489,17 +4579,17 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                           <button
                             disabled={currentPage <= 1}
                             onClick={() => setSessionCurrentPage(prev => Math.max(1, prev - 1))}
-                            className="px-3 py-1.5 rounded-xl border border-[#2d3748] bg-[#0e1117] text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#1f242d] transition-colors cursor-pointer"
+                            className="px-3 py-1.5 rounded-xl border border-border bg-input text-foreground disabled:opacity-40 disabled:cursor-not-allowed hover:bg-hover transition-colors cursor-pointer"
                           >
                             Anterior
                           </button>
-                          <span className="px-3 py-1 text-slate-300 font-bold">
+                          <span className="px-3 py-1 text-foreground-secondary font-bold">
                             Página {currentPage} de {totalPages}
                           </span>
                           <button
                             disabled={currentPage >= totalPages}
                             onClick={() => setSessionCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                            className="px-3 py-1.5 rounded-xl border border-[#2d3748] bg-[#0e1117] text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#1f242d] transition-colors cursor-pointer"
+                            className="px-3 py-1.5 rounded-xl border border-border bg-input text-foreground disabled:opacity-40 disabled:cursor-not-allowed hover:bg-hover transition-colors cursor-pointer"
                           >
                             Siguiente
                           </button>
@@ -4518,89 +4608,21 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               {(() => {
                 const userActs = realUserActivity || [];
 
-                // Metrics Calculation
-                const totalCount = userActs.length;
-                const now = new Date();
-                const todayStr = now.toISOString().split('T')[0];
-                const sevenDaysAgoMs = now.getTime() - (7 * 24 * 60 * 60 * 1000);
-                const thirtyDaysAgoMs = now.getTime() - (30 * 24 * 60 * 60 * 1000);
-
-                let todayCount = 0;
-                let last7DaysCount = 0;
-                let last30DaysCount = 0;
-                let errorCount = 0;
-                let successCount = 0;
-
-                userActs.forEach(act => {
-                  const actTime = act.timestamp || act.fecha_hora ? new Date(act.timestamp || act.fecha_hora).getTime() : 0;
-                  const actDateStr = act.timestamp || act.fecha_hora ? new Date(act.timestamp || act.fecha_hora).toISOString().split('T')[0] : '';
-
-                  if (actDateStr === todayStr) todayCount++;
-                  if (actTime >= sevenDaysAgoMs) last7DaysCount++;
-                  if (actTime >= thirtyDaysAgoMs) last30DaysCount++;
-
-                  const res = String(act.resultado || act.result || 'Exitoso').toUpperCase();
-                  if (res.includes('ERROR') || res.includes('FALLID') || res.includes('ADVERT') || res.includes('FAIL') || res.includes('WARN')) {
-                    errorCount++;
-                  } else {
-                    successCount++;
-                  }
-                });
+                // Metrics Calculation from server stats or local list
+                const todayCount = activitySummaryStats?.eventos_hoy ?? userActs.filter(act => {
+                  const actDateStr = (act.timestamp || act.fecha_hora) ? new Date(act.timestamp || act.fecha_hora).toISOString().split('T')[0] : '';
+                  return actDateStr === new Date().toISOString().split('T')[0];
+                }).length;
+                const last7DaysCount = activitySummaryStats?.eventos_7dias ?? userActs.length;
+                const errorCount = activitySummaryStats?.eventos_error ?? 0;
+                const successCount = activitySummaryStats?.eventos_exito ?? userActs.length;
 
                 // Unique Modules for filter
-                const existingModules = Array.from(new Set(userActs.map(a => a.modulo || a.module).filter(Boolean)));
-                const defaultModules = ['Todos', 'CRM', 'Seguridad', 'Inventario', 'Compras', 'Facturación', 'Taller', 'Configuración', 'Portal Cliente', 'Reportes', 'Catálogos'];
-                const allModulesList = Array.from(new Set([...defaultModules, ...existingModules]));
-
-                // Filtering & Search
-                const filteredActs = userActs.filter(act => {
-                  // Search
-                  const term = activitySearchText.trim().toLowerCase();
-                  if (term) {
-                    const matchesTerm = 
-                      (act.evento || act.event || '').toLowerCase().includes(term) ||
-                      (act.descripcion || act.desc || '').toLowerCase().includes(term) ||
-                      (act.modulo || act.module || '').toLowerCase().includes(term) ||
-                      (act.direccion_ip || act.ip || '').toLowerCase().includes(term) ||
-                      (act.dispositivo || act.device || '').toLowerCase().includes(term) ||
-                      (act.resultado || act.result || '').toLowerCase().includes(term);
-                    if (!matchesTerm) return false;
-                  }
-
-                  // Date range
-                  if (activityDateFrom) {
-                    const actDate = (act.timestamp || act.fecha_hora) ? new Date(act.timestamp || act.fecha_hora).toISOString().split('T')[0] : '';
-                    if (actDate < activityDateFrom) return false;
-                  }
-                  if (activityDateTo) {
-                    const actDate = (act.timestamp || act.fecha_hora) ? new Date(act.timestamp || act.fecha_hora).toISOString().split('T')[0] : '';
-                    if (actDate > activityDateTo) return false;
-                  }
-
-                  // Module filter
-                  if (activityModuleFilter !== 'Todos') {
-                    const mod = (act.modulo || act.module || '').toLowerCase();
-                    if (mod !== activityModuleFilter.toLowerCase()) return false;
-                  }
-
-                  // Result filter
-                  if (activityResultFilter !== 'Todos') {
-                    const res = String(act.resultado || act.result || '').toLowerCase();
-                    const target = activityResultFilter.toLowerCase();
-                    if (!res.includes(target) && !target.includes(res)) return false;
-                  }
-
-                  // Action Type filter
-                  if (activityActionTypeFilter !== 'Todos') {
-                    const actType = (act.tipo_accion || act.evento || act.event || '').toLowerCase();
-                    if (!actType.includes(activityActionTypeFilter.toLowerCase())) return false;
-                  }
-
-                  return true;
-                });
+                const defaultModules = ['Todos', 'Seguridad', 'CRM', 'Taller', 'Inventario', 'Compras', 'Facturación', 'Configuración', 'Reportes', 'Catálogos'];
+                const allModulesList = Array.from(new Set([...defaultModules, ...(activityAvailableModules || [])]));
 
                 // Sorting
-                const sortedActs = [...filteredActs].sort((a, b) => {
+                const sortedActs = [...userActs].sort((a, b) => {
                   const key = sortConfigActividad.key;
                   let aVal = a[key] || '';
                   let bVal = b[key] || '';
@@ -4613,33 +4635,33 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                   return 0;
                 });
 
-                // Pagination
-                const totalPages = Math.ceil(sortedActs.length / activityPageSize) || 1;
-                const currentPage = Math.min(activityCurrentPage, totalPages);
-                const paginatedActs = sortedActs.slice((currentPage - 1) * activityPageSize, currentPage * activityPageSize);
+                const totalPages = activityTotalPages || 1;
+                const currentPage = activityCurrentPage || 1;
+                const totalRecords = activityTotalRecords || sortedActs.length;
+                const paginatedActs = sortedActs;
 
                 return (
                   <>
                     {/* Header & Main Actions */}
-                    <div className="bg-[#161a21] border border-[#2d3748] p-4 rounded-2xl shadow-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                    <div className="bg-card border border-border p-4 rounded-2xl shadow-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                       <div>
-                        <h4 className="font-black text-white text-sm uppercase tracking-wider flex items-center gap-2">
-                          <Clock className="text-[#bfce7f]" size={18} />
+                        <h4 className="font-black text-foreground text-sm uppercase tracking-wider flex items-center gap-2">
+                          <Clock className="text-primary" size={18} />
                           ACTIVIDAD DEL USUARIO
                         </h4>
-                        <p className="text-[11px] text-slate-400 mt-0.5">
+                        <p className="text-[11px] text-foreground-muted mt-0.5">
                           Registro cronológico de todas las operaciones realizadas por este usuario dentro de Bikers’ Fort.
                         </p>
                       </div>
 
                       <div className="flex items-center gap-2 flex-wrap">
                         {/* View Switcher */}
-                        <div className="flex items-center bg-[#0e1117] border border-[#2d3748] rounded-xl p-1">
+                        <div className="flex items-center bg-input border border-border rounded-xl p-1">
                           <button
                             type="button"
                             onClick={() => setActivityViewMode('table')}
                             className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
-                              activityViewMode === 'table' ? 'bg-[#bfce7f] text-[#1d1f18]' : 'text-slate-400 hover:text-white'
+                              activityViewMode === 'table' ? 'bg-primary text-primary-foreground' : 'text-foreground-muted hover:text-foreground'
                             }`}
                             title="Vista Tabla"
                           >
@@ -4650,7 +4672,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                             type="button"
                             onClick={() => setActivityViewMode('timeline')}
                             className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
-                              activityViewMode === 'timeline' ? 'bg-[#bfce7f] text-[#1d1f18]' : 'text-slate-400 hover:text-white'
+                              activityViewMode === 'timeline' ? 'bg-primary text-primary-foreground' : 'text-foreground-muted hover:text-foreground'
                             }`}
                             title="Vista Timeline"
                           >
@@ -4663,20 +4685,20 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                         <button
                           type="button"
                           onClick={() => exportActivityToExcel(sortedActs, detailUser?.full_name)}
-                          className="px-3 py-2 bg-[#0e1117] border border-[#2d3748] hover:border-[#bfce7f] text-slate-300 hover:text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+                          className="px-3 py-2 bg-input border border-border hover:border-primary text-foreground-secondary hover:text-foreground rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
                           title="Exportar a Excel (CSV)"
                         >
-                          <Download size={14} className="text-[#bfce7f]" />
+                          <Download size={14} className="text-primary" />
                           <span>Excel</span>
                         </button>
 
                         <button
                           type="button"
                           onClick={() => exportActivityToPdf(sortedActs, detailUser?.full_name)}
-                          className="px-3 py-2 bg-[#0e1117] border border-[#2d3748] hover:border-[#bfce7f] text-slate-300 hover:text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+                          className="px-3 py-2 bg-input border border-border hover:border-primary text-foreground-secondary hover:text-foreground rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
                           title="Exportar a PDF / Imprimir"
                         >
-                          <FileText size={14} className="text-[#bfce7f]" />
+                          <FileText size={14} className="text-primary" />
                           <span>PDF</span>
                         </button>
 
@@ -4684,47 +4706,47 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                         <button
                           type="button"
                           onClick={() => fetchUserActivity(detailUser.id)}
-                          className="p-2.5 bg-[#0e1117] border border-[#2d3748] hover:border-[#bfce7f] text-slate-300 hover:text-white rounded-xl text-xs transition-all cursor-pointer"
+                          className="p-2.5 bg-input border border-border hover:border-primary text-foreground-secondary hover:text-foreground rounded-xl text-xs transition-all cursor-pointer"
                           title="Actualizar registro de actividad"
                         >
-                          <RefreshCw size={14} className={isLoadingActivity ? "animate-spin text-[#bfce7f]" : ""} />
+                          <RefreshCw size={14} className={isLoadingActivity ? "animate-spin text-primary" : ""} />
                         </button>
                       </div>
                     </div>
 
                     {/* Toolbar & Filters */}
-                    <div className="bg-[#161a21] border border-[#2d3748] p-4 rounded-2xl shadow-xl space-y-3 text-xs">
+                    <div className="bg-card border border-border p-4 rounded-2xl shadow-xl space-y-3 text-xs">
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
                         
                         {/* Fecha Desde */}
                         <div>
-                          <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Fecha Desde</label>
+                          <label className="text-[10px] text-foreground-muted font-bold uppercase tracking-wider block mb-1">Fecha Desde</label>
                           <input
                             type="date"
                             value={activityDateFrom}
                             onChange={(e) => { setActivityDateFrom(e.target.value); setActivityCurrentPage(1); }}
-                            className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-1.5 text-slate-200 focus:outline-none focus:border-[#bfce7f]"
+                            className="w-full bg-input border border-border rounded-xl px-3 py-1.5 text-foreground-secondary focus:outline-none focus:border-primary"
                           />
                         </div>
 
                         {/* Fecha Hasta */}
                         <div>
-                          <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Fecha Hasta</label>
+                          <label className="text-[10px] text-foreground-muted font-bold uppercase tracking-wider block mb-1">Fecha Hasta</label>
                           <input
                             type="date"
                             value={activityDateTo}
                             onChange={(e) => { setActivityDateTo(e.target.value); setActivityCurrentPage(1); }}
-                            className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-1.5 text-slate-200 focus:outline-none focus:border-[#bfce7f]"
+                            className="w-full bg-input border border-border rounded-xl px-3 py-1.5 text-foreground-secondary focus:outline-none focus:border-primary"
                           />
                         </div>
 
                         {/* Módulo */}
                         <div>
-                          <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Módulo</label>
+                          <label className="text-[10px] text-foreground-muted font-bold uppercase tracking-wider block mb-1">Módulo</label>
                           <select
                             value={activityModuleFilter}
                             onChange={(e) => { setActivityModuleFilter(e.target.value); setActivityCurrentPage(1); }}
-                            className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-1.5 text-slate-200 focus:outline-none focus:border-[#bfce7f]"
+                            className="w-full bg-input border border-border rounded-xl px-3 py-1.5 text-foreground-secondary focus:outline-none focus:border-primary"
                           >
                             {allModulesList.map(mod => (
                               <option key={mod} value={mod}>{mod}</option>
@@ -4734,61 +4756,49 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
                         {/* Resultado */}
                         <div>
-                          <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Resultado</label>
+                          <label className="text-[10px] text-foreground-muted font-bold uppercase tracking-wider block mb-1">Resultado</label>
                           <select
                             value={activityResultFilter}
                             onChange={(e) => { setActivityResultFilter(e.target.value); setActivityCurrentPage(1); }}
-                            className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-1.5 text-slate-200 focus:outline-none focus:border-[#bfce7f]"
+                            className="w-full bg-input border border-border rounded-xl px-3 py-1.5 text-foreground-secondary focus:outline-none focus:border-primary"
                           >
                             <option value="Todos">Todos los resultados</option>
                             <option value="Exitoso">Exitoso (Verde)</option>
                             <option value="Advertencia">Advertencia (Amarillo)</option>
-                            <option value="Error">Error (Rojo)</option>
-                            <option value="Cancelado">Cancelado (Gris)</option>
-                            <option value="Información">Información (Azul)</option>
+                            <option value="Fallido">Fallido / Error (Rojo)</option>
+                            <option value="Denegado">Denegado</option>
                           </select>
                         </div>
 
-                        {/* Tipo de Acción */}
+                        {/* Evento / Acción */}
                         <div>
-                          <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Tipo de Acción</label>
+                          <label className="text-[10px] text-foreground-muted font-bold uppercase tracking-wider block mb-1">Evento</label>
                           <select
                             value={activityActionTypeFilter}
                             onChange={(e) => { setActivityActionTypeFilter(e.target.value); setActivityCurrentPage(1); }}
-                            className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-1.5 text-slate-200 focus:outline-none focus:border-[#bfce7f]"
+                            className="w-full bg-input border border-border rounded-xl px-3 py-1.5 text-foreground-secondary focus:outline-none focus:border-primary"
                           >
-                            <option value="Todos">Todas las acciones</option>
-                            <option value="Login">Login</option>
-                            <option value="Logout">Logout</option>
-                            <option value="Crear">Crear</option>
-                            <option value="Editar">Editar</option>
-                            <option value="Eliminar">Eliminar</option>
-                            <option value="Consultar">Consultar</option>
-                            <option value="Exportar">Exportar</option>
-                            <option value="Importar">Importar</option>
-                            <option value="Cambiar contraseña">Cambiar contraseña</option>
-                            <option value="Reset Password">Reset Password</option>
-                            <option value="Enviar Invitación">Enviar Invitación</option>
-                            <option value="Revocar Sesión">Revocar Sesión</option>
-                            <option value="Asignar Rol">Asignar Rol</option>
-                            <option value="Actualizar Permisos">Actualizar Permisos</option>
-                            <option value="Carga de Archivo">Carga de Archivo</option>
-                            <option value="Impresión">Impresión</option>
-                            <option value="Otros">Otros</option>
+                            <option value="Todos">Todos los eventos</option>
+                            <option value="LOGIN">LOGIN</option>
+                            <option value="LOGOUT">LOGOUT</option>
+                            <option value="EDITAR_USUARIO">EDITAR_USUARIO</option>
+                            <option value="RESET_PASSWORD_MANUAL">RESET_PASSWORD_MANUAL</option>
+                            <option value="REVOCAR_SESION">REVOCAR_SESION</option>
+                            <option value="REVOCAR_TODAS_SESIONES">REVOCAR_TODAS_SESIONES</option>
                           </select>
                         </div>
 
                         {/* Buscador */}
                         <div>
-                          <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Buscar</label>
+                          <label className="text-[10px] text-foreground-muted font-bold uppercase tracking-wider block mb-1">Buscar</label>
                           <div className="relative">
-                            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-foreground-muted" />
                             <input
                               type="text"
                               placeholder="Evento, IP, texto..."
                               value={activitySearchText}
                               onChange={(e) => { setActivitySearchText(e.target.value); setActivityCurrentPage(1); }}
-                              className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl pl-9 pr-3 py-1.5 text-slate-200 focus:outline-none focus:border-[#bfce7f]"
+                              className="w-full bg-input border border-border rounded-xl pl-9 pr-3 py-1.5 text-foreground-secondary focus:outline-none focus:border-primary"
                             />
                           </div>
                         </div>
@@ -4798,92 +4808,92 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
                     {/* VISTA TABLA / TIMELINE */}
                     {paginatedActs.length === 0 ? (
-                      <div className="py-12 border border-dashed border-[#2d3748] rounded-xl bg-[#0e1117] text-center space-y-2">
+                      <div className="py-12 border border-dashed border-border rounded-xl bg-input text-center space-y-2">
                         <Clock className="mx-auto text-slate-600 animate-pulse" size={32} />
-                        <p className="font-bold text-xs text-white">No se encontraron actividades en esta consulta.</p>
-                        <p className="text-[11px] text-slate-400 font-mono">Prueba ajustando los filtros de fecha, módulo o término de búsqueda.</p>
+                        <p className="font-bold text-xs text-foreground">No se encontraron actividades en esta consulta.</p>
+                        <p className="text-[11px] text-foreground-muted font-mono">Prueba ajustando los filtros de fecha, módulo o término de búsqueda.</p>
                       </div>
                     ) : activityViewMode === 'table' ? (
                       /* VISTA TABLA */
-                      <div className="border border-[#2d3748] rounded-2xl overflow-hidden bg-[#161a21] shadow-xl">
+                      <div className="border border-border rounded-2xl overflow-hidden bg-card shadow-xl">
                         <div className="overflow-x-auto">
                           <table className="w-full text-left border-collapse text-xs">
                             <thead>
-                              <tr className="border-b border-[#2d3748] bg-[#0e1117] select-none">
-                                <th className="py-3.5 px-4 font-mono text-[10px] text-slate-400 font-bold uppercase cursor-pointer" onClick={() => handleSortActividad('timestamp')}>
+                              <tr className="border-b border-border bg-input select-none">
+                                <th className="py-3.5 px-4 font-mono text-[10px] text-foreground-muted font-bold uppercase cursor-pointer" onClick={() => handleSortActividad('timestamp')}>
                                   FECHA Y HORA {sortConfigActividad.key === 'timestamp' && (sortConfigActividad.direction === 'asc' ? '↑' : '↓')}
                                 </th>
-                                <th className="py-3.5 px-4 font-mono text-[10px] text-slate-400 font-bold uppercase cursor-pointer" onClick={() => handleSortActividad('evento')}>
+                                <th className="py-3.5 px-4 font-mono text-[10px] text-foreground-muted font-bold uppercase cursor-pointer" onClick={() => handleSortActividad('evento')}>
                                   ACCIÓN {sortConfigActividad.key === 'evento' && (sortConfigActividad.direction === 'asc' ? '↑' : '↓')}
                                 </th>
-                                <th className="py-3.5 px-4 font-mono text-[10px] text-slate-400 font-bold uppercase">
+                                <th className="py-3.5 px-4 font-mono text-[10px] text-foreground-muted font-bold uppercase">
                                   DESCRIPCIÓN
                                 </th>
-                                <th className="py-3.5 px-4 font-mono text-[10px] text-slate-400 font-bold uppercase cursor-pointer" onClick={() => handleSortActividad('modulo')}>
+                                <th className="py-3.5 px-4 font-mono text-[10px] text-foreground-muted font-bold uppercase cursor-pointer" onClick={() => handleSortActividad('modulo')}>
                                   MÓDULO {sortConfigActividad.key === 'modulo' && (sortConfigActividad.direction === 'asc' ? '↑' : '↓')}
                                 </th>
-                                <th className="py-3.5 px-4 font-mono text-[10px] text-slate-400 font-bold uppercase cursor-pointer" onClick={() => handleSortActividad('resultado')}>
+                                <th className="py-3.5 px-4 font-mono text-[10px] text-foreground-muted font-bold uppercase cursor-pointer" onClick={() => handleSortActividad('resultado')}>
                                   RESULTADO {sortConfigActividad.key === 'resultado' && (sortConfigActividad.direction === 'asc' ? '↑' : '↓')}
                                 </th>
-                                <th className="py-3.5 px-4 font-mono text-[10px] text-slate-400 font-bold uppercase">
+                                <th className="py-3.5 px-4 font-mono text-[10px] text-foreground-muted font-bold uppercase">
                                   IP
                                 </th>
-                                <th className="py-3.5 px-4 font-mono text-[10px] text-slate-400 font-bold uppercase">
+                                <th className="py-3.5 px-4 font-mono text-[10px] text-foreground-muted font-bold uppercase">
                                   DISPOSITIVO
                                 </th>
-                                <th className="py-3.5 px-4 font-mono text-[10px] text-slate-400 font-bold uppercase">
+                                <th className="py-3.5 px-4 font-mono text-[10px] text-foreground-muted font-bold uppercase">
                                   DURACIÓN
                                 </th>
-                                <th className="py-3.5 px-4 font-mono text-[10px] text-slate-400 font-bold uppercase text-right pr-4">
+                                <th className="py-3.5 px-4 font-mono text-[10px] text-foreground-muted font-bold uppercase text-right pr-4">
                                   ACCIONES
                                 </th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-[#2d3748]">
                               {paginatedActs.map(act => {
-                                const resUpper = String(act.resultado || act.result || 'EXÍTO').toUpperCase();
+                                const resUpper = String(act.resultado || act.result || '').toUpperCase();
                                 let resultBadge = 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30';
                                 if (resUpper.includes('ERROR') || resUpper.includes('FALLID')) resultBadge = 'bg-rose-500/15 text-rose-400 border-rose-500/30';
                                 else if (resUpper.includes('ADVERT') || resUpper.includes('WARN')) resultBadge = 'bg-amber-500/15 text-amber-400 border-amber-500/30';
-                                else if (resUpper.includes('CANCEL')) resultBadge = 'bg-zinc-800 text-zinc-400 border-zinc-700';
+                                else if (resUpper.includes('CANCEL') || resUpper.includes('DENEG')) resultBadge = 'bg-zinc-800 text-zinc-400 border-zinc-700';
                                 else if (resUpper.includes('INFO')) resultBadge = 'bg-sky-500/15 text-sky-400 border-sky-500/30';
 
                                 return (
                                   <tr 
                                     key={act.id || act.actividad_id} 
                                     onClick={() => setSelectedActivityDetail(act)}
-                                    className="hover:bg-[#1f242d] transition-colors cursor-pointer"
+                                    className="hover:bg-hover transition-colors cursor-pointer"
                                   >
-                                    <td className="py-3.5 px-4 font-mono text-xs text-slate-300 whitespace-nowrap">
+                                    <td className="py-3.5 px-4 font-mono text-xs text-foreground-secondary whitespace-nowrap">
                                       {formatSafeDateTime(act.timestamp || act.fecha_hora)}
                                     </td>
                                     <td className="py-3.5 px-4 whitespace-nowrap">
-                                      <span className="font-bold text-white text-xs block">
-                                        {act.evento || act.event || 'Actividad'}
+                                      <span className="font-bold text-foreground text-xs block">
+                                        {act.evento || act.event || '—'}
                                       </span>
                                     </td>
                                     <td className="py-3.5 px-4 max-w-xs">
-                                      <span className="text-slate-300 text-xs block truncate" title={act.descripcion || act.desc}>
-                                        {act.descripcion || act.desc || 'Sin descripción'}
+                                      <span className="text-foreground-secondary text-xs block truncate" title={act.descripcion || act.desc}>
+                                        {act.descripcion || act.desc || '—'}
                                       </span>
                                     </td>
                                     <td className="py-3.5 px-4 whitespace-nowrap">
-                                      <span className="px-2.5 py-1 rounded-lg bg-[#0e1117] border border-[#2d3748] text-[#bfce7f] font-mono text-[10px] font-bold uppercase">
-                                        {act.modulo || act.module || 'Sistema'}
+                                      <span className="px-2.5 py-1 rounded-lg bg-input border border-border text-primary font-mono text-[10px] font-bold uppercase">
+                                        {act.modulo || act.module || '—'}
                                       </span>
                                     </td>
                                     <td className="py-3.5 px-4 whitespace-nowrap">
                                       <span className={`px-2.5 py-1 rounded-lg font-mono text-[10px] font-bold uppercase tracking-wider border ${resultBadge}`}>
-                                        ● {act.resultado || act.result || 'Exitoso'}
+                                        ● {act.resultado || act.result || '—'}
                                       </span>
                                     </td>
-                                    <td className="py-3.5 px-4 font-mono text-xs text-[#bfce7f] select-all whitespace-nowrap">
-                                      {act.direccion_ip || act.ip || '127.0.0.1'}
+                                    <td className="py-3.5 px-4 font-mono text-xs text-primary select-all whitespace-nowrap">
+                                      {act.direccion_ip || act.ip || '—'}
                                     </td>
-                                    <td className="py-3.5 px-4 text-xs text-slate-300 whitespace-nowrap max-w-[150px] truncate" title={act.dispositivo || act.device}>
-                                      {act.dispositivo || act.device || 'Navegador Web'}
+                                    <td className="py-3.5 px-4 text-xs text-foreground-secondary whitespace-nowrap max-w-[150px] truncate" title={act.dispositivo || act.device}>
+                                      {act.dispositivo || act.device || 'No registrado'}
                                     </td>
-                                    <td className="py-3.5 px-4 font-mono text-xs text-slate-400 whitespace-nowrap">
+                                    <td className="py-3.5 px-4 font-mono text-xs text-foreground-muted whitespace-nowrap">
                                       {act.duracion_ms ? `${act.duracion_ms} ms` : '—'}
                                     </td>
                                     <td className="py-3.5 px-4 text-right pr-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
@@ -4893,7 +4903,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                                           e.stopPropagation();
                                           setSelectedActivityDetail(act);
                                         }}
-                                        className="px-2.5 py-1 rounded-lg bg-[#0e1117] border border-[#2d3748] text-slate-300 hover:text-white hover:border-[#bfce7f] transition-all cursor-pointer flex items-center gap-1.5 ml-auto text-xs"
+                                        className="px-2.5 py-1 rounded-lg bg-input border border-border text-foreground-secondary hover:text-foreground hover:border-primary transition-all cursor-pointer flex items-center gap-1.5 ml-auto text-xs"
                                         title="Ver detalle del evento"
                                         aria-label="Ver detalle del evento"
                                       >
@@ -4910,7 +4920,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                       </div>
                     ) : (
                       /* VISTA TIMELINE */
-                      <div className="p-6 bg-[#161a21] border border-[#2d3748] rounded-2xl shadow-xl space-y-6">
+                      <div className="p-6 bg-card border border-border rounded-2xl shadow-xl space-y-6">
                         {(() => {
                           const groups = {};
                           paginatedActs.forEach(act => {
@@ -4923,17 +4933,17 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                           return Object.keys(groups).map(dateGroup => (
                             <div key={dateGroup} className="space-y-4">
                               <div className="flex items-center gap-2">
-                                <span className="px-3 py-1 bg-[#0e1117] border border-[#2d3748] rounded-xl text-xs font-bold text-[#bfce7f] uppercase tracking-wider">
+                                <span className="px-3 py-1 bg-input border border-border rounded-xl text-xs font-bold text-primary uppercase tracking-wider">
                                   {dateGroup}
                                 </span>
-                                <div className="flex-1 h-[1px] bg-[#2d3748]" />
+                                <div className="flex-1 h-[1px] bg-surface-subtle" />
                               </div>
 
-                              <div className="relative pl-6 space-y-4 border-l-2 border-[#2d3748]">
+                              <div className="relative pl-6 space-y-4 border-l-2 border-border">
                                 {groups[dateGroup].map(act => {
                                   const dateObj = act.timestamp || act.fecha_hora ? new Date(act.timestamp || act.fecha_hora) : new Date();
                                   const timeStr = dateObj.toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-                                  const resUpper = String(act.resultado || act.result || 'EXÍTO').toUpperCase();
+                                  const resUpper = String(act.resultado || act.result || '').toUpperCase();
                                   let nodeColor = 'bg-emerald-400 border-emerald-500/50';
                                   if (resUpper.includes('ERROR') || resUpper.includes('FALLID')) nodeColor = 'bg-rose-400 border-rose-500/50';
                                   else if (resUpper.includes('ADVERT') || resUpper.includes('WARN')) nodeColor = 'bg-amber-400 border-amber-500/50';
@@ -4942,27 +4952,27 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                                     <div 
                                       key={act.id || act.actividad_id}
                                       onClick={() => setSelectedActivityDetail(act)}
-                                      className="relative group p-4 bg-[#0e1117] border border-[#2d3748] hover:border-[#bfce7f] rounded-xl transition-all cursor-pointer shadow-md space-y-2"
+                                      className="relative group p-4 bg-input border border-border hover:border-primary rounded-xl transition-all cursor-pointer shadow-md space-y-2"
                                     >
                                       <div className={`absolute -left-[31px] top-4 w-3.5 h-3.5 rounded-full border-2 ${nodeColor} shadow-lg`} />
 
                                       <div className="flex items-center justify-between gap-3">
                                         <div className="flex items-center gap-2">
-                                          <span className="font-mono text-xs font-bold text-[#bfce7f]">{timeStr}</span>
-                                          <span className="text-white font-bold text-xs">{act.evento || act.event || 'Actividad Operativa'}</span>
+                                          <span className="font-mono text-xs font-bold text-primary">{timeStr}</span>
+                                          <span className="text-foreground font-bold text-xs">{act.evento || act.event || '—'}</span>
                                         </div>
-                                        <span className="px-2 py-0.5 rounded bg-[#161a21] border border-[#2d3748] text-[10px] text-[#bfce7f] uppercase font-bold">
-                                          {act.modulo || act.module || 'Sistema'}
+                                        <span className="px-2 py-0.5 rounded bg-card border border-border text-[10px] text-primary uppercase font-bold">
+                                          {act.modulo || act.module || '—'}
                                         </span>
                                       </div>
 
-                                      <p className="text-slate-300 text-xs leading-relaxed">
-                                        {act.descripcion || act.desc || 'Sin descripción registrada'}
+                                      <p className="text-foreground-secondary text-xs leading-relaxed">
+                                        {act.descripcion || act.desc || '—'}
                                       </p>
 
-                                      <div className="flex items-center justify-between pt-2 border-t border-[#2d3748]/50 text-[10px] text-slate-400">
-                                        <span>IP: <strong className="text-slate-300 font-mono">{act.direccion_ip || act.ip || '127.0.0.1'}</strong></span>
-                                        <span className="text-[#bfce7f] font-bold group-hover:underline flex items-center gap-1">
+                                      <div className="flex items-center justify-between pt-2 border-t border-border/50 text-[10px] text-foreground-muted">
+                                        <span>IP: <strong className="text-foreground-secondary font-mono">{act.direccion_ip || act.ip || '—'}</strong></span>
+                                        <span className="text-primary font-bold group-hover:underline flex items-center gap-1">
                                           Ver detalle completo <ArrowRight size={10} />
                                         </span>
                                       </div>
@@ -4977,12 +4987,12 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                     )}
 
                     {/* Pagination Footer */}
-                    <div className="bg-[#161a21] border border-[#2d3748] p-4 rounded-2xl shadow-xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-                      <div className="flex items-center gap-2 text-slate-400">
+                    <div className="bg-card border border-border p-4 rounded-2xl shadow-xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+                      <div className="flex items-center gap-2 text-foreground-muted">
                         <span>Mostrando</span>
-                        <span className="text-white font-bold">{paginatedActs.length}</span>
+                        <span className="text-foreground font-bold">{paginatedActs.length}</span>
                         <span>de</span>
-                        <span className="text-white font-bold">{sortedActs.length}</span>
+                        <span className="text-foreground font-bold">{totalRecords}</span>
                         <span>actividades registradas</span>
                       </div>
 
@@ -4990,17 +5000,17 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                         <button
                           disabled={currentPage <= 1}
                           onClick={() => setActivityCurrentPage(prev => Math.max(1, prev - 1))}
-                          className="px-3 py-1.5 rounded-xl border border-[#2d3748] bg-[#0e1117] text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#1f242d] transition-colors cursor-pointer"
+                          className="px-3 py-1.5 rounded-xl border border-border bg-input text-foreground disabled:opacity-40 disabled:cursor-not-allowed hover:bg-hover transition-colors cursor-pointer"
                         >
                           Anterior
                         </button>
-                        <span className="px-3 py-1 text-slate-300 font-bold">
+                        <span className="px-3 py-1 text-foreground-secondary font-bold">
                           Página {currentPage} de {totalPages}
                         </span>
                         <button
                           disabled={currentPage >= totalPages}
                           onClick={() => setActivityCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                          className="px-3 py-1.5 rounded-xl border border-[#2d3748] bg-[#0e1117] text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#1f242d] transition-colors cursor-pointer"
+                          className="px-3 py-1.5 rounded-xl border border-border bg-input text-foreground disabled:opacity-40 disabled:cursor-not-allowed hover:bg-hover transition-colors cursor-pointer"
                         >
                           Siguiente
                         </button>
@@ -5017,13 +5027,13 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
             <div className="space-y-4 animate-in fade-in duration-200">
               
               {/* Header & Main Actions */}
-              <div className="bg-[#161a21] border border-[#2d3748] p-4 rounded-2xl shadow-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <div className="bg-card border border-border p-4 rounded-2xl shadow-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                 <div>
-                  <h4 className="font-black text-white text-sm uppercase tracking-wider flex items-center gap-2">
-                    <ShieldAlert className="text-[#bfce7f]" size={18} />
+                  <h4 className="font-black text-foreground text-sm uppercase tracking-wider flex items-center gap-2">
+                    <ShieldAlert className="text-primary" size={18} />
                     BITÁCORA DE AUDITORÍA
                   </h4>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
+                  <p className="text-[11px] text-foreground-muted mt-0.5">
                     Registro oficial e inalterable de todos los cambios administrativos realizados sobre esta cuenta.
                   </p>
                 </div>
@@ -5033,7 +5043,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                   <button
                     type="button"
                     onClick={handleExportAuditExcel}
-                    className="px-3 py-2 bg-[#0e1117] border border-[#2d3748] hover:border-emerald-500/50 text-slate-300 hover:text-emerald-400 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                    className="px-3 py-2 bg-input border border-border hover:border-emerald-500/50 text-foreground-secondary hover:text-emerald-400 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
                     title="Exportar a Excel (CSV)"
                   >
                     <Download size={14} className="text-emerald-400" />
@@ -5044,7 +5054,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                   <button
                     type="button"
                     onClick={handleExportAuditPdf}
-                    className="px-3 py-2 bg-[#0e1117] border border-[#2d3748] hover:border-rose-500/50 text-slate-300 hover:text-rose-400 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                    className="px-3 py-2 bg-input border border-border hover:border-rose-500/50 text-foreground-secondary hover:text-rose-400 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
                     title="Exportar a PDF"
                   >
                     <Printer size={14} className="text-rose-400" />
@@ -5055,86 +5065,86 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                   <button
                     type="button"
                     onClick={() => fetchUserAudits(detailUser.id)}
-                    className="p-2.5 bg-[#0e1117] border border-[#2d3748] hover:border-[#bfce7f] text-slate-300 hover:text-white rounded-xl text-xs transition-all cursor-pointer shadow-sm"
+                    className="p-2.5 bg-input border border-border hover:border-primary text-foreground-secondary hover:text-foreground rounded-xl text-xs transition-all cursor-pointer shadow-sm"
                     title="Actualizar bitácora de auditoría"
                   >
-                    <RefreshCw size={14} className={isLoadingAudits ? "animate-spin text-[#bfce7f]" : ""} />
+                    <RefreshCw size={14} className={isLoadingAudits ? "animate-spin text-primary" : ""} />
                   </button>
                 </div>
               </div>
 
               {/* Resumen Superior / Metric Cards */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-9 gap-2.5 text-xs">
-                <div className="p-3 bg-[#161a21] border border-[#2d3748] rounded-xl space-y-1 shadow-md">
-                  <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block truncate">Total Eventos</span>
-                  <span className="text-base font-black text-white font-mono">{auditSummaryStats.total_eventos || 0}</span>
+                <div className="p-3 bg-card border border-border rounded-xl space-y-1 shadow-md">
+                  <span className="text-[9px] text-foreground-muted font-bold uppercase tracking-wider block truncate">Total Eventos</span>
+                  <span className="text-base font-black text-foreground font-mono">{auditSummaryStats.total_eventos || 0}</span>
                 </div>
-                <div className="p-3 bg-[#161a21] border border-[#2d3748] rounded-xl space-y-1 shadow-md">
+                <div className="p-3 bg-card border border-border rounded-xl space-y-1 shadow-md">
                   <span className="text-[9px] text-emerald-400 font-bold uppercase tracking-wider block truncate">Creaciones</span>
                   <span className="text-base font-black text-emerald-400 font-mono">{auditSummaryStats.creaciones || 0}</span>
                 </div>
-                <div className="p-3 bg-[#161a21] border border-[#2d3748] rounded-xl space-y-1 shadow-md">
+                <div className="p-3 bg-card border border-border rounded-xl space-y-1 shadow-md">
                   <span className="text-[9px] text-sky-400 font-bold uppercase tracking-wider block truncate">Ediciones</span>
                   <span className="text-base font-black text-sky-400 font-mono">{auditSummaryStats.actualizaciones || 0}</span>
                 </div>
-                <div className="p-3 bg-[#161a21] border border-[#2d3748] rounded-xl space-y-1 shadow-md">
+                <div className="p-3 bg-card border border-border rounded-xl space-y-1 shadow-md">
                   <span className="text-[9px] text-purple-400 font-bold uppercase tracking-wider block truncate">Permisos</span>
                   <span className="text-base font-black text-purple-400 font-mono">{auditSummaryStats.permisos_modificados || 0}</span>
                 </div>
-                <div className="p-3 bg-[#161a21] border border-[#2d3748] rounded-xl space-y-1 shadow-md">
+                <div className="p-3 bg-card border border-border rounded-xl space-y-1 shadow-md">
                   <span className="text-[9px] text-amber-400 font-bold uppercase tracking-wider block truncate">Passwords</span>
                   <span className="text-base font-black text-amber-400 font-mono">{auditSummaryStats.reseteos_password || 0}</span>
                 </div>
-                <div className="p-3 bg-[#161a21] border border-[#2d3748] rounded-xl space-y-1 shadow-md">
+                <div className="p-3 bg-card border border-border rounded-xl space-y-1 shadow-md">
                   <span className="text-[9px] text-amber-400 font-bold uppercase tracking-wider block truncate">Sesiones</span>
                   <span className="text-base font-black text-amber-400 font-mono">{auditSummaryStats.revocaciones_sesion || 0}</span>
                 </div>
-                <div className="p-3 bg-[#161a21] border border-[#2d3748] rounded-xl space-y-1 shadow-md">
+                <div className="p-3 bg-card border border-border rounded-xl space-y-1 shadow-md">
                   <span className="text-[9px] text-purple-400 font-bold uppercase tracking-wider block truncate">Roles</span>
                   <span className="text-base font-black text-purple-400 font-mono">{auditSummaryStats.cambios_roles || 0}</span>
                 </div>
-                <div className="p-3 bg-[#161a21] border border-[#2d3748] rounded-xl space-y-1 shadow-md">
+                <div className="p-3 bg-card border border-border rounded-xl space-y-1 shadow-md">
                   <span className="text-[9px] text-rose-400 font-bold uppercase tracking-wider block truncate">Bloqueos</span>
                   <span className="text-base font-black text-rose-400 font-mono">{auditSummaryStats.bloqueos || 0}</span>
                 </div>
-                <div className="p-3 bg-[#161a21] border border-[#2d3748] rounded-xl space-y-1 shadow-md">
+                <div className="p-3 bg-card border border-border rounded-xl space-y-1 shadow-md">
                   <span className="text-[9px] text-emerald-400 font-bold uppercase tracking-wider block truncate">Desbloqueos</span>
                   <span className="text-base font-black text-emerald-400 font-mono">{auditSummaryStats.desbloqueos || 0}</span>
                 </div>
               </div>
 
               {/* Toolbar & Server-side Filters */}
-              <div className="bg-[#161a21] border border-[#2d3748] p-4 rounded-2xl shadow-xl space-y-3 text-xs">
+              <div className="bg-card border border-border p-4 rounded-2xl shadow-xl space-y-3 text-xs">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
                   {/* Fecha Desde */}
                   <div>
-                    <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1">Desde</label>
+                    <label className="text-[10px] text-foreground-muted font-bold uppercase block mb-1">Desde</label>
                     <input
                       type="date"
                       value={auditDateFrom}
                       onChange={(e) => { setAuditDateFrom(e.target.value); setAuditCurrentPage(1); }}
-                      className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-2 text-white text-xs font-mono focus:outline-none focus:border-[#bfce7f]"
+                      className="w-full bg-input border border-border rounded-xl px-3 py-2 text-foreground text-xs font-mono focus:outline-none focus:border-primary"
                     />
                   </div>
 
                   {/* Fecha Hasta */}
                   <div>
-                    <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1">Hasta</label>
+                    <label className="text-[10px] text-foreground-muted font-bold uppercase block mb-1">Hasta</label>
                     <input
                       type="date"
                       value={auditDateTo}
                       onChange={(e) => { setAuditDateTo(e.target.value); setAuditCurrentPage(1); }}
-                      className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-2 text-white text-xs font-mono focus:outline-none focus:border-[#bfce7f]"
+                      className="w-full bg-input border border-border rounded-xl px-3 py-2 text-foreground text-xs font-mono focus:outline-none focus:border-primary"
                     />
                   </div>
 
                   {/* Acción */}
                   <div>
-                    <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1">Acción</label>
+                    <label className="text-[10px] text-foreground-muted font-bold uppercase block mb-1">Acción</label>
                     <select
                       value={auditActionFilter}
                       onChange={(e) => { setAuditActionFilter(e.target.value); setAuditCurrentPage(1); }}
-                      className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-2 text-white text-xs font-mono focus:outline-none focus:border-[#bfce7f]"
+                      className="w-full bg-input border border-border rounded-xl px-3 py-2 text-foreground text-xs font-mono focus:outline-none focus:border-primary"
                     >
                       <option value="Todos">Todas las Acciones</option>
                       {auditAvailableActions.map(act => (
@@ -5145,11 +5155,11 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
                   {/* Administrador */}
                   <div>
-                    <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1">Administrador</label>
+                    <label className="text-[10px] text-foreground-muted font-bold uppercase block mb-1">Administrador</label>
                     <select
                       value={auditAdminFilter}
                       onChange={(e) => { setAuditAdminFilter(e.target.value); setAuditCurrentPage(1); }}
-                      className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-2 text-white text-xs font-mono focus:outline-none focus:border-[#bfce7f]"
+                      className="w-full bg-input border border-border rounded-xl px-3 py-2 text-foreground text-xs font-mono focus:outline-none focus:border-primary"
                     >
                       <option value="Todos">Todos los Admins</option>
                       {auditAvailableAdmins.map(adm => (
@@ -5160,11 +5170,11 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
                   {/* Resultado */}
                   <div>
-                    <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1">Resultado</label>
+                    <label className="text-[10px] text-foreground-muted font-bold uppercase block mb-1">Resultado</label>
                     <select
                       value={auditResultFilter}
                       onChange={(e) => { setAuditResultFilter(e.target.value); setAuditCurrentPage(1); }}
-                      className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-2 text-white text-xs font-mono focus:outline-none focus:border-[#bfce7f]"
+                      className="w-full bg-input border border-border rounded-xl px-3 py-2 text-foreground text-xs font-mono focus:outline-none focus:border-primary"
                     >
                       <option value="Todos">Todos</option>
                       <option value="EXITOSO">Exitoso / Completado</option>
@@ -5175,16 +5185,16 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
                   {/* Buscador */}
                   <div>
-                    <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1">Buscar</label>
+                    <label className="text-[10px] text-foreground-muted font-bold uppercase block mb-1">Buscar</label>
                     <div className="relative">
-                      <Search size={14} className="absolute left-3 top-2.5 text-slate-500" />
+                      <Search size={14} className="absolute left-3 top-2.5 text-foreground-disabled" />
                       <input
                         type="text"
                         placeholder="Admin, IP, motivo..."
                         value={auditSearchText}
                         onChange={(e) => setAuditSearchText(e.target.value)}
                         onKeyDown={(e) => { if (e.key === 'Enter') { setAuditCurrentPage(1); fetchUserAudits(detailUser.id); } }}
-                        className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl pl-8 pr-3 py-2 text-white text-xs font-mono focus:outline-none focus:border-[#bfce7f]"
+                        className="w-full bg-input border border-border rounded-xl pl-8 pr-3 py-2 text-foreground text-xs font-mono focus:outline-none focus:border-primary"
                       />
                     </div>
                   </div>
@@ -5193,34 +5203,34 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
               {/* Body: Timeline Cards / Stream */}
               {isLoadingAudits ? (
-                <div className="w-full min-h-[220px] py-14 px-6 border border-dashed border-[#2d3748] rounded-2xl bg-[#0e1117] flex flex-col items-center justify-center space-y-3 shadow-xl">
-                  <div className="w-8 h-8 border-4 border-[#2d3748] border-t-[#bfce7f] rounded-full animate-spin"></div>
-                  <p className="text-xs text-slate-400 font-mono">Consultando bitácora de auditoría administrativa...</p>
+                <div className="w-full min-h-[220px] py-14 px-6 border border-dashed border-border rounded-2xl bg-input flex flex-col items-center justify-center space-y-3 shadow-xl">
+                  <div className="w-8 h-8 border-4 border-border border-t-[#bfce7f] rounded-full animate-spin"></div>
+                  <p className="text-xs text-foreground-muted font-mono">Consultando bitácora de auditoría administrativa...</p>
                 </div>
               ) : auditFetchError ? (
                 <div className="w-full min-h-[220px] py-12 px-6 border border-rose-500/30 rounded-2xl bg-rose-500/5 flex flex-col items-center justify-center text-center space-y-3 shadow-xl">
                   <AlertCircle className="mx-auto text-rose-400" size={38} />
-                  <p className="font-bold text-sm text-white">No se pudo cargar la bitácora de auditoría.</p>
+                  <p className="font-bold text-sm text-foreground">No se pudo cargar la bitácora de auditoría.</p>
                   <p className="text-xs text-rose-300/80 max-w-md mx-auto">{auditFetchError}</p>
                   <button
                     type="button"
                     onClick={() => fetchUserAudits(detailUser.id)}
-                    className="px-4 py-2 bg-[#161a21] border border-rose-500/40 hover:border-rose-400 text-rose-300 hover:text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm flex items-center gap-2 mt-1"
+                    className="px-4 py-2 bg-card border border-rose-500/40 hover:border-rose-400 text-rose-300 hover:text-foreground rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm flex items-center gap-2 mt-1"
                   >
                     <RefreshCw size={14} />
                     <span>Reintentar</span>
                   </button>
                 </div>
               ) : realUserAudits.length === 0 ? (
-                <div className="w-full min-h-[240px] py-12 px-6 border border-dashed border-[#2d3748] rounded-2xl bg-[#0e1117] flex flex-col items-center justify-center text-center space-y-3 shadow-xl">
-                  <ShieldAlert className="mx-auto text-slate-500 animate-pulse" size={40} />
+                <div className="w-full min-h-[240px] py-12 px-6 border border-dashed border-border rounded-2xl bg-input flex flex-col items-center justify-center text-center space-y-3 shadow-xl">
+                  <ShieldAlert className="mx-auto text-foreground-disabled animate-pulse" size={40} />
                   <div className="max-w-[520px] mx-auto space-y-1">
-                    <p className="font-bold text-sm text-white">
+                    <p className="font-bold text-sm text-foreground">
                       {(auditActionFilter !== 'Todos' || auditAdminFilter !== 'Todos' || auditResultFilter !== 'Todos' || auditSearchText || auditDateFrom || auditDateTo)
                         ? 'No se encontraron eventos con los filtros seleccionados.'
                         : 'No existen registros de auditoría para este usuario.'}
                     </p>
-                    <p className="text-xs text-slate-400 leading-relaxed">
+                    <p className="text-xs text-foreground-muted leading-relaxed">
                       Los cambios de configuración, reseteos de clave, revocación de sesiones y modificaciones de perfil efectuadas por administradores se registran inalterablemente aquí.
                     </p>
                   </div>
@@ -5237,7 +5247,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                         setAuditDateTo('');
                         setAuditCurrentPage(1);
                       }}
-                      className="px-4 py-2 bg-[#161a21] border border-[#2d3748] hover:border-[#bfce7f] text-slate-300 hover:text-white rounded-xl text-xs font-bold transition-all cursor-pointer mt-2 shadow-sm"
+                      className="px-4 py-2 bg-card border border-border hover:border-primary text-foreground-secondary hover:text-foreground rounded-xl text-xs font-bold transition-all cursor-pointer mt-2 shadow-sm"
                     >
                       Limpiar filtros
                     </button>
@@ -5250,14 +5260,14 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                     <div key={dateGroup} className="space-y-3">
                       {/* Date Group Heading */}
                       <div className="flex items-center gap-3">
-                        <span className="px-3 py-1 bg-[#161a21] border border-[#2d3748] rounded-lg text-xs font-bold text-[#bfce7f] uppercase tracking-wider font-mono shadow-sm">
+                        <span className="px-3 py-1 bg-card border border-border rounded-lg text-xs font-bold text-primary uppercase tracking-wider font-mono shadow-sm">
                           {dateGroup}
                         </span>
-                        <div className="flex-1 h-[1px] bg-[#2d3748]" />
+                        <div className="flex-1 h-[1px] bg-surface-subtle" />
                       </div>
 
                       {/* Event Cards */}
-                      <div className="space-y-3 relative pl-4 border-l-2 border-[#2d3748]/80 ml-3">
+                      <div className="space-y-3 relative pl-4 border-l-2 border-border/80 ml-3">
                         {items.map(audit => {
                           const semantic = getSemanticColorClass(audit);
                           const friendlyTitle = getFriendlyActionTitle(audit.accion || audit.action);
@@ -5266,24 +5276,24 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                           return (
                             <div 
                               key={audit.id}
-                              className={`relative bg-[#161a21] border ${semantic.border} rounded-2xl p-4 shadow-xl hover:border-[#bfce7f]/50 transition-all space-y-3`}
+                              className={`relative bg-card border ${semantic.border} rounded-2xl p-4 shadow-xl hover:border-primary/50 transition-all space-y-3`}
                             >
                               {/* Node Indicator Dot */}
-                              <div className={`absolute -left-[23px] top-5 w-3.5 h-3.5 rounded-full ${semantic.nodeBg} ring-4 ring-[#0e1117]`} />
+                              <div className={`absolute -left-[23px] top-5 w-3.5 h-3.5 rounded-full ${semantic.nodeBg} ring-4 ring-surface-subtle`} />
 
-                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#2d3748]/50 pb-2.5">
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/50 pb-2.5">
                                 <div className="flex items-center gap-2">
                                   <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border font-mono ${semantic.badge}`}>
                                     ● {friendlyTitle}
                                   </span>
-                                  <span className="text-[11px] text-slate-400 font-mono">
+                                  <span className="text-[11px] text-foreground-muted font-mono">
                                     {formatSafeDateTime(audit.fecha_hora || audit.performed_at || audit.timestamp)}
                                   </span>
                                 </div>
 
                                 <div className="flex items-center gap-2">
-                                  <span className="text-[11px] text-slate-400 font-medium">Ejecutado por:</span>
-                                  <span className="px-2 py-0.5 bg-[#0e1117] border border-[#2d3748] rounded-md font-bold text-white text-xs font-mono">
+                                  <span className="text-[11px] text-foreground-muted font-medium">Ejecutado por:</span>
+                                  <span className="px-2 py-0.5 bg-input border border-border rounded-md font-bold text-foreground text-xs font-mono">
                                     {audit.admin_nombre || audit.performed_by || 'Sistema'}
                                   </span>
                                   <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider font-mono border ${
@@ -5298,8 +5308,8 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
                               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
                                 <div className="space-y-1 flex-1">
-                                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Resumen Operativo</span>
-                                  <p className="text-xs font-medium text-slate-200 leading-relaxed">
+                                  <span className="text-[10px] text-foreground-muted font-bold uppercase tracking-wider block">Resumen Operativo</span>
+                                  <p className="text-xs font-medium text-foreground-secondary leading-relaxed">
                                     {naturalText}
                                   </p>
                                 </div>
@@ -5307,9 +5317,9 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                                 <button
                                   type="button"
                                   onClick={() => setSelectedAuditDetail(audit)}
-                                  className="px-3.5 py-2 bg-[#0e1117] border border-[#2d3748] hover:border-[#bfce7f] text-slate-200 hover:text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer shadow-sm"
+                                  className="px-3.5 py-2 bg-input border border-border hover:border-primary text-foreground-secondary hover:text-foreground rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer shadow-sm"
                                 >
-                                  <Eye size={14} className="text-[#bfce7f]" />
+                                  <Eye size={14} className="text-primary" />
                                   <span>Ver detalle</span>
                                 </button>
                               </div>
@@ -5321,16 +5331,16 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                   ))}
 
                   {/* Server-Side Pagination Bar */}
-                  <div className="bg-[#161a21] border border-[#2d3748] p-4 rounded-2xl shadow-xl flex flex-col sm:flex-row justify-between items-center gap-3 text-xs font-mono">
-                    <div className="text-slate-400">
-                      Mostrando página <span className="text-white font-bold">{auditCurrentPage}</span> de <span className="text-white font-bold">{auditTotalPages}</span> ({auditTotalRecords} eventos en total)
+                  <div className="bg-card border border-border p-4 rounded-2xl shadow-xl flex flex-col sm:flex-row justify-between items-center gap-3 text-xs font-mono">
+                    <div className="text-foreground-muted">
+                      Mostrando página <span className="text-foreground font-bold">{auditCurrentPage}</span> de <span className="text-foreground font-bold">{auditTotalPages}</span> ({auditTotalRecords} eventos en total)
                     </div>
 
                     <div className="flex items-center gap-2">
                       <select
                         value={auditPageSize}
                         onChange={(e) => { setAuditPageSize(Number(e.target.value)); setAuditCurrentPage(1); }}
-                        className="bg-[#0e1117] border border-[#2d3748] rounded-xl px-2.5 py-1.5 text-white font-mono focus:outline-none"
+                        className="bg-input border border-border rounded-xl px-2.5 py-1.5 text-foreground font-mono focus:outline-none"
                       >
                         <option value={10}>10 por página</option>
                         <option value={20}>20 por página</option>
@@ -5341,7 +5351,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                       <button
                         disabled={auditCurrentPage <= 1}
                         onClick={() => setAuditCurrentPage(prev => Math.max(1, prev - 1))}
-                        className="px-3 py-1.5 rounded-xl border border-[#2d3748] bg-[#0e1117] text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#1f242d] transition-colors cursor-pointer"
+                        className="px-3 py-1.5 rounded-xl border border-border bg-input text-foreground disabled:opacity-40 disabled:cursor-not-allowed hover:bg-hover transition-colors cursor-pointer"
                       >
                         Anterior
                       </button>
@@ -5349,7 +5359,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                       <button
                         disabled={auditCurrentPage >= auditTotalPages}
                         onClick={() => setAuditCurrentPage(prev => Math.min(auditTotalPages, prev + 1))}
-                        className="px-3 py-1.5 rounded-xl border border-[#2d3748] bg-[#0e1117] text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#1f242d] transition-colors cursor-pointer"
+                        className="px-3 py-1.5 rounded-xl border border-border bg-input text-foreground disabled:opacity-40 disabled:cursor-not-allowed hover:bg-hover transition-colors cursor-pointer"
                       >
                         Siguiente
                       </button>
@@ -5364,7 +5374,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         </div>
 
         {/* Ficha Footer */}
-        <div className="p-4 md:p-6 border-t border-[#2d3748] bg-[#0e1117] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shrink-0">
+        <div className="p-4 md:p-6 border-t border-border bg-input flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shrink-0">
           <div className="flex-1">
             {edit360Error && (
               <div className="flex items-center gap-2 text-rose-400 text-[11px] font-bold animate-in fade-in duration-200 font-mono">
@@ -5379,14 +5389,14 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                 <button
                   type="button"
                   onClick={handleCancelEdit360}
-                  className="px-5 py-2.5 rounded-xl border border-[#2d3748] bg-[#161a21] text-white hover:bg-[#212631] font-mono text-xs font-bold transition-all cursor-pointer"
+                  className="px-5 py-2.5 rounded-xl border border-border bg-card text-foreground hover:bg-surface-subtle font-mono text-xs font-bold transition-all cursor-pointer"
                 >
                   Cancelar Edición
                 </button>
                 <button
                   type="button"
                   onClick={handleTriggerSaveEdit360}
-                  className="px-6 py-2.5 rounded-xl bg-[#bfce7f] hover:bg-[#a8b868] text-[#1d1f18] font-mono text-xs font-black transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
+                  className="px-6 py-2.5 rounded-xl bg-primary hover:bg-primary text-primary-foreground font-mono text-xs font-black transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
                 >
                   <Save size={14} />
                   Guardar Cambios
@@ -5396,7 +5406,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               <button 
                 type="button"
                 onClick={handleGoBack}
-                className="px-5 py-2.5 border border-[#2d3748] bg-[#161a21] text-white hover:bg-[#212631] transition-all font-mono text-xs font-bold rounded-xl shadow-md cursor-pointer flex items-center gap-2"
+                className="px-5 py-2.5 border border-border bg-card text-foreground hover:bg-surface-subtle transition-all font-mono text-xs font-bold rounded-xl shadow-md cursor-pointer flex items-center gap-2"
               >
                 Volver al Listado
               </button>
@@ -5424,37 +5434,37 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
       {!detailUser ? (
         (profileLoadError && isSelfMode) ? (
-          <div className="w-full max-w-2xl mx-auto my-12 p-8 text-center bg-[#161a21] border border-rose-500/30 rounded-2xl font-mono shadow-2xl animate-in fade-in duration-200">
+          <div className="w-full max-w-2xl mx-auto my-12 p-8 text-center bg-card border border-rose-500/30 rounded-2xl font-mono shadow-2xl animate-in fade-in duration-200">
             <AlertTriangle className="w-12 h-12 text-rose-400 mx-auto mb-4" />
-            <h3 className="text-xl font-bold text-white mb-2">Error de Carga</h3>
-            <p className="text-sm text-slate-300 mb-6">{profileLoadError}</p>
+            <h3 className="text-xl font-bold text-foreground mb-2">Error de Carga</h3>
+            <p className="text-sm text-foreground-secondary mb-6">{profileLoadError}</p>
             <button
               type="button"
               onClick={loadSelfProfile}
-              className="px-6 py-2.5 bg-[#bfce7f] text-[#2b3400] font-bold rounded-xl hover:bg-[#dbea98] transition-all shadow-lg cursor-pointer font-mono"
+              className="px-6 py-2.5 bg-primary text-primary-foreground font-bold rounded-xl hover:bg-primary/20 transition-all shadow-lg cursor-pointer font-mono"
             >
               Reintentar
             </button>
           </div>
         ) : (searchParams.get('userId') || isSelfMode) ? (
           <div className="flex-1 flex flex-col items-center justify-center min-h-[400px]">
-            <div className="w-10 h-10 border-4 border-[#2d3748] border-t-[#bfce7f] rounded-full animate-spin shadow-sm"></div>
-            <p className="mt-4 text-xs font-bold text-slate-400 animate-pulse font-mono">Cargando perfil del usuario...</p>
+            <div className="w-10 h-10 border-4 border-border border-t-[#bfce7f] rounded-full animate-spin shadow-sm"></div>
+            <p className="mt-4 text-xs font-bold text-foreground-muted animate-pulse font-mono">Cargando perfil del usuario...</p>
           </div>
         ) : (
           <div className="max-w-[1550px] mx-auto space-y-6 animate-in fade-in duration-300 p-6 font-mono text-xs w-full">
-      <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-6 shadow-xl flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div className="bg-card border border-border rounded-2xl p-6 shadow-xl flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 font-mono text-xs text-[#bfce7f] mb-1">
+          <div className="flex items-center gap-2 font-mono text-xs text-primary mb-1">
             <span>Seguridad</span>
             <span>/</span>
-            <span className="text-white font-bold">Usuarios</span>
+            <span className="text-foreground font-bold">Usuarios</span>
           </div>
-          <h1 className="font-mono text-2xl md:text-3xl font-black text-white tracking-tight flex items-center gap-2">
-            <Users className="text-[#bfce7f]" size={24} />
+          <h1 className="font-mono text-2xl md:text-3xl font-black text-foreground tracking-tight flex items-center gap-2">
+            <Users className="text-primary" size={24} />
             Usuarios
           </h1>
-          <p className="text-slate-400 font-mono text-xs md:text-sm mt-1">
+          <p className="text-foreground-muted font-mono text-xs md:text-sm mt-1">
             Administra los usuarios, accesos, roles, permisos y alcance operativo dentro de Bikers’ Fort.
           </p>
         </div>
@@ -5462,14 +5472,14 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         <div className="flex items-center gap-3 flex-wrap">
           <button 
             onClick={handleExport}
-            className="bg-[#161a21] border border-[#2d3748] hover:border-[#bfce7f] text-white font-mono text-xs font-bold px-4 py-3 rounded-xl shadow-lg flex items-center gap-2 transition-all cursor-pointer" 
+            className="bg-card border border-border hover:border-primary text-foreground font-mono text-xs font-bold px-4 py-3 rounded-xl shadow-lg flex items-center gap-2 transition-all cursor-pointer" 
             title="Exportar a Excel (CSV)"
           >
             <Download size={16}/> Exportar Excel
           </button>
           <button 
             onClick={handleAddNew}
-            className="bg-[#bfce7f] hover:bg-[#a9ba6b] text-[#1d1f18] font-mono text-xs font-bold px-5 py-3 rounded-xl shadow-lg flex items-center gap-2 transition-all cursor-pointer"
+            className="bg-primary hover:bg-primary text-primary-foreground font-mono text-xs font-bold px-5 py-3 rounded-xl shadow-lg flex items-center gap-2 transition-all cursor-pointer"
           >
             <UserPlus size={18}/> Nuevo usuario
           </button>
@@ -5478,45 +5488,45 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
       {/* Grid of upper metric cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-4">
-        <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-4 shadow-xl flex flex-col justify-between">
-          <span className="font-mono text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total</span>
-          <span className="font-mono text-2xl font-black text-white mt-1">{data.length}</span>
+        <div className="bg-card border border-border rounded-2xl p-4 shadow-xl flex flex-col justify-between">
+          <span className="font-mono text-[10px] font-bold text-foreground-muted uppercase tracking-wider block">Total</span>
+          <span className="font-mono text-2xl font-black text-foreground mt-1">{data.length}</span>
         </div>
-        <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-4 shadow-xl flex flex-col justify-between">
+        <div className="bg-card border border-border rounded-2xl p-4 shadow-xl flex flex-col justify-between">
           <span className="font-mono text-[10px] font-bold text-emerald-400 uppercase tracking-wider block">Activos</span>
           <span className="font-mono text-2xl font-black text-emerald-400 mt-1">{data.filter(u => u.status === 'Activo').length}</span>
         </div>
-        <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-4 shadow-xl flex flex-col justify-between">
+        <div className="bg-card border border-border rounded-2xl p-4 shadow-xl flex flex-col justify-between">
           <span className="font-mono text-[10px] font-bold text-rose-400 uppercase tracking-wider block">Bloqueados</span>
           <span className="font-mono text-2xl font-black text-rose-400 mt-1">{data.filter(u => u.status === 'Bloqueado').length}</span>
         </div>
-        <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-4 shadow-xl flex flex-col justify-between">
+        <div className="bg-card border border-border rounded-2xl p-4 shadow-xl flex flex-col justify-between">
           <span className="font-mono text-[10px] font-bold text-sky-400 uppercase tracking-wider block">Inv. Enviadas</span>
           <span className="font-mono text-2xl font-black text-sky-400 mt-1">{data.filter(u => u.activation?.activation_status === 'INVITATION_SENT' || u.activation?.activation_status === 'INVITATION_OPENED').length}</span>
         </div>
-        <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-4 shadow-xl flex flex-col justify-between">
+        <div className="bg-card border border-border rounded-2xl p-4 shadow-xl flex flex-col justify-between">
           <span className="font-mono text-[10px] font-bold text-amber-400 uppercase tracking-wider block">Pend. Registro</span>
           <span className="font-mono text-2xl font-black text-amber-400 mt-1">{data.filter(u => u.activation?.activation_status === 'INVITATION_PENDING' || u.activation?.activation_status === 'INVITATION_SENT' || u.activation?.activation_status === 'INVITATION_OPENED').length}</span>
         </div>
-        <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-4 shadow-xl flex flex-col justify-between">
+        <div className="bg-card border border-border rounded-2xl p-4 shadow-xl flex flex-col justify-between">
           <span className="font-mono text-[10px] font-bold text-indigo-400 uppercase tracking-wider block">Reg. sin Login</span>
           <span className="font-mono text-2xl font-black text-indigo-400 mt-1">{data.filter(u => u.activation?.activation_status === 'REGISTRATION_COMPLETED').length}</span>
         </div>
-        <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-4 shadow-xl flex flex-col justify-between">
+        <div className="bg-card border border-border rounded-2xl p-4 shadow-xl flex flex-col justify-between">
           <span className="font-mono text-[10px] font-bold text-emerald-400 uppercase tracking-wider block">Primer Login</span>
           <span className="font-mono text-2xl font-black text-emerald-400 mt-1">{data.filter(u => u.activation?.activation_status === 'FIRST_LOGIN_COMPLETED').length}</span>
         </div>
       </div>
 
       {/* Toolbar & Filters */}
-      <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-4 shadow-xl flex flex-col md:flex-row items-center justify-between gap-4">
+      <div className="bg-card border border-border rounded-2xl p-4 shadow-xl flex flex-col md:flex-row items-center justify-between gap-4">
         <div className="relative flex-1 w-full">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-foreground-muted" size={18} />
           <input 
             type="text" 
             value={search} 
             onChange={(e) => setSearch(e.target.value)} 
-            className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl pl-10 pr-4 py-2.5 font-mono text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#bfce7f]" 
+            className="w-full bg-input border border-border rounded-xl pl-10 pr-4 py-2.5 font-mono text-xs text-foreground placeholder:text-foreground-disabled focus:outline-none focus:border-primary" 
             placeholder="Buscar por nombre, correo, usuario o documento..." 
           />
         </div>
@@ -5528,8 +5538,8 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
             onClick={() => setViewMode('table')} 
             className={`p-2.5 border rounded-xl transition-colors cursor-pointer ${
               viewMode === 'table' 
-                ? 'bg-[#bfce7f]/10 border-[#bfce7f]/40 text-[#bfce7f]' 
-                : 'bg-[#0e1117] border-[#2d3748] text-slate-400 hover:text-white'
+                ? 'bg-primary/10 border-primary/40 text-primary' 
+                : 'bg-input border-border text-foreground-muted hover:text-foreground'
             }`}
             title="Vista de Tabla"
           >
@@ -5540,8 +5550,8 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
             onClick={() => setViewMode('grid')} 
             className={`p-2.5 border rounded-xl transition-colors cursor-pointer ${
               viewMode === 'grid' 
-                ? 'bg-[#bfce7f]/10 border-[#bfce7f]/40 text-[#bfce7f]' 
-                : 'bg-[#0e1117] border-[#2d3748] text-slate-400 hover:text-white'
+                ? 'bg-primary/10 border-primary/40 text-primary' 
+                : 'bg-input border-border text-foreground-muted hover:text-foreground'
             }`}
             title="Vista de Cuadrícula (Grid)"
           >
@@ -5549,25 +5559,25 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
           </button>
 
           {activeFiltersCount > 0 && (
-            <button onClick={handleClearFilters} className="text-xs font-mono font-bold text-[#bfce7f] hover:underline ml-2">Limpiar filtros</button>
+            <button onClick={handleClearFilters} className="text-xs font-mono font-bold text-primary hover:underline ml-2">Limpiar filtros</button>
           )}
         </div>
       </div>
 
       {/* Selected rows actions bar */}
       {selectedIds.length > 0 && (
-        <div className="p-4 bg-[#161a21] border border-[#bfce7f]/40 rounded-2xl flex items-center justify-between animate-in slide-in-from-top-2 shadow-xl">
-          <span className="text-xs font-bold text-[#bfce7f]">
+        <div className="p-4 bg-card border border-primary/40 rounded-2xl flex items-center justify-between animate-in slide-in-from-top-2 shadow-xl">
+          <span className="text-xs font-bold text-primary">
             {selectedIds.length} usuarios seleccionados
           </span>
           <div className="flex items-center gap-2">
             <button 
               onClick={handleMassToggleStatus} 
-              className="px-4 py-2 bg-[#0e1117] border border-[#2d3748] text-white rounded-xl text-xs font-bold hover:border-[#bfce7f] transition-colors flex items-center gap-1.5 cursor-pointer"
+              className="px-4 py-2 bg-input border border-border text-foreground rounded-xl text-xs font-bold hover:border-primary transition-colors flex items-center gap-1.5 cursor-pointer"
             >
               <ToggleRight size={14} /> Rotar Estado
             </button>
-            <button onClick={() => setSelectedIds([])} className="px-4 py-2 text-slate-400 hover:text-white text-xs font-bold transition-colors cursor-pointer">
+            <button onClick={() => setSelectedIds([])} className="px-4 py-2 text-foreground-muted hover:text-foreground text-xs font-bold transition-colors cursor-pointer">
               Limpiar Selección
             </button>
           </div>
@@ -5576,17 +5586,17 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
       {/* Users Catalog List */}
       {viewMode === 'table' ? (
-        <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl shadow-xl overflow-hidden">
+        <div className="bg-card border border-border rounded-2xl shadow-xl overflow-hidden">
           <div className="overflow-x-auto custom-scrollbar">
             <table className="w-full text-left border-collapse font-mono text-xs min-w-[1100px]">
               <thead>
-                <tr className="bg-[#0e1117] border-b border-[#2d3748] select-none text-slate-400 font-bold text-[11px] uppercase tracking-wider">
+                <tr className="bg-input border-b border-border select-none text-foreground-muted font-bold text-[11px] uppercase tracking-wider">
                   <th className="py-3.5 px-4 w-12 text-center">
                     <input 
                       type="checkbox" 
                       checked={selectedIds.length > 0 && selectedIds.length === sortedData.length} 
                       onChange={toggleAll} 
-                      className="rounded border-[#2d3748] bg-[#0e1117] text-[#bfce7f] focus:ring-[#bfce7f] cursor-pointer"
+                      className="rounded border-border bg-input text-primary focus:ring-primary cursor-pointer"
                     />
                   </th>
                   <th className="py-3.5 px-4">Usuario / Identidad</th>
@@ -5603,10 +5613,10 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               <tbody className="divide-y divide-[#2d3748]">
                 {sortedData.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="py-12 text-center text-slate-400 font-mono">
-                      <Users size={40} className="mx-auto text-slate-500 opacity-40 mb-3" />
-                      <h3 className="text-sm font-bold text-white">Sin registros encontrados</h3>
-                      <p className="text-xs text-slate-400 mt-1">Prueba limpiando los filtros o realizando otra búsqueda.</p>
+                    <td colSpan={10} className="py-12 text-center text-foreground-muted font-mono">
+                      <Users size={40} className="mx-auto text-foreground-disabled opacity-40 mb-3" />
+                      <h3 className="text-sm font-bold text-foreground">Sin registros encontrados</h3>
+                      <p className="text-xs text-foreground-muted mt-1">Prueba limpiando los filtros o realizando otra búsqueda.</p>
                     </td>
                   </tr>
                 ) : (
@@ -5618,7 +5628,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                     return (
                       <tr 
                         key={item.id}
-                        className={`hover:bg-[#1f242d] transition-colors cursor-pointer group ${isChecked ? 'bg-[#bfce7f]/5' : ''}`}
+                        className={`hover:bg-hover transition-colors cursor-pointer group ${isChecked ? 'bg-primary/5' : ''}`}
                         onClick={() => handleViewDetail(item, 'resumen')}
                       >
                         <td className="py-3.5 px-4 text-center" onClick={e => e.stopPropagation()}>
@@ -5626,26 +5636,26 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                             type="checkbox" 
                             checked={isChecked} 
                             onChange={(e) => toggleSelection(item.id, e)}
-                            className="rounded border-[#2d3748] bg-[#0e1117] text-[#bfce7f] focus:ring-[#bfce7f] cursor-pointer"
+                            className="rounded border-border bg-input text-primary focus:ring-primary cursor-pointer"
                           />
                         </td>
                         
                         <td className="py-3.5 px-4">
                           <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-xl bg-[#2d3748] flex items-center justify-center font-bold text-[#bfce7f] border border-[#3b475a] shrink-0 font-mono text-xs">
+                            <div className="w-9 h-9 rounded-xl bg-surface-subtle flex items-center justify-center font-bold text-primary border border-border shrink-0 font-mono text-xs">
                               {item.full_name.split(' ').filter(Boolean).map(n => n[0]).join('').replace(/\./g, '').substring(0, 2).toUpperCase()}
                             </div>
                             <div className="flex flex-col min-w-0">
-                              <span className="font-bold text-white group-hover:text-[#bfce7f] transition-colors truncate">
+                              <span className="font-bold text-foreground group-hover:text-primary transition-colors truncate">
                                 {item.full_name}
                               </span>
-                              <span className="text-[11px] text-slate-400 font-mono flex items-center gap-1.5 mt-0.5 truncate">
-                                <Mail size={12} className="text-slate-500 shrink-0" />
+                              <span className="text-[11px] text-foreground-muted font-mono flex items-center gap-1.5 mt-0.5 truncate">
+                                <Mail size={12} className="text-foreground-disabled shrink-0" />
                                 <span>{item.login_identifiers?.find(id => id.is_primary)?.identifier_value || item.email || '—'}</span>
                               </span>
                               {item.phone && (
-                                <span className="text-[11px] text-slate-400 font-mono flex items-center gap-1.5 mt-0.5 truncate">
-                                  <Phone size={12} className="text-slate-500 shrink-0" />
+                                <span className="text-[11px] text-foreground-muted font-mono flex items-center gap-1.5 mt-0.5 truncate">
+                                  <Phone size={12} className="text-foreground-disabled shrink-0" />
                                   <span>{item.phone}</span>
                                 </span>
                               )}
@@ -5656,11 +5666,11 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                         <td className="py-3.5 px-4">
                           {company ? (
                             <div className="flex items-center gap-2">
-                              <Building2 size={13} className="text-slate-400" />
-                              <span className="font-bold text-slate-300 font-mono text-xs">{company.name}</span>
+                              <Building2 size={13} className="text-foreground-muted" />
+                              <span className="font-bold text-foreground-secondary font-mono text-xs">{company.name}</span>
                             </div>
                           ) : (
-                            <span className="text-slate-500 font-mono">—</span>
+                            <span className="text-foreground-disabled font-mono">—</span>
                           )}
                         </td>
 
@@ -5671,12 +5681,12 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                         </td>
 
                         <td className="py-3.5 px-4">
-                          <span className="bg-slate-800 border border-slate-700 text-slate-300 font-mono text-[10px] font-bold tracking-wider px-2 py-0.5 rounded">
+                          <span className="bg-surface-subtle border border-border text-foreground-secondary font-mono text-[10px] font-bold tracking-wider px-2 py-0.5 rounded">
                             {item.user_type}
                           </span>
                         </td>
 
-                        <td className="py-3.5 px-4 text-slate-300 font-mono text-xs">
+                        <td className="py-3.5 px-4 text-foreground-secondary font-mono text-xs">
                           {item.last_login_at ? new Date(item.last_login_at).toLocaleString('es-DO', { dateStyle: 'short', timeStyle: 'short' }) : 'Nunca'}
                         </td>
 
@@ -5685,7 +5695,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                             {item.mfaEnabled ? (
                               <ShieldCheck className="text-emerald-400" size={18} title={`MFA: ${item.mfa_method}`} />
                             ) : (
-                              <ShieldX className="text-slate-500" size={18} title="MFA Deshabilitado" />
+                              <ShieldX className="text-foreground-disabled" size={18} title="MFA Deshabilitado" />
                             )}
                           </div>
                         </td>
@@ -5696,7 +5706,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                               ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' 
                               : (String(item.status || item.estado || '').toUpperCase() === 'BLOQUEADO' || String(item.status || item.estado || '').toUpperCase() === 'INACTIVO')
                               ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-                              : 'bg-slate-800 text-slate-400 border-slate-700'
+                              : 'bg-surface-subtle text-foreground-muted border-border'
                           }`}>
                             {item.status || item.estado}
                           </span>
@@ -5708,14 +5718,14 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
                         <td className="py-3.5 px-4 text-right pr-6 relative" onClick={e => e.stopPropagation()}>
                           <button 
-                            className="p-1.5 text-slate-400 hover:text-white hover:bg-[#2d3748] rounded-lg transition-colors cursor-pointer inline-block"
+                            className="p-1.5 text-foreground-muted hover:text-foreground hover:bg-surface-subtle rounded-lg transition-colors cursor-pointer inline-block"
                             onClick={(e) => { e.stopPropagation(); setActiveDropdown(isDropdownOpen ? null : item.id); }}
                           >
                             <MoreVertical size={16} />
                           </button>
                           
                           {isDropdownOpen && (
-                            <div className="absolute right-6 top-8 w-52 bg-[#161a21] rounded-xl shadow-2xl border border-[#2d3748] py-1.5 z-50 text-left font-mono">
+                            <div className="absolute right-6 top-8 w-52 bg-card rounded-xl shadow-2xl border border-border py-1.5 z-50 text-left font-mono">
                               {renderDropdownItems(item)}
                             </div>
                           )}
@@ -5729,16 +5739,16 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
           </div>
 
           {/* Table Footer & Pagination */}
-          <div className="p-4 bg-[#0e1117] border-t border-[#2d3748] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 font-mono text-xs">
+          <div className="p-4 bg-input border-t border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 font-mono text-xs">
             <div className="flex items-center gap-2">
-              <span className="text-slate-400">Filas por página:</span>
+              <span className="text-foreground-muted">Filas por página:</span>
               <select 
                 value={pageSize} 
                 onChange={(e) => {
                   setPageSize(parseInt(e.target.value) || 5);
                   setCurrentPage(1);
                 }}
-                className="bg-[#161a21] border border-[#2d3748] rounded-lg px-2 py-1 font-mono text-xs text-white focus:outline-none focus:border-[#bfce7f] cursor-pointer"
+                className="bg-card border border-border rounded-lg px-2 py-1 font-mono text-xs text-foreground focus:outline-none focus:border-primary cursor-pointer"
               >
                 <option value={5}>5</option>
                 <option value={10}>10</option>
@@ -5746,8 +5756,8 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               </select>
             </div>
             
-            <span className="text-slate-400">
-              Mostrando <strong className="text-white">{(currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, sortedData.length)}</strong> de <strong className="text-white">{sortedData.length}</strong> registros
+            <span className="text-foreground-muted">
+              Mostrando <strong className="text-foreground">{(currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, sortedData.length)}</strong> de <strong className="text-foreground">{sortedData.length}</strong> registros
             </span>
             
             <div className="flex items-center gap-1.5">
@@ -5755,18 +5765,18 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                 type="button"
                 disabled={currentPage === 1}
                 onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                className="px-3 py-1.5 bg-[#161a21] border border-[#2d3748] rounded-lg text-slate-300 hover:text-white disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed flex items-center gap-1"
+                className="px-3 py-1.5 bg-card border border-border rounded-lg text-foreground-secondary hover:text-foreground disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed flex items-center gap-1"
               >
                 <ChevronLeft size={14} /> Ant
               </button>
-              <span className="px-3 py-1.5 bg-[#0e1117] rounded text-xs font-bold text-white font-mono border border-[#2d3748]">
+              <span className="px-3 py-1.5 bg-input rounded text-xs font-bold text-foreground font-mono border border-border">
                 {currentPage}
               </span>
               <button
                 type="button"
                 disabled={currentPage >= totalPages}
                 onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                className="px-3 py-1.5 bg-[#161a21] border border-[#2d3748] rounded-lg text-slate-300 hover:text-white disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed flex items-center gap-1"
+                className="px-3 py-1.5 bg-card border border-border rounded-lg text-foreground-secondary hover:text-foreground disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed flex items-center gap-1"
               >
                 Sig <ChevronRight size={14} />
               </button>
@@ -5776,10 +5786,10 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 animate-in fade-in duration-200">
           {sortedData.length === 0 ? (
-            <div className="col-span-full py-12 text-center bg-[#161a21] border border-[#2d3748] rounded-2xl shadow-xl font-mono">
-              <Users size={40} className="mx-auto text-slate-500 opacity-40 mb-3" />
-              <h3 className="text-sm font-bold text-white">Sin registros encontrados</h3>
-              <p className="text-xs text-slate-400 mt-1">Prueba limpiando los filtros o realizando otra búsqueda.</p>
+            <div className="col-span-full py-12 text-center bg-card border border-border rounded-2xl shadow-xl font-mono">
+              <Users size={40} className="mx-auto text-foreground-disabled opacity-40 mb-3" />
+              <h3 className="text-sm font-bold text-foreground">Sin registros encontrados</h3>
+              <p className="text-xs text-foreground-muted mt-1">Prueba limpiando los filtros o realizando otra búsqueda.</p>
             </div>
           ) : (
             paginatedData.map(item => {
@@ -5790,8 +5800,8 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               return (
                 <div 
                   key={item.id} 
-                  className={`bg-[#161a21] border rounded-2xl p-5 hover:border-[#bfce7f]/50 transition-all cursor-pointer relative flex flex-col justify-between min-h-[220px] shadow-xl group font-mono text-xs ${
-                    isChecked ? 'border-[#bfce7f] bg-[#bfce7f]/5' : 'border-[#2d3748]'
+                  className={`bg-card border rounded-2xl p-5 hover:border-primary/50 transition-all cursor-pointer relative flex flex-col justify-between min-h-[220px] shadow-xl group font-mono text-xs ${
+                    isChecked ? 'border-primary bg-primary/5' : 'border-border'
                   }`}
                   onClick={() => handleViewDetail(item, 'resumen')}
                 >
@@ -5802,14 +5812,14 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                         type="checkbox" 
                         checked={isChecked} 
                         onChange={(e) => toggleSelection(item.id, e)}
-                        className="rounded border-[#2d3748] bg-[#0e1117] text-[#bfce7f] focus:ring-[#bfce7f] cursor-pointer w-4 h-4"
+                        className="rounded border-border bg-input text-primary focus:ring-primary cursor-pointer w-4 h-4"
                       />
                       <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold uppercase border tracking-wider ${
                         (String(item.status || item.estado || '').toUpperCase() === 'ACTIVO' || String(item.status || item.estado || '').toUpperCase() === 'ACTIVE')
                           ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' 
                           : (String(item.status || item.estado || '').toUpperCase() === 'BLOQUEADO' || String(item.status || item.estado || '').toUpperCase() === 'INACTIVO')
                           ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-                          : 'bg-slate-800 text-slate-400 border-slate-700'
+                          : 'bg-surface-subtle text-foreground-muted border-border'
                       }`}>
                         {item.status || item.estado}
                       </span>
@@ -5817,14 +5827,14 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                     
                     <div className="relative">
                       <button 
-                        className="p-1.5 text-slate-400 hover:text-white hover:bg-[#2d3748] rounded-lg transition-colors cursor-pointer"
+                        className="p-1.5 text-foreground-muted hover:text-foreground hover:bg-surface-subtle rounded-lg transition-colors cursor-pointer"
                         onClick={(e) => { e.stopPropagation(); setActiveDropdown(isDropdownOpen ? null : item.id); }}
                       >
                         <MoreVertical size={16} />
                       </button>
                       
                       {isDropdownOpen && (
-                        <div className="absolute right-0 top-6 w-52 bg-[#161a21] rounded-xl shadow-2xl border border-[#2d3748] py-1.5 z-50 text-left font-mono">
+                        <div className="absolute right-0 top-6 w-52 bg-card rounded-xl shadow-2xl border border-border py-1.5 z-50 text-left font-mono">
                           {renderDropdownItems(item)}
                         </div>
                       )}
@@ -5833,12 +5843,12 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
                   {/* Middle Row: Avatar and User Details */}
                   <div className="flex items-center gap-3 my-3">
-                    <div className="w-10 h-10 rounded-xl bg-[#2d3748] text-[#bfce7f] border border-[#3b475a] flex items-center justify-center font-bold text-xs shrink-0 font-mono">
+                    <div className="w-10 h-10 rounded-xl bg-surface-subtle text-primary border border-border flex items-center justify-center font-bold text-xs shrink-0 font-mono">
                       {item.full_name.split(' ').filter(Boolean).map(n => n[0]).join('').replace(/\./g, '').substring(0, 2).toUpperCase()}
                     </div>
                     <div className="flex flex-col min-w-0">
-                      <span className="font-bold text-white group-hover:text-[#bfce7f] transition-colors truncate text-xs">{item.full_name}</span>
-                      <div className="text-[11px] text-slate-400 font-mono mt-1 flex flex-col gap-0.5">
+                      <span className="font-bold text-foreground group-hover:text-primary transition-colors truncate text-xs">{item.full_name}</span>
+                      <div className="text-[11px] text-foreground-muted font-mono mt-1 flex flex-col gap-0.5">
                          <span className="flex items-center gap-1"><Mail size={10} /> {item.email || '—'}</span>
                          <span className="flex items-center gap-1"><Phone size={10} /> {item.phone || '—'}</span>
                       </div>
@@ -5846,25 +5856,25 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                   </div>
 
                   {/* Meta Section: Role & User Type & Company */}
-                  <div className="flex flex-col gap-1.5 border-t border-[#2d3748] pt-3 text-[11px]">
+                  <div className="flex flex-col gap-1.5 border-t border-border pt-3 text-[11px]">
                     <div className="grid grid-cols-2 gap-2">
                       <div className="flex flex-col">
-                        <span className="text-slate-400 font-bold">Rol:</span>
+                        <span className="text-foreground-muted font-bold">Rol:</span>
                         <span className="bg-indigo-500/10 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider truncate mt-0.5">{item.role}</span>
                       </div>
                       <div className="flex flex-col">
-                        <span className="text-slate-400 font-bold">Tipo:</span>
-                        <span className="bg-slate-800 border border-slate-700 text-slate-300 font-mono text-[9px] font-bold tracking-wider px-2 py-0.5 rounded truncate mt-0.5">{item.user_type}</span>
+                        <span className="text-foreground-muted font-bold">Tipo:</span>
+                        <span className="bg-surface-subtle border border-border text-foreground-secondary font-mono text-[9px] font-bold tracking-wider px-2 py-0.5 rounded truncate mt-0.5">{item.user_type}</span>
                       </div>
                     </div>
                     <div className="flex justify-between items-center mt-1">
-                      <span className="text-slate-400 font-bold">Empresa:</span>
-                      <span className="font-bold text-slate-300 truncate max-w-[150px]">
+                      <span className="text-foreground-muted font-bold">Empresa:</span>
+                      <span className="font-bold text-foreground-secondary truncate max-w-[150px]">
                         {company?.name || '—'}
                       </span>
                     </div>
                     <div className="flex justify-between items-center mt-1">
-                      <span className="text-slate-400 font-bold">Activación:</span>
+                      <span className="text-foreground-muted font-bold">Activación:</span>
                       <span className="truncate">
                         {renderActivationBadge(item.estado_activacion, item.primary_access_type, item)}
                       </span>
@@ -5879,16 +5889,16 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
       {/* Pagination Footer outside table when in grid view or general */}
       {viewMode === 'grid' && (
-        <div className="p-4 bg-[#161a21] border border-[#2d3748] rounded-2xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 font-mono text-xs shadow-xl">
+        <div className="p-4 bg-card border border-border rounded-2xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 font-mono text-xs shadow-xl">
           <div className="flex items-center gap-2">
-            <span className="text-slate-400">Filas por página:</span>
+            <span className="text-foreground-muted">Filas por página:</span>
             <select 
               value={pageSize} 
               onChange={(e) => {
                 setPageSize(parseInt(e.target.value) || 5);
                 setCurrentPage(1);
               }}
-              className="bg-[#0e1117] border border-[#2d3748] rounded-lg px-2 py-1 font-mono text-xs text-white focus:outline-none focus:border-[#bfce7f] cursor-pointer"
+              className="bg-input border border-border rounded-lg px-2 py-1 font-mono text-xs text-foreground focus:outline-none focus:border-primary cursor-pointer"
             >
               <option value={5}>5</option>
               <option value={10}>10</option>
@@ -5896,8 +5906,8 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
             </select>
           </div>
           
-          <span className="text-slate-400">
-            Mostrando <strong className="text-white">{(currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, sortedData.length)}</strong> de <strong className="text-white">{sortedData.length}</strong> registros
+          <span className="text-foreground-muted">
+            Mostrando <strong className="text-foreground">{(currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, sortedData.length)}</strong> de <strong className="text-foreground">{sortedData.length}</strong> registros
           </span>
           
           <div className="flex items-center gap-1.5">
@@ -5905,18 +5915,18 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               type="button"
               disabled={currentPage === 1}
               onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-              className="px-3 py-1.5 bg-[#0e1117] border border-[#2d3748] rounded-lg text-slate-300 hover:text-white disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed flex items-center gap-1"
+              className="px-3 py-1.5 bg-input border border-border rounded-lg text-foreground-secondary hover:text-foreground disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed flex items-center gap-1"
             >
               <ChevronLeft size={14} /> Ant
             </button>
-            <span className="px-3 py-1.5 bg-[#0e1117] rounded text-xs font-bold text-white font-mono border border-[#2d3748]">
+            <span className="px-3 py-1.5 bg-input rounded text-xs font-bold text-foreground font-mono border border-border">
               {currentPage}
             </span>
             <button
               type="button"
               disabled={currentPage >= totalPages}
               onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-              className="px-3 py-1.5 bg-[#0e1117] border border-[#2d3748] rounded-lg text-slate-300 hover:text-white disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed flex items-center gap-1"
+              className="px-3 py-1.5 bg-input border border-border rounded-lg text-foreground-secondary hover:text-foreground disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed flex items-center gap-1"
             >
               Sig <ChevronRight size={14} />
             </button>
@@ -5932,7 +5942,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       {/* ADVANCED FILTER MODAL (React Portal) */}
       {isFilterModalOpen && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => setIsFilterModalOpen(false)}></div>
+          <div className="absolute inset-0 bg-surface-subtle/50 backdrop-blur-sm" onClick={() => setIsFilterModalOpen(false)}></div>
           <div className="relative w-full max-w-lg bg-[var(--bg-elevated)] rounded-xl shadow-2xl flex flex-col border border-[var(--border-color)] max-h-[85vh] overflow-hidden animate-in zoom-in-95 duration-200">
              <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-color)] shrink-0 bg-[var(--bg-color)]">
                 <h3 className="text-lg font-black text-[var(--text-primary)] flex items-center gap-2">
@@ -6100,25 +6110,25 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       {/* CREATE / EDIT WIZARD (React Portal Modal) */}
       {isCreating && wizardData && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 md:p-6 animate-in fade-in duration-200">
-          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onClick={handleCancel}></div>
-          <div className="relative w-full max-w-5xl md:max-w-6xl bg-[#12141a] max-h-[92vh] rounded-2xl shadow-2xl flex flex-col border border-slate-800/80 overflow-hidden animate-in zoom-in-95 duration-200 text-slate-200 font-sans">
+          <div className="absolute inset-0 bg-surface-subtle/80 backdrop-blur-md" onClick={handleCancel}></div>
+          <div className="relative w-full max-w-5xl md:max-w-6xl bg-surface-elevated max-h-[92vh] rounded-2xl shadow-2xl flex flex-col border border-border overflow-hidden animate-in zoom-in-95 duration-200 text-foreground-secondary font-sans">
             
             {/* 1. ENCABEZADO SUPERIOR */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-[#161820] shrink-0 z-20">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-surface-subtle shrink-0 z-20">
               <div className="flex items-center gap-3.5">
-                <div className="p-2.5 rounded-xl bg-[#bfce7f]/10 text-[#bfce7f] border border-[#bfce7f]/20 shadow-sm">
+                <div className="p-2.5 rounded-xl bg-primary/10 text-primary border border-primary/20 shadow-sm">
                   <UserPlus size={20} />
                 </div>
                 <div>
                   <div className="flex items-center gap-2.5">
-                    <h3 className="text-base md:text-lg font-bold text-white tracking-tight">
+                    <h3 className="text-base md:text-lg font-bold text-foreground tracking-tight">
                       {isCreating ? 'Nuevo usuario' : `Editar usuario: ${wizardData.full_name}`}
                     </h3>
-                    <span className="px-2.5 py-0.5 rounded-full bg-[#bfce7f]/10 text-[#bfce7f] text-[11px] font-semibold border border-[#bfce7f]/20">
+                    <span className="px-2.5 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-semibold border border-primary/20">
                       Paso {currentStep} de 5
                     </span>
                   </div>
-                  <p className="text-xs text-slate-400 font-normal mt-0.5">
+                  <p className="text-xs text-foreground-muted font-normal mt-0.5">
                     {isCreating ? 'Configure la identidad, empresa, rol, acceso y políticas de seguridad.' : `ID de Cuenta: ${wizardData.id}`}
                   </p>
                 </div>
@@ -6126,7 +6136,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               <button 
                 type="button"
                 onClick={handleCancel} 
-                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800/70 rounded-lg transition-colors"
+                className="p-2 text-foreground-muted hover:text-foreground hover:bg-surface-subtle/70 rounded-lg transition-colors"
                 title="Cerrar"
               >
                 <X size={20} />
@@ -6134,7 +6144,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
             </div>
 
             {/* 2. STEPPER HORIZONTAL */}
-            <div className="bg-[#181a22] border-b border-slate-800 px-6 py-3 shrink-0 z-10">
+            <div className="bg-surface-subtle border-b border-border px-6 py-3 shrink-0 z-10">
               <div className="max-w-5xl mx-auto space-y-2.5">
                 <div className="flex items-center justify-between gap-2 overflow-x-auto custom-scrollbar pb-1">
                   {[
@@ -6158,31 +6168,31 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                           disabled={!(isCompleted || s.step < currentStep)}
                           className={`flex items-center gap-2.5 px-3 py-1.5 rounded-xl transition-all text-left outline-none shrink-0 ${
                             isActive 
-                              ? 'bg-[#bfce7f]/10 border border-[#bfce7f]/40 shadow-sm' 
+                              ? 'bg-primary/10 border border-primary/40 shadow-sm' 
                               : isCompleted 
-                              ? 'hover:bg-slate-800/60 cursor-pointer' 
+                              ? 'hover:bg-surface-subtle/60 cursor-pointer' 
                               : 'opacity-50 cursor-not-allowed'
                           }`}
                         >
                           <div 
                             className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-[11px] font-bold transition-all ${
                               isActive 
-                                ? 'bg-[#bfce7f] text-slate-950 font-extrabold shadow-sm' 
+                                ? 'bg-primary text-slate-950 font-extrabold shadow-sm' 
                                 : isCompleted 
                                 ? 'bg-emerald-500 text-white' 
-                                : 'bg-slate-800 border border-slate-700 text-slate-400'
+                                : 'bg-surface-subtle border border-border text-foreground-muted'
                             }`}
                           >
                             {isCompleted ? <Check size={13} strokeWidth={3} /> : s.step}
                           </div>
                           <div className="flex flex-col">
-                            <span className={`text-[12px] font-semibold ${isActive ? 'text-[#bfce7f] font-bold' : isCompleted ? 'text-slate-200' : 'text-slate-400'}`}>
+                            <span className={`text-[12px] font-semibold ${isActive ? 'text-primary font-bold' : isCompleted ? 'text-foreground-secondary' : 'text-foreground-muted'}`}>
                               {s.label}
                             </span>
                           </div>
                         </button>
                         {idx < arr.length - 1 && (
-                          <div className={`h-[1px] flex-1 min-w-[16px] max-w-[40px] transition-colors ${isCompleted ? 'bg-emerald-500/60' : 'bg-slate-800'}`}></div>
+                          <div className={`h-[1px] flex-1 min-w-[16px] max-w-[40px] transition-colors ${isCompleted ? 'bg-emerald-500/60' : 'bg-surface-subtle'}`}></div>
                         )}
                       </Fragment>
                     );
@@ -6190,13 +6200,13 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                 </div>
 
                 {/* Micro Barra de Progreso */}
-                <div className="flex items-center justify-between text-[11px] font-medium text-slate-400">
+                <div className="flex items-center justify-between text-[11px] font-medium text-foreground-muted">
                   <span>Paso {currentStep} de 5</span>
-                  <span className="text-[#bfce7f] font-semibold">{Math.round((currentStep / 5) * 100)}% completado</span>
+                  <span className="text-primary font-semibold">{Math.round((currentStep / 5) * 100)}% completado</span>
                 </div>
-                <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
+                <div className="w-full h-1 bg-surface-subtle rounded-full overflow-hidden">
                   <div 
-                    className="h-full bg-[#bfce7f] transition-all duration-300 rounded-full"
+                    className="h-full bg-primary transition-all duration-300 rounded-full"
                     style={{ width: `${(currentStep / 5) * 100}%` }}
                   ></div>
                 </div>
@@ -6204,7 +6214,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
             </div>
 
             {/* 3. CONTENEDOR PRINCIPAL DEL FORMULARIO */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-6 md:p-8 bg-[#12141a]">
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-6 md:p-8 bg-surface-subtle">
               <div className="max-w-5xl mx-auto space-y-6">
                 {formError && (
                   <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 flex items-start gap-2.5 text-xs font-semibold shadow-sm animate-shake">
@@ -6218,37 +6228,37 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                   <div className="space-y-6 animate-in fade-in duration-200">
                     
                     {/* Seccion 1: Identidad personal */}
-                    <div className="bg-[#181a22] border border-slate-800 p-6 rounded-2xl space-y-5 shadow-sm">
-                      <div className="border-b border-slate-800 pb-3">
-                        <h4 className="font-bold text-sm text-white flex items-center gap-2">
-                          <div className="w-1.5 h-4 bg-[#bfce7f] rounded-full"></div>
+                    <div className="bg-surface-subtle border border-border p-6 rounded-2xl space-y-5 shadow-sm">
+                      <div className="border-b border-border pb-3">
+                        <h4 className="font-bold text-sm text-foreground flex items-center gap-2">
+                          <div className="w-1.5 h-4 bg-primary rounded-full"></div>
                           Identidad personal
                         </h4>
-                        <p className="text-xs text-slate-400 mt-0.5">Ingresa los datos personales y de contacto del usuario.</p>
+                        <p className="text-xs text-foreground-muted mt-0.5">Ingresa los datos personales y de contacto del usuario.</p>
                       </div>
 
                       {/* Row 1: Nombre | Apellido */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-xs font-semibold text-slate-300 mb-1.5">Nombre *</label>
+                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Nombre *</label>
                           <input 
                             type="text" 
                             required
                             value={wizardData.first_name || ''} 
                             onChange={(e) => handleChange('first_name', e.target.value)} 
-                            className={`w-full bg-[#12141a] border rounded-xl px-3.5 py-2.5 text-xs font-normal text-white placeholder-slate-500 focus:outline-none transition-colors ${fieldErrors.first_name ? 'border-rose-500 focus:border-rose-500 bg-rose-500/5' : 'border-slate-800 focus:border-[#bfce7f]'}`} 
+                            className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground placeholder:text-foreground-disabled focus:outline-none transition-colors ${fieldErrors.first_name ? 'border-rose-500 focus:border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`} 
                             placeholder="Ej. Juan"
                           />
                           {fieldErrors.first_name && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{fieldErrors.first_name}</span>}
                         </div>
                         <div>
-                          <label className="block text-xs font-semibold text-slate-300 mb-1.5">Apellido *</label>
+                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Apellido *</label>
                           <input 
                             type="text" 
                             required
                             value={wizardData.last_name || ''} 
                             onChange={(e) => handleChange('last_name', e.target.value)} 
-                            className={`w-full bg-[#12141a] border rounded-xl px-3.5 py-2.5 text-xs font-normal text-white placeholder-slate-500 focus:outline-none transition-colors ${fieldErrors.last_name ? 'border-rose-500 focus:border-rose-500 bg-rose-500/5' : 'border-slate-800 focus:border-[#bfce7f]'}`} 
+                            className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground placeholder:text-foreground-disabled focus:outline-none transition-colors ${fieldErrors.last_name ? 'border-rose-500 focus:border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`} 
                             placeholder="Ej. Pérez"
                           />
                           {fieldErrors.last_name && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{fieldErrors.last_name}</span>}
@@ -6258,11 +6268,11 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                       {/* Row 2: Tipo de documento | Número de documento | Teléfono */}
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
-                          <label className="block text-xs font-semibold text-slate-300 mb-1.5">Tipo de documento (Opcional)</label>
+                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Tipo de documento (Opcional)</label>
                           <select 
                             value={wizardData.document_type || 'Cédula'} 
                             onChange={(e) => handleChange('document_type', e.target.value)} 
-                            className="w-full bg-[#12141a] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs font-normal text-white focus:outline-none focus:border-[#bfce7f] cursor-pointer"
+                            className="w-full bg-input border border-border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none focus:border-primary cursor-pointer"
                           >
                             <option value="Cédula">Cédula</option>
                             <option value="Pasaporte">Pasaporte</option>
@@ -6270,23 +6280,23 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                           </select>
                         </div>
                         <div>
-                          <label className="block text-xs font-semibold text-slate-300 mb-1.5">Número de documento (Opcional)</label>
+                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Número de documento (Opcional)</label>
                           <input 
                             type="text" 
                             value={wizardData.document_number || ''} 
                             onChange={(e) => handleChange('document_number', e.target.value)} 
-                            className={`w-full bg-[#12141a] border rounded-xl px-3.5 py-2.5 text-xs font-normal text-white placeholder-slate-500 focus:outline-none transition-colors ${fieldErrors.document_number ? 'border-rose-500 focus:border-rose-500 bg-rose-500/5' : 'border-slate-800 focus:border-[#bfce7f]'}`} 
+                            className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground placeholder:text-foreground-disabled focus:outline-none transition-colors ${fieldErrors.document_number ? 'border-rose-500 focus:border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`} 
                             placeholder="Ej. 001-1234567-8"
                           />
                           {fieldErrors.document_number && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{fieldErrors.document_number}</span>}
                         </div>
                         <div>
-                          <label className="block text-xs font-semibold text-slate-300 mb-1.5">Teléfono (Opcional)</label>
+                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Teléfono (Opcional)</label>
                           <input 
                             type="text" 
                             value={wizardData.phone || ''} 
                             onChange={(e) => handleChange('phone', e.target.value)} 
-                            className="w-full bg-[#12141a] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs font-normal text-white placeholder-slate-500 focus:outline-none focus:border-[#bfce7f]" 
+                            className="w-full bg-input border border-border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground placeholder:text-foreground-disabled focus:outline-none focus:border-primary" 
                             placeholder="Ej. +1 (809) 555-0101"
                           />
                         </div>
@@ -6294,12 +6304,12 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
                       {/* Row 3: Correo electrónico (ancho completo) */}
                       <div>
-                        <label className="block text-xs font-semibold text-slate-300 mb-1.5">Correo electrónico *</label>
+                        <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Correo electrónico *</label>
                         <input 
                           type="email" 
                           value={wizardData.email || ''} 
                           onChange={(e) => handleChange('email', e.target.value)} 
-                          className={`w-full bg-[#12141a] border rounded-xl px-3.5 py-2.5 text-xs font-normal text-white placeholder-slate-500 focus:outline-none transition-colors ${fieldErrors.email ? 'border-rose-500 focus:border-rose-500 bg-rose-500/5' : 'border-slate-800 focus:border-[#bfce7f]'}`} 
+                          className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground placeholder:text-foreground-disabled focus:outline-none transition-colors ${fieldErrors.email ? 'border-rose-500 focus:border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`} 
                           placeholder="Ej. juan.perez@empresa.com"
                         />
                         {fieldErrors.email && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{fieldErrors.email}</span>}
@@ -6307,23 +6317,23 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                     </div>
 
                     {/* Seccion 2: Asignación organizativa */}
-                    <div className="bg-[#181a22] border border-slate-800 p-6 rounded-2xl space-y-5 shadow-sm">
-                      <div className="border-b border-slate-800 pb-3">
-                        <h4 className="font-bold text-sm text-white flex items-center gap-2">
-                          <div className="w-1.5 h-4 bg-[#bfce7f] rounded-full"></div>
+                    <div className="bg-surface-subtle border border-border p-6 rounded-2xl space-y-5 shadow-sm">
+                      <div className="border-b border-border pb-3">
+                        <h4 className="font-bold text-sm text-foreground flex items-center gap-2">
+                          <div className="w-1.5 h-4 bg-primary rounded-full"></div>
                           Asignación organizativa
                         </h4>
-                        <p className="text-xs text-slate-400 mt-0.5">Asigna la empresa, cargo, departamento y área correspondiente.</p>
+                        <p className="text-xs text-foreground-muted mt-0.5">Asigna la empresa, cargo, departamento y área correspondiente.</p>
                       </div>
 
                       {/* Row 1: Empresa | Cargo */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-xs font-semibold text-slate-300 mb-1.5">Empresa / Consorcio *</label>
+                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Empresa / Consorcio *</label>
                           <select
                             value={wizardData.companyId || ''}
                             onChange={(e) => handleChange('companyId', e.target.value ? Number(e.target.value) : '')}
-                            className={`w-full bg-[#12141a] border rounded-xl px-3.5 py-2.5 text-xs font-normal text-white focus:outline-none cursor-pointer transition-colors ${fieldErrors.companyId ? 'border-rose-500 bg-rose-500/5' : 'border-slate-800 focus:border-[#bfce7f]'}`}
+                            className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none cursor-pointer transition-colors ${fieldErrors.companyId ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
                             disabled={isLoadingEmpresas}
                           >
                             {isLoadingEmpresas && <option value="">Cargando empresas...</option>}
@@ -6346,7 +6356,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                         </div>
 
                         <div>
-                          <label className="block text-xs font-semibold text-slate-300 mb-1.5">Cargo / Posición</label>
+                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Cargo / Posición</label>
                           <select
                             value={wizardData.cargo_id || ''}
                             onChange={(e) => {
@@ -6355,7 +6365,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                               handleChange('cargo_id', cId);
                               handleChange('job_title', cargoObj ? cargoObj.nombre : '');
                             }}
-                            className={`w-full bg-[#12141a] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs font-normal text-white focus:outline-none focus:border-[#bfce7f] cursor-pointer ${fieldErrors.cargo_id ? 'border-rose-500 bg-rose-500/5' : ''}`}
+                            className={`w-full bg-input border border-border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none focus:border-primary cursor-pointer ${fieldErrors.cargo_id ? 'border-rose-500 bg-rose-500/5' : ''}`}
                             disabled={isLoadingCargos}
                           >
                             {isLoadingCargos && <option value="">Cargando cargos...</option>}
@@ -6380,7 +6390,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                       {/* Row 2: Departamento | Área */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-xs font-semibold text-slate-300 mb-1.5">Departamento *</label>
+                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Departamento *</label>
                           <select
                             value={wizardData.department_id || ''}
                             onChange={(e) => {
@@ -6392,7 +6402,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                               handleChange('area', '');
                               fetchAreasForDepartamento(dId);
                             }}
-                            className={`w-full bg-[#12141a] border rounded-xl px-3.5 py-2.5 text-xs font-normal text-white focus:outline-none cursor-pointer transition-colors ${fieldErrors.department_id ? 'border-rose-500 bg-rose-500/5' : 'border-slate-800 focus:border-[#bfce7f]'}`}
+                            className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none cursor-pointer transition-colors ${fieldErrors.department_id ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
                             disabled={isLoadingDepartamentos}
                           >
                             {isLoadingDepartamentos && <option value="">Cargando departamentos...</option>}
@@ -6415,7 +6425,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                         </div>
 
                         <div>
-                          <label className="block text-xs font-semibold text-slate-300 mb-1.5">Área</label>
+                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Área</label>
                           <select
                             value={wizardData.area_id || ''}
                             onChange={(e) => {
@@ -6424,7 +6434,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                               handleChange('area_id', aId);
                               handleChange('area', arObj ? arObj.nombre : '');
                             }}
-                            className="w-full bg-[#12141a] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs font-normal text-white focus:outline-none focus:border-[#bfce7f] cursor-pointer disabled:opacity-50"
+                            className="w-full bg-input border border-border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none focus:border-primary cursor-pointer disabled:opacity-50"
                             disabled={!wizardData.department_id || isLoadingAreas}
                           >
                             {!wizardData.department_id && (
@@ -6455,11 +6465,11 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                     </div>
 
                     {/* Card Informativa */}
-                    <div className="p-4 rounded-xl bg-slate-900/60 border-l-4 border-l-[#bfce7f] border border-slate-800 text-xs text-slate-300 flex items-center gap-3 shadow-sm">
-                      <Info size={18} className="text-[#bfce7f] shrink-0" />
+                    <div className="p-4 rounded-xl bg-surface-subtle/60 border-l-4 border-l-[#bfce7f] border border-border text-xs text-foreground-secondary flex items-center gap-3 shadow-sm">
+                      <Info size={18} className="text-primary shrink-0" />
                       <div>
-                        <span className="font-bold text-white block text-xs">Directiva de seguridad</span>
-                        <span className="text-xs text-slate-400">Las credenciales temporales expiran en 7 días y todas las asignaciones quedan registradas en auditoría.</span>
+                        <span className="font-bold text-foreground block text-xs">Directiva de seguridad</span>
+                        <span className="text-xs text-foreground-muted">Las credenciales temporales expiran en 7 días y todas las asignaciones quedan registradas en auditoría.</span>
                       </div>
                     </div>
                   </div>
@@ -6468,22 +6478,22 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                 {/* STEP 2: EMPRESA Y ROL */}
                 {currentStep === 2 && (
                   <div className="space-y-6 animate-in fade-in duration-200">
-                    <div className="bg-[#181a22] border border-slate-800 p-6 rounded-2xl space-y-5 shadow-sm">
-                      <div className="border-b border-slate-800 pb-3">
-                        <h4 className="font-bold text-sm text-white flex items-center gap-2">
-                          <div className="w-1.5 h-4 bg-[#bfce7f] rounded-full"></div>
+                    <div className="bg-surface-subtle border border-border p-6 rounded-2xl space-y-5 shadow-sm">
+                      <div className="border-b border-border pb-3">
+                        <h4 className="font-bold text-sm text-foreground flex items-center gap-2">
+                          <div className="w-1.5 h-4 bg-primary rounded-full"></div>
                           Configuración de Empresa y Perfil
                         </h4>
-                        <p className="text-xs text-slate-400 mt-0.5">Asocia la empresa y asigna el perfil de usuario correspondiente.</p>
+                        <p className="text-xs text-foreground-muted mt-0.5">Asocia la empresa y asigna el perfil de usuario correspondiente.</p>
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-xs font-semibold text-slate-300 mb-1.5">Empresa / Consorcio *</label>
+                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Empresa / Consorcio *</label>
                           <select
                             value={wizardData.companyId || ''}
                             onChange={(e) => handleChange('companyId', e.target.value ? Number(e.target.value) : '')}
-                            className={`w-full bg-[#12141a] border rounded-xl px-3.5 py-2.5 text-xs font-normal text-white focus:outline-none cursor-pointer transition-colors ${fieldErrors.companyId ? 'border-rose-500 bg-rose-500/5' : 'border-slate-800 focus:border-[#bfce7f]'}`}
+                            className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none cursor-pointer transition-colors ${fieldErrors.companyId ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
                             disabled={isLoadingEmpresas}
                           >
                             {isLoadingEmpresas && <option value="">Cargando empresas...</option>}
@@ -6506,7 +6516,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                         </div>
 
                         <div>
-                          <label className="block text-xs font-semibold text-slate-300 mb-1.5">Tipo de Usuario *</label>
+                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Tipo de Usuario *</label>
                           <select
                             value={wizardData.tipo_usuario_id || ''}
                             onChange={(e) => {
@@ -6515,7 +6525,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                               const obj = userTypes.find(t => Number(t.tipo_usuario_id) === Number(valId));
                               if (obj) handleChange('user_type', obj.nombre);
                             }}
-                            className={`w-full bg-[#12141a] border rounded-xl px-3.5 py-2.5 text-xs font-normal text-white focus:outline-none cursor-pointer transition-colors ${fieldErrors.tipo_usuario_id ? 'border-rose-500 bg-rose-500/5' : 'border-slate-800 focus:border-[#bfce7f]'}`}
+                            className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none cursor-pointer transition-colors ${fieldErrors.tipo_usuario_id ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
                           >
                             <option value="">-- Selecciona Tipo --</option>
                             {userTypes.map(t => (
@@ -6529,18 +6539,18 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                       </div>
                     </div>
 
-                    <div className="bg-[#181a22] border border-slate-800 p-6 rounded-2xl space-y-5 shadow-sm">
-                      <div className="border-b border-slate-800 pb-3">
-                        <h4 className="font-bold text-sm text-white flex items-center gap-2">
-                          <div className="w-1.5 h-4 bg-[#bfce7f] rounded-full"></div>
+                    <div className="bg-surface-subtle border border-border p-6 rounded-2xl space-y-5 shadow-sm">
+                      <div className="border-b border-border pb-3">
+                        <h4 className="font-bold text-sm text-foreground flex items-center gap-2">
+                          <div className="w-1.5 h-4 bg-primary rounded-full"></div>
                           Rol y Método de Acceso Principal
                         </h4>
-                        <p className="text-xs text-slate-400 mt-0.5">Define el rol de seguridad RBAC y la vía primaria de autenticación.</p>
+                        <p className="text-xs text-foreground-muted mt-0.5">Define el rol de seguridad RBAC y la vía primaria de autenticación.</p>
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-xs font-semibold text-slate-300 mb-1.5">Rol Principal *</label>
+                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Rol Principal *</label>
                           <select
                             value={wizardData.rol_id || ''}
                             onChange={(e) => {
@@ -6549,7 +6559,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                               const rolObj = roles.find(r => Number(r.numericId || r.id) === Number(rId));
                               if (rolObj) handleChange('role', rolObj.nombre);
                             }}
-                            className={`w-full bg-[#12141a] border rounded-xl px-3.5 py-2.5 text-xs font-normal text-white focus:outline-none cursor-pointer transition-colors ${fieldErrors.rol_id ? 'border-rose-500 bg-rose-500/5' : 'border-slate-800 focus:border-[#bfce7f]'}`}
+                            className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none cursor-pointer transition-colors ${fieldErrors.rol_id ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
                           >
                             <option value="">-- Selecciona Rol --</option>
                             {roles.map(r => (
@@ -6562,11 +6572,11 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                         </div>
 
                         <div>
-                          <label className="block text-xs font-semibold text-slate-300 mb-1.5">Método de Acceso Principal *</label>
+                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Método de Acceso Principal *</label>
                           <select
                             value={wizardData.primary_access_type || 'EMAIL'}
                             onChange={(e) => handleChange('primary_access_type', e.target.value)}
-                            className={`w-full bg-[#12141a] border rounded-xl px-3.5 py-2.5 text-xs font-normal text-white focus:outline-none cursor-pointer transition-colors ${fieldErrors.primary_access_type ? 'border-rose-500 bg-rose-500/5' : 'border-slate-800 focus:border-[#bfce7f]'}`}
+                            className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none cursor-pointer transition-colors ${fieldErrors.primary_access_type ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
                           >
                             <option value="EMAIL">Correo electrónico</option>
                             <option value="DOCUMENT">Documento de identidad</option>
@@ -6575,16 +6585,16 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2 p-3.5 bg-slate-900/60 border border-slate-800 text-xs text-slate-300 rounded-xl font-medium">
-                        <Info size={16} className="text-[#bfce7f] shrink-0" />
+                      <div className="flex items-center gap-2 p-3.5 bg-surface-subtle/60 border border-border text-xs text-foreground-secondary rounded-xl font-medium">
+                        <Info size={16} className="text-primary shrink-0" />
                         <span>
-                          <strong className="text-white">Acceso sugerido: {wizardData.primary_access_type === 'DOCUMENT' ? 'Documento de identidad' : 'Correo electrónico'}.</strong> Recomendado para usuarios corporativos, administradores, supervisores y analistas.
+                          <strong className="text-foreground">Acceso sugerido: {wizardData.primary_access_type === 'DOCUMENT' ? 'Documento de identidad' : 'Correo electrónico'}.</strong> Recomendado para usuarios corporativos, administradores, supervisores y analistas.
                         </span>
                       </div>
                     </div>
 
-                    <div className="bg-[#181a22] border border-slate-800 p-6 rounded-2xl space-y-4 shadow-sm">
-                      <h4 className="font-bold text-xs text-slate-300">Roles Adicionales (Opcional)</h4>
+                    <div className="bg-surface-subtle border border-border p-6 rounded-2xl space-y-4 shadow-sm">
+                      <h4 className="font-bold text-xs text-foreground-secondary">Roles Adicionales (Opcional)</h4>
                       <div className="flex flex-wrap gap-2">
                         {roles.filter(r => r.id != wizardData.rol_id).map(r => (
                           <button
@@ -6599,8 +6609,8 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                             }}
                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors ${
                               (wizardData.roles_additional || []).includes(r.id)
-                                ? 'bg-[#bfce7f]/15 border-[#bfce7f]/40 text-[#bfce7f]'
-                                : 'bg-[#12141a] border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                                ? 'bg-primary/15 border-primary/40 text-primary'
+                                : 'bg-surface-subtle border-border text-foreground-muted hover:border-border hover:text-foreground-secondary'
                             }`}
                           >
                             <span>{(wizardData.roles_additional || []).includes(r.id) ? '✓' : '+'}</span>
@@ -6608,7 +6618,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                           </button>
                         ))}
                         {roles.filter(r => r.id != wizardData.rol_id).length === 0 && (
-                          <span className="text-xs text-slate-500 italic">No hay más roles disponibles para asignar.</span>
+                          <span className="text-xs text-foreground-disabled italic">No hay más roles disponibles para asignar.</span>
                         )}
                       </div>
                     </div>
@@ -6618,23 +6628,23 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                 {/* STEP 3: ACCESO Y CREDENCIALES */}
                 {currentStep === 3 && (
                   <div className="space-y-6 animate-in fade-in duration-200">
-                    <div className="bg-[#181a22] border border-slate-800 p-6 rounded-2xl space-y-5 shadow-sm">
-                      <div className="border-b border-slate-800 pb-3">
-                        <h4 className="font-bold text-sm text-white flex items-center gap-2">
-                          <div className="w-1.5 h-4 bg-[#bfce7f] rounded-full"></div>
+                    <div className="bg-surface-subtle border border-border p-6 rounded-2xl space-y-5 shadow-sm">
+                      <div className="border-b border-border pb-3">
+                        <h4 className="font-bold text-sm text-foreground flex items-center gap-2">
+                          <div className="w-1.5 h-4 bg-primary rounded-full"></div>
                           Credenciales de Acceso por {wizardData.primary_access_type === 'DOCUMENT' ? 'Documento' : 'Correo'}
                         </h4>
-                        <p className="text-xs text-slate-400 mt-0.5">Configura la forma de ingreso y contraseñas de primer acceso.</p>
+                        <p className="text-xs text-foreground-muted mt-0.5">Configura la forma de ingreso y contraseñas de primer acceso.</p>
                       </div>
 
                       {wizardData.primary_access_type === 'EMAIL' ? (
                         <div>
-                          <label className="block text-xs font-semibold text-slate-300 mb-1.5">Correo electrónico *</label>
+                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Correo electrónico *</label>
                           <input 
                             type="email" 
                             value={wizardData.email || ''} 
                             onChange={(e) => handleChange('email', e.target.value)} 
-                            className={`w-full bg-[#12141a] border rounded-xl px-3.5 py-2.5 text-xs font-normal text-white placeholder-slate-500 focus:outline-none transition-colors ${fieldErrors.email ? 'border-rose-500 bg-rose-500/5' : 'border-slate-800 focus:border-[#bfce7f]'}`} 
+                            className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground placeholder:text-foreground-disabled focus:outline-none transition-colors ${fieldErrors.email ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`} 
                             placeholder="Ej. juan.perez@empresa.com"
                           />
                           {fieldErrors.email && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{fieldErrors.email}</span>}
@@ -6642,11 +6652,11 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                       ) : (
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                           <div>
-                            <label className="block text-xs font-semibold text-slate-300 mb-1.5">Tipo de documento *</label>
+                            <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Tipo de documento *</label>
                             <select 
                               value={wizardData.document_type || 'Cédula'} 
                               onChange={(e) => handleChange('document_type', e.target.value)} 
-                              className={`w-full bg-[#12141a] border rounded-xl px-3.5 py-2.5 text-xs font-normal text-white focus:outline-none cursor-pointer transition-colors ${fieldErrors.document_type ? 'border-rose-500 bg-rose-500/5' : 'border-slate-800 focus:border-[#bfce7f]'}`}
+                              className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none cursor-pointer transition-colors ${fieldErrors.document_type ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
                             >
                               <option value="Cédula">Cédula</option>
                               <option value="Pasaporte">Pasaporte</option>
@@ -6655,23 +6665,23 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                             {fieldErrors.document_type && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{fieldErrors.document_type}</span>}
                           </div>
                           <div>
-                            <label className="block text-xs font-semibold text-slate-300 mb-1.5">Número de documento *</label>
+                            <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Número de documento *</label>
                             <input 
                               type="text" 
                               value={wizardData.document_number || ''} 
                               onChange={(e) => handleChange('document_number', e.target.value)} 
-                              className={`w-full bg-[#12141a] border rounded-xl px-3.5 py-2.5 text-xs font-normal text-white placeholder-slate-500 focus:outline-none transition-colors ${fieldErrors.document_number ? 'border-rose-500 bg-rose-500/5' : 'border-slate-800 focus:border-[#bfce7f]'}`} 
+                              className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground placeholder:text-foreground-disabled focus:outline-none transition-colors ${fieldErrors.document_number ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`} 
                               placeholder="Ej. 001-1234567-8"
                             />
                             {fieldErrors.document_number && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{fieldErrors.document_number}</span>}
                           </div>
                           <div>
-                            <label className="block text-xs font-semibold text-slate-300 mb-1.5">Teléfono *</label>
+                            <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Teléfono *</label>
                             <input 
                               type="text" 
                               value={wizardData.phone || ''} 
                               onChange={(e) => handleChange('phone', e.target.value)} 
-                              className={`w-full bg-[#12141a] border rounded-xl px-3.5 py-2.5 text-xs font-normal text-white placeholder-slate-500 focus:outline-none transition-colors ${fieldErrors.phone ? 'border-rose-500 bg-rose-500/5' : 'border-slate-800 focus:border-[#bfce7f]'}`} 
+                              className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground placeholder:text-foreground-disabled focus:outline-none transition-colors ${fieldErrors.phone ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`} 
                               placeholder="Ej. +1 (809) 555-0101"
                             />
                             {fieldErrors.phone && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{fieldErrors.phone}</span>}
@@ -6682,77 +6692,77 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                       {!wizardData.auto_generate_password && (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 animate-in fade-in duration-200">
                           <div>
-                            <label className="block text-xs font-semibold text-slate-300 mb-1.5">Contraseña temporal *</label>
+                            <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Contraseña temporal *</label>
                             <input 
                               type="password" 
                               value={wizardData.password || ''} 
                               onChange={(e) => handleChange('password', e.target.value)} 
-                              className={`w-full bg-[#12141a] border rounded-xl px-3.5 py-2.5 text-xs font-normal text-white focus:outline-none transition-colors ${fieldErrors.password ? 'border-rose-500 bg-rose-500/5' : 'border-slate-800 focus:border-[#bfce7f]'}`} 
+                              className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none transition-colors ${fieldErrors.password ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`} 
                             />
                             {fieldErrors.password && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{fieldErrors.password}</span>}
                           </div>
                           <div>
-                            <label className="block text-xs font-semibold text-slate-300 mb-1.5">Confirmar contraseña *</label>
+                            <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Confirmar contraseña *</label>
                             <input 
                               type="password" 
                               value={wizardData.confirm_password || ''} 
                               onChange={(e) => handleChange('confirm_password', e.target.value)} 
-                              className={`w-full bg-[#12141a] border rounded-xl px-3.5 py-2.5 text-xs font-normal text-white focus:outline-none transition-colors ${fieldErrors.confirm_password ? 'border-rose-500 bg-rose-500/5' : 'border-slate-800 focus:border-[#bfce7f]'}`} 
+                              className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none transition-colors ${fieldErrors.confirm_password ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`} 
                             />
                             {fieldErrors.confirm_password && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{fieldErrors.confirm_password}</span>}
                           </div>
                         </div>
                       )}
 
-                      <div className="flex flex-col gap-3.5 border-t border-slate-800 pt-4">
+                      <div className="flex flex-col gap-3.5 border-t border-border pt-4">
                         {wizardData.primary_access_type === 'EMAIL' && (
-                          <label className="flex items-center justify-between cursor-pointer group p-2.5 rounded-xl hover:bg-[#12141a] transition-colors border border-transparent hover:border-slate-800">
+                          <label className="flex items-center justify-between cursor-pointer group p-2.5 rounded-xl hover:bg-surface-subtle transition-colors border border-transparent hover:border-border">
                             <div className="flex items-center gap-2.5">
-                              <span className="font-medium text-slate-200 text-xs group-hover:text-white">Enviar invitación por correo electrónico</span>
-                              <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-[#bfce7f]/10 text-[#bfce7f] border border-[#bfce7f]/20">Recomendado</span>
+                              <span className="font-medium text-foreground-secondary text-xs group-hover:text-foreground">Enviar invitación por correo electrónico</span>
+                              <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-primary/10 text-primary border border-primary/20">Recomendado</span>
                             </div>
-                            <div className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors ${wizardData.send_invitation ? 'bg-[#bfce7f]' : 'bg-slate-700'}`}>
-                              <div className={`bg-slate-950 w-4 h-4 rounded-full shadow-sm transform transition-transform ${wizardData.send_invitation ? 'translate-x-4' : 'translate-x-0'}`}></div>
+                            <div className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors ${wizardData.send_invitation ? 'bg-primary' : 'bg-slate-700'}`}>
+                              <div className={`bg-surface-subtle w-4 h-4 rounded-full shadow-sm transform transition-transform ${wizardData.send_invitation ? 'translate-x-4' : 'translate-x-0'}`}></div>
                             </div>
                             <input type="checkbox" className="hidden" checked={!!wizardData.send_invitation} onChange={(e) => handleChange('send_invitation', e.target.checked)} />
                           </label>
                         )}
                         
-                        <label className="flex items-center justify-between cursor-pointer group p-2.5 rounded-xl hover:bg-[#12141a] transition-colors border border-transparent hover:border-slate-800">
+                        <label className="flex items-center justify-between cursor-pointer group p-2.5 rounded-xl hover:bg-surface-subtle transition-colors border border-transparent hover:border-border">
                           <div className="flex items-center gap-2.5">
-                            <span className="font-medium text-slate-200 text-xs group-hover:text-white">Generar contraseña automáticamente</span>
+                            <span className="font-medium text-foreground-secondary text-xs group-hover:text-foreground">Generar contraseña automáticamente</span>
                           </div>
-                          <div className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors ${wizardData.auto_generate_password ? 'bg-[#bfce7f]' : 'bg-slate-700'}`}>
-                            <div className={`bg-slate-950 w-4 h-4 rounded-full shadow-sm transform transition-transform ${wizardData.auto_generate_password ? 'translate-x-4' : 'translate-x-0'}`}></div>
+                          <div className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors ${wizardData.auto_generate_password ? 'bg-primary' : 'bg-slate-700'}`}>
+                            <div className={`bg-surface-subtle w-4 h-4 rounded-full shadow-sm transform transition-transform ${wizardData.auto_generate_password ? 'translate-x-4' : 'translate-x-0'}`}></div>
                           </div>
                           <input type="checkbox" className="hidden" checked={!!wizardData.auto_generate_password} onChange={(e) => handleChange('auto_generate_password', e.target.checked)} />
                         </label>
 
-                        <label className="flex items-center gap-2.5 cursor-pointer group p-2.5 rounded-xl hover:bg-[#12141a] transition-colors">
-                          <input type="checkbox" checked={!!wizardData.must_change_password} onChange={(e) => handleChange('must_change_password', e.target.checked)} className="rounded text-[#bfce7f] w-4 h-4 focus:ring-[#bfce7f] border-slate-700 bg-[#12141a]" />
-                          <span className="font-medium text-slate-200 text-xs group-hover:text-white">Forzar cambio de contraseña al primer ingreso</span>
+                        <label className="flex items-center gap-2.5 cursor-pointer group p-2.5 rounded-xl hover:bg-surface-subtle transition-colors">
+                          <input type="checkbox" checked={!!wizardData.must_change_password} onChange={(e) => handleChange('must_change_password', e.target.checked)} className="rounded text-primary w-4 h-4 focus:ring-primary border-border bg-surface-subtle" />
+                          <span className="font-medium text-foreground-secondary text-xs group-hover:text-foreground">Forzar cambio de contraseña al primer ingreso</span>
                         </label>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border border-slate-800 rounded-2xl p-6 bg-[#181a22] shadow-sm">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border border-border rounded-2xl p-6 bg-surface-subtle shadow-sm">
                       <div>
-                        <label className="block text-xs font-semibold text-slate-300 mb-1.5">Idioma preferido</label>
-                        <select value={wizardData.preferred_language || 'es'} onChange={(e) => handleChange('preferred_language', e.target.value)} className="w-full bg-[#12141a] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs font-normal text-white focus:outline-none focus:border-[#bfce7f]">
+                        <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Idioma preferido</label>
+                        <select value={wizardData.preferred_language || 'es'} onChange={(e) => handleChange('preferred_language', e.target.value)} className="w-full bg-input border border-border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none focus:border-primary">
                           <option value="es">Español (América Latina)</option>
                           <option value="en">Inglés (US)</option>
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs font-semibold text-slate-300 mb-1.5">Zona horaria</label>
-                        <select value={wizardData.timezone || 'America/Santo_Domingo'} onChange={(e) => handleChange('timezone', e.target.value)} className="w-full bg-[#12141a] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs font-normal text-white focus:outline-none focus:border-[#bfce7f]">
+                        <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Zona horaria</label>
+                        <select value={wizardData.timezone || 'America/Santo_Domingo'} onChange={(e) => handleChange('timezone', e.target.value)} className="w-full bg-input border border-border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none focus:border-primary">
                           <option value="America/Santo_Domingo">America/Santo_Domingo (GMT-4)</option>
                           <option value="America/New_York">America/New_York (GMT-4)</option>
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs font-semibold text-slate-300 mb-1.5">Formato de fecha</label>
-                        <select value={wizardData.date_format || 'DD/MM/YYYY'} onChange={(e) => handleChange('date_format', e.target.value)} className="w-full bg-[#12141a] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs font-normal text-white focus:outline-none focus:border-[#bfce7f]">
+                        <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Formato de fecha</label>
+                        <select value={wizardData.date_format || 'DD/MM/YYYY'} onChange={(e) => handleChange('date_format', e.target.value)} className="w-full bg-input border border-border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none focus:border-primary">
                           <option value="DD/MM/YYYY">DD/MM/YYYY</option>
                           <option value="MM/DD/YYYY">MM/DD/YYYY</option>
                           <option value="YYYY-MM-DD">YYYY-MM-DD</option>
@@ -6765,19 +6775,19 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                 {/* STEP 4: SEGURIDAD */}
                 {currentStep === 4 && (
                   <div className="space-y-6 animate-in fade-in duration-200">
-                    <div className="bg-[#181a22] border border-slate-800 p-6 rounded-2xl space-y-5 shadow-sm">
-                      <div className="border-b border-slate-800 pb-3">
-                        <h4 className="font-bold text-sm text-white flex items-center gap-2">
-                          <div className="w-1.5 h-4 bg-[#bfce7f] rounded-full"></div>
+                    <div className="bg-surface-subtle border border-border p-6 rounded-2xl space-y-5 shadow-sm">
+                      <div className="border-b border-border pb-3">
+                        <h4 className="font-bold text-sm text-foreground flex items-center gap-2">
+                          <div className="w-1.5 h-4 bg-primary rounded-full"></div>
                           Políticas de Seguridad y Accesos
                         </h4>
-                        <p className="text-xs text-slate-400 mt-0.5">Define parámetros de inactividad e intentos de autenticación.</p>
+                        <p className="text-xs text-foreground-muted mt-0.5">Define parámetros de inactividad e intentos de autenticación.</p>
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-xs font-semibold text-slate-300 mb-1.5">Cerrar sesión por inactividad</label>
-                          <select value={wizardData.inactivity_timeout_minutes ?? 0} onChange={(e) => handleChange('inactivity_timeout_minutes', parseInt(e.target.value))} className="w-full bg-[#12141a] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs font-normal text-white focus:outline-none focus:border-[#bfce7f]">
+                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Cerrar sesión por inactividad</label>
+                          <select value={wizardData.inactivity_timeout_minutes ?? 0} onChange={(e) => handleChange('inactivity_timeout_minutes', parseInt(e.target.value))} className="w-full bg-input border border-border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none focus:border-primary">
                             <option value={0}>No aplicar</option>
                             <option value={15}>15 minutos</option>
                             <option value={30}>30 minutos</option>
@@ -6786,8 +6796,8 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                           </select>
                         </div>
                         <div>
-                          <label className="block text-xs font-semibold text-slate-300 mb-1.5">Bloquear cuenta por intentos fallidos</label>
-                          <select value={wizardData.max_failed_attempts ?? 10} onChange={(e) => handleChange('max_failed_attempts', parseInt(e.target.value))} className="w-full bg-[#12141a] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs font-normal text-white focus:outline-none focus:border-[#bfce7f]">
+                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Bloquear cuenta por intentos fallidos</label>
+                          <select value={wizardData.max_failed_attempts ?? 10} onChange={(e) => handleChange('max_failed_attempts', parseInt(e.target.value))} className="w-full bg-input border border-border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none focus:border-primary">
                             <option value={3}>Bloquear al tercer intento fallido</option>
                             <option value={5}>Bloquear al quinto intento fallido</option>
                             <option value={10}>Bloquear al décimo intento fallido</option>
@@ -6796,13 +6806,13 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                        <label className="flex items-center gap-3 cursor-pointer p-3 rounded-xl bg-[#12141a] border border-slate-800 hover:border-slate-700">
-                          <input type="checkbox" checked={wizardData.require_export_approval || false} onChange={(e) => handleChange('require_export_approval', e.target.checked)} className="rounded text-[#bfce7f] w-4 h-4 focus:ring-[#bfce7f] border-slate-700 bg-[#12141a]" />
-                          <span className="text-xs font-medium text-slate-200">Exigir aprobación para exportaciones de datos sensibles</span>
+                        <label className="flex items-center gap-3 cursor-pointer p-3 rounded-xl bg-surface-subtle border border-border hover:border-border">
+                          <input type="checkbox" checked={wizardData.require_export_approval || false} onChange={(e) => handleChange('require_export_approval', e.target.checked)} className="rounded text-primary w-4 h-4 focus:ring-primary border-border bg-surface-subtle" />
+                          <span className="text-xs font-medium text-foreground-secondary">Exigir aprobación para exportaciones de datos sensibles</span>
                         </label>
-                        <label className="flex items-center gap-3 cursor-pointer p-3 rounded-xl bg-[#12141a] border border-slate-800 hover:border-slate-700">
-                          <input type="checkbox" checked={wizardData.require_dual_validation || false} onChange={(e) => handleChange('require_dual_validation', e.target.checked)} className="rounded text-[#bfce7f] w-4 h-4 focus:ring-[#bfce7f] border-slate-700 bg-[#12141a]" />
-                          <span className="text-xs font-medium text-slate-200">Exigir doble validación (Dual control) para cambios críticos</span>
+                        <label className="flex items-center gap-3 cursor-pointer p-3 rounded-xl bg-surface-subtle border border-border hover:border-border">
+                          <input type="checkbox" checked={wizardData.require_dual_validation || false} onChange={(e) => handleChange('require_dual_validation', e.target.checked)} className="rounded text-primary w-4 h-4 focus:ring-primary border-border bg-surface-subtle" />
+                          <span className="text-xs font-medium text-foreground-secondary">Exigir doble validación (Dual control) para cambios críticos</span>
                         </label>
                       </div>
 
@@ -6814,15 +6824,15 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                       )}
                     </div>
 
-                    <div className="bg-[#181a22] border border-slate-800 p-6 rounded-2xl space-y-4 shadow-sm">
-                      <h4 className="font-bold text-sm text-white flex items-center gap-2">
-                        <Settings size={16} className="text-[#bfce7f]" />
+                    <div className="bg-surface-subtle border border-border p-6 rounded-2xl space-y-4 shadow-sm">
+                      <h4 className="font-bold text-sm text-foreground flex items-center gap-2">
+                        <Settings size={16} className="text-primary" />
                         Configuración avanzada
                       </h4>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-xs font-semibold text-slate-300 mb-1.5">Correo de recuperación (Opcional)</label>
-                          <input type="email" value={wizardData.correo_acceso || ''} onChange={(e) => handleChange('correo_acceso', e.target.value)} className="w-full bg-[#12141a] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs font-normal text-white focus:outline-none focus:border-[#bfce7f]" placeholder="Ej. admin@miempresa.com" />
+                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Correo de recuperación (Opcional)</label>
+                          <input type="email" value={wizardData.correo_acceso || ''} onChange={(e) => handleChange('correo_acceso', e.target.value)} className="w-full bg-input border border-border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none focus:border-primary" placeholder="Ej. admin@miempresa.com" />
                         </div>
                       </div>
                     </div>
@@ -6832,128 +6842,128 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                 {/* STEP 5: CONFIRMACION */}
                 {currentStep === 5 && (
                   <div className="space-y-6 animate-in fade-in duration-200">
-                    <div className="border-b border-slate-800 pb-3">
-                      <h4 className="font-bold text-base text-white flex items-center gap-2">
-                        <div className="w-1.5 h-4 bg-[#bfce7f] rounded-full"></div>
+                    <div className="border-b border-border pb-3">
+                      <h4 className="font-bold text-base text-foreground flex items-center gap-2">
+                        <div className="w-1.5 h-4 bg-primary rounded-full"></div>
                         Confirmación del usuario
                       </h4>
-                      <p className="text-xs text-slate-400 mt-1">
+                      <p className="text-xs text-foreground-muted mt-1">
                         Revisa la información de identidad, empresa, rol y seguridad antes de finalizar la creación de la cuenta.
                       </p>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                       {/* Card 1: Identidad */}
-                      <div className="bg-[#181a22] p-5 rounded-2xl border border-slate-800 space-y-3.5 shadow-sm">
-                        <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
-                          <h5 className="font-bold text-xs text-white flex items-center gap-2">
-                            <Users size={15} className="text-[#bfce7f]" /> Identidad
+                      <div className="bg-surface-subtle p-5 rounded-2xl border border-border space-y-3.5 shadow-sm">
+                        <div className="flex items-center justify-between border-b border-border pb-2.5">
+                          <h5 className="font-bold text-xs text-foreground flex items-center gap-2">
+                            <Users size={15} className="text-primary" /> Identidad
                           </h5>
                           <button 
                             type="button"
                             onClick={() => setCurrentStep(1)}
-                            className="text-[11px] font-semibold text-[#bfce7f] hover:underline"
+                            className="text-[11px] font-semibold text-primary hover:underline"
                           >
                             Editar
                           </button>
                         </div>
                         <div className="grid grid-cols-2 gap-y-2 text-xs">
-                          <span className="text-slate-400 font-medium">Nombre:</span>
-                          <span className="font-bold text-white">{wizardData.full_name}</span>
-                          <span className="text-slate-400 font-medium">Correo:</span>
-                          <span className="font-normal text-slate-200">{wizardData.email || '—'}</span>
-                          <span className="text-slate-400 font-medium">Documento:</span>
-                          <span className="font-normal text-slate-200">
+                          <span className="text-foreground-muted font-medium">Nombre:</span>
+                          <span className="font-bold text-foreground">{wizardData.full_name}</span>
+                          <span className="text-foreground-muted font-medium">Correo:</span>
+                          <span className="font-normal text-foreground-secondary">{wizardData.email || '—'}</span>
+                          <span className="text-foreground-muted font-medium">Documento:</span>
+                          <span className="font-normal text-foreground-secondary">
                             {wizardData.document_number ? `${wizardData.document_type}: ${wizardData.document_number}` : 'No registrado'}
                           </span>
-                          <span className="text-slate-400 font-medium">Posición / Cargo:</span>
-                          <span className="font-normal text-slate-200">{wizardData.job_title || '—'} ({wizardData.department || '—'}{wizardData.area ? ` / ${wizardData.area}` : ''})</span>
+                          <span className="text-foreground-muted font-medium">Posición / Cargo:</span>
+                          <span className="font-normal text-foreground-secondary">{wizardData.job_title || '—'} ({wizardData.department || '—'}{wizardData.area ? ` / ${wizardData.area}` : ''})</span>
                         </div>
                       </div>
 
                       {/* Card 2: Empresa y Rol */}
-                      <div className="bg-[#181a22] p-5 rounded-2xl border border-slate-800 space-y-3.5 shadow-sm">
-                        <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
-                          <h5 className="font-bold text-xs text-white flex items-center gap-2">
-                            <Building2 size={15} className="text-[#bfce7f]" /> Empresa y Rol
+                      <div className="bg-surface-subtle p-5 rounded-2xl border border-border space-y-3.5 shadow-sm">
+                        <div className="flex items-center justify-between border-b border-border pb-2.5">
+                          <h5 className="font-bold text-xs text-foreground flex items-center gap-2">
+                            <Building2 size={15} className="text-primary" /> Empresa y Rol
                           </h5>
                           <button 
                             type="button"
                             onClick={() => setCurrentStep(2)}
-                            className="text-[11px] font-semibold text-[#bfce7f] hover:underline"
+                            className="text-[11px] font-semibold text-primary hover:underline"
                           >
                             Editar
                           </button>
                         </div>
                         <div className="grid grid-cols-2 gap-y-2 text-xs">
-                          <span className="text-slate-400 font-medium">Empresa:</span>
-                          <span className="font-bold text-white">
+                          <span className="text-foreground-muted font-medium">Empresa:</span>
+                          <span className="font-bold text-foreground">
                             {companies.find(c => c.empresa_id == wizardData.companyId)?.nombre_comercial || 'Empresa seleccionada'}
                           </span>
-                          <span className="text-slate-400 font-medium">Rol principal:</span>
-                          <span className="font-bold text-[#bfce7f]">{wizardData.role}</span>
-                          <span className="text-slate-400 font-medium">Tipo de usuario:</span>
-                          <span className="font-normal text-slate-200">{wizardData.user_type || '—'}</span>
-                          <span className="text-slate-400 font-medium">Permisos:</span>
-                          <span className="font-normal text-slate-200">
+                          <span className="text-foreground-muted font-medium">Rol principal:</span>
+                          <span className="font-bold text-primary">{wizardData.role}</span>
+                          <span className="text-foreground-muted font-medium">Tipo de usuario:</span>
+                          <span className="font-normal text-foreground-secondary">{wizardData.user_type || '—'}</span>
+                          <span className="text-foreground-muted font-medium">Permisos:</span>
+                          <span className="font-normal text-foreground-secondary">
                             {Object.keys(wizardData.permissionsOverride || {}).length > 0 ? 'Permisos específicos' : 'Heredados del rol'}
                           </span>
                         </div>
                       </div>
 
                       {/* Card 3: Acceso */}
-                      <div className="bg-[#181a22] p-5 rounded-2xl border border-slate-800 space-y-3.5 shadow-sm">
-                        <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
-                          <h5 className="font-bold text-xs text-white flex items-center gap-2">
-                            <Key size={15} className="text-[#bfce7f]" /> Acceso
+                      <div className="bg-surface-subtle p-5 rounded-2xl border border-border space-y-3.5 shadow-sm">
+                        <div className="flex items-center justify-between border-b border-border pb-2.5">
+                          <h5 className="font-bold text-xs text-foreground flex items-center gap-2">
+                            <Key size={15} className="text-primary" /> Acceso
                           </h5>
                           <button 
                             type="button"
                             onClick={() => setCurrentStep(3)}
-                            className="text-[11px] font-semibold text-[#bfce7f] hover:underline"
+                            className="text-[11px] font-semibold text-primary hover:underline"
                           >
                             Editar
                           </button>
                         </div>
                         <div className="grid grid-cols-2 gap-y-2 text-xs">
-                          <span className="text-slate-400 font-medium">Tipo de acceso:</span>
-                          <span className="font-normal text-slate-200">{wizardData.primary_access_type === 'DOCUMENT' ? 'Documento de identidad' : 'Correo electrónico'}</span>
-                          <span className="text-slate-400 font-medium">Identificador:</span>
+                          <span className="text-foreground-muted font-medium">Tipo de acceso:</span>
+                          <span className="font-normal text-foreground-secondary">{wizardData.primary_access_type === 'DOCUMENT' ? 'Documento de identidad' : 'Correo electrónico'}</span>
+                          <span className="text-foreground-muted font-medium">Identificador:</span>
                           <span className="font-mono font-bold text-indigo-400">
                             {wizardData.primary_access_type === 'DOCUMENT' ? wizardData.document_number : (wizardData.identificador_principal || wizardData.email)}
                           </span>
-                          <span className="text-slate-400 font-medium">Invitación correo:</span>
-                          <span className="font-normal text-slate-200">{wizardData.send_invitation ? 'Sí, enviar al crear' : 'No'}</span>
-                          <span className="text-slate-400 font-medium">Cambio clave:</span>
-                          <span className="font-normal text-slate-200">{wizardData.must_change_password ? 'Exigido al primer ingreso' : 'No exigido'}</span>
+                          <span className="text-foreground-muted font-medium">Invitación correo:</span>
+                          <span className="font-normal text-foreground-secondary">{wizardData.send_invitation ? 'Sí, enviar al crear' : 'No'}</span>
+                          <span className="text-foreground-muted font-medium">Cambio clave:</span>
+                          <span className="font-normal text-foreground-secondary">{wizardData.must_change_password ? 'Exigido al primer ingreso' : 'No exigido'}</span>
                         </div>
                       </div>
 
                       {/* Card 4: Seguridad */}
-                      <div className="bg-[#181a22] p-5 rounded-2xl border border-slate-800 space-y-3.5 shadow-sm">
-                        <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
-                          <h5 className="font-bold text-xs text-white flex items-center gap-2">
-                            <ShieldCheck size={15} className="text-[#bfce7f]" /> Seguridad
+                      <div className="bg-surface-subtle p-5 rounded-2xl border border-border space-y-3.5 shadow-sm">
+                        <div className="flex items-center justify-between border-b border-border pb-2.5">
+                          <h5 className="font-bold text-xs text-foreground flex items-center gap-2">
+                            <ShieldCheck size={15} className="text-primary" /> Seguridad
                           </h5>
                           <button 
                             type="button"
                             onClick={() => setCurrentStep(4)}
-                            className="text-[11px] font-semibold text-[#bfce7f] hover:underline"
+                            className="text-[11px] font-semibold text-primary hover:underline"
                           >
                             Editar
                           </button>
                         </div>
                         <div className="grid grid-cols-2 gap-y-2 text-xs">
-                          <span className="text-slate-400 font-medium">Inactividad:</span>
-                          <span className="font-semibold text-white">{wizardData.inactivity_timeout_minutes ? `${wizardData.inactivity_timeout_minutes} min` : 'No aplica'}</span>
-                          <span className="text-slate-400 font-medium">Intentos fallidos:</span>
-                          <span className="font-semibold text-white">{wizardData.max_failed_attempts ? `${wizardData.max_failed_attempts} intentos` : 'No aplica'}</span>
-                          <span className="text-slate-400 font-medium">Estado inicial:</span>
+                          <span className="text-foreground-muted font-medium">Inactividad:</span>
+                          <span className="font-semibold text-foreground">{wizardData.inactivity_timeout_minutes ? `${wizardData.inactivity_timeout_minutes} min` : 'No aplica'}</span>
+                          <span className="text-foreground-muted font-medium">Intentos fallidos:</span>
+                          <span className="font-semibold text-foreground">{wizardData.max_failed_attempts ? `${wizardData.max_failed_attempts} intentos` : 'No aplica'}</span>
+                          <span className="text-foreground-muted font-medium">Estado inicial:</span>
                           <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 w-fit">
                             Pendiente de activación
                           </span>
-                          <span className="text-slate-400 font-medium">Auditoría:</span>
-                          <span className="font-normal text-slate-200">Registro permanente habilitado</span>
+                          <span className="text-foreground-muted font-medium">Auditoría:</span>
+                          <span className="font-normal text-foreground-secondary">Registro permanente habilitado</span>
                         </div>
                       </div>
                     </div>
@@ -6963,12 +6973,12 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
             </div>
 
             {/* 4. FOOTER FIJO CON ACCIONES */}
-            <div className="px-6 py-4 border-t border-slate-800 bg-[#161820] flex items-center justify-between gap-3 shrink-0 z-20">
+            <div className="px-6 py-4 border-t border-border bg-surface-subtle flex items-center justify-between gap-3 shrink-0 z-20">
               <button 
                 type="button" 
                 disabled={currentStep === 1}
                 onClick={handlePrevStep}
-                className="px-4 py-2 rounded-xl border border-slate-800 hover:bg-slate-800/60 text-slate-300 font-medium disabled:opacity-40 disabled:cursor-not-allowed text-xs transition-colors"
+                className="px-4 py-2 rounded-xl border border-border hover:bg-surface-subtle/60 text-foreground-secondary font-medium disabled:opacity-40 disabled:cursor-not-allowed text-xs transition-colors"
               >
                 Volver
               </button>
@@ -6977,7 +6987,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                 <button 
                   type="button" 
                   onClick={handleCancel} 
-                  className="px-4 py-2 rounded-xl border border-slate-800 hover:bg-slate-800/60 text-slate-300 font-medium text-xs transition-colors"
+                  className="px-4 py-2 rounded-xl border border-border hover:bg-surface-subtle/60 text-foreground-secondary font-medium text-xs transition-colors"
                 >
                   Cancelar
                 </button>
@@ -6986,7 +6996,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                   <button 
                     type="button" 
                     onClick={handleNextStep}
-                    className="px-5 py-2 rounded-xl bg-[#bfce7f] hover:bg-[#b0c06f] text-slate-950 font-bold flex items-center gap-1.5 shadow-sm text-xs transition-colors"
+                    className="px-5 py-2 rounded-xl bg-primary hover:bg-primary text-slate-950 font-bold flex items-center gap-1.5 shadow-sm text-xs transition-colors"
                   >
                     Siguiente <ArrowRight size={14} />
                   </button>
@@ -6996,7 +7006,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                       type="button" 
                       disabled={isSaving}
                       onClick={() => handleSaveUser(false)}
-                      className="px-4 py-2 rounded-xl bg-slate-800 text-slate-200 border border-slate-700 hover:bg-slate-700 font-semibold text-xs shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      className="px-4 py-2 rounded-xl bg-surface-subtle text-foreground-secondary border border-border hover:bg-slate-700 font-semibold text-xs shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
                       {isSaving ? 'Guardando...' : 'Guardar borrador'}
                     </button>
@@ -7005,7 +7015,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                         type="button" 
                         disabled={isSaving}
                         onClick={() => handleSaveUser(true)}
-                        className="px-5 py-2 rounded-xl bg-[#bfce7f] hover:bg-[#b0c06f] text-slate-950 font-bold flex items-center gap-1.5 shadow-sm text-xs disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        className="px-5 py-2 rounded-xl bg-primary hover:bg-primary text-slate-950 font-bold flex items-center gap-1.5 shadow-sm text-xs disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
                         {isSaving ? 'Guardando...' : 'Crear y enviar invitación'}
                       </button>
@@ -7014,7 +7024,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                         type="button" 
                         disabled={isSaving}
                         onClick={() => handleSaveUser(false)}
-                        className="px-5 py-2 rounded-xl bg-[#bfce7f] hover:bg-[#b0c06f] text-slate-950 font-bold flex items-center gap-1.5 shadow-sm text-xs disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        className="px-5 py-2 rounded-xl bg-primary hover:bg-primary text-slate-950 font-bold flex items-center gap-1.5 shadow-sm text-xs disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
                         {isSaving ? 'Guardando...' : 'Crear usuario'}
                       </button>
@@ -7031,7 +7041,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       {/* MOTIVO ADMINISTRATIVO DIALOG (React Portal) */}
       {showReasonModal && reasonAction && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md"></div>
+          <div className="absolute inset-0 bg-surface-subtle/60 backdrop-blur-md"></div>
           
           <div className="relative w-full max-w-md bg-[var(--bg-elevated)] rounded-2xl shadow-2xl border border-[var(--border-color)] p-6 animate-in zoom-in-95 duration-200">
             <h3 className="text-base font-black text-[var(--text-primary)] flex items-center gap-2">
@@ -7084,10 +7094,10 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       {/* PASSWORD COPY MODAL (React Portal) */}
       {showPassModal && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-md"></div>
+          <div className="absolute inset-0 bg-surface-subtle/70 backdrop-blur-md"></div>
           
           <div className="relative w-full max-w-sm bg-[var(--bg-elevated)] rounded-2xl shadow-2xl border border-[var(--border-color)] p-6 animate-in zoom-in-95 duration-200 text-center">
-            <div className="w-14 h-14 bg-[#bfce7f]/10 text-[#bfce7f] border border-[#bfce7f]/30 rounded-full flex items-center justify-center mx-auto mb-4">
+            <div className="w-14 h-14 bg-primary/10 text-primary border border-primary/30 rounded-full flex items-center justify-center mx-auto mb-4">
               <Key size={26} />
             </div>
             
@@ -7096,7 +7106,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               Copia la clave y compártela de forma segura. El usuario deberá renovarla en su primer acceso.
             </p>
 
-            <div className="my-5 p-3.5 bg-slate-100 dark:bg-slate-900 rounded-xl border border-[var(--border-color)] select-all font-mono font-black text-primary text-[15px] tracking-widest">
+            <div className="my-5 p-3.5 bg-slate-100 dark:bg-surface-subtle rounded-xl border border-[var(--border-color)] select-all font-mono font-black text-primary text-[15px] tracking-widest">
               {tempPassword}
             </div>
 
@@ -7119,7 +7129,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       {/* AGENCY SELECTOR SUBMODAL (React Portal) */}
       {isAgencyModalOpen && typeof document !== 'undefined' && wizardData && createPortal(
         <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => setIsAgencyModalOpen(false)}></div>
+          <div className="absolute inset-0 bg-surface-subtle/60 backdrop-blur-md" onClick={() => setIsAgencyModalOpen(false)}></div>
           
           <div className="relative w-full max-w-3xl bg-[var(--bg-elevated)] rounded-2xl shadow-2xl border border-[var(--border-color)] overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200">
             {/* Header */}
@@ -7387,15 +7397,15 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         isLoading={isRevokingAllSessions}
         loadingLabel="Revocando..."
         extraContent={
-          <div className="p-3 rounded-xl bg-[#0e1117] border border-[#2d3748] w-full flex items-center gap-3 text-left">
+          <div className="p-3 rounded-xl bg-input border border-border w-full flex items-center gap-3 text-left">
             <input 
               type="checkbox"
               id="keepCurrentCheck"
               checked={keepCurrentSessionOnRevokeAll}
               onChange={(e) => setKeepCurrentSessionOnRevokeAll(e.target.checked)}
-              className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-[#bfce7f] focus:ring-[#bfce7f] cursor-pointer"
+              className="w-4 h-4 rounded border-border bg-surface-subtle text-primary focus:ring-primary cursor-pointer"
             />
-            <label htmlFor="keepCurrentCheck" className="text-xs font-bold text-slate-200 cursor-pointer select-none">
+            <label htmlFor="keepCurrentCheck" className="text-xs font-bold text-foreground-secondary cursor-pointer select-none">
               Mantener mi sesión actual del administrador abierta
             </label>
           </div>
@@ -7458,16 +7468,16 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
           />
 
           {/* Drawer Container */}
-          <div className="relative w-full max-w-[500px] h-full bg-[#161a21] border-l border-[#2d3748] shadow-2xl z-[999999] flex flex-col animate-in slide-in-from-right duration-300">
+          <div className="relative w-full max-w-[500px] h-full bg-card border-l border-border shadow-2xl z-[999999] flex flex-col animate-in slide-in-from-right duration-300">
             {/* Drawer Header */}
-            <div className="px-6 py-5 border-b border-[#2d3748] bg-[#0e1117] flex items-center justify-between shrink-0">
+            <div className="px-6 py-5 border-b border-border bg-input flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-[#212631] border border-[#2d3748] text-[#bfce7f] flex items-center justify-center font-bold shadow-inner">
+                <div className="w-10 h-10 rounded-xl bg-surface-subtle border border-border text-primary flex items-center justify-center font-bold shadow-inner">
                   <Laptop size={20} />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white tracking-tight">Detalle de sesión</h3>
-                  <p className="text-[11px] text-slate-400 font-medium leading-tight">
+                  <h3 className="text-base font-bold text-foreground tracking-tight">Detalle de sesión</h3>
+                  <p className="text-[11px] text-foreground-muted font-medium leading-tight">
                     Información técnica e historial de la conexión seleccionada.
                   </p>
                 </div>
@@ -7475,7 +7485,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               <button
                 type="button"
                 onClick={() => setSelectedSessionDetail(null)}
-                className="w-8 h-8 rounded-lg bg-[#161a21] border border-[#2d3748] text-slate-400 hover:text-white hover:border-[#bfce7f] flex items-center justify-center transition-all cursor-pointer"
+                className="w-8 h-8 rounded-lg bg-card border border-border text-foreground-muted hover:text-foreground hover:border-primary flex items-center justify-center transition-all cursor-pointer"
                 title="Cerrar detalle"
                 aria-label="Cerrar detalle"
               >
@@ -7487,9 +7497,9 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
             <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar text-xs">
               
               {/* Section 1: Estado */}
-              <div className="p-4 rounded-xl bg-[#0e1117] border border-[#2d3748] space-y-3">
+              <div className="p-4 rounded-xl bg-input border border-border space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">1. Estado</span>
+                  <span className="text-[11px] font-bold text-foreground-muted uppercase tracking-wider">1. Estado</span>
                   <span className={`px-2.5 py-1 rounded-lg font-mono text-[10px] font-bold uppercase tracking-wider inline-flex items-center gap-1 ${
                     selectedSessionDetail.estado === 'ACTIVA' 
                       ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' 
@@ -7505,40 +7515,40 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-[#2d3748]/50">
+                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border/50">
                   <div>
-                    <span className="text-[10px] text-slate-400 block font-medium">ID de Sesión</span>
-                    <span className="font-mono text-slate-200 font-bold select-all">
+                    <span className="text-[10px] text-foreground-muted block font-medium">ID de Sesión</span>
+                    <span className="font-mono text-foreground-secondary font-bold select-all">
                       {selectedSessionDetail.sesion_id || selectedSessionDetail.id || 'No registrado'}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-400 block font-medium">Sesión Actual</span>
-                    <span className={`font-bold ${selectedSessionDetail.is_current ? 'text-[#bfce7f]' : 'text-slate-300'}`}>
+                    <span className="text-[10px] text-foreground-muted block font-medium">Sesión Actual</span>
+                    <span className={`font-bold ${selectedSessionDetail.is_current ? 'text-primary' : 'text-foreground-secondary'}`}>
                       {selectedSessionDetail.is_current ? 'Sí (Este navegador)' : 'No'}
                     </span>
                   </div>
                 </div>
 
                 {detailUser && (
-                  <div className="pt-2 border-t border-[#2d3748]/50">
-                    <span className="text-[10px] text-slate-400 block font-medium">Usuario</span>
-                    <span className="font-bold text-white">
+                  <div className="pt-2 border-t border-border/50">
+                    <span className="text-[10px] text-foreground-muted block font-medium">Usuario</span>
+                    <span className="font-bold text-foreground">
                       {detailUser.full_name || 'No registrado'}
-                      {detailUser.email && <span className="text-slate-400 font-normal ml-1">({detailUser.email})</span>}
+                      {detailUser.email && <span className="text-foreground-muted font-normal ml-1">({detailUser.email})</span>}
                     </span>
                   </div>
                 )}
               </div>
 
               {/* Section 2: Dispositivo */}
-              <div className="p-4 rounded-xl bg-[#0e1117] border border-[#2d3748] space-y-3">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">2. Dispositivo</span>
+              <div className="p-4 rounded-xl bg-input border border-border space-y-3">
+                <span className="text-[11px] font-bold text-foreground-muted uppercase tracking-wider block">2. Dispositivo</span>
                 
                 <div className="space-y-2">
                   <div>
-                    <span className="text-[10px] text-slate-400 block font-medium">Navegador / Sistema Operativo</span>
-                    <span className="font-bold text-slate-200 block break-words leading-relaxed">
+                    <span className="text-[10px] text-foreground-muted block font-medium">Navegador / Sistema Operativo</span>
+                    <span className="font-bold text-foreground-secondary block break-words leading-relaxed">
                       {selectedSessionDetail.dispositivo_navegador || selectedSessionDetail.device || 'No registrado'}
                     </span>
                   </div>
@@ -7546,19 +7556,19 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               </div>
 
               {/* Section 3: Red */}
-              <div className="p-4 rounded-xl bg-[#0e1117] border border-[#2d3748] space-y-3">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">3. Red</span>
+              <div className="p-4 rounded-xl bg-input border border-border space-y-3">
+                <span className="text-[11px] font-bold text-foreground-muted uppercase tracking-wider block">3. Red</span>
                 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <span className="text-[10px] text-slate-400 block font-medium">Dirección IP</span>
-                    <span className="font-mono text-[#bfce7f] font-bold select-all">
+                    <span className="text-[10px] text-foreground-muted block font-medium">Dirección IP</span>
+                    <span className="font-mono text-primary font-bold select-all">
                       {selectedSessionDetail.direccion_ip || selectedSessionDetail.ip || 'No registrada'}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-400 block font-medium">Ubicación</span>
-                    <span className="text-slate-300 font-bold">
+                    <span className="text-[10px] text-foreground-muted block font-medium">Ubicación</span>
+                    <span className="text-foreground-secondary font-bold">
                       {selectedSessionDetail.ubicacion || selectedSessionDetail.location || 'No registrada'}
                     </span>
                   </div>
@@ -7566,31 +7576,31 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               </div>
 
               {/* Section 4: Tiempos */}
-              <div className="p-4 rounded-xl bg-[#0e1117] border border-[#2d3748] space-y-3">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">4. Tiempos</span>
+              <div className="p-4 rounded-xl bg-input border border-border space-y-3">
+                <span className="text-[11px] font-bold text-foreground-muted uppercase tracking-wider block">4. Tiempos</span>
                 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <span className="text-[10px] text-slate-400 block font-medium">Fecha/Hora de Inicio</span>
-                    <span className="text-slate-200 font-bold">
+                    <span className="text-[10px] text-foreground-muted block font-medium">Fecha/Hora de Inicio</span>
+                    <span className="text-foreground-secondary font-bold">
                       {formatSafeDateTime(selectedSessionDetail.fecha_inicio || selectedSessionDetail.login_time)}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-400 block font-medium">Última Actividad</span>
-                    <span className="text-slate-200 font-bold">
+                    <span className="text-[10px] text-foreground-muted block font-medium">Última Actividad</span>
+                    <span className="text-foreground-secondary font-bold">
                       {formatSafeDateTime(selectedSessionDetail.ultima_actividad || selectedSessionDetail.last_activity_at)}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-400 block font-medium">Duración Total</span>
-                    <span className="text-[#bfce7f] font-bold">
+                    <span className="text-[10px] text-foreground-muted block font-medium">Duración Total</span>
+                    <span className="text-primary font-bold">
                       {selectedSessionDetail.duration || 'No registrada'}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-400 block font-medium">Fecha Expiración</span>
-                    <span className="text-slate-300 font-bold">
+                    <span className="text-[10px] text-foreground-muted block font-medium">Fecha Expiración</span>
+                    <span className="text-foreground-secondary font-bold">
                       {formatSafeDateTime(selectedSessionDetail.fecha_expiracion)}
                     </span>
                   </div>
@@ -7598,8 +7608,8 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               </div>
 
               {/* Section 5: Cierre / Revocación */}
-              <div className="p-4 rounded-xl bg-[#0e1117] border border-[#2d3748] space-y-3">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">5. Cierre / Revocación</span>
+              <div className="p-4 rounded-xl bg-input border border-border space-y-3">
+                <span className="text-[11px] font-bold text-foreground-muted uppercase tracking-wider block">5. Cierre / Revocación</span>
                 
                 {selectedSessionDetail.estado === 'REVOCADA' && (
                   <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 space-y-2">
@@ -7609,17 +7619,17 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                     <div className="grid grid-cols-2 gap-2 text-[11px] pt-1">
                       <div>
                         <span className="opacity-75 block text-[10px]">Fecha de Revocación:</span>
-                        <span className="font-bold text-white">{formatSafeDateTime(selectedSessionDetail.fecha_revocacion || selectedSessionDetail.ultima_actividad)}</span>
+                        <span className="font-bold text-foreground">{formatSafeDateTime(selectedSessionDetail.fecha_revocacion || selectedSessionDetail.fecha_cierre)}</span>
                       </div>
                       <div>
                         <span className="opacity-75 block text-[10px]">Administrador que Revocó:</span>
-                        <span className="font-bold text-white">{selectedSessionDetail.revocado_por || 'Administrador de Seguridad'}</span>
+                        <span className="font-bold text-foreground">{selectedSessionDetail.revocado_por_nombre || (selectedSessionDetail.revocado_por ? `Admin #${selectedSessionDetail.revocado_por}` : 'Administrador')}</span>
                       </div>
                     </div>
-                    {selectedSessionDetail.motivo_revocacion && (
+                    {(selectedSessionDetail.motivo_cierre || selectedSessionDetail.motivo_revocacion) && (
                       <div className="text-[11px] pt-1 border-t border-rose-500/20">
                         <span className="opacity-75 block text-[10px]">Motivo de Revocación:</span>
-                        <span className="font-medium text-white">{selectedSessionDetail.motivo_revocacion}</span>
+                        <span className="font-medium text-foreground">{selectedSessionDetail.motivo_cierre || selectedSessionDetail.motivo_revocacion}</span>
                       </div>
                     )}
                   </div>
@@ -7633,17 +7643,17 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                     <div className="grid grid-cols-2 gap-2 text-[11px] pt-1">
                       <div>
                         <span className="opacity-75 block text-[10px]">Fecha de Cierre:</span>
-                        <span className="font-bold text-white">{formatSafeDateTime(selectedSessionDetail.fecha_cierre || selectedSessionDetail.ultima_actividad)}</span>
+                        <span className="font-bold text-foreground">{formatSafeDateTime(selectedSessionDetail.fecha_cierre || selectedSessionDetail.ultima_actividad)}</span>
                       </div>
                       <div>
-                        <span className="opacity-75 block text-[10px]">Motivo de Cierre:</span>
-                        <span className="font-bold text-white">{selectedSessionDetail.motivo_cierre || 'Cierre de sesión por usuario'}</span>
+                        <span className="opacity-75 block text-[10px]">Causa / Motivo:</span>
+                        <span className="font-bold text-foreground">{selectedSessionDetail.motivo_cierre || selectedSessionDetail.tipo_cierre || 'Logout voluntario'}</span>
                       </div>
                     </div>
                     {selectedSessionDetail.tipo_cierre && (
                       <div className="text-[11px] pt-1 border-t border-sky-500/20">
                         <span className="opacity-75 block text-[10px]">Tipo de Cierre:</span>
-                        <span className="font-medium text-white">{selectedSessionDetail.tipo_cierre}</span>
+                        <span className="font-medium text-foreground">{selectedSessionDetail.tipo_cierre}</span>
                       </div>
                     )}
                   </div>
@@ -7652,18 +7662,24 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                 {selectedSessionDetail.estado === 'EXPIRADA' && (
                   <div className="p-3.5 rounded-xl bg-zinc-800 border border-zinc-700 text-zinc-300 space-y-2">
                     <div className="font-bold flex items-center gap-1.5 text-zinc-400 text-xs">
-                      <Clock size={14} /> Sesión Expirada por Inactividad
+                      <Clock size={14} /> Sesión Expirada
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-[11px] pt-1">
                       <div>
-                        <span className="opacity-75 block text-[10px]">Expiró en:</span>
-                        <span className="font-bold text-white">{formatSafeDateTime(selectedSessionDetail.fecha_expiracion || selectedSessionDetail.ultima_actividad)}</span>
+                        <span className="opacity-75 block text-[10px]">Fecha de Expiración:</span>
+                        <span className="font-bold text-foreground">{formatSafeDateTime(selectedSessionDetail.fecha_cierre || selectedSessionDetail.fecha_expiracion)}</span>
                       </div>
                       <div>
                         <span className="opacity-75 block text-[10px]">Duración:</span>
-                        <span className="font-bold text-white">{selectedSessionDetail.duration || 'No registrada'}</span>
+                        <span className="font-bold text-foreground">{selectedSessionDetail.duration || '—'}</span>
                       </div>
                     </div>
+                    {selectedSessionDetail.motivo_cierre && (
+                      <div className="text-[11px] pt-1 border-t border-zinc-700">
+                        <span className="opacity-75 block text-[10px]">Causa:</span>
+                        <span className="font-medium text-foreground">{selectedSessionDetail.motivo_cierre}</span>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -7671,7 +7687,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                   <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 flex items-center justify-between gap-3">
                     <div>
                       <div className="font-bold text-emerald-400 text-xs">Sesión Activa</div>
-                      <span className="text-[10px] text-slate-400 block mt-0.5">La conexión permanece abierta.</span>
+                      <span className="text-[10px] text-foreground-muted block mt-0.5">La conexión permanece abierta.</span>
                     </div>
                     <button
                       type="button"
@@ -7691,11 +7707,11 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
             </div>
 
             {/* Drawer Footer */}
-            <div className="p-4 border-t border-[#2d3748] bg-[#0e1117] flex justify-end shrink-0">
+            <div className="p-4 border-t border-border bg-input flex justify-end shrink-0">
               <button
                 type="button"
                 onClick={() => setSelectedSessionDetail(null)}
-                className="px-5 py-2.5 bg-[#212631] text-white text-xs font-bold rounded-xl border border-[#2d3748] hover:bg-[#2d3748] transition-all cursor-pointer"
+                className="px-5 py-2.5 bg-surface-subtle text-foreground text-xs font-bold rounded-xl border border-border hover:bg-surface-subtle transition-all cursor-pointer"
               >
                 Cerrar
               </button>
@@ -7715,16 +7731,16 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
           />
 
           {/* Drawer Container */}
-          <div className="relative w-full max-w-[540px] h-full bg-[#161a21] border-l border-[#2d3748] shadow-2xl z-[999999] flex flex-col animate-in slide-in-from-right duration-300">
+          <div className="relative w-full max-w-[540px] h-full bg-card border-l border-border shadow-2xl z-[999999] flex flex-col animate-in slide-in-from-right duration-300">
             {/* Drawer Header */}
-            <div className="px-6 py-5 border-b border-[#2d3748] bg-[#0e1117] flex items-center justify-between shrink-0">
+            <div className="px-6 py-5 border-b border-border bg-input flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-[#212631] border border-[#2d3748] text-[#bfce7f] flex items-center justify-center font-bold shadow-inner">
+                <div className="w-10 h-10 rounded-xl bg-surface-subtle border border-border text-primary flex items-center justify-center font-bold shadow-inner">
                   <FileText size={20} />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white tracking-tight">Detalle de Actividad</h3>
-                  <p className="text-[11px] text-slate-400 font-medium leading-tight">
+                  <h3 className="text-base font-bold text-foreground tracking-tight">Detalle de Actividad</h3>
+                  <p className="text-[11px] text-foreground-muted font-medium leading-tight">
                     Información técnica e historial del evento seleccionado.
                   </p>
                 </div>
@@ -7732,7 +7748,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               <button
                 type="button"
                 onClick={() => setSelectedActivityDetail(null)}
-                className="w-8 h-8 rounded-lg bg-[#161a21] border border-[#2d3748] text-slate-400 hover:text-white hover:border-[#bfce7f] flex items-center justify-center transition-all cursor-pointer"
+                className="w-8 h-8 rounded-lg bg-card border border-border text-foreground-muted hover:text-foreground hover:border-primary flex items-center justify-center transition-all cursor-pointer"
                 title="Cerrar detalle"
                 aria-label="Cerrar detalle"
               >
@@ -7744,16 +7760,16 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
             <div className="flex-1 overflow-y-auto p-6 space-y-5 custom-scrollbar text-xs">
               
               {/* Section 1: Identificación y Resultado */}
-              <div className="p-4 rounded-xl bg-[#0e1117] border border-[#2d3748] space-y-3">
+              <div className="p-4 rounded-xl bg-input border border-border space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">1. Resultado y Estado</span>
+                  <span className="text-[11px] font-bold text-foreground-muted uppercase tracking-wider">1. Resultado y Estado</span>
                   {(() => {
                     const res = String(selectedActivityDetail.resultado || selectedActivityDetail.result || 'Exitoso').toUpperCase();
                     let badgeColor = 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30';
                     if (res.includes('ERROR') || res.includes('FALLID')) badgeColor = 'bg-rose-500/15 text-rose-400 border-rose-500/30';
                     else if (res.includes('ADVERT') || res.includes('WARN')) badgeColor = 'bg-amber-500/15 text-amber-400 border-amber-500/30';
                     else if (res.includes('CANCEL')) badgeColor = 'bg-zinc-800 text-zinc-400 border-zinc-700';
-                    else if (res.includes('INFO')) badgeColor = 'bg-[#161a21] text-[#bfce7f] border-[#2d3748]';
+                    else if (res.includes('INFO')) badgeColor = 'bg-card text-primary border-border';
                     return (
                       <span className={`px-2.5 py-1 rounded-lg font-mono text-[10px] font-bold uppercase tracking-wider border ${badgeColor}`}>
                         ● {selectedActivityDetail.resultado || selectedActivityDetail.result || 'Exitoso'}
@@ -7762,16 +7778,16 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                   })()}
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-[#2d3748]/50">
+                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border/50">
                   <div>
-                    <span className="text-[10px] text-slate-400 block font-medium">ID de Actividad</span>
-                    <span className="font-mono text-slate-200 font-bold select-all">
+                    <span className="text-[10px] text-foreground-muted block font-medium">ID de Actividad</span>
+                    <span className="font-mono text-foreground-secondary font-bold select-all">
                       #{selectedActivityDetail.actividad_id || selectedActivityDetail.id || 'N/A'}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-400 block font-medium">Usuario</span>
-                    <span className="font-bold text-white truncate block">
+                    <span className="text-[10px] text-foreground-muted block font-medium">Usuario</span>
+                    <span className="font-bold text-foreground truncate block">
                       {detailUser?.full_name || 'N/A'}
                     </span>
                   </div>
@@ -7779,94 +7795,94 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               </div>
 
               {/* Section 2: Evento y Módulo */}
-              <div className="p-4 rounded-xl bg-[#0e1117] border border-[#2d3748] space-y-3">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">2. Operación y Módulo</span>
+              <div className="p-4 rounded-xl bg-input border border-border space-y-3">
+                <span className="text-[11px] font-bold text-foreground-muted uppercase tracking-wider block">2. Operación y Módulo</span>
                 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <span className="text-[10px] text-slate-400 block font-medium">Acción / Evento</span>
-                    <span className="font-bold text-white block">
-                      {selectedActivityDetail.evento || selectedActivityDetail.event || 'Actividad Operativa'}
+                    <span className="text-[10px] text-foreground-muted block font-medium">Acción / Evento</span>
+                    <span className="font-bold text-foreground block">
+                      {selectedActivityDetail.evento || selectedActivityDetail.event || '—'}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-400 block font-medium">Módulo</span>
-                    <span className="font-bold text-[#bfce7f] uppercase block">
-                      {selectedActivityDetail.modulo || selectedActivityDetail.module || 'Seguridad'}
+                    <span className="text-[10px] text-foreground-muted block font-medium">Módulo</span>
+                    <span className="font-bold text-primary uppercase block">
+                      {selectedActivityDetail.modulo || selectedActivityDetail.module || '—'}
                     </span>
                   </div>
                 </div>
 
-                <div className="pt-2 border-t border-[#2d3748]/50 space-y-2">
+                <div className="pt-2 border-t border-border/50 space-y-2">
                   <div>
-                    <span className="text-[10px] text-slate-400 block font-medium">Descripción Completa</span>
-                    <p className="text-slate-200 font-medium leading-relaxed bg-[#161a21] p-2.5 rounded-lg border border-[#2d3748]">
-                      {selectedActivityDetail.descripcion || selectedActivityDetail.desc || 'Sin descripción adicional'}
+                    <span className="text-[10px] text-foreground-muted block font-medium">Descripción Completa</span>
+                    <p className="text-foreground-secondary font-medium leading-relaxed bg-card p-2.5 rounded-lg border border-border">
+                      {selectedActivityDetail.descripcion || selectedActivityDetail.desc || '—'}
                     </p>
                   </div>
                 </div>
 
                 {(selectedActivityDetail.tabla_afectada || selectedActivityDetail.registro_afectado) && (
-                  <div className="grid grid-cols-2 gap-3 pt-2 border-t border-[#2d3748]/50">
+                  <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border/50">
                     <div>
-                      <span className="text-[10px] text-slate-400 block font-medium">Tabla Afectada</span>
-                      <span className="font-mono text-slate-300 font-bold">{selectedActivityDetail.tabla_afectada || 'N/A'}</span>
+                      <span className="text-[10px] text-foreground-muted block font-medium">Tabla Afectada</span>
+                      <span className="font-mono text-foreground-secondary font-bold">{selectedActivityDetail.tabla_afectada || 'N/A'}</span>
                     </div>
                     <div>
-                      <span className="text-[10px] text-slate-400 block font-medium">Registro ID Afectado</span>
-                      <span className="font-mono text-slate-300 font-bold">{selectedActivityDetail.registro_afectado || 'N/A'}</span>
+                      <span className="text-[10px] text-foreground-muted block font-medium">Registro ID Afectado</span>
+                      <span className="font-mono text-foreground-secondary font-bold">{selectedActivityDetail.registro_afectado || 'N/A'}</span>
                     </div>
                   </div>
                 )}
               </div>
 
               {/* Section 3: Red y Entorno */}
-              <div className="p-4 rounded-xl bg-[#0e1117] border border-[#2d3748] space-y-3">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">3. Red y Dispositivo</span>
+              <div className="p-4 rounded-xl bg-input border border-border space-y-3">
+                <span className="text-[11px] font-bold text-foreground-muted uppercase tracking-wider block">3. Red y Dispositivo</span>
                 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <span className="text-[10px] text-slate-400 block font-medium">Dirección IP</span>
-                    <span className="font-mono text-[#bfce7f] font-bold select-all">
-                      {selectedActivityDetail.direccion_ip || selectedActivityDetail.ip || '127.0.0.1'}
+                    <span className="text-[10px] text-foreground-muted block font-medium">Dirección IP</span>
+                    <span className="font-mono text-primary font-bold select-all">
+                      {selectedActivityDetail.direccion_ip || selectedActivityDetail.ip || '—'}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-400 block font-medium">Dispositivo / Agente</span>
-                    <span className="text-slate-200 font-bold break-words">
-                      {selectedActivityDetail.dispositivo || selectedActivityDetail.device || 'Navegador Web'}
+                    <span className="text-[10px] text-foreground-muted block font-medium">Dispositivo / Agente</span>
+                    <span className="text-foreground-secondary font-bold break-words">
+                      {selectedActivityDetail.dispositivo || selectedActivityDetail.device || 'No registrado'}
                     </span>
                   </div>
                 </div>
 
                 {(selectedActivityDetail.url || selectedActivityDetail.metodo_http) && (
-                  <div className="grid grid-cols-2 gap-3 pt-2 border-t border-[#2d3748]/50">
+                  <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border/50">
                     <div>
-                      <span className="text-[10px] text-slate-400 block font-medium">Método HTTP</span>
+                      <span className="text-[10px] text-foreground-muted block font-medium">Método HTTP</span>
                       <span className="font-mono text-emerald-400 font-bold">{selectedActivityDetail.metodo_http || 'GET'}</span>
                     </div>
                     <div>
-                      <span className="text-[10px] text-slate-400 block font-medium">Ruta / URL</span>
-                      <span className="font-mono text-slate-300 truncate block">{selectedActivityDetail.url || '/'}</span>
+                      <span className="text-[10px] text-foreground-muted block font-medium">Ruta / URL</span>
+                      <span className="font-mono text-foreground-secondary truncate block">{selectedActivityDetail.url || '/'}</span>
                     </div>
                   </div>
                 )}
               </div>
 
               {/* Section 4: Tiempos */}
-              <div className="p-4 rounded-xl bg-[#0e1117] border border-[#2d3748] space-y-3">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">4. Tiempos y Rendimiento</span>
+              <div className="p-4 rounded-xl bg-input border border-border space-y-3">
+                <span className="text-[11px] font-bold text-foreground-muted uppercase tracking-wider block">4. Tiempos y Rendimiento</span>
                 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <span className="text-[10px] text-slate-400 block font-medium">Fecha y Hora</span>
-                    <span className="text-slate-200 font-bold">
+                    <span className="text-[10px] text-foreground-muted block font-medium">Fecha y Hora</span>
+                    <span className="text-foreground-secondary font-bold">
                       {formatSafeDateTime(selectedActivityDetail.timestamp || selectedActivityDetail.fecha_hora)}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-400 block font-medium">Tiempo de Ejecución</span>
-                    <span className="text-[#bfce7f] font-bold">
+                    <span className="text-[10px] text-foreground-muted block font-medium">Tiempo de Ejecución</span>
+                    <span className="text-primary font-bold">
                       {selectedActivityDetail.duracion_ms ? `${selectedActivityDetail.duracion_ms} ms` : '—'}
                     </span>
                   </div>
@@ -7875,24 +7891,22 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
               {/* Section 5: Antes y Después (Visor de Cambios) */}
               {(selectedActivityDetail.antes || selectedActivityDetail.valor_anterior || selectedActivityDetail.despues || selectedActivityDetail.valor_nuevo) && (
-                <div className="p-4 rounded-xl bg-[#0e1117] border border-[#2d3748] space-y-3">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">5. Comparativa de Cambios (Antes / Después)</span>
+                <div className="p-4 rounded-xl bg-input border border-border space-y-3">
+                  <span className="text-[11px] font-bold text-foreground-muted uppercase tracking-wider block">5. Comparativa de Cambios (Antes / Después)</span>
                   
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                    {/* ANTES */}
-                    <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 space-y-1">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-rose-400 block">Valor Anterior (ANTES)</span>
-                      <pre className="font-mono text-[11px] text-slate-200 whitespace-pre-wrap break-words leading-tight bg-[#0e1117]/80 p-2 rounded border border-rose-500/20 max-h-48 overflow-y-auto custom-scrollbar">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <span className="text-[10px] text-rose-400 font-bold uppercase tracking-wider block">Valor Previo</span>
+                      <pre className="p-3 rounded-lg bg-card border border-rose-500/20 text-rose-300 font-mono text-[11px] whitespace-pre-wrap break-all max-h-40 overflow-y-auto">
                         {typeof (selectedActivityDetail.antes || selectedActivityDetail.valor_anterior) === 'object'
                           ? JSON.stringify(selectedActivityDetail.antes || selectedActivityDetail.valor_anterior, null, 2)
                           : String(selectedActivityDetail.antes || selectedActivityDetail.valor_anterior || 'No registrado')}
                       </pre>
                     </div>
 
-                    {/* DESPUÉS */}
-                    <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 space-y-1">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 block">Valor Nuevo (DESPUÉS)</span>
-                      <pre className="font-mono text-[11px] text-slate-200 whitespace-pre-wrap break-words leading-tight bg-[#0e1117]/80 p-2 rounded border border-emerald-500/20 max-h-48 overflow-y-auto custom-scrollbar">
+                    <div className="space-y-1">
+                      <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider block">Nuevo Valor</span>
+                      <pre className="p-3 rounded-lg bg-card border border-emerald-500/20 text-emerald-300 font-mono text-[11px] whitespace-pre-wrap break-all max-h-40 overflow-y-auto">
                         {typeof (selectedActivityDetail.despues || selectedActivityDetail.valor_nuevo) === 'object'
                           ? JSON.stringify(selectedActivityDetail.despues || selectedActivityDetail.valor_nuevo, null, 2)
                           : String(selectedActivityDetail.despues || selectedActivityDetail.valor_nuevo || 'No registrado')}
@@ -7905,11 +7919,11 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
             </div>
 
             {/* Drawer Footer */}
-            <div className="p-4 border-t border-[#2d3748] bg-[#0e1117] flex justify-end shrink-0">
+            <div className="p-4 border-t border-border bg-input flex justify-end shrink-0">
               <button
                 type="button"
                 onClick={() => setSelectedActivityDetail(null)}
-                className="px-5 py-2.5 bg-[#212631] text-white text-xs font-bold rounded-xl border border-[#2d3748] hover:bg-[#2d3748] transition-all cursor-pointer"
+                className="px-5 py-2.5 bg-surface-subtle text-foreground text-xs font-bold rounded-xl border border-border hover:bg-surface-subtle transition-all cursor-pointer"
               >
                 Cerrar
               </button>
@@ -7929,16 +7943,16 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
           />
 
           {/* Drawer Container */}
-          <div className="relative w-full max-w-[540px] h-full bg-[#161a21] border-l border-[#2d3748] shadow-2xl z-[999999] flex flex-col animate-in slide-in-from-right duration-300">
+          <div className="relative w-full max-w-[540px] h-full bg-card border-l border-border shadow-2xl z-[999999] flex flex-col animate-in slide-in-from-right duration-300">
             {/* Drawer Header */}
-            <div className="px-6 py-5 border-b border-[#2d3748] bg-[#0e1117] flex items-center justify-between shrink-0">
+            <div className="px-6 py-5 border-b border-border bg-input flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-[#212631] border border-[#2d3748] text-[#bfce7f] flex items-center justify-center font-bold shadow-inner">
+                <div className="w-10 h-10 rounded-xl bg-surface-subtle border border-border text-primary flex items-center justify-center font-bold shadow-inner">
                   <ShieldAlert size={20} />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white tracking-tight">Detalle de Auditoría</h3>
-                  <p className="text-[11px] text-slate-400 font-medium leading-tight">
+                  <h3 className="text-base font-bold text-foreground tracking-tight">Detalle de Auditoría</h3>
+                  <p className="text-[11px] text-foreground-muted font-medium leading-tight">
                     Historial oficial e inalterable de la modificación administrativa.
                   </p>
                 </div>
@@ -7946,7 +7960,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               <button
                 type="button"
                 onClick={() => setSelectedAuditDetail(null)}
-                className="w-8 h-8 rounded-lg bg-[#161a21] border border-[#2d3748] text-slate-400 hover:text-white hover:border-[#bfce7f] flex items-center justify-center transition-all cursor-pointer"
+                className="w-8 h-8 rounded-lg bg-card border border-border text-foreground-muted hover:text-foreground hover:border-primary flex items-center justify-center transition-all cursor-pointer"
                 title="Cerrar detalle"
                 aria-label="Cerrar detalle"
               >
@@ -7958,28 +7972,28 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
             <div className="flex-1 overflow-y-auto p-6 space-y-5 custom-scrollbar text-xs">
               
               {/* Section 1: Evento y Resultado */}
-              <div className="p-4 rounded-xl bg-[#0e1117] border border-[#2d3748] space-y-3">
+              <div className="p-4 rounded-xl bg-input border border-border space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">1. Evento y Estado</span>
+                  <span className="text-[11px] font-bold text-foreground-muted uppercase tracking-wider">1. Evento y Estado</span>
                   <span className={`px-2.5 py-1 rounded-lg font-mono text-[10px] font-bold uppercase tracking-wider border ${
                     String(selectedAuditDetail.resultado || '').toUpperCase().includes('ERR')
                       ? 'bg-rose-500/15 text-rose-400 border-rose-500/30'
                       : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
                   }`}>
-                    ● {selectedAuditDetail.resultado || 'EXITOSO'}
+                    ● {selectedAuditDetail.resultado || '—'}
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-[#2d3748]/50">
+                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border/50">
                   <div>
-                    <span className="text-[10px] text-slate-400 block font-medium">ID de Auditoría</span>
-                    <span className="font-mono text-slate-200 font-bold select-all">
+                    <span className="text-[10px] text-foreground-muted block font-medium">ID de Auditoría</span>
+                    <span className="font-mono text-foreground-secondary font-bold select-all">
                       #{selectedAuditDetail.auditoria_id || selectedAuditDetail.id || 'N/A'}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-400 block font-medium">Usuario Afectado</span>
-                    <span className="font-bold text-white truncate block">
+                    <span className="text-[10px] text-foreground-muted block font-medium">Usuario Afectado</span>
+                    <span className="font-bold text-foreground truncate block">
                       {detailUser?.full_name || 'N/A'}
                     </span>
                   </div>
@@ -7987,61 +8001,61 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               </div>
 
               {/* Section 2: Información Administrativa */}
-              <div className="p-4 rounded-xl bg-[#0e1117] border border-[#2d3748] space-y-3">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">2. Operación y Ejecutor</span>
+              <div className="p-4 rounded-xl bg-input border border-border space-y-3">
+                <span className="text-[11px] font-bold text-foreground-muted uppercase tracking-wider block">2. Operación y Ejecutor</span>
                 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <span className="text-[10px] text-slate-400 block font-medium">Acción Registrada</span>
-                    <span className="font-bold text-[#bfce7f] block">
+                    <span className="text-[10px] text-foreground-muted block font-medium">Acción Registrada</span>
+                    <span className="font-bold text-primary block">
                       {getFriendlyActionTitle(selectedAuditDetail.accion || selectedAuditDetail.action)}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-400 block font-medium">Ejecutado Por (Admin)</span>
-                    <span className="font-bold text-white block">
-                      {selectedAuditDetail.admin_nombre || selectedAuditDetail.performed_by || 'Sistema'}
+                    <span className="text-[10px] text-foreground-muted block font-medium">Ejecutado Por (Admin)</span>
+                    <span className="font-bold text-foreground block">
+                      {selectedAuditDetail.admin_nombre || selectedAuditDetail.performed_by || '—'}
                     </span>
                   </div>
                 </div>
 
-                <div className="pt-2 border-t border-[#2d3748]/50 space-y-2">
+                <div className="pt-2 border-t border-border/50 space-y-2">
                   <div>
-                    <span className="text-[10px] text-slate-400 block font-medium">Motivo / Justificación</span>
-                    <p className="text-slate-200 font-medium leading-relaxed bg-[#161a21] p-2.5 rounded-lg border border-[#2d3748]">
-                      {selectedAuditDetail.motivo || selectedAuditDetail.reason || 'Actualización administrativa'}
+                    <span className="text-[10px] text-foreground-muted block font-medium">Motivo / Justificación</span>
+                    <p className="text-foreground-secondary font-medium leading-relaxed bg-card p-2.5 rounded-lg border border-border">
+                      {selectedAuditDetail.motivo || selectedAuditDetail.reason || '—'}
                     </p>
                   </div>
                 </div>
               </div>
 
               {/* Section 3: Red y Entorno */}
-              <div className="p-4 rounded-xl bg-[#0e1117] border border-[#2d3748] space-y-3">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">3. Red y Dispositivo</span>
+              <div className="p-4 rounded-xl bg-input border border-border space-y-3">
+                <span className="text-[11px] font-bold text-foreground-muted uppercase tracking-wider block">3. Red y Dispositivo</span>
                 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <span className="text-[10px] text-slate-400 block font-medium">Dirección IP</span>
-                    <span className="font-mono text-[#bfce7f] font-bold select-all">
-                      {selectedAuditDetail.direccion_ip || selectedAuditDetail.ip || '127.0.0.1'}
+                    <span className="text-[10px] text-foreground-muted block font-medium">Dirección IP</span>
+                    <span className="font-mono text-primary font-bold select-all">
+                      {selectedAuditDetail.direccion_ip || selectedAuditDetail.ip || '—'}
                     </span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-400 block font-medium">Dispositivo / Agente</span>
-                    <span className="text-slate-200 font-bold break-words">
-                      {selectedAuditDetail.dispositivo || selectedAuditDetail.device || 'Navegador Web'}
+                    <span className="text-[10px] text-foreground-muted block font-medium">Dispositivo / Agente</span>
+                    <span className="text-foreground-secondary font-bold break-words">
+                      {selectedAuditDetail.dispositivo || selectedAuditDetail.device || 'No registrado'}
                     </span>
                   </div>
                 </div>
               </div>
 
               {/* Section 4: Fechas */}
-              <div className="p-4 rounded-xl bg-[#0e1117] border border-[#2d3748] space-y-3">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">4. Marca Temporal</span>
+              <div className="p-4 rounded-xl bg-input border border-border space-y-3">
+                <span className="text-[11px] font-bold text-foreground-muted uppercase tracking-wider block">4. Marca Temporal</span>
                 
                 <div>
-                  <span className="text-[10px] text-slate-400 block font-medium">Fecha y Hora Exacta</span>
-                  <span className="text-slate-200 font-bold">
+                  <span className="text-[10px] text-foreground-muted block font-medium">Fecha y Hora Exacta</span>
+                  <span className="text-foreground-secondary font-bold">
                     {formatSafeDateTime(selectedAuditDetail.fecha_hora || selectedAuditDetail.timestamp || selectedAuditDetail.performed_at)}
                   </span>
                 </div>
@@ -8055,24 +8069,24 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                 );
 
                 return (
-                  <div className="p-4 rounded-xl bg-[#0e1117] border border-[#2d3748] space-y-3">
-                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">5. Cambios Realizados (Antes → Después)</span>
+                  <div className="p-4 rounded-xl bg-input border border-border space-y-3">
+                    <span className="text-[11px] font-bold text-foreground-muted uppercase tracking-wider block">5. Cambios Realizados (Antes → Después)</span>
 
                     {diffRes.isParsed && diffRes.diffs ? (
                       <div className="space-y-2.5 pt-1">
                         {diffRes.diffs.map((d, idx) => (
-                          <div key={idx} className="p-3 rounded-xl bg-[#161a21] border border-[#2d3748] space-y-2">
-                            <span className="text-[10px] font-bold text-[#bfce7f] uppercase tracking-wider block">
+                          <div key={idx} className="p-3 rounded-xl bg-card border border-border space-y-2">
+                            <span className="text-[10px] font-bold text-primary uppercase tracking-wider block">
                               Campo: {d.field}
                             </span>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
                               <div className="p-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-300 space-y-0.5">
                                 <span className="text-[9px] font-bold uppercase text-rose-400 block">Antes</span>
-                                <span className="font-mono text-slate-200 font-medium break-all">{d.before}</span>
+                                <span className="font-mono text-foreground-secondary font-medium break-all">{d.before}</span>
                               </div>
                               <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 space-y-0.5">
                                 <span className="text-[9px] font-bold uppercase text-emerald-400 block">Después</span>
-                                <span className="font-mono text-slate-200 font-medium break-all">{d.after}</span>
+                                <span className="font-mono text-foreground-secondary font-medium break-all">{d.after}</span>
                               </div>
                             </div>
                           </div>
@@ -8082,13 +8096,13 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                         <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 space-y-1">
                           <span className="text-[10px] font-bold uppercase tracking-wider text-rose-400 block">Valor Anterior (ANTES)</span>
-                          <span className="font-mono text-slate-200 break-words block">
+                          <span className="font-mono text-foreground-secondary break-words block">
                             {diffRes.before}
                           </span>
                         </div>
                         <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 space-y-1">
                           <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 block">Valor Nuevo (DESPUÉS)</span>
-                          <span className="font-mono text-slate-200 break-words block">
+                          <span className="font-mono text-foreground-secondary break-words block">
                             {diffRes.after}
                           </span>
                         </div>
@@ -8101,11 +8115,11 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
             </div>
 
             {/* Drawer Footer */}
-            <div className="p-4 border-t border-[#2d3748] bg-[#0e1117] flex justify-end shrink-0">
+            <div className="p-4 border-t border-border bg-input flex justify-end shrink-0">
               <button
                 type="button"
                 onClick={() => setSelectedAuditDetail(null)}
-                className="px-5 py-2.5 bg-[#212631] text-white text-xs font-bold rounded-xl border border-[#2d3748] hover:bg-[#2d3748] transition-all cursor-pointer"
+                className="px-5 py-2.5 bg-surface-subtle text-foreground text-xs font-bold rounded-xl border border-border hover:bg-surface-subtle transition-all cursor-pointer"
               >
                 Cerrar
               </button>
@@ -8122,24 +8136,24 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
           aria-live={toastNotification.type === 'error' ? 'assertive' : 'polite'}
           className={`fixed top-16 right-6 z-[9999] w-[380px] max-w-[calc(100vw-32px)] p-4 rounded-xl border shadow-2xl transition-all duration-300 animate-in fade-in slide-in-from-top-4 ${
             toastNotification.type === 'success'
-              ? 'bg-[#182212] border-[#bfce7f] text-white'
-              : 'bg-[#281316] border-[#ef4444] text-white'
+              ? 'bg-surface-subtle border-primary text-foreground'
+              : 'bg-error/10 border-error text-foreground'
           }`}
         >
           <div className="flex items-start gap-3">
             <div className="shrink-0 mt-0.5">
               {toastNotification.type === 'success' ? (
-                <CheckCircle2 className="w-5 h-5 text-[#bfce7f]" />
+                <CheckCircle2 className="w-5 h-5 text-primary" />
               ) : (
-                <AlertTriangle className="w-5 h-5 text-[#f87171]" />
+                <AlertTriangle className="w-5 h-5 text-error" />
               )}
             </div>
             <div className="flex-1 min-w-0 pr-2">
-              <h4 className="text-sm font-semibold text-white leading-tight">
+              <h4 className="text-sm font-semibold text-foreground leading-tight">
                 {toastNotification.title}
               </h4>
               <p className={`text-xs mt-1 leading-relaxed whitespace-normal break-words ${
-                toastNotification.type === 'success' ? 'text-[#d8e5a3]' : 'text-[#fca5a5]'
+                toastNotification.type === 'success' ? 'text-primary' : 'text-error'
               }`}>
                 {toastNotification.description}
               </p>
@@ -8149,13 +8163,178 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               onClick={() => setToastNotification(null)}
               className={`shrink-0 p-1 rounded-lg transition-colors cursor-pointer ${
                 toastNotification.type === 'success'
-                  ? 'text-[#bfce7f]/70 hover:text-[#bfce7f] hover:bg-[#bfce7f]/10'
-                  : 'text-[#f87171]/70 hover:text-[#f87171] hover:bg-[#f87171]/10'
+                  ? 'text-primary/70 hover:text-primary hover:bg-primary/10'
+                  : 'text-error/70 hover:text-error hover:bg-error/10'
               }`}
               aria-label="Cerrar notificación"
             >
               <X className="w-4 h-4" />
             </button>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* MANUAL RESET PASSWORD MODAL */}
+      {isResetPasswordModalOpen && resetPasswordUser && typeof window !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4 font-sans">
+          <div 
+            className="fixed inset-0 bg-black/75 backdrop-blur-sm transition-opacity" 
+            onClick={handleCloseResetPasswordModal} 
+          />
+          
+          <div 
+            role="dialog"
+            aria-modal="true"
+            className="relative w-[480px] max-w-[calc(100vw-32px)] min-w-[320px] bg-surface-elevated border border-border rounded-2xl shadow-2xl z-10 overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 text-foreground shrink-0"
+          >
+            
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-border bg-surface-subtle flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 bg-primary/10 border border-primary/30 rounded-xl flex items-center justify-center text-primary">
+                  <KeyRound size={18} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-foreground font-sans">Restablecer contraseña</h3>
+                  <p className="text-[11px] text-foreground-muted font-sans">Asigna una nueva contraseña para este usuario.</p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={handleCloseResetPasswordModal}
+                disabled={isManualResetting}
+                className="p-1.5 text-foreground-muted hover:text-foreground rounded-lg hover:bg-hover transition-colors cursor-pointer disabled:opacity-50"
+                aria-label="Cerrar modal"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleSubmitManualResetPassword} className="p-6 space-y-4 font-sans">
+              
+              {/* User Context Badge */}
+              <div className="p-3 bg-surface-subtle border border-border rounded-xl flex flex-col gap-1.5 text-xs">
+                <div className="flex justify-between items-center">
+                  <span className="text-[10.5px] font-mono font-bold text-foreground-muted uppercase tracking-wider">Usuario:</span>
+                  <span className="font-bold text-foreground truncate max-w-[240px]">
+                    {getUserDisplayName(resetPasswordUser)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-[10.5px] font-mono font-bold text-foreground-muted uppercase tracking-wider">Dato de Acceso (Login):</span>
+                  <span className="font-mono font-bold text-primary truncate max-w-[240px]">
+                    {getLoginAccessIdentifier(resetPasswordUser)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Error Message */}
+              {resetPasswordError && (
+                <div className="p-3 bg-error/10 border border-error/30 rounded-xl flex items-start gap-2.5 text-error text-xs">
+                  <AlertCircle size={15} className="shrink-0 mt-0.5" />
+                  <span className="leading-relaxed">{resetPasswordError}</span>
+                </div>
+              )}
+
+              {/* New Password Field */}
+              <div>
+                <label className="block text-[11px] font-bold text-foreground uppercase tracking-wider mb-1.5 font-mono">
+                  Nueva contraseña *
+                </label>
+                <div className="relative">
+                  <input
+                    type={showResetNewPassword ? "text" : "password"}
+                    value={resetNewPassword}
+                    onChange={(e) => setResetNewPassword(e.target.value)}
+                    placeholder="Mínimo 8 caracteres, mayúscula, minúscula, número y símbolo"
+                    disabled={isManualResetting}
+                    className="w-full bg-input border border-border rounded-xl pl-3.5 pr-10 py-2.5 text-xs text-foreground placeholder:text-foreground-disabled focus:outline-none focus:border-primary transition-colors font-mono"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowResetNewPassword(!showResetNewPassword)}
+                    tabIndex={-1}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground-muted hover:text-foreground cursor-pointer"
+                  >
+                    {showResetNewPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Confirm Password Field */}
+              <div>
+                <label className="block text-[11px] font-bold text-foreground uppercase tracking-wider mb-1.5 font-mono">
+                  Confirmar contraseña *
+                </label>
+                <div className="relative">
+                  <input
+                    type={showResetConfirmPassword ? "text" : "password"}
+                    value={resetConfirmPassword}
+                    onChange={(e) => setResetConfirmPassword(e.target.value)}
+                    placeholder="Repita la nueva contraseña"
+                    disabled={isManualResetting}
+                    className="w-full bg-input border border-border rounded-xl pl-3.5 pr-10 py-2.5 text-xs text-foreground placeholder:text-foreground-disabled focus:outline-none focus:border-primary transition-colors font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowResetConfirmPassword(!showResetConfirmPassword)}
+                    tabIndex={-1}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground-muted hover:text-foreground cursor-pointer"
+                  >
+                    {showResetConfirmPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Policy note */}
+              <p className="text-[11px] text-foreground-muted font-sans">
+                La contraseña debe cumplir la política de seguridad del sistema (8+ caracteres, mayúscula, minúscula, número y símbolo).
+              </p>
+
+              {/* Force change checkbox */}
+              <label className="flex items-center gap-2.5 pt-1 cursor-pointer select-none text-xs text-foreground font-medium">
+                <input
+                  type="checkbox"
+                  checked={resetForceChange}
+                  onChange={(e) => setResetForceChange(e.target.checked)}
+                  disabled={isManualResetting}
+                  className="w-4 h-4 rounded border-border text-primary focus:ring-primary/20 accent-primary cursor-pointer"
+                />
+                <span>Solicitar cambio de contraseña en el próximo inicio de sesión</span>
+              </label>
+
+              {/* Modal Buttons */}
+              <div className="pt-3 border-t border-border flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={handleCloseResetPasswordModal}
+                  disabled={isManualResetting}
+                  className="px-4 py-2.5 text-xs font-semibold text-foreground-secondary hover:text-foreground bg-surface-subtle hover:bg-hover border border-border rounded-xl transition-all cursor-pointer disabled:opacity-50 font-sans"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isManualResetting || !resetNewPassword || !resetConfirmPassword}
+                  className="px-5 py-2.5 bg-primary-button-bg hover:brightness-110 text-primary-foreground text-xs font-bold rounded-xl shadow transition-all flex items-center gap-2 cursor-pointer font-mono disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isManualResetting ? (
+                    <>
+                      <RefreshCw size={14} className="animate-spin" />
+                      Restableciendo...
+                    </>
+                  ) : (
+                    <>
+                      <KeyRound size={14} />
+                      Restablecer contraseña
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>,
         document.body

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { query } from "@/lib/db";
+import { validateAndTouchSession } from "@/lib/sessionLifecycle";
 
 export const dynamic = "force-dynamic";
 
@@ -17,30 +18,25 @@ export async function GET() {
       );
     }
 
-    const sessionCheck = await query(
-      `SELECT usuario_id, fecha_expiracion, estado
-       FROM admin.usuario_sesion
-       WHERE token_identificador = $1 AND estado = 'ACTIVA'
-       LIMIT 1`,
-      [tokenCookie]
-    );
-
-    if (!sessionCheck || sessionCheck.length === 0) {
+    const validation = await validateAndTouchSession(tokenCookie);
+    if (!validation.valid) {
+      const errorMap: Record<string, string> = {
+        REVOKED: "Su sesión fue revocada. Por favor, vuelva a iniciar sesión.",
+        CLOSED: "La sesión ha sido cerrada.",
+        EXPIRED: "La sesión ha expirado por límite de tiempo.",
+        NOT_FOUND: "Sesión no registrada o inactiva."
+      };
       return NextResponse.json(
-        { success: false, error: "UNAUTHORIZED", message: "Sesión no registrada o inactiva." },
+        {
+          success: false,
+          error: validation.reason === "REVOKED" ? "SESSION_REVOKED" : (validation.reason === "EXPIRED" ? "SESSION_EXPIRED" : "UNAUTHORIZED"),
+          message: errorMap[validation.reason] || "Sesión inválida o expirada."
+        },
         { status: 401 }
       );
     }
 
-    const session = sessionCheck[0];
-    if (session.estado !== "ACTIVA") {
-      return NextResponse.json(
-        { success: false, error: "UNAUTHORIZED", message: "Sesión inactiva." },
-        { status: 401 }
-      );
-    }
-
-    const targetUserId = session.usuario_id;
+    const targetUserId = validation.userId;
     if (!targetUserId || isNaN(Number(targetUserId))) {
       return NextResponse.json(
         { success: false, error: "UNAUTHORIZED", message: "Usuario de sesión no válido." },

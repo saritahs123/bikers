@@ -139,6 +139,20 @@ export async function POST(req: NextRequest) {
       expires_at: Date.now() + 30 * 60 * 1000 // 30 minutes
     });
 
+    // Durable Staging Registry entry
+    if (objectKey.startsWith("staging/")) {
+      const { registerStagingObject } = await import("@/lib/storage/s3CleanupQueue");
+      await registerStagingObject({
+        empresaId: Number(empresaId),
+        usuarioId: Number(session.usuario_id),
+        objectKey,
+        modulo: String(module),
+        tipoEntidad: String(entityType),
+        contextoId: body?.contextId || body?.idempotencyKey || null,
+        ttlHours: 24
+      }).catch((regErr) => console.error("Error registering staging object in PostgreSQL:", regErr));
+    }
+
     return NextResponse.json({
       success: true,
       uploadUrl,
