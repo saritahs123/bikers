@@ -476,6 +476,27 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      // Process discarded / replaced staging keys within transaction
+      const discardedKeys: string[] = Array.isArray(body.replaced_staging_keys)
+        ? body.replaced_staging_keys
+        : Array.isArray(body.unused_staging_keys)
+        ? body.unused_staging_keys
+        : [];
+      const expectedStagingPrefix = `staging/emp_${session.empresa_id}/`;
+      for (const dKey of discardedKeys) {
+        const cleanKey = String(dKey || "").trim();
+        if (cleanKey && cleanKey.startsWith(expectedStagingPrefix)) {
+          const { enqueueS3Cleanup } = await import("@/lib/storage/s3CleanupQueue");
+          await enqueueS3Cleanup(client, {
+            empresaId: session.empresa_id,
+            objectKey: cleanKey,
+            modulo: "TALLER",
+            entidad: "recepcion_checklist",
+            usuarioId: session.usuario_id
+          });
+        }
+      }
+
       // 3. Insert Signature (Optional, if provided) with version_terminos using PostgreSQL sequence
       if (hasValidSignature) {
         await client.query(
@@ -848,7 +869,7 @@ export async function POST(req: NextRequest) {
   } catch (error: any) {
     console.error("Error in POST /api/taller/recepciones:", error);
 
-    // Graceful recovery for concurrent idempotency race conditions
+    // 1. Graceful recovery for concurrent idempotency race conditions
     if (error?.code === "23505" && (error?.constraint === "uq_recepciones_idempotency_empresa_key" || error?.message?.includes("uq_recepciones_idempotency"))) {
       try {
         const bodyFallback = await req.clone().json().catch(() => ({}));
@@ -885,6 +906,30 @@ export async function POST(req: NextRequest) {
       } catch (err2) {
         console.error("Error recovering idempotent response on 23505:", err2);
       }
+    }
+
+    // 2. Durable S3 cleanup compensation on transaction rollback
+    try {
+      const bodyFallback = await req.clone().json().catch(() => ({}));
+      const chkListFallback = Array.isArray(bodyFallback.checklist) ? bodyFallback.checklist : [];
+      const stagingKeysToClean = chkListFallback
+        .map((c: any) => (c.object_key || c.s3_key || c.ruta_archivo || "").trim())
+        .filter((k: string) => k && k.startsWith(`staging/emp_${session?.empresa_id || ""}/`));
+
+      if (session?.empresa_id && stagingKeysToClean.length > 0) {
+        const { enqueueS3Cleanup } = await import("@/lib/storage/s3CleanupQueue");
+        for (const sKey of stagingKeysToClean) {
+          await enqueueS3Cleanup(null, {
+            empresaId: session.empresa_id,
+            objectKey: sKey,
+            modulo: "TALLER",
+            entidad: "recepcion_checklist",
+            usuarioId: session.usuario_id
+          }).catch(() => {});
+        }
+      }
+    } catch (compErr) {
+      console.error("Error enqueuing S3 staging cleanup compensation on rollback:", compErr);
     }
 
     const isDev = process.env.NODE_ENV !== "production";

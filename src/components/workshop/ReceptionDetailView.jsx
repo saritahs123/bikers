@@ -51,29 +51,31 @@ function EvidenceImageCard({ item, compact = false }) {
       }
     }
     loadEvidence();
-    return () => { isMounted = false; };
+    return () => {
+      isMounted = false;
+    };
   }, [item.recepcion_checklist_id]);
 
   if (compact) {
     return (
-      <div className="p-2 bg-slate-950/80 border border-slate-800 rounded-lg space-y-1 text-[11px] overflow-hidden">
+      <div className="p-2 bg-surface border border-border rounded-xl space-y-1 text-[11px] overflow-hidden font-mono">
         <div className="flex justify-between items-center gap-1">
-          <span className="font-semibold text-slate-200 truncate text-[11px]">
+          <span className="font-semibold text-foreground truncate text-[11px]">
             {item.item_nombre || "Inspección"}
           </span>
         </div>
 
         {loading ? (
-          <div className="h-20 bg-slate-900 border border-slate-800 rounded flex flex-col items-center justify-center space-y-1">
-            <Loader2 className="w-4 h-4 text-emerald-400 animate-spin" />
-            <span className="text-[9px] text-slate-500">Cargando...</span>
+          <div className="h-20 bg-card border border-border rounded-lg flex flex-col items-center justify-center space-y-1">
+            <Loader2 className="w-4 h-4 text-primary animate-spin" />
+            <span className="text-[9px] text-foreground-muted">Cargando...</span>
           </div>
         ) : error ? (
-          <div className="p-1.5 bg-amber-500/10 border border-amber-500/20 rounded text-amber-400 text-[10px] truncate">
+          <div className="p-1.5 bg-warning-muted border border-warning/20 rounded-lg text-warning text-[10px] truncate">
             {error}
           </div>
         ) : evidenceUrl ? (
-          <div className="relative group overflow-hidden rounded border border-slate-800 bg-slate-900">
+          <div className="relative group overflow-hidden rounded-lg border border-border bg-card">
             <img
               src={evidenceUrl}
               alt={item.nombre_archivo || "Evidencia"}
@@ -83,13 +85,13 @@ function EvidenceImageCard({ item, compact = false }) {
               href={evidenceUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[10px] font-medium transition-opacity"
+              className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[10px] font-medium transition-opacity"
             >
               Ver Foto
             </a>
           </div>
         ) : (
-          <div className="p-2 bg-slate-900 border border-slate-800 rounded text-center text-slate-500 text-[10px]">
+          <div className="p-2 bg-card border border-border rounded-lg text-center text-foreground-muted text-[10px]">
             Sin imagen
           </div>
         )}
@@ -98,33 +100,33 @@ function EvidenceImageCard({ item, compact = false }) {
   }
 
   return (
-    <div className="p-3.5 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2 text-xs">
+    <div className="p-3.5 bg-surface border border-border rounded-xl space-y-2 text-xs font-mono">
       <div className="flex justify-between items-start">
-        <span className="font-semibold text-slate-200">
+        <span className="font-semibold text-foreground">
           {item.item_nombre || "Ítem de Inspección"}
         </span>
-        <span className="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-mono">
+        <span className="text-[10px] bg-card text-foreground-muted px-1.5 py-0.5 rounded border border-border">
           #{item.recepcion_checklist_id}
         </span>
       </div>
-      <p className="text-[11px] text-slate-400 font-mono truncate">
+      <p className="text-[11px] text-foreground-muted truncate">
         Archivo: {item.nombre_archivo || "Sin nombre de archivo"}
       </p>
 
       {loading ? (
-        <div className="h-44 bg-slate-900 border border-slate-800 rounded-lg flex flex-col items-center justify-center space-y-2">
-          <Loader2 className="w-5 h-5 text-emerald-400 animate-spin" />
-          <span className="text-[11px] text-slate-500">Cargando imagen S3...</span>
+        <div className="h-44 bg-card border border-border rounded-lg flex flex-col items-center justify-center space-y-2">
+          <Loader2 className="w-5 h-5 text-primary animate-spin" />
+          <span className="text-[11px] text-foreground-muted">Cargando imagen S3...</span>
         </div>
       ) : error ? (
-        <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-400 text-[11px] space-y-1">
+        <div className="p-3 bg-warning-muted border border-warning/20 rounded-lg text-warning text-[11px] space-y-1">
           <p className="font-semibold flex items-center gap-1.5">
             <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> Error al cargar evidencia
           </p>
-          <p className="text-[10px] text-amber-300/80">{error}</p>
+          <p className="text-[10px] opacity-80">{error}</p>
         </div>
       ) : evidenceUrl ? (
-        <div className="relative group overflow-hidden rounded-lg border border-slate-800 bg-slate-900">
+        <div className="relative group overflow-hidden rounded-lg border border-border bg-card">
           <img
             src={evidenceUrl}
             alt={item.nombre_archivo || "Evidencia"}
@@ -134,13 +136,13 @@ function EvidenceImageCard({ item, compact = false }) {
             href={evidenceUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-medium transition-opacity"
+            className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-medium transition-opacity"
           >
             Ver Imagen Completa
           </a>
         </div>
       ) : (
-        <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg text-center text-slate-500 text-[11px]">
+        <div className="p-3 bg-card border border-border rounded-lg text-center text-foreground-muted text-[11px]">
           Imagen no disponible
         </div>
       )}
@@ -152,7 +154,7 @@ export default function ReceptionDetailView({ recepcionId, onBack }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState("resumen"); // 'resumen' | 'checklist' | 'fotografias' | 'firma' | 'historial'
+  const [activeTab, setActiveTab] = useState("resumen");
 
   useEffect(() => {
     if (recepcionId) {
@@ -197,22 +199,22 @@ export default function ReceptionDetailView({ recepcionId, onBack }) {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center p-16 space-y-4">
-        <Loader2 className="w-8 h-8 text-emerald-400 animate-spin" />
-        <span className="text-sm text-slate-400">Cargando detalle de recepción...</span>
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+        <span className="text-xs text-foreground-muted font-mono">Cargando detalle de recepción...</span>
       </div>
     );
   }
 
   if (error || !data) {
     return (
-      <div className="p-8 space-y-4">
+      <div className="p-6 space-y-4 font-sans">
         <button
           onClick={onBack}
-          className="flex items-center gap-2 text-xs text-slate-400 hover:text-slate-200 transition-colors"
+          className="flex items-center gap-2 text-xs text-foreground-muted hover:text-foreground transition-colors"
         >
           <ArrowLeft className="w-4 h-4" /> Volver al Listado
         </button>
-        <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-400 text-xs flex items-center gap-3">
+        <div className="p-4 bg-error-muted border border-error/20 rounded-xl text-error text-xs flex items-center gap-3">
           <AlertCircle className="w-5 h-5 shrink-0" />
           <span>{error || "La recepción solicitada no existe o no fue encontrada."}</span>
         </div>
@@ -220,9 +222,6 @@ export default function ReceptionDetailView({ recepcionId, onBack }) {
     );
   }
 
-
-
-  // Safe Date Helper
   const formatDate = (dateStr) => {
     if (!dateStr) return "—";
     const d = new Date(dateStr);
@@ -233,67 +232,66 @@ export default function ReceptionDetailView({ recepcionId, onBack }) {
       year: "numeric",
       hour: "2-digit",
       minute: "2-digit",
-      hour12: true,
+      hour12: true
     });
   };
 
   const itemsChecklistTotal = data.checklist ? data.checklist.length : 0;
   const itemsTrabajo = (data.checklist || []).filter((ch) => ch.requiere_trabajo);
   const fotosEvidencia = (data.checklist || []).filter((ch) => ch.evidencia_foto);
-  
-  // Real DB value: null if not converted
+
   const hasLinkedOT = Boolean(data.convertido_orden_id || data.codigo_orden);
   const otIdText = data.codigo_orden || (data.convertido_orden_id ? `OT #${data.convertido_orden_id}` : null);
   const isLocked = Boolean(data.estado?.permite_edicion === false || data.convertido_orden_id);
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-200">
+    <div className="space-y-6 animate-in fade-in duration-200 font-sans">
       {/* Locked State Banner */}
       {isLocked && (
-        <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs flex items-center gap-2.5">
-          <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
+        <div className="p-3.5 bg-warning-muted border border-warning/30 rounded-xl text-warning text-xs flex items-center gap-2.5">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
           <span className="font-medium">
-            Esta recepción está confirmada y su información se encuentra bloqueada para garantizar la trazabilidad documental.
+            Esta recepción está convertida a OT y su información se encuentra bloqueada para garantizar la inmutabilidad y trazabilidad documental.
           </span>
         </div>
       )}
 
       {/* 1. Header & Actions */}
-      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-800">
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-border">
         <div className="flex items-center gap-4">
           <button
             onClick={onBack}
-            className="p-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-xl transition-colors"
+            className="p-2 text-foreground-muted hover:text-foreground hover:bg-hover rounded-xl transition-colors cursor-pointer"
             title="Volver al Listado"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20">
+            <div className="flex items-center gap-2 flex-wrap font-mono">
+              <span className="text-xs font-bold text-primary bg-primary-muted px-2.5 py-1 rounded-lg border border-primary/20">
                 {data.codigo_recepcion || "—"}
               </span>
-              <span className="text-xs font-medium text-slate-300 bg-slate-800 px-2.5 py-1 rounded-lg">
+              <span className="text-xs font-medium text-foreground bg-surface border border-border px-2.5 py-1 rounded-lg">
                 {data.estado?.nombre || "RECIBIDA"}
               </span>
             </div>
-            <p className="text-xs text-slate-400 mt-1.5 flex items-center gap-3 flex-wrap">
-              <span className="flex items-center gap-1">
-                <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+            <p className="text-xs text-foreground-muted mt-1.5 flex items-center gap-3 flex-wrap">
+              <span className="flex items-center gap-1 font-mono">
+                <Calendar className="w-3.5 h-3.5 text-primary" />
                 {formatDate(data.fecha_recepcion)}
               </span>
-              <span className="flex items-center gap-1 border-l border-slate-800 pl-3">
-                <User className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="flex items-center gap-1 border-l border-border pl-3">
+                <User className="w-3.5 h-3.5 text-primary" />
                 {data.cliente?.nombre_completo || "—"}
               </span>
-              <span className="flex items-center gap-1 border-l border-slate-800 pl-3">
-                <Bike className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="flex items-center gap-1 border-l border-border pl-3">
+                <Bike className="w-3.5 h-3.5 text-primary" />
                 {data.bicicleta?.marca || "Bicicleta"} {data.bicicleta?.modelo || ""}{" "}
                 {data.bicicleta?.ano ? `(${data.bicicleta.ano})` : ""}
               </span>
               {data.usuario_receptor?.nombre_completo && (
-                <span className="flex items-center gap-1 border-l border-slate-800 pl-3 text-slate-400">
-                  <span className="text-slate-500">Receptor:</span> {data.usuario_receptor.nombre_completo}
+                <span className="flex items-center gap-1 border-l border-border pl-3 text-foreground-muted">
+                  <span>Receptor:</span> {data.usuario_receptor.nombre_completo}
                 </span>
               )}
             </p>
@@ -301,449 +299,233 @@ export default function ReceptionDetailView({ recepcionId, onBack }) {
         </div>
 
         {/* Top Action Buttons */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 font-mono text-xs">
           <button
             type="button"
             onClick={handlePrint}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-medium transition-colors cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2 bg-surface hover:bg-hover border border-border text-foreground rounded-xl font-medium transition-colors cursor-pointer"
           >
-            <Printer className="w-4 h-4 text-slate-400" />
+            <Printer className="w-4 h-4 text-foreground-muted" />
             Imprimir Recibo
           </button>
 
-          {/* Real OT Status Header Control */}
           {hasLinkedOT ? (
-            <button
-              type="button"
-              onClick={() =>
-                alert(`Navegación a la Orden de Trabajo ${otIdText}.`)
-              }
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-400 hover:bg-emerald-300 text-slate-950 rounded-xl text-xs font-bold transition-all shadow-lg shadow-emerald-400/20 cursor-pointer font-mono"
-              title="Ir a la Orden de Trabajo vinculada"
-            >
-              VER {otIdText}
-              <ArrowRight className="w-4 h-4" />
-            </button>
+            <span className="flex items-center gap-2 px-4 py-2 bg-primary-muted border border-primary text-primary font-bold rounded-xl">
+              <Wrench size={15} />
+              <span>{otIdText}</span>
+            </span>
           ) : (
-            <span className="flex items-center gap-1.5 px-3 py-2 bg-slate-800/80 text-slate-400 border border-slate-700 rounded-xl text-xs font-medium select-none">
-              Sin orden de trabajo asociada
+            <span className="flex items-center gap-1.5 px-3 py-2 bg-surface text-foreground-muted border border-border rounded-xl font-medium select-none">
+              Sin orden asociada
             </span>
           )}
         </div>
       </div>
 
       {/* 2. Module Navigation Tabs */}
-      <div className="flex gap-2 border-b border-slate-800 pb-3 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-        <button
-          type="button"
-          onClick={() => setActiveTab("resumen")}
-          className={`px-4 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
-            activeTab === "resumen"
-              ? "bg-slate-800 text-emerald-400 shadow-sm border border-slate-700 font-semibold"
-              : "text-slate-400 hover:text-slate-200 hover:bg-slate-900/40"
-          }`}
-        >
-          Resumen
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab("checklist")}
-          className={`px-4 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
-            activeTab === "checklist"
-              ? "bg-slate-800 text-emerald-400 shadow-sm border border-slate-700 font-semibold"
-              : "text-slate-400 hover:text-slate-200 hover:bg-slate-900/40"
-          }`}
-        >
-          Checklist
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab("fotografias")}
-          className={`px-4 py-2 rounded-xl text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer ${
-            activeTab === "fotografias"
-              ? "bg-slate-800 text-emerald-400 shadow-sm border border-slate-700 font-semibold"
-              : "text-slate-400 hover:text-slate-200 hover:bg-slate-900/40"
-          }`}
-        >
-          Fotografías
-          <span className="bg-slate-900 text-slate-300 px-1.5 py-0.5 rounded text-[10px] font-mono">
-            {fotosEvidencia.length}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab("firma")}
-          className={`px-4 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
-            activeTab === "firma"
-              ? "bg-slate-800 text-emerald-400 shadow-sm border border-slate-700 font-semibold"
-              : "text-slate-400 hover:text-slate-200 hover:bg-slate-900/40"
-          }`}
-        >
-          Firma
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab("historial")}
-          className={`px-4 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
-            activeTab === "historial"
-              ? "bg-slate-800 text-emerald-400 shadow-sm border border-slate-700 font-semibold"
-              : "text-slate-400 hover:text-slate-200 hover:bg-slate-900/40"
-          }`}
-        >
-          Historial
-        </button>
+      <div className="flex gap-2 border-b border-border pb-3 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden font-mono text-xs">
+        {["resumen", "checklist", "fotografias", "firma", "historial"].map((tab) => {
+          const isActive = activeTab === tab;
+          const labels = {
+            resumen: "Resumen",
+            checklist: `Checklist (${itemsChecklistTotal})`,
+            fotografias: `Fotografías (${fotosEvidencia.length})`,
+            firma: "Firma",
+            historial: "Historial"
+          };
+          return (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-2 rounded-xl font-medium transition-all cursor-pointer ${
+                isActive
+                  ? "bg-primary-muted text-primary border border-primary/30 font-bold"
+                  : "text-foreground-muted hover:text-foreground hover:bg-hover border border-transparent"
+              }`}
+            >
+              {labels[tab]}
+            </button>
+          );
+        })}
       </div>
 
       {/* 3. Tab Contents */}
-
-      {/* TAB 1: RESUMEN (Bento Grid) */}
       {activeTab === "resumen" && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
           {/* Main Left Column (8 Cols) */}
           <main className="lg:col-span-8 min-w-0 space-y-5">
-            {/* Card 1: Motivo de Ingreso & Notas */}
-            <div className="p-5 bg-slate-900/60 border border-slate-800 rounded-2xl space-y-3">
-              <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                <FileText className="w-4 h-4 text-emerald-400" />
-                Motivo de Ingreso &amp; Notas
+            {/* Card 1: Distinct Motivo de Ingreso vs Diagnóstico Preliminar */}
+            <div className="p-5 bg-card border border-border rounded-2xl space-y-4">
+              <h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
+                <FileText className="w-4 h-4 text-primary" />
+                Información de Ingreso &amp; Diagnóstico
               </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                <div>
-                  <span className="text-slate-400 block mb-1 font-medium">Motivo Principal:</span>
-                  <p className="p-3.5 bg-slate-950/60 border border-slate-800 rounded-xl text-slate-200 leading-relaxed min-h-[70px]">
-                    {data.diagnostico_preliminar || data.tipo_servicio?.nombre || "Mantenimiento e Inspección General"}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
+                <div className="space-y-1">
+                  <span className="text-foreground-secondary font-bold block text-[11px]">
+                    1. Motivo de Ingreso (Declarado por el Cliente):
+                  </span>
+                  <p className="p-3.5 bg-surface border border-border rounded-xl text-foreground leading-relaxed min-h-[70px]">
+                    &quot;{data.observaciones_cliente || "Sin observaciones expresadas por el cliente."}&quot;
                   </p>
                 </div>
-                <div>
-                  <span className="text-slate-400 block mb-1 font-medium">Observaciones del Cliente:</span>
-                  <p className="p-3.5 bg-slate-950/60 border border-slate-800 border-l-2 border-l-emerald-400 rounded-xl text-slate-300 italic leading-relaxed min-h-[70px]">
-                    &quot;{data.observaciones_cliente || "Sin observaciones expresadas por el cliente."}&quot;
+                <div className="space-y-1">
+                  <span className="text-foreground-secondary font-bold block text-[11px]">
+                    2. Diagnóstico Preliminar (Evaluación de Taller):
+                  </span>
+                  <p className="p-3.5 bg-surface border border-border rounded-xl text-foreground leading-relaxed min-h-[70px]">
+                    {data.diagnostico_preliminar || "Diagnóstico general de mantenimiento e inspección."}
                   </p>
                 </div>
               </div>
             </div>
 
-            {/* Card 2: Datos Técnicos y Cliente (Zebra Table) */}
-            <div className="bg-slate-900/60 border border-slate-800 rounded-2xl overflow-hidden">
-              <div className="p-4 border-b border-slate-800 bg-slate-950/50 flex justify-between items-center">
-                <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+            {/* Card 2: Datos Técnicos y Cliente */}
+            <div className="bg-card border border-border rounded-2xl overflow-hidden text-xs">
+              <div className="p-4 border-b border-border bg-surface flex justify-between items-center">
+                <h4 className="text-xs font-bold text-foreground uppercase tracking-wider">
                   Datos Técnicos y Cliente
                 </h4>
-                <button
-                  type="button"
-                  onClick={onBack}
-                  className="text-xs text-slate-400 hover:text-emerald-400 underline transition-colors cursor-pointer"
-                >
-                  Volver al Listado
-                </button>
               </div>
 
-              <div className="divide-y divide-slate-800/80 text-xs">
-                {/* Row 1: Cliente / Contacto */}
+              <div className="divide-y divide-border-subtle font-mono">
                 <div className="flex flex-col sm:flex-row">
-                  <div className="sm:w-1/3 p-3.5 bg-slate-950/40 text-slate-400 font-medium">
+                  <div className="sm:w-1/3 p-3.5 bg-surface text-foreground-secondary font-semibold">
                     Cliente / Contacto
                   </div>
-                  <div className="sm:w-2/3 p-3.5 bg-slate-900/40 text-slate-200 flex items-center gap-3 flex-wrap">
-                    <span className="font-semibold text-slate-100">{data.cliente?.nombre_completo || "—"}</span>
+                  <div className="sm:w-2/3 p-3.5 bg-card text-foreground flex items-center gap-3 flex-wrap">
+                    <span className="font-bold">{data.cliente?.nombre_completo || "—"}</span>
                     {data.cliente?.telefono && (
-                      <span className="text-slate-400 border-l border-slate-800 pl-3">
+                      <span className="text-foreground-muted border-l border-border pl-3">
                         {data.cliente.telefono}
                       </span>
                     )}
-                    {data.cliente?.correo && (
-                      <span className="text-slate-400 border-l border-slate-800 pl-3">
-                        {data.cliente.correo}
-                      </span>
-                    )}
                     {data.cliente?.identificacion && (
-                      <span className="text-slate-400 border-l border-slate-800 pl-3 font-mono text-[11px]">
+                      <span className="text-foreground-muted border-l border-border pl-3">
                         ID: {data.cliente.identificacion}
                       </span>
                     )}
                   </div>
                 </div>
 
-                {/* Row 2: Bicicleta */}
                 <div className="flex flex-col sm:flex-row">
-                  <div className="sm:w-1/3 p-3.5 bg-slate-950/40 text-slate-400 font-medium">
+                  <div className="sm:w-1/3 p-3.5 bg-surface text-foreground-secondary font-semibold">
                     Bicicleta
                   </div>
-                  <div className="sm:w-2/3 p-3.5 bg-slate-900/40 text-slate-200">
-                    <span className="font-semibold text-emerald-400">
+                  <div className="sm:w-2/3 p-3.5 bg-card text-foreground">
+                    <span className="font-bold text-primary">
                       {data.bicicleta?.marca || "Bicicleta"} {data.bicicleta?.modelo || ""}
                     </span>{" "}
                     {data.bicicleta?.ano ? `(${data.bicicleta.ano})` : ""} —{" "}
-                    {data.bicicleta?.tipo_bicicleta || "MTB / Trail"}
+                    {data.bicicleta?.tipo_bicicleta || "General"}
                     {data.bicicleta?.color && (
-                      <span className="text-slate-400 ml-2">
-                        • Color: {data.bicicleta.color}
-                      </span>
+                      <span className="text-foreground-muted ml-2">• Color: {data.bicicleta.color}</span>
                     )}
                   </div>
                 </div>
 
-                {/* Row 3: Nº de Serie / Cuadro */}
                 <div className="flex flex-col sm:flex-row">
-                  <div className="sm:w-1/3 p-3.5 bg-slate-950/40 text-slate-400 font-medium">
-                    Nº de Serie / Cuadro
+                  <div className="sm:w-1/3 p-3.5 bg-surface text-foreground-secondary font-semibold">
+                    Nº de Serie
                   </div>
-                  <div className="sm:w-2/3 p-3.5 bg-slate-900/40 text-slate-300 font-mono font-bold tracking-wider">
+                  <div className="sm:w-2/3 p-3.5 bg-card text-foreground font-bold">
                     {data.bicicleta?.numero_serie || "—"}
-                  </div>
-                </div>
-
-                {/* Row 4: Suspensiones / Notas Técnicas */}
-                <div className="flex flex-col sm:flex-row">
-                  <div className="sm:w-1/3 p-3.5 bg-slate-950/40 text-slate-400 font-medium">
-                    Suspensiones / Notas
-                  </div>
-                  <div className="sm:w-2/3 p-3.5 bg-slate-900/40 text-slate-300 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <div>
-                      <span className="text-slate-500 text-[10px] block uppercase font-medium">
-                        Horquilla / Config.
-                      </span>
-                      {data.bicicleta?.notas_tecnicas || "Fox Rhythm 34, 140mm"}
-                    </div>
-                    <div>
-                      <span className="text-slate-500 text-[10px] block uppercase font-medium">
-                        Shock / Trasero
-                      </span>
-                      {"Fox Float EVOL, 130mm"}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Row 5: Transmisión / Frenos */}
-                <div className="flex flex-col sm:flex-row">
-                  <div className="sm:w-1/3 p-3.5 bg-slate-950/40 text-slate-400 font-medium">
-                    Transmisión / Frenos
-                  </div>
-                  <div className="sm:w-2/3 p-3.5 bg-slate-900/40 text-slate-300 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <div>
-                      <span className="text-slate-500 text-[10px] block uppercase font-medium">
-                        G. Shift
-                      </span>
-                      {"Shimano XT M8100 12v"}
-                    </div>
-                    <div>
-                      <span className="text-slate-500 text-[10px] block uppercase font-medium">
-                        Frenos
-                      </span>
-                      {"Shimano Deore 4-pistones"}
-                    </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Card 3: Sub-Grid de Evidencias (50%) & Firma Digital (50%) */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
-              {/* Evidencias Registradas */}
-              <section className="min-w-0 h-full">
-                <div className="p-4 bg-slate-900/60 border border-slate-800 rounded-2xl h-full flex flex-col justify-between space-y-3">
-                  <div className="flex items-center justify-between border-b border-slate-800 pb-2.5 min-h-[32px]">
-                    <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                      <Camera className="w-4 h-4 text-emerald-400" />
-                      Evidencias Registradas ({fotosEvidencia.length})
-                    </h4>
-
-                    {fotosEvidencia.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setActiveTab("fotografias")}
-                        className="text-[11px] text-emerald-400 hover:underline cursor-pointer font-medium"
-                      >
-                        Ver detalle
-                      </button>
-                    )}
-                  </div>
-
-                  {fotosEvidencia.length === 0 ? (
-                    <div className="p-4 bg-slate-950/60 border border-slate-800 rounded-xl text-center space-y-1 my-auto">
-                      <ImageOff className="w-5 h-5 text-slate-600 mx-auto" />
-                      <p className="text-xs text-slate-400">
-                        No hay evidencias fotográficas registradas
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {fotosEvidencia.slice(0, 2).map((item) => (
-                        <EvidenceImageCard key={item.recepcion_checklist_id} item={item} compact={true} />
-                      ))}
-                    </div>
+            {/* Card 3: Evidencias & Firma Summary */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-4 bg-card border border-border rounded-2xl space-y-3">
+                <div className="flex items-center justify-between border-b border-border pb-2.5">
+                  <h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
+                    <Camera className="w-4 h-4 text-primary" />
+                    Evidencias ({fotosEvidencia.length})
+                  </h4>
+                  {fotosEvidencia.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("fotografias")}
+                      className="text-xs text-primary hover:underline font-bold"
+                    >
+                      Ver fotos
+                    </button>
                   )}
                 </div>
-              </section>
 
-              {/* Firma Digital del Cliente */}
-              <section className="min-w-0 h-full">
-                <div className="p-4 bg-slate-900/60 border border-slate-800 rounded-2xl h-full flex flex-col justify-between space-y-3">
-                  <div className="flex items-center justify-between border-b border-slate-800 pb-2.5 min-h-[32px]">
-                    <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                      <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                      Firma Digital del Cliente
-                    </h4>
+                {fotosEvidencia.length === 0 ? (
+                  <div className="p-4 bg-surface border border-border rounded-xl text-center space-y-1">
+                    <ImageOff className="w-5 h-5 text-foreground-muted mx-auto" />
+                    <p className="text-xs text-foreground-muted font-mono">Sin fotos de evidencia</p>
                   </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    {fotosEvidencia.slice(0, 2).map((item) => (
+                      <EvidenceImageCard key={item.recepcion_checklist_id} item={item} compact={true} />
+                    ))}
+                  </div>
+                )}
+              </div>
 
-                  {data.firma?.firma_digital ? (
-                    <div className="space-y-2 my-auto">
-                      <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-center max-w-full overflow-hidden h-24">
-                        <img
-                          src={data.firma.firma_digital}
-                          alt="Firma del Cliente"
-                          className="max-h-20 max-w-full object-contain"
-                        />
-                      </div>
-                      <div className="flex items-center justify-between text-[11px] text-slate-400 gap-2">
-                        <span className="text-emerald-400 font-medium truncate">Términos Aceptados</span>
-                        <span className="truncate shrink-0 font-mono text-[10px]">{formatDate(data.firma.fecha_firma)}</span>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="p-4 bg-slate-950/60 border border-slate-800 rounded-xl text-center space-y-1 my-auto">
-                      <ShieldCheck className="w-5 h-5 text-slate-600 mx-auto" />
-                      <p className="text-xs text-slate-400">
-                        Sin firma digital registrada.
-                      </p>
-                    </div>
-                  )}
+              <div className="p-4 bg-card border border-border rounded-2xl space-y-3">
+                <div className="flex items-center justify-between border-b border-border pb-2.5">
+                  <h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-primary" />
+                    Firma del Cliente
+                  </h4>
                 </div>
-              </section>
+
+                {data.firma?.firma_digital ? (
+                  <div className="space-y-2">
+                    <div className="p-2 bg-[#090d16] border border-border rounded-xl flex items-center justify-center h-20">
+                      <img
+                        src={data.firma.firma_digital}
+                        alt="Firma del Cliente"
+                        className="max-h-16 max-w-full object-contain"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between text-[10px] text-foreground-muted font-mono">
+                      <span className="text-primary font-bold">Consentimiento OK</span>
+                      <span>{formatDate(data.firma.fecha_firma)}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-4 bg-surface border border-border rounded-xl text-center space-y-1">
+                    <ShieldCheck className="w-5 h-5 text-foreground-muted mx-auto" />
+                    <p className="text-xs text-foreground-muted font-mono">Sin firma digital registrada</p>
+                  </div>
+                )}
+              </div>
             </div>
           </main>
 
           {/* Aside Right Column (4 Cols) */}
           <aside className="lg:col-span-4 min-w-0 space-y-5">
-            {/* Card 1: Estado de Ingreso */}
-            <div className="p-5 bg-slate-900/60 border border-slate-800 rounded-2xl space-y-4">
-              <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2 border-b border-slate-800 pb-3">
-                <ClipboardCheck className="w-4 h-4 text-emerald-400" />
-                Estado de Ingreso
+            {/* Card 1: Presupuesto & OT */}
+            <div className="p-5 bg-card border border-border rounded-2xl space-y-4">
+              <h4 className="text-xs font-bold text-foreground uppercase tracking-wider border-b border-border pb-3 flex items-center gap-2">
+                <ClipboardCheck className="w-4 h-4 text-primary" />
+                Resumen Económico &amp; OT
               </h4>
 
-              <div className="space-y-4 text-xs">
-                {/* Visual Inspection Progress */}
-                <div>
-                  <div className="flex justify-between items-center mb-1.5 text-[11px]">
-                    <span className="text-slate-400">Inspección Visual</span>
-                    <span className="text-emerald-400 font-semibold font-mono">APROBADA</span>
-                  </div>
-                  <div className="flex gap-1 h-2 w-full">
-                    <div className="flex-1 bg-emerald-400 rounded-sm" />
-                    <div className="flex-1 bg-emerald-400 rounded-sm" />
-                    <div className="flex-1 bg-emerald-400 rounded-sm" />
-                    <div className="flex-1 bg-emerald-400 rounded-sm" />
-                  </div>
-                </div>
-
-                {/* Checklist Progress */}
-                <div>
-                  <div className="flex justify-between items-center mb-1.5 text-[11px]">
-                    <span className="text-slate-400">Checklist Recepción</span>
-                    <span className="text-slate-200 font-mono">
-                      100% ({itemsChecklistTotal}/{itemsChecklistTotal || 1})
-                    </span>
-                  </div>
-                  <div className="flex gap-0.5 h-2 w-full">
-                    {Array.from({ length: Math.max(1, Math.min(12, itemsChecklistTotal || 12)) }).map((_, i) => (
-                      <div key={i} className="flex-1 bg-emerald-400 rounded-sm" />
-                    ))}
-                  </div>
-                </div>
-
-                {/* Critical Findings */}
-                <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl space-y-1.5">
-                  <span className="text-[10px] font-semibold text-amber-400 uppercase flex items-center gap-1">
-                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                    Hallazgos Críticos en Ingreso
-                  </span>
-                  {itemsTrabajo.length > 0 ? (
-                    <ul className="list-disc list-inside text-xs text-slate-300 space-y-1">
-                      {itemsTrabajo.map((item) => (
-                        <li key={item.recepcion_checklist_id}>
-                          {item.item_nombre || "—"}: {item.observacion || item.estado_checklist_nombre || "—"}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-xs text-slate-400">
-                      Sin hallazgos críticos reportados durante la recepción.
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Card 2: Block 2 Linked Work Order Card */}
-            <div className="p-5 bg-slate-900/60 border border-slate-800 rounded-2xl space-y-4 relative">
-              <div className="absolute top-0 right-0 bg-slate-800 text-slate-400 border-l border-b border-slate-800 text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-bl-lg">
-                {hasLinkedOT ? "Orden Creada" : "Estado OT"}
-              </div>
-              <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider mt-1">
-                Orden de Trabajo Vinculada
-              </h4>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                {hasLinkedOT
-                  ? "Esta recepción ya ha sido procesada y se ha generado una Orden de Trabajo en el taller."
-                  : "Sin orden de trabajo vinculada."}
-              </p>
-              <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-between">
-                <div>
-                  <span className="text-[10px] font-mono text-slate-400 block uppercase">
-                    ID OT
-                  </span>
-                  <span className="text-lg font-mono font-bold text-emerald-400">
-                    {hasLinkedOT ? otIdText : "SIN OT"}
-                  </span>
-                </div>
-                <Wrench className="w-6 h-6 text-slate-700" />
+              <div className="p-3.5 bg-surface border border-border rounded-xl space-y-1">
+                <span className="text-[10px] uppercase font-bold text-foreground-muted font-mono">
+                  Presupuesto Preliminar
+                </span>
+                <p className="text-xl font-bold font-mono text-primary">
+                  RD$ {Number(data.presupuesto_estimado || 0).toFixed(2)}
+                </p>
               </div>
 
-              {hasLinkedOT ? (
-                <button
-                  type="button"
-                  onClick={() =>
-                    alert("Acción de navegación vinculada al Módulo de Órdenes de Trabajo (Bloque 2).")
-                  }
-                  className="w-full flex items-center justify-center gap-2 p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-medium transition-colors cursor-pointer"
-                  title="Función del Módulo de Órdenes de Trabajo (Bloque 2)"
-                >
-                  Ir al Panel de Taller
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  disabled
-                  className="w-full flex items-center justify-center gap-2 p-2.5 bg-slate-950 text-slate-600 rounded-xl text-xs font-medium border border-slate-800/80 cursor-not-allowed select-none"
-                >
-                  Sin Acción de Bloque 2
-                </button>
-              )}
-
-              {/* Seccion Compacta de Presupuesto Preliminar Aprobado */}
-              <div className="border-t border-slate-800/80 pt-3 mt-3">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="min-w-0">
-                    <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">
-                      Presupuesto preliminar aprobado
-                    </p>
-                    <p className="text-[11px] text-slate-400 truncate">
-                      Sujeto a cambios después del diagnóstico en taller
-                    </p>
-                  </div>
-
-                  <div className="shrink-0 text-right">
-                    <p className="text-lg font-mono font-bold text-emerald-400">
-                      RD$ {Number(data.presupuesto_estimado || 0).toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </p>
-                  </div>
-                </div>
+              <div className="p-3.5 bg-surface border border-border rounded-xl space-y-1">
+                <span className="text-[10px] uppercase font-bold text-foreground-muted font-mono">
+                  Orden de Trabajo
+                </span>
+                <p className="text-base font-bold font-mono text-foreground">
+                  {hasLinkedOT ? otIdText : "Sin OT vinculada"}
+                </p>
               </div>
             </div>
           </aside>
@@ -752,45 +534,39 @@ export default function ReceptionDetailView({ recepcionId, onBack }) {
 
       {/* TAB 2: CHECKLIST */}
       {activeTab === "checklist" && (
-        <div className="p-5 bg-slate-900/60 border border-slate-800 rounded-2xl space-y-4">
-          <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-            <ClipboardCheck className="w-4 h-4 text-emerald-400" />
-            Checklist de Inspección Inicial ({itemsChecklistTotal} Ítems)
+        <div className="p-5 bg-card border border-border rounded-2xl space-y-4">
+          <h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
+            <ClipboardCheck className="w-4 h-4 text-primary" />
+            Checklist de Inspección ({itemsChecklistTotal} Puntos)
           </h4>
 
           {itemsChecklistTotal === 0 ? (
-            <p className="text-xs text-slate-500 py-6 text-center">
+            <p className="text-xs text-foreground-muted py-6 text-center font-mono">
               No se evaluaron ítems de checklist durante la recepción.
             </p>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-2 font-mono text-xs">
               {data.checklist.map((item) => (
                 <div
                   key={item.recepcion_checklist_id}
-                  className="p-3.5 bg-slate-950/60 border border-slate-800/80 rounded-xl flex flex-wrap items-center justify-between gap-4 text-xs"
+                  className="p-3.5 bg-surface border border-border rounded-xl flex flex-wrap items-center justify-between gap-3"
                 >
                   <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-slate-200">
-                        {item.item_nombre || "—"}
-                      </span>
-                      <span className="text-[10px] text-slate-400 bg-slate-800 px-2 py-0.5 rounded">
-                        {item.item_categoria || "GENERAL"}
-                      </span>
-                    </div>
+                    <span className="font-bold text-foreground">{item.item_nombre || "—"}</span>
+                    <span className="ml-2 text-[10px] text-foreground-muted bg-card px-2 py-0.5 rounded border border-border">
+                      {item.item_categoria || "GENERAL"}
+                    </span>
                     {item.observacion && (
-                      <p className="text-xs text-slate-400 mt-1 italic">
-                        &quot;{item.observacion}&quot;
-                      </p>
+                      <p className="text-[11px] text-foreground-muted mt-1 italic">&quot;{item.observacion}&quot;</p>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-xs font-medium px-2.5 py-1 rounded bg-slate-800 text-slate-300">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold px-2.5 py-1 rounded bg-card border border-border text-foreground">
                       {item.estado_checklist_nombre || "Evaluado"}
                     </span>
                     {item.requiere_trabajo && (
-                      <span className="text-[10px] bg-amber-500/10 border border-amber-500/20 text-amber-400 px-2 py-0.5 rounded font-semibold">
-                        Requiere Reparación
+                      <span className="text-[10px] bg-warning-muted border border-warning/30 text-warning px-2 py-0.5 rounded font-bold">
+                        Requiere Trabajo
                       </span>
                     )}
                   </div>
@@ -801,17 +577,17 @@ export default function ReceptionDetailView({ recepcionId, onBack }) {
         </div>
       )}
 
-      {/* TAB 3: FOTOGRAFÍAS / EVIDENCIAS */}
+      {/* TAB 3: FOTOGRAFÍAS */}
       {activeTab === "fotografias" && (
-        <div className="p-5 bg-slate-900/60 border border-slate-800 rounded-2xl space-y-4">
-          <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-            <Camera className="w-4 h-4 text-emerald-400" />
-            Evidencias Registradas ({fotosEvidencia.length})
+        <div className="p-5 bg-card border border-border rounded-2xl space-y-4">
+          <h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
+            <Camera className="w-4 h-4 text-primary" />
+            Evidencias Fotográficas ({fotosEvidencia.length})
           </h4>
           {fotosEvidencia.length === 0 ? (
-            <div className="p-8 bg-slate-950/60 border border-slate-800 rounded-xl text-center space-y-2">
-              <ImageOff className="w-8 h-8 text-slate-600 mx-auto" />
-              <p className="text-xs text-slate-400">
+            <div className="p-8 bg-surface border border-border rounded-xl text-center space-y-2">
+              <ImageOff className="w-8 h-8 text-foreground-muted mx-auto" />
+              <p className="text-xs text-foreground-muted font-mono">
                 Esta recepción no posee evidencias fotográficas registradas.
               </p>
             </div>
@@ -827,59 +603,47 @@ export default function ReceptionDetailView({ recepcionId, onBack }) {
 
       {/* TAB 4: FIRMA */}
       {activeTab === "firma" && (
-        <div className="p-5 bg-slate-900/60 border border-slate-800 rounded-2xl space-y-4 w-full">
-          <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+        <div className="p-5 bg-card border border-border rounded-2xl space-y-4">
+          <h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-primary" />
             Firma Digital del Cliente
           </h4>
 
           {data.firma?.firma_digital ? (
-            <div className="space-y-4 w-full">
-              <div className="p-6 bg-slate-950 border border-slate-800 rounded-xl flex flex-col items-center justify-center w-full min-h-[160px]">
+            <div className="space-y-4">
+              <div className="p-6 bg-[#090d16] border border-border rounded-xl flex items-center justify-center min-h-[160px]">
                 <img
                   src={data.firma.firma_digital}
                   alt="Firma del Cliente"
                   className="max-h-40 w-auto object-contain"
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none';
-                    const parent = e.currentTarget.parentElement;
-                    if (parent && !parent.querySelector('.fallback-msg')) {
-                      const msg = document.createElement('p');
-                      msg.className = 'fallback-msg text-xs text-slate-400 text-center py-4';
-                      msg.innerText = 'Archivo de firma digital no disponible en servidor.';
-                      parent.appendChild(msg);
-                    }
-                  }}
                 />
               </div>
 
-              <div className="p-4 bg-slate-950/60 border border-slate-800 rounded-xl grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                <div className="flex flex-col sm:flex-row justify-between sm:justify-start gap-1 sm:gap-2">
-                  <span className="text-slate-400">Tipo de Firma:</span>
-                  <span className="text-slate-200 font-medium">{data.firma.tipo_firma || "—"}</span>
+              <div className="p-4 bg-surface border border-border rounded-xl grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs font-mono">
+                <div>
+                  <span className="text-foreground-muted block text-[10px] uppercase">Tipo:</span>
+                  <span className="text-foreground font-bold">{data.firma.tipo_firma || "INGRESO"}</span>
                 </div>
-                <div className="flex flex-col sm:flex-row justify-between sm:justify-start gap-1 sm:gap-2">
-                  <span className="text-slate-400">Términos:</span>
-                  <span className="text-emerald-400 font-medium">
-                    {data.firma.terminos_aceptados ? "Aceptados" : "No Aceptados"}
+                <div>
+                  <span className="text-foreground-muted block text-[10px] uppercase">Términos:</span>
+                  <span className="text-primary font-bold">
+                    {data.firma.terminos_aceptados ? "Aceptados ✓" : "No"}
                   </span>
                 </div>
-                <div className="flex flex-col sm:flex-row justify-between sm:justify-start gap-1 sm:gap-2">
-                  <span className="text-slate-400">Versión:</span>
-                  <span className="text-slate-300 font-mono font-medium">{data.firma.version_terminos || "LEGACY_UNVERSIONED"}</span>
+                <div>
+                  <span className="text-foreground-muted block text-[10px] uppercase">Versión:</span>
+                  <span className="text-foreground font-bold">{data.firma.version_terminos || "LEGACY"}</span>
                 </div>
-                <div className="flex flex-col sm:flex-row justify-between sm:justify-start gap-1 sm:gap-2">
-                  <span className="text-slate-400">Fecha de Firma:</span>
-                  <span className="text-slate-200">{formatDate(data.firma.fecha_firma)}</span>
+                <div>
+                  <span className="text-foreground-muted block text-[10px] uppercase">Fecha:</span>
+                  <span className="text-foreground">{formatDate(data.firma.fecha_firma)}</span>
                 </div>
               </div>
             </div>
           ) : (
-            <div className="p-8 bg-slate-950/60 border border-slate-800 rounded-xl text-center space-y-2">
-              <ShieldCheck className="w-8 h-8 text-slate-600 mx-auto" />
-              <p className="text-xs text-slate-400">
-                Sin firma digital registrada.
-              </p>
+            <div className="p-8 bg-surface border border-border rounded-xl text-center space-y-2">
+              <ShieldCheck className="w-8 h-8 text-foreground-muted mx-auto" />
+              <p className="text-xs text-foreground-muted font-mono">Sin firma digital registrada</p>
             </div>
           )}
         </div>
@@ -887,22 +651,22 @@ export default function ReceptionDetailView({ recepcionId, onBack }) {
 
       {/* TAB 5: HISTORIAL */}
       {activeTab === "historial" && (
-        <div className="p-5 bg-slate-900/60 border border-slate-800 rounded-2xl space-y-4">
-          <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-            <History className="w-4 h-4 text-emerald-400" />
+        <div className="p-5 bg-card border border-border rounded-2xl space-y-4">
+          <h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
+            <History className="w-4 h-4 text-primary" />
             Historial de Registro
           </h4>
-          <div className="space-y-3 text-xs">
-            <div className="p-3.5 bg-slate-950/60 border-l-2 border-l-emerald-400 rounded-r-xl border border-slate-800 flex justify-between items-center">
+          <div className="space-y-3 text-xs font-mono">
+            <div className="p-3.5 bg-surface border-l-2 border-l-primary rounded-r-xl border border-border flex justify-between items-center">
               <div>
-                <span className="text-slate-200 font-semibold block">
-                  Recepción Creada ({data.estado?.nombre || "RECIBIDA"})
+                <span className="text-foreground font-bold block">
+                  Recepción Registrada ({data.estado?.nombre || "RECIBIDA"})
                 </span>
-                <span className="text-slate-400 text-[11px]">
-                  Registrado en el módulo de recepción de taller
+                <span className="text-foreground-muted text-[11px]">
+                  Registrado en el sistema de taller
                 </span>
               </div>
-              <span className="text-slate-400">{formatDate(data.fecha_recepcion)}</span>
+              <span className="text-foreground-muted">{formatDate(data.fecha_recepcion)}</span>
             </div>
           </div>
         </div>

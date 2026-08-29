@@ -108,10 +108,34 @@ export async function enqueueS3Cleanup(
 export async function executeDurableS3Cleanup(
   cleanupId: number,
   objectKey: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; preserved?: boolean }> {
   await ensureS3CleanupTable();
 
   try {
+    // Safety check: verify if the object_key is currently referenced by any active database entity
+    const [activeCheckChk] = await query(
+      `SELECT recepcion_checklist_id
+       FROM admin.recepcion_checklist
+       WHERE (ruta_archivo = $1 OR url_archivo = $1)
+         AND (activo = true OR activo IS NULL)
+       LIMIT 1`,
+      [objectKey]
+    ).catch(() => [null]);
+
+    if (activeCheckChk) {
+      // Actively referenced: preserve S3 physical file and complete queue obligation
+      await query(`
+        UPDATE admin.s3_cleanup_queue
+        SET estado = 'COMPLETED',
+            intentos = intentos + 1,
+            ultimo_error = 'PRESERVED: Active reference found in database',
+            fecha_procesamiento = NOW()
+        WHERE cleanup_id = $1
+      `, [cleanupId]);
+
+      return { success: true, preserved: true };
+    }
+
     const deleted = await deleteS3Object(objectKey);
     if (!deleted) {
       throw new Error("deleteS3Object devolvió false o S3 no está configurado.");
