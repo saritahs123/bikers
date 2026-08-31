@@ -18,7 +18,9 @@ import {
   ArrowLeft,
   Layers,
   Sparkles,
-  Info
+  Info,
+  Search,
+  ChevronDown
 } from "lucide-react";
 import { getServiceStateRules } from "@/lib/workshop-state-machine";
 
@@ -151,6 +153,11 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
   // Unified Item Modal Form States
   const [itemType, setItemType] = useState("SERVICIO"); // "SERVICIO" | "PRODUCTO"
   const [formTipoServicioId, setFormTipoServicioId] = useState("");
+  const [serviceSearch, setServiceSearch] = useState("");
+  const [isServiceDropdownOpen, setIsServiceDropdownOpen] = useState(false);
+  const [activeServiceIndex, setActiveServiceIndex] = useState(-1);
+  const serviceComboboxRef = useRef(null);
+  const serviceSearchInputRef = useRef(null);
   const [formBicicletaComponenteId, setFormBicicletaComponenteId] = useState("");
   const [formNuevoEstadoComponenteId, setFormNuevoEstadoComponenteId] = useState("");
   const [formProductoId, setFormProductoId] = useState("");
@@ -535,6 +542,9 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
     setEditingItem(null);
     setItemType("SERVICIO");
     setFormTipoServicioId("");
+    setServiceSearch("");
+    setIsServiceDropdownOpen(false);
+    setActiveServiceIndex(-1);
     setFormBicicletaComponenteId("");
     setFormNuevoEstadoComponenteId("");
     setFormProductoId("");
@@ -1699,25 +1709,142 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
               <>
                 <div className="md:col-span-2">
                   <label className="text-[11px] text-slate-400 block mb-1 font-semibold uppercase">Tipo de Servicio *</label>
-                  <select
-                    value={formTipoServicioId}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setFormTipoServicioId(val);
-                      const ts = tiposServicio.find(t => String(t.tipo_servicio_id) === val);
-                      if (ts && ts.precio_base) {
-                        setFormPrecioUnitario(String(ts.precio_base));
+                  {(() => {
+                    const selectedServiceObj = tiposServicio.find(t => String(t.tipo_servicio_id) === String(formTipoServicioId));
+                    const normalizeText = (text) => String(text || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                    const filteredServices = (tiposServicio || []).filter(t => {
+                      if (!serviceSearch.trim()) return true;
+                      const q = normalizeText(serviceSearch);
+                      return normalizeText(t.nombre).includes(q) || normalizeText(t.codigo).includes(q);
+                    }).slice(0, 8);
+
+                    const handleSelectServiceCombobox = (t) => {
+                      if (!t) return;
+                      setFormTipoServicioId(String(t.tipo_servicio_id));
+                      if (t.precio_base) {
+                        setFormPrecioUnitario(String(t.precio_base));
                       }
-                    }}
-                    className="w-full min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-[#bfce7f]"
-                  >
-                    <option value="">-- Seleccionar servicio --</option>
-                    {tiposServicio.map((t) => (
-                      <option key={t.tipo_servicio_id} value={t.tipo_servicio_id}>
-                        {t.nombre} (RD$ {Number(t.precio_base || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })})
-                      </option>
-                    ))}
-                  </select>
+                      setServiceSearch("");
+                      setIsServiceDropdownOpen(false);
+                      setActiveServiceIndex(-1);
+                    };
+
+                    const handleClearServiceCombobox = () => {
+                      setFormTipoServicioId("");
+                      setFormPrecioUnitario("");
+                      setServiceSearch("");
+                      setIsServiceDropdownOpen(false);
+                      setActiveServiceIndex(-1);
+                      if (serviceSearchInputRef.current) {
+                        serviceSearchInputRef.current.focus();
+                      }
+                    };
+
+                    const handleServiceKeyDown = (e) => {
+                      if (!isServiceDropdownOpen) {
+                        if (e.key === "ArrowDown" || e.key === "Enter") {
+                          setIsServiceDropdownOpen(true);
+                          return;
+                        }
+                      }
+                      if (e.key === "ArrowDown") {
+                        e.preventDefault();
+                        setActiveServiceIndex((prev) => (prev < filteredServices.length - 1 ? prev + 1 : 0));
+                      } else if (e.key === "ArrowUp") {
+                        e.preventDefault();
+                        setActiveServiceIndex((prev) => (prev > 0 ? prev - 1 : filteredServices.length - 1));
+                      } else if (e.key === "Enter") {
+                        e.preventDefault();
+                        if (activeServiceIndex >= 0 && activeServiceIndex < filteredServices.length) {
+                          handleSelectServiceCombobox(filteredServices[activeServiceIndex]);
+                        }
+                      } else if (e.key === "Escape") {
+                        e.preventDefault();
+                        setIsServiceDropdownOpen(false);
+                        setActiveServiceIndex(-1);
+                      }
+                    };
+
+                    return !selectedServiceObj ? (
+                      <div className="relative" ref={serviceComboboxRef}>
+                        <div className="relative">
+                          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                          <input
+                            ref={serviceSearchInputRef}
+                            type="text"
+                            value={serviceSearch}
+                            onChange={(e) => {
+                              setServiceSearch(e.target.value);
+                              setIsServiceDropdownOpen(true);
+                              setActiveServiceIndex(-1);
+                            }}
+                            onFocus={() => setIsServiceDropdownOpen(true)}
+                            onKeyDown={handleServiceKeyDown}
+                            placeholder="Buscar tipo de servicio..."
+                            className="w-full pl-9 pr-8 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-[#bfce7f] font-mono transition-all"
+                          />
+                          <ChevronDown className="w-4 h-4 absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                        </div>
+
+                        {isServiceDropdownOpen && (
+                          <div className="absolute left-0 right-0 top-full mt-1.5 bg-slate-950 border border-slate-800 rounded-xl shadow-2xl z-50 overflow-hidden font-mono text-xs max-h-60 overflow-y-auto custom-scrollbar animate-in fade-in duration-100">
+                            {filteredServices.length === 0 ? (
+                              <div className="p-3 text-center text-slate-500 text-xs">
+                                Sin coincidencias para &quot;{serviceSearch}&quot;
+                              </div>
+                            ) : (
+                              filteredServices.map((t, idx) => (
+                                <div
+                                  key={t.tipo_servicio_id}
+                                  onClick={() => handleSelectServiceCombobox(t)}
+                                  className={`p-2.5 flex items-center justify-between cursor-pointer border-b border-slate-900 last:border-0 transition-colors ${
+                                    activeServiceIndex === idx ? "bg-slate-900 text-slate-100" : "hover:bg-slate-900"
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2.5 min-w-0">
+                                    <div className="w-7 h-7 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center font-bold text-[#bfce7f] shrink-0">
+                                      <Wrench size={14} />
+                                    </div>
+                                    <div className="truncate">
+                                      <p className="font-bold text-slate-200 truncate">{t.nombre}</p>
+                                      <p className="text-[10px] text-slate-500 truncate">
+                                        {t.codigo} {t.duracion_estimada_horas ? `• ${Number(t.duracion_estimada_horas).toFixed(1)}h` : ""}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <span className="text-[11px] font-bold text-emerald-400 font-mono ml-2 shrink-0">
+                                    RD$ {Number(t.precio_base || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })}
+                                  </span>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="p-2.5 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-between">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-7 h-7 rounded-lg bg-[#bfce7f]/10 border border-[#bfce7f]/30 flex items-center justify-center font-bold text-[#bfce7f] shrink-0 font-mono">
+                            <Wrench size={14} />
+                          </div>
+                          <div className="truncate">
+                            <p className="font-bold text-slate-200 text-xs truncate">{selectedServiceObj.nombre}</p>
+                            <p className="text-[10px] text-slate-400 font-mono truncate">
+                              {selectedServiceObj.codigo} • Base: RD$ {Number(selectedServiceObj.precio_base || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleClearServiceCombobox}
+                          className="p-1 text-slate-400 hover:text-rose-400 hover:bg-rose-950/30 rounded-lg transition-colors cursor-pointer shrink-0 ml-1"
+                          title="Cambiar tipo de servicio"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Componente Afectado with Inline Creator */}

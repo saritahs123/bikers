@@ -65,7 +65,7 @@ export function TopBar({
 
   return (
     <header
-      className={`fixed top-0 right-0 h-16 bg-surface border-b border-border flex justify-between items-center px-4 md:px-xl z-30 transition-all duration-300 ease-in-out ${
+      className={`fixed top-0 right-0 h-16 bg-surface border-b border-border flex justify-between items-center px-4 md:px-8 z-30 transition-all duration-300 ease-in-out ${
         isSidebarOpen ? "md:left-64 md:w-[calc(100%-16rem)] left-0 w-full" : "left-0 w-full"
       }`}
     >
