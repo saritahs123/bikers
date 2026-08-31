@@ -45,14 +45,6 @@
 
   --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-
-  --spacing-gutter: 24px;
-  --spacing-md: 16px;
-  --spacing-xl: 40px;
-  --spacing-xs: 4px;
-  --spacing-sm: 8px;
-  --spacing-lg: 24px;
-  --spacing-container-max: 1440px;
 }
 
 /* --------------------------------------------------------------------------

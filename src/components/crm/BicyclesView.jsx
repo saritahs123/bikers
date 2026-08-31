@@ -1528,7 +1528,7 @@ export default function BicyclesView({ initialBikeId = null, initialTab = "gener
       {/* Delete Confirmation Modal */}
       {isDeletingModalOpen && itemToDelete && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-card border border-border rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 font-mono text-xs">
+          <div className="bg-card border border-border rounded-2xl w-full max-w-[460px] p-6 shadow-2xl space-y-4 font-mono text-xs">
             <div className="flex items-center gap-3 text-rose-400">
               <AlertCircle size={22} />
               <h3 className="text-sm font-bold text-foreground">Eliminar Bicicleta</h3>

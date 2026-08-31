@@ -75,6 +75,13 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
   const bikeComboboxRef = useRef(null);
   const bikeSearchInputRef = useRef(null);
 
+  // Service Type Autocomplete & Selection State
+  const [serviceSearch, setServiceSearch] = useState("");
+  const [isServiceDropdownOpen, setIsServiceDropdownOpen] = useState(false);
+  const [activeServiceIndex, setActiveServiceIndex] = useState(-1);
+  const serviceComboboxRef = useRef(null);
+  const serviceSearchInputRef = useRef(null);
+
   // Multi-Service State & Draft Validation Errors
   const [serviciosList, setServiciosList] = useState([]);
   const [currentServicioId, setCurrentServicioId] = useState("");
@@ -142,7 +149,7 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
     }
   }, [isOpen]);
 
-  // Click outside to close client & bike dropdowns
+  // Click outside to close client, bike & service dropdowns
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (comboboxRef.current && !comboboxRef.current.contains(e.target)) {
@@ -150,6 +157,9 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
       }
       if (bikeComboboxRef.current && !bikeComboboxRef.current.contains(e.target)) {
         setIsBikeDropdownOpen(false);
+      }
+      if (serviceComboboxRef.current && !serviceComboboxRef.current.contains(e.target)) {
+        setIsServiceDropdownOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -494,6 +504,78 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
     }
   };
 
+  // Filtered Service Types for Searchable Combobox
+  const filteredServicesList = (catalogs.tipos_servicio || []).filter((ts) => {
+    if (!serviceSearch.trim()) return true;
+    const q = normalizeText(serviceSearch);
+    const nombre = normalizeText(ts.nombre);
+    const codigo = normalizeText(ts.codigo);
+    const desc = normalizeText(ts.descripcion);
+    const cat = normalizeText(ts.categoria_nombre);
+
+    return (
+      nombre.includes(q) ||
+      codigo.includes(q) ||
+      desc.includes(q) ||
+      cat.includes(q)
+    );
+  });
+
+  const displayedServices = filteredServicesList.slice(0, 8);
+
+  const selectedServiceType = (catalogs.tipos_servicio || []).find(
+    (t) => String(t.tipo_servicio_id) === String(currentServicioId)
+  );
+
+  const handleSelectServiceCombobox = (ts) => {
+    if (!ts) return;
+    const sId = String(ts.tipo_servicio_id);
+    setCurrentServicioId(sId);
+    setCurrentPrecio(String(ts.precio_base || "0"));
+    setServiceSearch("");
+    setIsServiceDropdownOpen(false);
+    setActiveServiceIndex(-1);
+    setServiceDraftErrors((prev) => ({ ...prev, tipo_servicio_id: "", precio_estimado: "" }));
+    setServiceSuccessMsg("");
+  };
+
+  const handleClearServiceCombobox = () => {
+    setCurrentServicioId("");
+    setCurrentPrecio("");
+    setServiceSearch("");
+    setIsServiceDropdownOpen(false);
+    setActiveServiceIndex(-1);
+    if (serviceSearchInputRef.current) {
+      serviceSearchInputRef.current.focus();
+    }
+  };
+
+  const handleServiceKeyDown = (e) => {
+    if (!isServiceDropdownOpen) {
+      if (e.key === "ArrowDown" || e.key === "Enter") {
+        setIsServiceDropdownOpen(true);
+        return;
+      }
+    }
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveServiceIndex((prev) => (prev < displayedServices.length - 1 ? prev + 1 : 0));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveServiceIndex((prev) => (prev > 0 ? prev - 1 : displayedServices.length - 1));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (activeServiceIndex >= 0 && activeServiceIndex < displayedServices.length) {
+        handleSelectServiceCombobox(displayedServices[activeServiceIndex]);
+      }
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setIsServiceDropdownOpen(false);
+      setActiveServiceIndex(-1);
+    }
+  };
+
   // Handle choice of service type in sub-form
   const handleSelectServiceType = (sId) => {
     setCurrentServicioId(sId);
@@ -638,6 +720,9 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
     // Reset sub-form
     setCurrentServicioId("");
     setCurrentPrecio("");
+    setServiceSearch("");
+    setIsServiceDropdownOpen(false);
+    setActiveServiceIndex(-1);
     setCurrentBicicletaComponenteId("");
     setAttachedNewComponent(null);
     setIsAddingNewComponent(false);
@@ -1210,19 +1295,91 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
                   <div className="p-3.5 bg-surface border border-border rounded-xl space-y-3">
                     <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
                       <div className="sm:col-span-5">
-                        <label className="block text-[11px] text-foreground-muted mb-1">Tipo de Servicio</label>
-                        <select
-                          value={currentServicioId}
-                          onChange={(e) => handleSelectServiceType(e.target.value)}
-                          className="w-full p-2 bg-card border border-border rounded-lg text-xs text-foreground focus:outline-none focus:border-primary"
-                        >
-                          <option value="">Seleccione servicio...</option>
-                          {catalogs.tipos_servicio.map((ts) => (
-                            <option key={ts.tipo_servicio_id} value={ts.tipo_servicio_id}>
-                              {ts.nombre} (RD$ {Number(ts.precio_base || 0).toFixed(2)})
-                            </option>
-                          ))}
-                        </select>
+                        <label className="block text-[11px] text-foreground-muted mb-1 font-semibold">
+                          Tipo de Servicio <span className="text-error">*</span>
+                        </label>
+                        {!selectedServiceType ? (
+                          <div className="relative" ref={serviceComboboxRef}>
+                            <div className="relative">
+                              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-foreground-muted pointer-events-none" />
+                              <input
+                                ref={serviceSearchInputRef}
+                                type="text"
+                                value={serviceSearch}
+                                onChange={(e) => {
+                                  setServiceSearch(e.target.value);
+                                  setIsServiceDropdownOpen(true);
+                                  setActiveServiceIndex(-1);
+                                }}
+                                onFocus={() => setIsServiceDropdownOpen(true)}
+                                onKeyDown={handleServiceKeyDown}
+                                placeholder="Buscar por código o servicio..."
+                                className={`w-full pl-9 pr-8 py-2 bg-card border rounded-lg text-xs text-foreground placeholder-foreground-muted focus:outline-none focus:border-primary transition-all font-mono ${
+                                  serviceDraftErrors.tipo_servicio_id ? "border-error focus:border-error" : "border-border"
+                                }`}
+                              />
+                              <ChevronDown className="w-4 h-4 absolute right-2.5 top-1/2 -translate-y-1/2 text-foreground-muted pointer-events-none" />
+                            </div>
+
+                            {isServiceDropdownOpen && (
+                              <div className="absolute left-0 right-0 top-full mt-1.5 bg-card border border-border rounded-xl shadow-2xl z-50 overflow-hidden font-mono text-xs max-h-60 overflow-y-auto custom-scrollbar animate-in fade-in duration-100">
+                                {displayedServices.length === 0 ? (
+                                  <div className="p-3 text-center text-foreground-muted text-xs">
+                                    Sin coincidencias encontradas
+                                  </div>
+                                ) : (
+                                  displayedServices.map((ts, idx) => (
+                                    <div
+                                      key={ts.tipo_servicio_id}
+                                      onClick={() => handleSelectServiceCombobox(ts)}
+                                      className={`p-2.5 flex items-center justify-between cursor-pointer border-b border-border-subtle last:border-0 transition-colors ${
+                                        activeServiceIndex === idx ? "bg-hover text-foreground" : "hover:bg-hover"
+                                      }`}
+                                    >
+                                      <div className="flex items-center gap-2.5 min-w-0">
+                                        <div className="w-7 h-7 rounded-lg bg-surface border border-border flex items-center justify-center font-bold text-primary shrink-0">
+                                          <Wrench size={14} />
+                                        </div>
+                                        <div className="truncate">
+                                          <p className="font-bold text-foreground truncate">{ts.nombre}</p>
+                                          <p className="text-[10px] text-foreground-muted truncate">
+                                            {ts.codigo} {ts.categoria_nombre ? `• ${ts.categoria_nombre}` : ""}{" "}
+                                            {ts.duracion_estimada_horas ? `• ${Number(ts.duracion_estimada_horas).toFixed(1)}h` : ""}
+                                          </p>
+                                        </div>
+                                      </div>
+                                      <span className="text-[11px] font-bold text-emerald-400 font-mono ml-2 shrink-0">
+                                        RD$ {Number(ts.precio_base || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })}
+                                      </span>
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="p-2 bg-card border border-border rounded-lg flex items-center justify-between">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-7 h-7 rounded-lg bg-primary-muted border border-primary/30 flex items-center justify-center font-bold text-primary shrink-0 font-mono">
+                                <Wrench size={14} />
+                              </div>
+                              <div className="truncate">
+                                <p className="font-bold text-foreground text-xs truncate">{selectedServiceType.nombre}</p>
+                                <p className="text-[10px] text-foreground-muted font-mono truncate">
+                                  {selectedServiceType.codigo} • Base: RD$ {Number(selectedServiceType.precio_base || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })}
+                                </p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={handleClearServiceCombobox}
+                              className="p-1 text-foreground-muted hover:text-error hover:bg-error-muted rounded-lg transition-colors cursor-pointer shrink-0 ml-1"
+                              title="Cambiar tipo de servicio"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        )}
                         {serviceDraftErrors.tipo_servicio_id && (
                           <p className="text-error text-[10px] mt-1">{serviceDraftErrors.tipo_servicio_id}</p>
                         )}

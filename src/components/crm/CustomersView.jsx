@@ -1386,7 +1386,7 @@ export default function CustomersView() {
             onClick={() => !isDeleting && setIsDeletingModalOpen(false)}
           />
 
-          <div className="relative bg-card border border-border rounded-2xl p-6 max-w-md w-full shadow-2xl z-10 font-sans space-y-4">
+          <div className="relative bg-card border border-border rounded-2xl p-6 w-full max-w-[460px] shadow-2xl z-10 font-sans space-y-4">
             <div className="flex items-center gap-3 text-error">
               <div className="p-3 bg-error-muted border border-error/30 rounded-xl">
                 <AlertTriangle size={24} />

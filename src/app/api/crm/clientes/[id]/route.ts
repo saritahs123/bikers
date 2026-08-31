@@ -480,13 +480,7 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
 
     const beforeClient = clientOwnership[0];
 
-    // 2. Audit all dependent relationships in CRM and Taller
-    const bikeCheck = await query(`
-      SELECT COUNT(*)::integer AS total FROM admin.bicicletas
-      WHERE cliente_id = $1 AND fecha_eliminacion IS NULL
-    `, [clienteId]);
-    const totalBikes = Number(bikeCheck[0]?.total || 0);
-
+    // 2. Audit dependent relationships in Taller / Invoicing
     const otCheck = await query(`
       SELECT COUNT(*)::integer AS total FROM admin.ordenes_trabajo
       WHERE cliente_id = $1 AND (activo = true OR activo IS NULL)
@@ -511,57 +505,49 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
     `, [clienteId]);
     const totalFirmas = Number(firmaCheck[0]?.total || 0);
 
-    // 3. Block physical deletion if dependencies exist -> Return semantic HTTP 409
-    if (totalBikes > 0 || totalOrders > 0 || totalReceptions > 0 || totalInvoices > 0 || totalFirmas > 0) {
-      // Record denied activity attempt
-      await recordUserActivity({
-        userId: session.usuario_id,
-        modulo: "CRM",
-        evento: "CLIENT_DELETE_BLOCKED",
-        descripcion: `Intento de eliminación de cliente con dependencias (ID: ${clienteId})`,
-        resultado: "DENEGADO",
-        req
-      });
+    const hasOperationalHistory = totalOrders > 0 || totalReceptions > 0 || totalInvoices > 0 || totalFirmas > 0;
 
-      return NextResponse.json({
-        success: false,
-        error: "CLIENT_HAS_DEPENDENCIES",
-        code: "CLIENT_HAS_DEPENDENCIES",
-        message: "No puedes eliminar este cliente porque posee historial operativo o registros asociados en el sistema. Puedes desactivarlo en su lugar.",
-        dependencies: {
-          bicicletas: totalBikes,
-          ordenes: totalOrders,
-          recepciones: totalReceptions,
-          facturas: totalInvoices,
-          firmas: totalFirmas
+    // 3. Execute safe deletion inside database transaction
+    await withTransaction(async (client) => {
+      if (hasOperationalHistory) {
+        // Soft delete client and their bicycles to preserve audit/financial references
+        await client.query(`
+          UPDATE admin.bicicletas
+          SET fecha_eliminacion = NOW(), activo = false, usuario_eliminacion = $1
+          WHERE cliente_id = $2 AND fecha_eliminacion IS NULL
+        `, [session.usuario_id, clienteId]);
+
+        await client.query(`
+          UPDATE admin.clientes
+          SET fecha_eliminacion = NOW(), activo = false, usuario_eliminacion = $1
+          WHERE cliente_id = $2 AND empresa_id = $3
+        `, [session.usuario_id, clienteId, session.empresa_id]);
+      } else {
+        // Physical deletion when no historical workshop records exist
+        const bikeIdsRes = await client.query(`
+          SELECT bicicleta_id FROM admin.bicicletas WHERE cliente_id = $1
+        `, [clienteId]);
+        const bikeIds = (bikeIdsRes.rows || []).map((r: any) => r.bicicleta_id);
+
+        if (bikeIds.length > 0) {
+          await client.query(`DELETE FROM admin.bicicleta_fotos WHERE bicicleta_id = ANY($1)`, [bikeIds]);
+          await client.query(`DELETE FROM admin.bicicleta_componentes WHERE bicicleta_id = ANY($1)`, [bikeIds]);
+          await client.query(`DELETE FROM admin.bicicletas WHERE cliente_id = $1`, [clienteId]);
         }
-      }, { status: 409 });
-    }
 
-    // 4. Client has 0 dependencies -> Perform physical DELETE inside transaction
-    const deleteResult = await withTransaction(async (client) => {
-      const res = await client.query(`
-        DELETE FROM admin.clientes
-        WHERE cliente_id = $1 AND empresa_id = $2
-        RETURNING cliente_id
-      `, [clienteId, session.empresa_id]);
-      return res.rows;
+        await client.query(`
+          DELETE FROM admin.clientes
+          WHERE cliente_id = $1 AND empresa_id = $2
+        `, [clienteId, session.empresa_id]);
+      }
     });
-
-    if (!deleteResult || deleteResult.length === 0) {
-      return NextResponse.json({
-        success: false,
-        error: "NOT_FOUND",
-        message: "Cliente no encontrado."
-      }, { status: 404 });
-    }
 
     // Forensic logging on successful deletion
     await recordUserActivity({
       userId: session.usuario_id,
       modulo: "CRM",
       evento: "CLIENT_DELETED",
-      descripcion: `Eliminación física del cliente ${beforeClient.nombre_completo} (ID: ${clienteId})`,
+      descripcion: `Eliminación de cliente ${beforeClient.nombre_completo} (ID: ${clienteId})`,
       req
     });
 
@@ -577,7 +563,7 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
         telefono_principal: beforeClient.telefono_principal
       })),
       valorNuevo: null,
-      motivo: `Eliminación física de cliente ID ${clienteId} sin dependencias`,
+      motivo: `Eliminación de cliente ID ${clienteId}`,
       req
     });
 
