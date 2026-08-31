@@ -57,6 +57,8 @@ function SidebarContent({
         { href: "/workshop?view=work_orders", label: "ÓRDENES DE TRABAJO" },
         { href: "/workshop?view=kanban", label: "VISTA KANBAN" },
         { href: "/workshop?view=billing", label: "DESPACHO DE ÓRDENES" },
+        { href: "/workshop/service-types", label: "TIPOS DE SERVICIO" },
+        { href: "/workshop/products", label: "PRODUCTOS" },
       ]
     },
     {
