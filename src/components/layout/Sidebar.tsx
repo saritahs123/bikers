@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useState, useEffect, Suspense } from "react";
+import { PanelLeftClose } from "lucide-react";
 
 interface SubMenuItem {
   href?: string;
@@ -186,7 +188,7 @@ function SidebarContent({
           </button>
 
           {isExpanded && (
-            <div className="flex flex-col mt-1.5 ml-4 pl-3.5 border-l-2 border-border space-y-1 py-1 font-mono text-xs animate-in fade-in duration-200">
+            <div className="flex flex-col mt-1.5 ml-2 space-y-1 py-1 font-mono text-xs animate-in fade-in duration-200">
               {item.submenu.map((sub, idx) => {
                 if (sub.isHeader) {
                   return (
@@ -270,11 +272,39 @@ function SidebarContent({
 
       {/* Unified Responsive Sidebar (Desktop Fixed / Mobile Drawer) */}
       <aside
-        className={`fixed left-0 top-0 h-full w-64 bg-surface border-r border-border flex flex-col pt-5 pb-4 px-4 z-45 font-mono transition-transform duration-300 ease-in-out shadow-2xl md:shadow-none ${
+        className={`fixed left-0 top-0 h-full w-64 bg-surface border-r border-border flex flex-col pb-4 px-4 z-45 font-mono transition-transform duration-300 ease-in-out shadow-2xl md:shadow-none ${
           isOpen ? "translate-x-0" : "-translate-x-full pointer-events-none"
         }`}
         aria-label="Menú principal de navegación"
       >
+        {/* Header inside the sidebar frame with Centered Larger Logo and Toggle Button */}
+        <div className="relative h-20 flex items-center justify-center -mx-4 px-4 mb-2 shrink-0 bg-surface">
+          <Link
+            href="/"
+            onClick={onNavigate}
+            className="flex items-center justify-center transition-transform hover:scale-[1.03] focus:outline-none"
+            title="Bikers' Fort Core"
+          >
+            <Image
+              src="/logo.png"
+              alt="Bikers' Fort Logo"
+              width={180}
+              height={55}
+              className="h-12 max-h-14 w-auto object-contain"
+              priority
+            />
+          </Link>
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-xl border border-border bg-surface-subtle text-foreground-secondary hover:text-primary hover:border-primary/50 hover:bg-hover transition-all cursor-pointer flex items-center justify-center shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/30 shrink-0"
+            title="Ocultar menú"
+            aria-label="Ocultar menú de navegación"
+          >
+            <PanelLeftClose className="w-5 h-5 transition-colors" />
+          </button>
+        </div>
+
         <div className="flex-1 overflow-y-auto custom-scrollbar -mx-2 px-2">
           <nav className="space-y-1">
             {navItems.map((item) => renderItemCard(item))}

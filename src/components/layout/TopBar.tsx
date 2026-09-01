@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { Moon, Sun, Check, Menu } from "lucide-react";
+import { Moon, Sun, Check, PanelLeftOpen } from "lucide-react";
 import { useTheme } from "@/context/ThemeContext";
 
 export interface AuthenticatedUser {
@@ -70,30 +70,34 @@ export function TopBar({
       }`}
     >
       <div className="flex items-center gap-3 md:gap-4 min-w-0">
-        <button
-          type="button"
-          onClick={onMenuToggle}
-          className="p-2 rounded-xl border border-border bg-surface-subtle text-foreground-secondary hover:text-primary hover:border-primary/50 hover:bg-hover transition-all cursor-pointer flex items-center justify-center shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/30 shrink-0"
-          title={isSidebarOpen ? "Ocultar menú" : "Mostrar menú"}
-          aria-label={isSidebarOpen ? "Ocultar menú de navegación" : "Mostrar menú de navegación"}
-        >
-          <Menu className="w-5 h-5 transition-colors" />
-        </button>
+        {!isSidebarOpen && (
+          <>
+            <button
+              type="button"
+              onClick={onMenuToggle}
+              className="p-2 rounded-xl border border-border bg-surface-subtle text-foreground-secondary hover:text-primary hover:border-primary/50 hover:bg-hover transition-all cursor-pointer flex items-center justify-center shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/30 shrink-0"
+              title="Mostrar menú"
+              aria-label="Mostrar menú de navegación"
+            >
+              <PanelLeftOpen className="w-5 h-5 transition-colors" />
+            </button>
 
-        <Link
-          href="/"
-          className="flex items-center transition-transform hover:scale-[1.02] focus:outline-none shrink-0"
-          title="Bikers' Fort Core"
-        >
-          <Image
-            src="/logo.png"
-            alt="Bikers' Fort Logo"
-            width={160}
-            height={50}
-            className="h-9 sm:h-11 md:h-12 w-auto object-contain shrink-0"
-            priority
-          />
-        </Link>
+            <Link
+              href="/"
+              className="flex items-center transition-transform hover:scale-[1.02] focus:outline-none shrink-0"
+              title="Bikers' Fort Core"
+            >
+              <Image
+                src="/logo.png"
+                alt="Bikers' Fort Logo"
+                width={160}
+                height={50}
+                className="h-9 sm:h-11 md:h-12 w-auto object-contain shrink-0"
+                priority
+              />
+            </Link>
+          </>
+        )}
       </div>
 
       <div className="flex items-center gap-3">

@@ -11,21 +11,27 @@ export function DashboardShell({
   user: AuthenticatedUser;
   children: React.ReactNode;
 }) {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
-  // Desktop defaults to open on initial client load
+  // Close sidebar on mobile/tablet on initial client mount
   useEffect(() => {
-    if (typeof window !== "undefined" && window.innerWidth >= 1024) {
-      setIsSidebarOpen(true);
+    if (typeof window !== "undefined" && window.innerWidth < 1024) {
+      setIsSidebarOpen(false);
     }
   }, []);
+
+  const handleNavigate = () => {
+    if (typeof window !== "undefined" && window.innerWidth < 1024) {
+      setIsSidebarOpen(false);
+    }
+  };
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <Sidebar
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
-        onNavigate={() => setIsSidebarOpen(false)}
+        onNavigate={handleNavigate}
       />
       <div className="flex-1 flex flex-col relative w-full min-w-0">
         <TopBar
