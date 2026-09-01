@@ -625,15 +625,6 @@ export default function ServiceTypesView() {
                     </div>
                   </th>
                   <th
-                    onClick={() => handleSort("duracion_estimada_horas")}
-                    className="p-4 cursor-pointer hover:text-foreground select-none text-right"
-                  >
-                    <div className="flex items-center justify-end gap-1.5">
-                      <span>Duración</span>
-                      <ArrowUpDown size={12} />
-                    </div>
-                  </th>
-                  <th
                     onClick={() => handleSort("precio_base")}
                     className="p-4 cursor-pointer hover:text-foreground select-none text-right"
                   >
@@ -652,7 +643,6 @@ export default function ServiceTypesView() {
                       <ArrowUpDown size={12} />
                     </div>
                   </th>
-                  <th className="p-4 text-center select-none">En Uso</th>
                   <th className="p-4 text-right select-none">Acciones</th>
                 </tr>
               </thead>
@@ -681,12 +671,6 @@ export default function ServiceTypesView() {
                     <td className="p-4">
                       <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-primary/10 border border-primary/20 text-primary whitespace-nowrap">
                         {item.categoria_nombre}
-                      </span>
-                    </td>
-                    <td className="p-4 text-right font-bold text-foreground">
-                      <span className="inline-flex items-center gap-1 text-foreground-secondary">
-                        <Clock size={12} className="text-foreground-muted" />
-                        {Number(item.duracion_estimada_horas).toFixed(1)} h
                       </span>
                     </td>
                     <td className="p-4 text-right font-bold text-emerald-400">
@@ -727,15 +711,6 @@ export default function ServiceTypesView() {
                           </>
                         )}
                       </span>
-                    </td>
-                    <td className="p-4 text-center">
-                      {item.uso_count > 0 ? (
-                        <span className="px-2 py-0.5 rounded-full bg-sky-500/10 border border-sky-500/20 text-sky-400 font-bold text-[11px]" title={`${item.uso_count} registros operativos asociados`}>
-                          {item.uso_count}
-                        </span>
-                      ) : (
-                        <span className="text-foreground-muted opacity-40">0</span>
-                      )}
                     </td>
                     <td className="p-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">

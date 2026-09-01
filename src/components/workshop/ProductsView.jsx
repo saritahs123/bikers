@@ -705,16 +705,6 @@ export default function ProductsView() {
                     </div>
                   </th>
                   <th
-                    onClick={() => handleSort("stock_actual")}
-                    className="p-4 cursor-pointer hover:text-foreground select-none text-center"
-                  >
-                    <div className="flex items-center justify-center gap-1.5">
-                      <span>Stock Actual</span>
-                      <ArrowUpDown size={12} />
-                    </div>
-                  </th>
-                  <th className="p-4 text-center select-none">Mín / Máx</th>
-                  <th
                     onClick={() => handleSort("activo")}
                     className="p-4 cursor-pointer hover:text-foreground select-none text-center"
                   >
@@ -777,25 +767,6 @@ export default function ProductsView() {
                       <div className="text-[10px] text-foreground-muted mt-0.5">
                         Costo: RD$ {Number(item.costo_actual).toLocaleString("es-DO", { minimumFractionDigits: 2 })}
                       </div>
-                    </td>
-                    <td className="p-4 text-center">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold border ${
-                          item.is_stock_critico
-                            ? "bg-rose-500/10 border-rose-500/20 text-rose-400"
-                            : "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-                        }`}
-                        title={item.is_stock_critico ? "Stock igual o inferior al mínimo configurado" : "Stock operativo adecuado"}
-                      >
-                        {item.is_stock_critico && <AlertTriangle size={12} className="text-rose-400" />}
-                        <span>{Number(item.stock_actual).toFixed(0)}</span>
-                        <span className="text-[10px] opacity-70 font-normal">{item.unidad_medida_codigo}</span>
-                      </span>
-                    </td>
-                    <td className="p-4 text-center text-foreground-muted text-[11px]">
-                      <span>{Number(item.stock_minimo).toFixed(0)}</span>
-                      <span className="mx-1">/</span>
-                      <span>{item.stock_maximo !== null ? Number(item.stock_maximo).toFixed(0) : "∞"}</span>
                     </td>
                     <td className="p-4 text-center">
                       <span
