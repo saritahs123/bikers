@@ -124,9 +124,11 @@ export default function WorkOrdersKanbanView({ onViewDetail, onOpenNewModal, onT
 
   // Fetch orders from PostgreSQL with timezone and period
   const fetchOrders = useCallback(async (isSilent = false) => {
-    if (!isSilent) setLoading(true);
-    setIsRefreshing(true);
-    setError(null);
+    if (!isSilent) {
+      setLoading(true);
+      setIsRefreshing(true);
+      setError(null);
+    }
 
     try {
       const params = new URLSearchParams();
@@ -150,21 +152,31 @@ export default function WorkOrdersKanbanView({ onViewDetail, onOpenNewModal, onT
       try {
         data = await res.json();
       } catch {
-        throw new Error(res.ok ? "Respuesta inválida del servidor." : `Error del servidor (${res.status})`);
+        if (!isSilent) {
+          throw new Error(res.ok ? "Respuesta inválida del servidor." : `Error del servidor (${res.status})`);
+        }
+        return;
       }
 
       if (!res.ok) {
-        throw new Error(data?.message || data?.error || "Error al consultar las órdenes del taller.");
+        if (!isSilent) {
+          throw new Error(data?.message || data?.error || "Error al consultar las órdenes del taller.");
+        }
+        return;
       }
 
       setOrders(data.data || []);
       setLastUpdated(new Date());
     } catch (err) {
       console.error("fetchOrders Kanban Error:", err);
-      setError(err.message);
+      if (!isSilent) {
+        setError(err.message);
+      }
     } finally {
-      setLoading(false);
-      setIsRefreshing(false);
+      if (!isSilent) {
+        setLoading(false);
+        setIsRefreshing(false);
+      }
     }
   }, [selectedPeriod, customFrom, customTo]);
 
@@ -173,11 +185,11 @@ export default function WorkOrdersKanbanView({ onViewDetail, onOpenNewModal, onT
     fetchOrders(false);
   }, [fetchOrders]);
 
-  // Auto-refresh every 30 seconds for live monitor
+  // Auto-refresh every 10 seconds for live monitor (transparent in background)
   useEffect(() => {
     const interval = setInterval(() => {
       fetchOrders(true);
-    }, 30000);
+    }, 10000);
 
     return () => clearInterval(interval);
   }, [fetchOrders]);

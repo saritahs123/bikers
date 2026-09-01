@@ -106,13 +106,14 @@ export default function DashboardView({ initialMetrics }: { initialMetrics?: Ini
     `RD$ ${Number(val || 0).toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   // Extract snapshot & period data
+  const totalOrdenesVal = dashboardData?.totalOrdenes ?? dashboardData?.total_ordenes ?? ((dashboardData?.ordenesActivas ?? 0) + (dashboardData?.desgloseEstados?.entregadas ?? 0));
   const ordenesActivasVal = dashboardData?.ordenesActivas ?? initialMetrics?.ordenesActivas ?? 0;
   const facturacionPeriodoVal = dashboardData?.facturacion_periodo ?? dashboardData?.facturacionPeriodo ?? initialMetrics?.ingresosDia ?? 0;
   const montoPendienteVal = dashboardData?.monto_pendiente_entrega ?? dashboardData?.montoPendienteEntrega ?? 0;
   const ordenesPendientesVal = dashboardData?.ordenes_pendientes_entrega ?? dashboardData?.ordenesPendientesEntrega ?? 0;
   const nuevosClientesVal = dashboardData?.nuevosClientesSemana ?? initialMetrics?.nuevosClientesSemana ?? 0;
   const ordenesEntregadasVal = dashboardData?.ordenesEntregadasPeriodo ?? 0;
-  const desgloseEstados = dashboardData?.desgloseEstados || { enProceso: 0, recibidas: 0, listas: 0 };
+  const desgloseEstados = dashboardData?.desgloseEstados || { enProceso: 0, recibidas: 0, listas: 0, entregadas: 0 };
 
   const weeklyData: Array<{
     fecha: string;
@@ -305,15 +306,15 @@ export default function DashboardView({ initialMetrics }: { initialMetrics?: Ini
         </div>
       )}
 
-      {/* 6 Main KPI Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3.5">
+      {/* 5 Main KPI Cards Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3.5">
         
-        {/* KPI 1: Órdenes Activas (Snapshot) */}
+        {/* KPI 1: Total de Órdenes (Snapshot) */}
         <div className="bg-card border border-border rounded-2xl p-4 shadow-sm relative overflow-hidden group hover:border-primary/50 transition-all flex flex-col justify-between">
           <div>
             <div className="flex justify-between items-center mb-2">
               <span className="font-mono text-[10px] text-foreground-muted font-bold uppercase tracking-wider block">
-                ÓRDENES ACTIVAS
+                TOTAL DE ÓRDENES
               </span>
               <div className="p-1.5 bg-primary/15 border border-primary/30 rounded-lg text-primary group-hover:scale-110 transition-transform">
                 <Wrench size={16} />
@@ -321,15 +322,15 @@ export default function DashboardView({ initialMetrics }: { initialMetrics?: Ini
             </div>
             <div className="mt-1">
               <h3 className="font-mono text-2xl 2xl:text-3xl font-black text-primary">
-                {loading ? <Loader2 className="w-6 h-6 animate-spin text-primary" /> : ordenesActivasVal}
+                {loading ? <Loader2 className="w-6 h-6 animate-spin text-primary" /> : totalOrdenesVal}
               </h3>
             </div>
             <p className="text-[9.5px] 2xl:text-[10px] text-foreground-muted font-mono mt-1.5 leading-tight">
-              {desgloseEstados.enProceso} en reparación • {desgloseEstados.recibidas} recibidas • {desgloseEstados.listas} listas para entrega
+              {desgloseEstados.enProceso} en reparación • {desgloseEstados.recibidas} recibidas • {desgloseEstados.listas} {desgloseEstados.listas === 1 ? 'lista' : 'listas'} para entrega • {desgloseEstados.entregadas || 0} entregadas
             </p>
           </div>
           <div className="mt-3 pt-2 border-t border-border text-[10px] font-mono text-foreground-disabled">
-            Estado Actual Taller
+            Estado General Taller
           </div>
         </div>
 
@@ -383,32 +384,7 @@ export default function DashboardView({ initialMetrics }: { initialMetrics?: Ini
           </div>
         </div>
 
-        {/* KPI 4: Órdenes Entregadas en el Período (Period) */}
-        <div className="bg-card border border-border rounded-2xl p-4 shadow-sm relative overflow-hidden group hover:border-success/50 transition-all flex flex-col justify-between">
-          <div>
-            <div className="flex justify-between items-center mb-2">
-              <span className="font-mono text-[10px] text-foreground-muted font-bold uppercase tracking-wider block">
-                ÓRDENES ENTREGADAS
-              </span>
-              <div className="p-1.5 bg-success/15 border border-success/30 rounded-lg text-success group-hover:scale-110 transition-transform">
-                <CheckCircle2 size={16} />
-              </div>
-            </div>
-            <div className="mt-1">
-              <h3 className="font-mono text-2xl 2xl:text-3xl font-black text-success">
-                {loading ? <Loader2 className="w-6 h-6 animate-spin text-success" /> : ordenesEntregadasVal}
-              </h3>
-            </div>
-            <p className="text-[10px] text-success font-mono mt-1.5 font-bold">
-              Ciclos completados
-            </p>
-          </div>
-          <div className="mt-3 pt-2 border-t border-border text-[10px] font-mono text-foreground-disabled truncate">
-            {resumenGrafico.periodoTexto}
-          </div>
-        </div>
-
-        {/* KPI 5: Mecánicos Asignados (Snapshot) */}
+        {/* KPI 4: Mecánicos Asignados (Snapshot) */}
         <div className="bg-card border border-border rounded-2xl p-4 shadow-sm relative overflow-hidden group hover:border-info/50 transition-all flex flex-col justify-between">
           <div>
             <div className="flex justify-between items-center mb-2">
@@ -434,7 +410,7 @@ export default function DashboardView({ initialMetrics }: { initialMetrics?: Ini
           </div>
         </div>
 
-        {/* KPI 6: Nuevos Clientes (Period) */}
+        {/* KPI 5: Nuevos Clientes (Period) */}
         <div className="bg-card border border-border rounded-2xl p-4 shadow-sm relative overflow-hidden group hover:border-purple-500/50 transition-all flex flex-col justify-between">
           <div>
             <div className="flex justify-between items-center mb-2">

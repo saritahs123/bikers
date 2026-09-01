@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   Search,
   X,
@@ -43,9 +43,11 @@ export default function BillingKanbanView({ onViewInvoiceDetail }) {
     }
   };
 
-  const fetchBillingData = async (searchQuery = "") => {
-    setLoading(true);
-    setError(null);
+  const fetchBillingData = useCallback(async (searchQuery = "", isSilent = false) => {
+    if (!isSilent) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const url = searchQuery
         ? `/api/taller/facturacion/ordenes?search=${encodeURIComponent(searchQuery)}`
@@ -62,10 +64,16 @@ export default function BillingKanbanView({ onViewInvoiceDetail }) {
       try {
         data = await res.json();
       } catch {
-        throw new Error(res.ok ? "Respuesta inválida del servidor." : `Error del servidor (${res.status})`);
+        if (!isSilent) {
+          throw new Error(res.ok ? "Respuesta inválida del servidor." : `Error del servidor (${res.status})`);
+        }
+        return;
       }
       if (!res.ok) {
-        throw new Error(data?.message || data?.error || "Error al cargar órdenes.");
+        if (!isSilent) {
+          throw new Error(data?.message || data?.error || "Error al cargar órdenes.");
+        }
+        return;
       }
 
       setOrders(data.data || []);
@@ -78,15 +86,29 @@ export default function BillingKanbanView({ onViewInvoiceDetail }) {
       setEstados(data.catalogs?.estados || operationalEstados);
     } catch (err) {
       console.error("fetchBillingData Error:", err);
-      setError(err.message || "Error al conectar con el servidor.");
+      if (!isSilent) {
+        setError(err.message || "Error al conectar con el servidor.");
+      }
     } finally {
-      setLoading(false);
+      if (!isSilent) {
+        setLoading(false);
+      }
     }
-  };
+  }, []);
 
+  // Initial load & debounced search
   useEffect(() => {
-    fetchBillingData(debouncedSearch);
-  }, [debouncedSearch]);
+    fetchBillingData(debouncedSearch, false);
+  }, [debouncedSearch, fetchBillingData]);
+
+  // Auto-refresh every 10 seconds for real-time monitoring (transparent in background)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchBillingData(debouncedSearch, true);
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [debouncedSearch, fetchBillingData]);
 
   const getPrioridadBadge = (nombre, color) => {
     const colorStyle = color ? { color: color, borderColor: `${color}40`, backgroundColor: `${color}15` } : {};
@@ -279,7 +301,7 @@ export default function BillingKanbanView({ onViewInvoiceDetail }) {
       </div>
 
       {/* 4. Main Body: Loading, Error or Kanban Columns */}
-      {loading ? (
+      {loading && !orders.length ? (
         <div className="p-16 flex flex-col items-center justify-center bg-slate-900/40 border border-slate-800 rounded-2xl text-slate-400 gap-3">
           <Loader2 className="w-8 h-8 animate-spin text-emerald-400" />
           <span className="text-xs font-medium">Cargando órdenes...</span>

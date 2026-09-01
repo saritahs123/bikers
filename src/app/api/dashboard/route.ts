@@ -83,25 +83,28 @@ export async function GET(request: NextRequest) {
 
     // --- 1. SNAPSHOT METRICS (ESTADO ACTUAL - INDEPENDIENTES DEL RANGO DE FECHA) ---
     
-    // A. Órdenes Activas de la empresa (estados RECIBIDA, REPARACION, LISTA_ENTREGA)
+    // A. Total de Órdenes y desglose de estados (Snapshot)
     const ordActRows = await query<any>(`
       SELECT 
-        COUNT(ot.orden_trabajo_id)::int AS total_activas,
+        COUNT(ot.orden_trabajo_id)::int AS total_ordenes,
+        COUNT(ot.orden_trabajo_id) FILTER (WHERE eot.codigo IN ('RECIBIDA', 'REPARACION', 'LISTA_ENTREGA'))::int AS total_activas,
         COUNT(ot.orden_trabajo_id) FILTER (WHERE eot.codigo = 'REPARACION')::int AS en_proceso,
         COUNT(ot.orden_trabajo_id) FILTER (WHERE eot.codigo = 'RECIBIDA')::int AS recibidas,
-        COUNT(ot.orden_trabajo_id) FILTER (WHERE eot.codigo = 'LISTA_ENTREGA')::int AS listas
+        COUNT(ot.orden_trabajo_id) FILTER (WHERE eot.codigo = 'LISTA_ENTREGA')::int AS listas,
+        COUNT(ot.orden_trabajo_id) FILTER (WHERE eot.codigo = 'ENTREGADA' OR ot.estado_orden_id = 8)::int AS entregadas
       FROM admin.ordenes_trabajo ot
-      JOIN admin.usuario u_ot ON u_ot.usuario_id = ot.usuario_registro
+      JOIN admin.clientes c ON ot.cliente_id = c.cliente_id
       LEFT JOIN admin.estado_orden_trabajo eot ON eot.estado_orden_id = ot.estado_orden_id
-      WHERE u_ot.empresa_id = $1
-        AND (ot.activo IS DISTINCT FROM false)
-        AND eot.codigo IN ('RECIBIDA', 'REPARACION', 'LISTA_ENTREGA');
+      WHERE (c.empresa_id = $1 OR ot.usuario_registro IN (SELECT usuario_id FROM admin.usuario WHERE empresa_id = $1))
+        AND (ot.activo IS DISTINCT FROM false);
     `, [empresaId]);
 
+    const totalOrdenesVal = ordActRows[0]?.total_ordenes || 0;
     const ordenesActivasVal = ordActRows[0]?.total_activas || 0;
     const enProcesoVal = ordActRows[0]?.en_proceso || 0;
     const recibidasVal = ordActRows[0]?.recibidas || 0;
     const listasVal = ordActRows[0]?.listas || 0;
+    const entregadasVal = ordActRows[0]?.entregadas || 0;
 
     // B. Monto Pendiente de Entrega (Suma total de órdenes activas no entregadas)
     const pendingMontoRows = await query<any>(`
@@ -109,9 +112,9 @@ export async function GET(request: NextRequest) {
         COALESCE(SUM(COALESCE(ot.total_orden, 0)), 0)::numeric AS monto_pendiente,
         COUNT(ot.orden_trabajo_id)::int AS ordenes_pendientes
       FROM admin.ordenes_trabajo ot
-      JOIN admin.usuario u_ot ON u_ot.usuario_id = ot.usuario_registro
+      JOIN admin.clientes c ON ot.cliente_id = c.cliente_id
       LEFT JOIN admin.estado_orden_trabajo eot ON eot.estado_orden_id = ot.estado_orden_id
-      WHERE u_ot.empresa_id = $1
+      WHERE (c.empresa_id = $1 OR ot.usuario_registro IN (SELECT usuario_id FROM admin.usuario WHERE empresa_id = $1))
         AND (ot.activo IS DISTINCT FROM false)
         AND eot.codigo IN ('RECIBIDA', 'REPARACION', 'LISTA_ENTREGA');
     `, [empresaId]);
@@ -176,18 +179,18 @@ export async function GET(request: NextRequest) {
 
     // --- 2. PERIOD METRICS (MÉTRICAS FILTRADAS POR EL RANGO DE FECHAS SELECCIONADO) ---
 
-    // A. Facturación del Período (Órdenes ENTREGADAS dentro del rango según fecha_entrega_real)
+    // A. Facturación del Período (Órdenes ENTREGADAS dentro del rango según fecha de entrega/facturación)
     const facturacionRows = await query<any>(`
       SELECT 
         COALESCE(SUM(COALESCE(ot.total_orden, 0)), 0)::numeric AS facturacion_periodo,
         COUNT(ot.orden_trabajo_id)::int AS ordenes_facturadas
       FROM admin.ordenes_trabajo ot
-      JOIN admin.usuario u_ot ON u_ot.usuario_id = ot.usuario_registro
+      JOIN admin.clientes c ON ot.cliente_id = c.cliente_id
       JOIN admin.estado_orden_trabajo eot ON eot.estado_orden_id = ot.estado_orden_id
-      WHERE u_ot.empresa_id = $1
+      WHERE (c.empresa_id = $1 OR ot.usuario_registro IN (SELECT usuario_id FROM admin.usuario WHERE empresa_id = $1))
         AND (ot.activo IS DISTINCT FROM false)
-        AND eot.codigo = 'ENTREGADA'
-        AND (ot.fecha_entrega_real AT TIME ZONE 'America/Santo_Domingo')::date BETWEEN $2::date AND $3::date;
+        AND (eot.codigo = 'ENTREGADA' OR ot.estado_orden_id = 8)
+        AND (COALESCE(ot.fecha_entrega_real, ot.fecha_facturacion, ot.fecha_finalizacion, ot.fecha_registro) AT TIME ZONE 'America/Santo_Domingo')::date BETWEEN $2::date AND $3::date;
     `, [empresaId, startDateStr, endDateStr]);
 
     const facturacionPeriodo = Number(facturacionRows[0]?.facturacion_periodo || 0);
@@ -197,8 +200,7 @@ export async function GET(request: NextRequest) {
     const cliRows = await query<any>(`
       SELECT COUNT(*)::int AS total_clientes
       FROM admin.clientes c
-      JOIN admin.usuario u_cli ON u_cli.usuario_id = c.usuario_creacion
-      WHERE u_cli.empresa_id = $1
+      WHERE c.empresa_id = $1
         AND (c.activo IS DISTINCT FROM false)
         AND (c.fecha_creacion AT TIME ZONE 'America/Santo_Domingo')::date BETWEEN $2::date AND $3::date;
     `, [empresaId, startDateStr, endDateStr]);
@@ -228,20 +230,19 @@ export async function GET(request: NextRequest) {
       LEFT JOIN admin.ordenes_trabajo ot_reg
         ON (ot_reg.fecha_registro AT TIME ZONE 'America/Santo_Domingo')::date = d.fecha
         AND (ot_reg.activo IS DISTINCT FROM false)
-        AND ot_reg.usuario_registro IN (SELECT usuario_id FROM admin.usuario WHERE empresa_id = $1)
+        AND (ot_reg.cliente_id IN (SELECT cliente_id FROM admin.clientes WHERE empresa_id = $1) OR ot_reg.usuario_registro IN (SELECT usuario_id FROM admin.usuario WHERE empresa_id = $1))
       LEFT JOIN admin.ordenes_trabajo ot_ent
-        ON (ot_ent.fecha_entrega_real AT TIME ZONE 'America/Santo_Domingo')::date = d.fecha
+        ON (COALESCE(ot_ent.fecha_entrega_real, ot_ent.fecha_facturacion, ot_ent.fecha_finalizacion, ot_ent.fecha_registro) AT TIME ZONE 'America/Santo_Domingo')::date = d.fecha
         AND ot_ent.estado_orden_id = 8
         AND (ot_ent.activo IS DISTINCT FROM false)
-        AND ot_ent.usuario_registro IN (SELECT usuario_id FROM admin.usuario WHERE empresa_id = $1)
+        AND (ot_ent.cliente_id IN (SELECT cliente_id FROM admin.clientes WHERE empresa_id = $1) OR ot_ent.usuario_registro IN (SELECT usuario_id FROM admin.usuario WHERE empresa_id = $1))
       LEFT JOIN admin.orden_servicios os_comp
         ON (COALESCE(os_comp.fecha_finalizacion, os_comp.fecha_registro) AT TIME ZONE 'America/Santo_Domingo')::date = d.fecha
         AND (os_comp.estado_orden_servicio_id = 3)
         AND (os_comp.activo IS DISTINCT FROM false)
         AND os_comp.orden_trabajo_id IN (
           SELECT orden_trabajo_id FROM admin.ordenes_trabajo ot_sub
-          JOIN admin.usuario u_sub ON u_sub.usuario_id = ot_sub.usuario_registro
-          WHERE u_sub.empresa_id = $1
+          WHERE (ot_sub.cliente_id IN (SELECT cliente_id FROM admin.clientes WHERE empresa_id = $1) OR ot_sub.usuario_registro IN (SELECT usuario_id FROM admin.usuario WHERE empresa_id = $1))
         )
       GROUP BY d.fecha, d.day_short, d.label_fmt
       ORDER BY d.fecha ASC;
@@ -284,10 +285,10 @@ export async function GET(request: NextRequest) {
         COUNT(os.orden_servicio_id)::int AS count_val
       FROM admin.orden_servicios os
       JOIN admin.ordenes_trabajo ot ON os.orden_trabajo_id = ot.orden_trabajo_id
-      JOIN admin.usuario u_ot ON u_ot.usuario_id = ot.usuario_registro
+      JOIN admin.clientes c ON ot.cliente_id = c.cliente_id
       LEFT JOIN admin.tipo_servicio ts ON os.tipo_servicio_id = ts.tipo_servicio_id
       LEFT JOIN admin.estado_orden_servicio eos ON eos.estado_orden_servicio_id = os.estado_orden_servicio_id
-      WHERE u_ot.empresa_id = $1
+      WHERE (c.empresa_id = $1 OR ot.usuario_registro IN (SELECT usuario_id FROM admin.usuario WHERE empresa_id = $1))
         AND (eos.codigo = 'COMPLETADO' OR os.estado_orden_servicio_id = 3)
         AND (os.activo IS DISTINCT FROM false)
         AND (COALESCE(os.fecha_finalizacion, os.fecha_registro) AT TIME ZONE 'America/Santo_Domingo')::date BETWEEN $2::date AND $3::date
@@ -322,8 +323,7 @@ export async function GET(request: NextRequest) {
         COALESCE(u_mec_id.nombre_completo, 'Por asignar') AS mecanico,
         TO_CHAR(ot.fecha_recepcion AT TIME ZONE 'America/Santo_Domingo', 'DD/MM/YYYY') AS tiempo
       FROM admin.ordenes_trabajo ot
-      JOIN admin.usuario u_ot ON u_ot.usuario_id = ot.usuario_registro
-      LEFT JOIN admin.clientes c ON ot.cliente_id = c.cliente_id
+      JOIN admin.clientes c ON ot.cliente_id = c.cliente_id
       LEFT JOIN admin.bicicletas b ON ot.bicicleta_id = b.bicicleta_id
       LEFT JOIN admin.estado_orden_trabajo eot ON ot.estado_orden_id = eot.estado_orden_id
       LEFT JOIN LATERAL (
@@ -341,7 +341,7 @@ export async function GET(request: NextRequest) {
         WHERE u_m.usuario_id = ot.mecanico_id
         LIMIT 1
       ) u_mec_id ON true
-      WHERE u_ot.empresa_id = $1
+      WHERE (c.empresa_id = $1 OR ot.usuario_registro IN (SELECT usuario_id FROM admin.usuario WHERE empresa_id = $1))
         AND (ot.activo IS DISTINCT FROM false)
       ORDER BY ot.orden_trabajo_id DESC
       LIMIT 5;
@@ -383,11 +383,14 @@ export async function GET(request: NextRequest) {
       startDate: startDateStr,
       endDate: endDateStr,
       data: {
+        totalOrdenes: totalOrdenesVal,
+        total_ordenes: totalOrdenesVal,
         ordenesActivas: ordenesActivasVal,
         desgloseEstados: {
           enProceso: enProcesoVal,
           recibidas: recibidasVal,
-          listas: listasVal
+          listas: listasVal,
+          entregadas: entregadasVal
         },
         facturacionPeriodo,
         facturacion_periodo: facturacionPeriodo,
