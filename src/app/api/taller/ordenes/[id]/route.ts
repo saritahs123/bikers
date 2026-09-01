@@ -169,6 +169,7 @@ export async function GET(
         ts.nombre AS tipo_servicio_nombre,
         os.estado_orden_servicio_id AS estado_servicio_id,
         eos.nombre AS estado_servicio_nombre,
+        eos.codigo AS estado_servicio_codigo,
         os.cantidad,
         os.precio_unitario,
         os.porcentaje_descuento,

@@ -521,7 +521,7 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
     );
   });
 
-  const displayedServices = filteredServicesList.slice(0, 8);
+  const displayedServices = filteredServicesList;
 
   const selectedServiceType = (catalogs.tipos_servicio || []).find(
     (t) => String(t.tipo_servicio_id) === String(currentServicioId)
@@ -1245,39 +1245,21 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
                   </div>
                 )}
 
-                {/* Step 3: Observaciones del Cliente vs Diagnóstico Preliminar */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-foreground-secondary block">
-                      Motivo de Ingreso (Declarado por el Cliente)
-                    </label>
-                    <textarea
-                      value={observacionesCliente}
-                      onChange={(e) => {
-                        setObservacionesCliente(e.target.value);
-                        setSignatureData(null);
-                      }}
-                      placeholder="Indique los síntomas, ruidos o requerimientos que expresa el cliente..."
-                      rows={2}
-                      className="w-full p-2.5 bg-surface border border-border rounded-xl text-xs text-foreground focus:outline-none focus:border-primary resize-none"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-foreground-secondary block">
-                      Diagnóstico Preliminar (Técnico / Taller)
-                    </label>
-                    <textarea
-                      value={diagnosticoPreliminar}
-                      onChange={(e) => {
-                        setDiagnosticoPreliminar(e.target.value);
-                        setSignatureData(null);
-                      }}
-                      placeholder="Evaluación inicial de estado o trabajo técnico requerido..."
-                      rows={2}
-                      className="w-full p-2.5 bg-surface border border-border rounded-xl text-xs text-foreground focus:outline-none focus:border-primary resize-none"
-                    />
-                  </div>
+                {/* Step 3: Motivo de Ingreso del Cliente */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-foreground-secondary block">
+                    Motivo de Ingreso (Declarado por el Cliente)
+                  </label>
+                  <textarea
+                    value={observacionesCliente}
+                    onChange={(e) => {
+                      setObservacionesCliente(e.target.value);
+                      setSignatureData(null);
+                    }}
+                    placeholder="Indique los síntomas, ruidos o requerimientos que expresa el cliente..."
+                    rows={2}
+                    className="w-full p-2.5 bg-surface border border-border rounded-xl text-xs text-foreground focus:outline-none focus:border-primary resize-none"
+                  />
                 </div>
 
                 {/* Step 4: Multi-Service Configuration */}
@@ -1529,24 +1511,24 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
                     </span>
                   </div>
 
-                  {/* Digital Signature Card */}
+                  {/* Digital Signature Card (Deshabilitada) */}
                   <div
-                    onClick={() => setIsSignatureModalOpen(true)}
-                    className="p-4 bg-surface border border-border rounded-xl cursor-pointer hover:border-primary/50 transition-colors flex items-center justify-between"
+                    className="p-4 bg-surface/50 border border-border/40 rounded-xl opacity-50 cursor-not-allowed select-none flex items-center justify-between"
+                    title="Firma digital deshabilitada temporalmente"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="p-2 bg-primary-muted border border-primary/20 rounded-lg text-primary">
+                      <div className="p-2 bg-card border border-border/40 rounded-lg text-foreground-muted">
                         <FileSignature size={18} />
                       </div>
                       <div>
-                        <p className="font-bold text-xs text-foreground">Firma de Consentimiento</p>
-                        <p className="text-[11px] text-foreground-muted">
-                          {signatureData ? "Firma capturada ✓" : "Capturar firma del cliente"}
+                        <p className="font-bold text-xs text-foreground-muted">Firma de Consentimiento</p>
+                        <p className="text-[11px] text-foreground-muted/70">
+                          Deshabilitada (No requerida)
                         </p>
                       </div>
                     </div>
-                    <span className="text-xs text-primary font-semibold">
-                      {signatureData ? "Ver/Cambiar" : "Firmar"}
+                    <span className="text-[11px] text-foreground-muted font-semibold bg-card px-2 py-0.5 rounded border border-border/40">
+                      Deshabilitada
                     </span>
                   </div>
                 </div>

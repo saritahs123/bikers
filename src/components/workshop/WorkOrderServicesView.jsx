@@ -1716,7 +1716,7 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
                       if (!serviceSearch.trim()) return true;
                       const q = normalizeText(serviceSearch);
                       return normalizeText(t.nombre).includes(q) || normalizeText(t.codigo).includes(q);
-                    }).slice(0, 8);
+                    });
 
                     const handleSelectServiceCombobox = (t) => {
                       if (!t) return;
