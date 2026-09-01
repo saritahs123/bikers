@@ -354,20 +354,26 @@ export default function BillingOrderDetailView({ ordenId, onBack }) {
   );
 
   const incompleteServices = activeServices.filter((service) => {
+    const id = Number(service.estado_orden_servicio_id || service.estado_servicio_id || service.estado_id || 0);
     const code = String(
       service.estado_servicio_codigo ||
       service.estado_codigo ||
       service.estado ||
       ""
     ).trim().toUpperCase();
+    const name = String(
+      service.estado_servicio_nombre ||
+      service.estado_nombre ||
+      ""
+    ).trim().toUpperCase();
 
-    return ![
-      "COMPLETADO",
-      "FINALIZADO",
-      "CANCELADO",
-      "ANULADO",
-      "INACTIVO"
-    ].includes(code);
+    const isClosed =
+      id === 3 || // 3 = COMPLETADO
+      id === 4 || // 4 = CANCELADO
+      ["COMPLETADO", "FINALIZADO", "CANCELADO", "ANULADO", "INACTIVO"].includes(code) ||
+      ["COMPLETADO", "FINALIZADO", "CANCELADO", "ANULADO", "INACTIVO"].includes(name);
+
+    return !isClosed;
   });
 
   const hasIncompleteServices = incompleteServices.length > 0;

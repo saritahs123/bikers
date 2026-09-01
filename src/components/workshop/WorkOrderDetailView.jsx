@@ -75,20 +75,26 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
     return (order?.servicios || [])
       .filter((s) => s.activo !== false)
       .filter((service) => {
+        const id = Number(service.estado_servicio_id || service.estado_id || 0);
         const code = String(
           service.estado_servicio_codigo ||
           service.estado_codigo ||
           service.estado ||
           ""
         ).trim().toUpperCase();
+        const name = String(
+          service.estado_servicio_nombre ||
+          service.estado_nombre ||
+          ""
+        ).trim().toUpperCase();
 
-        return ![
-          "COMPLETADO",
-          "FINALIZADO",
-          "CANCELADO",
-          "ANULADO",
-          "INACTIVO"
-        ].includes(code);
+        const isClosed =
+          id === 3 || // 3 = COMPLETADO
+          id === 4 || // 4 = CANCELADO
+          ["COMPLETADO", "FINALIZADO", "CANCELADO", "ANULADO", "INACTIVO"].includes(code) ||
+          ["COMPLETADO", "FINALIZADO", "CANCELADO", "ANULADO", "INACTIVO"].includes(name);
+
+        return !isClosed;
       });
   }, [order?.servicios]);
 
@@ -328,6 +334,17 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
 
   const handleTransitionState = async (targetStateId, notes = "") => {
     if (loadingStateChange) return;
+
+    if ((targetStateId === 7 || targetStateId === 8) && hasIncompleteServices) {
+      showInfoToast(
+        "Para avanzar a Lista para Entrega o Entregar la orden, primero debes completar todos los servicios pendientes de la orden.",
+        "SERVICIOS PENDIENTES",
+        8000,
+        `Servicios pendientes: ${incompleteServices.map(s => s.codigo_servicio || s.tipo_servicio_nombre || 'Servicio').join(', ')}`
+      );
+      return;
+    }
+
     setLoadingStateChange(true);
     setModalError(null);
     try {
@@ -808,8 +825,13 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
           {Number(order.estado_orden_id) === 5 && (
             <button
               onClick={() => handleTransitionState(7)}
-              disabled={loadingStateChange}
-              className="flex items-center gap-2 px-4 py-2 bg-sky-500 text-white hover:bg-sky-600 rounded-xl transition-all font-mono text-xs font-extrabold uppercase tracking-wider shadow-lg shadow-sky-500/20 disabled:opacity-50 cursor-pointer"
+              disabled={loadingStateChange || hasIncompleteServices}
+              className="flex items-center gap-2 px-4 py-2 bg-sky-500 text-white hover:bg-sky-600 rounded-xl transition-all font-mono text-xs font-extrabold uppercase tracking-wider shadow-lg shadow-sky-500/20 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              title={
+                hasIncompleteServices
+                  ? `No se puede marcar lista para entrega: hay ${incompleteServices.length} servicio(s) pendiente(s).`
+                  : "Marcar orden lista para entrega"
+              }
             >
               {loadingStateChange ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -1380,8 +1402,12 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                   >
                     <option value="1">1 - Recibida</option>
                     {(Number(order.estado_orden_id) !== 7 || newStatusId === "5") && <option value="5">5 - En Reparación</option>}
-                    <option value="7">7 - Lista para Entrega</option>
-                    <option value="8">8 - Entregada</option>
+                    <option value="7" disabled={hasIncompleteServices && Number(order.estado_orden_id) !== 7}>
+                      7 - Lista para Entrega {hasIncompleteServices && Number(order.estado_orden_id) !== 7 ? " (Servicios pendientes)" : ""}
+                    </option>
+                    <option value="8" disabled={hasIncompleteServices}>
+                      8 - Entregada {hasIncompleteServices ? " (Servicios pendientes)" : ""}
+                    </option>
                   </select>
                 </div>
 
