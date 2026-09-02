@@ -20,7 +20,11 @@ import {
   Sparkles,
   Info,
   Search,
-  ChevronDown
+  ChevronDown,
+  Truck,
+  Clock,
+  ShieldCheck,
+  ClipboardCheck
 } from "lucide-react";
 import { getServiceStateRules } from "@/lib/workshop-state-machine";
 
@@ -158,6 +162,11 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
   const [activeServiceIndex, setActiveServiceIndex] = useState(-1);
   const serviceComboboxRef = useRef(null);
   const serviceSearchInputRef = useRef(null);
+  const [productSearch, setProductSearch] = useState("");
+  const [isProductDropdownOpen, setIsProductDropdownOpen] = useState(false);
+  const [activeProductIndex, setActiveProductIndex] = useState(-1);
+  const productComboboxRef = useRef(null);
+  const productSearchInputRef = useRef(null);
   const [formBicicletaComponenteId, setFormBicicletaComponenteId] = useState("");
   const [formNuevoEstadoComponenteId, setFormNuevoEstadoComponenteId] = useState("");
   const [formProductoId, setFormProductoId] = useState("");
@@ -261,6 +270,20 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
       }
     }
     loadCatalogs();
+  }, []);
+
+  // Close dropdowns on outside click
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (serviceComboboxRef.current && !serviceComboboxRef.current.contains(e.target)) {
+        setIsServiceDropdownOpen(false);
+      }
+      if (productComboboxRef.current && !productComboboxRef.current.contains(e.target)) {
+        setIsProductDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   // Normalized Bike ID from order
@@ -545,6 +568,9 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
     setServiceSearch("");
     setIsServiceDropdownOpen(false);
     setActiveServiceIndex(-1);
+    setProductSearch("");
+    setIsProductDropdownOpen(false);
+    setActiveProductIndex(-1);
     setFormBicicletaComponenteId("");
     setFormNuevoEstadoComponenteId("");
     setFormProductoId("");
@@ -592,6 +618,12 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
     setPendingNewComponent(null);
     setShowInlineComponentForm(false);
     setComponentCreationMessage("");
+    setServiceSearch("");
+    setIsServiceDropdownOpen(false);
+    setActiveServiceIndex(-1);
+    setProductSearch("");
+    setIsProductDropdownOpen(false);
+    setActiveProductIndex(-1);
 
     if (isService) {
       setFormTipoServicioId(String(item.tipo_servicio_id || ""));
@@ -921,7 +953,13 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
         })
       });
 
-      const json = await res.json();
+      let json = null;
+      try {
+        json = await res.json();
+      } catch {
+        json = { message: `Respuesta del servidor no válida (${res.status})` };
+      }
+
       if (!res.ok) {
         if (res.status === 409) {
           showInfoToast(
@@ -943,7 +981,7 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
       fetchBikeComponents();
       if (onRefresh) onRefresh();
     } catch (err) {
-      showErrorToast("Error de conexión al comunicarse con el servidor.");
+      showErrorToast(err?.message || "Error de conexión al comunicarse con el servidor.");
     } finally {
       setProcessingServiceId(null);
     }
@@ -1160,12 +1198,13 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
       )}
 
       {/* Top Controls Header */}
+      {/* HEADER CARD: SERVICIOS Y REPUESTOS DE LA ORDEN */}
       <div className="bg-[#161a21] border border-[#2d3748] p-4 sm:p-5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
         <div className="flex items-center gap-3">
           {backUrl && (
             <Link
               href={backUrl}
-              className="p-2 bg-[#161a21] border border-[#2d3748] rounded-xl text-slate-300 hover:text-white hover:border-[#bfce7f] transition-all"
+              className="p-2 bg-[#161a21] border border-[#2d3748] rounded-xl text-slate-300 hover:text-white hover:border-[#bfce7f] transition-all shrink-0"
               title="Volver"
             >
               <ArrowLeft className="w-4 h-4" />
@@ -1186,52 +1225,13 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
           <button
             type="button"
             onClick={handleOpenAddItem}
-            className="flex items-center gap-2 px-4 py-2 bg-[#bfce7f] hover:bg-[#aab86e] text-slate-950 font-bold rounded-xl text-xs shadow-lg transition-all cursor-pointer font-mono uppercase"
+            className="flex items-center gap-2 px-4 py-2 bg-[#bfce7f] hover:bg-[#aab86e] text-slate-950 font-bold rounded-xl text-xs shadow-lg transition-all cursor-pointer font-mono uppercase shrink-0"
           >
             <Plus className="w-4 h-4 stroke-[3]" />
             <span>AGREGAR REPUESTO O SERVICIO</span>
           </button>
         )}
       </div>
-
-      {/* Banner for Order in RECIBIDA state */}
-      {isOrderRecibida && (
-        <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-between gap-4 font-mono text-xs text-amber-300">
-          <div className="flex items-center gap-3">
-            <AlertTriangle className="w-5 h-5 shrink-0 text-amber-400" />
-            <div>
-              <p className="font-bold">Orden en estado RECIBIDA</p>
-              <p className="text-[11px] text-amber-400/80 font-sans">
-                Para iniciar el cronómetro y ejecutar las acciones de los servicios, primero debes iniciar la reparación de la orden.
-              </p>
-            </div>
-          </div>
-          {onStartRepair && (
-            <button
-              type="button"
-              onClick={onStartRepair}
-              className="px-3.5 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold rounded-xl text-xs transition-all shrink-0 cursor-pointer uppercase"
-            >
-              INICIAR REPARACIÓN
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Banner for Order in LISTA_ENTREGA state */}
-      {orderStateCode === "LISTA_ENTREGA" && (
-        <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-between gap-4 font-mono text-xs text-amber-300">
-          <div className="flex items-center gap-3">
-            <AlertTriangle className="w-5 h-5 shrink-0 text-amber-400" />
-            <div>
-              <p className="font-bold">Orden Lista para Entrega</p>
-              <p className="text-[11px] text-amber-400/80 font-sans">
-                La orden está en estado Lista para Entrega. Reabre la reparación para modificar servicios o repuestos.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
 
 
 
@@ -1282,7 +1282,7 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
                   {/* SERVICES ROWS */}
                   {services.map((svc, idx) => {
                     const sId = getServId(svc) || (idx + 1);
-                    const srvCode = svc.codigo_servicio || "SIN CÓDIGO";
+                    const srvCode = svc.codigo_servicio || (svc.secuencia ? `SRV-${String(svc.secuencia).padStart(3, "0")}` : `SRV-${String(idx + 1).padStart(3, "0")}`);
                     const stateRules = getServiceStateRules(svc.estado_servicio_id, svc.usuario_id, Number(order?.estado_orden_id || 1));
                     const elapsedSec = getElapsedSecondsForService(svc);
                     const isProcessing = processingServiceId === sId;
@@ -2163,29 +2163,143 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
               <>
                 <div className="md:col-span-2">
                   <label className="text-[11px] text-slate-400 block mb-1 font-semibold uppercase">Producto / Repuesto *</label>
-                  <select
-                    value={formProductoId}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setFormProductoId(val);
-                      const prod = productosList.find(p => String(p.producto_id) === val);
-                      if (prod) {
-                        setFormPrecioUnitario(String(prod.precio_venta || prod.precio || 0));
+                  {(() => {
+                    const selectedProdObj = productosList.find(p => String(p.producto_id) === String(formProductoId));
+                    const normalizeText = (text) => String(text || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                    const filteredProducts = (productosList || []).filter(p => {
+                      if (!productSearch.trim()) return true;
+                      const q = normalizeText(productSearch);
+                      return normalizeText(p.nombre).includes(q) || normalizeText(p.codigo).includes(q);
+                    });
+
+                    const handleSelectProductCombobox = (p) => {
+                      if (!p) return;
+                      setFormProductoId(String(p.producto_id));
+                      setFormPrecioUnitario(String(p.precio_venta || p.precio || 0));
+                      setProductSearch("");
+                      setIsProductDropdownOpen(false);
+                      setActiveProductIndex(-1);
+                    };
+
+                    const handleClearProductCombobox = () => {
+                      setFormProductoId("");
+                      setFormPrecioUnitario("");
+                      setProductSearch("");
+                      setIsProductDropdownOpen(false);
+                      setActiveProductIndex(-1);
+                      if (productSearchInputRef.current) {
+                        productSearchInputRef.current.focus();
                       }
-                    }}
-                    className="w-full min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-cyan-400"
-                  >
-                    <option value="">-- Seleccionar repuesto del catálogo --</option>
-                    {productosList.map((p) => {
-                      const stock = Number(p.stock_disponible ?? 9999);
-                      const isOutOfStock = stock <= 0;
-                      return (
-                        <option key={p.producto_id} value={p.producto_id} disabled={isOutOfStock}>
-                          [{p.codigo || `REP-${p.producto_id}`}] {p.nombre} - Stock: {stock} {p.unidad_medida || "UND"} (RD$ {Number(p.precio_venta || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })}){isOutOfStock ? " [SIN EXISTENCIA]" : ""}
-                        </option>
-                      );
-                    })}
-                  </select>
+                    };
+
+                    const handleProductKeyDown = (e) => {
+                      if (!isProductDropdownOpen) {
+                        if (e.key === "ArrowDown" || e.key === "Enter") {
+                          setIsProductDropdownOpen(true);
+                          return;
+                        }
+                      }
+                      if (e.key === "ArrowDown") {
+                        e.preventDefault();
+                        setActiveProductIndex((prev) => (prev < filteredProducts.length - 1 ? prev + 1 : 0));
+                      } else if (e.key === "ArrowUp") {
+                        e.preventDefault();
+                        setActiveProductIndex((prev) => (prev > 0 ? prev - 1 : filteredProducts.length - 1));
+                      } else if (e.key === "Enter") {
+                        e.preventDefault();
+                        if (activeProductIndex >= 0 && activeProductIndex < filteredProducts.length) {
+                          handleSelectProductCombobox(filteredProducts[activeProductIndex]);
+                        }
+                      } else if (e.key === "Escape") {
+                        e.preventDefault();
+                        setIsProductDropdownOpen(false);
+                        setActiveProductIndex(-1);
+                      }
+                    };
+
+                    return !selectedProdObj ? (
+                      <div className="relative" ref={productComboboxRef}>
+                        <div className="relative">
+                          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                          <input
+                            ref={productSearchInputRef}
+                            type="text"
+                            value={productSearch}
+                            onChange={(e) => {
+                              setProductSearch(e.target.value);
+                              setIsProductDropdownOpen(true);
+                              setActiveProductIndex(-1);
+                            }}
+                            onFocus={() => setIsProductDropdownOpen(true)}
+                            onKeyDown={handleProductKeyDown}
+                            placeholder="Buscar repuesto por nombre o código..."
+                            className="w-full pl-9 pr-8 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-400 font-mono transition-all"
+                          />
+                          <ChevronDown className="w-4 h-4 absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                        </div>
+
+                        {isProductDropdownOpen && (
+                          <div className="absolute left-0 right-0 top-full mt-1.5 bg-slate-950 border border-slate-800 rounded-xl shadow-2xl z-50 overflow-hidden font-mono text-xs max-h-60 overflow-y-auto custom-scrollbar animate-in fade-in duration-100">
+                            {filteredProducts.length === 0 ? (
+                              <div className="p-3 text-center text-slate-500 text-xs">
+                                Sin coincidencias para &quot;{productSearch}&quot;
+                              </div>
+                            ) : (
+                              filteredProducts.map((p, idx) => {
+                                const stock = Number(p.stock_disponible ?? 0);
+                                return (
+                                  <div
+                                    key={p.producto_id}
+                                    onClick={() => handleSelectProductCombobox(p)}
+                                    className={`p-2.5 flex items-center justify-between cursor-pointer border-b border-slate-900 last:border-0 transition-colors ${
+                                      activeProductIndex === idx ? "bg-slate-900 text-slate-100" : "hover:bg-slate-900"
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                      <div className="w-7 h-7 rounded-lg bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center font-bold text-cyan-400 shrink-0">
+                                        <Package size={14} />
+                                      </div>
+                                      <div className="truncate">
+                                        <p className="font-bold text-slate-200 truncate">{p.nombre}</p>
+                                        <p className="text-[10px] text-slate-500 truncate">
+                                          {p.codigo || `REP-${p.producto_id}`} • Stock: {stock} {p.unidad_medida || "UND"}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <span className="text-[11px] font-bold text-cyan-400 font-mono ml-2 shrink-0">
+                                      RD$ {Number(p.precio_venta || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })}
+                                    </span>
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="p-2.5 bg-slate-950 border border-cyan-500/40 rounded-xl flex items-center justify-between">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-7 h-7 rounded-lg bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center font-bold text-cyan-400 shrink-0 font-mono">
+                            <Package size={14} />
+                          </div>
+                          <div className="truncate">
+                            <p className="font-bold text-slate-200 text-xs truncate">{selectedProdObj.nombre}</p>
+                            <p className="text-[10px] text-slate-400 font-mono truncate">
+                              {selectedProdObj.codigo || `REP-${selectedProdObj.producto_id}`} • Precio: RD$ {Number(selectedProdObj.precio_venta || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })} (Stock: {Number(selectedProdObj.stock_disponible ?? 0)} {selectedProdObj.unidad_medida || "UND"})
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleClearProductCombobox}
+                          className="p-1 text-slate-400 hover:text-rose-400 hover:bg-rose-950/30 rounded-lg transition-colors cursor-pointer shrink-0 ml-1"
+                          title="Cambiar repuesto"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 <div className="md:col-span-1">

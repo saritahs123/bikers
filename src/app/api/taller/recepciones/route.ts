@@ -386,13 +386,11 @@ export async function POST(req: NextRequest) {
       const now = new Date();
       const yearMonth = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`;
       const recCodeSeqRes = await client.query(
-        `SELECT COALESCE(MAX(CAST(SUBSTRING(codigo_recepcion FROM 'REC-\\d{6}-(\\d+)') AS INTEGER)), 0) + 1 AS next_seq
-         FROM admin.recepciones
-         WHERE codigo_recepcion LIKE $1`,
-        [`REC-${yearMonth}-%`]
+        `SELECT COALESCE(MAX(SUBSTRING(codigo_recepcion FROM '[0-9]+$')::integer), 0) + 1 AS next_seq
+         FROM admin.recepciones`
       );
       const nextRecSeq = recCodeSeqRes.rows[0].next_seq;
-      const codigo_recepcion = `REC-${yearMonth}-${String(nextRecSeq).padStart(4, "0")}`;
+      const codigo_recepcion = `REC-${yearMonth}-${nextRecSeq}`;
 
       // Resolve Dynamic Reception State based on business outcome
       let targetStateCode = "RECIBIDA";
@@ -451,11 +449,12 @@ export async function POST(req: NextRequest) {
         const estado_checklist_id = parseInt(chkItem.estado_checklist_id, 10);
         if (isNaN(item_checklist_id) || isNaN(estado_checklist_id)) continue;
 
+        const obs = (chkItem.observacion || chkItem.observaciones || "").trim();
         const s3Path = (chkItem.object_key || chkItem.s3_key || chkItem.ruta_archivo || "").trim() || null;
         const fileName = (chkItem.filename || chkItem.nombre_archivo || "").trim() || null;
         const hasPhoto = Boolean(chkItem.evidencia_foto || s3Path);
 
-        await client.query(
+        const chkInsertRes = await client.query(
           `INSERT INTO admin.recepcion_checklist (
             recepcion_id, item_checklist_id, estado_checklist_id,
             observacion, requiere_trabajo, requiere_aprobacion, evidencia_foto,
@@ -469,11 +468,34 @@ export async function POST(req: NextRequest) {
           ) RETURNING recepcion_checklist_id`,
           [
             recepcion_id, item_checklist_id, estado_checklist_id,
-            (chkItem.observacion || "").trim() || null, Boolean(chkItem.requiere_trabajo), hasPhoto,
+            obs || null, Boolean(chkItem.requiere_trabajo), hasPhoto,
             fileName, s3Path,
             chkIdx + 1, session.usuario_id
           ]
         );
+        const recepcion_checklist_id = chkInsertRes.rows[0].recepcion_checklist_id;
+
+        // Associate evidence photos transactionally
+        const fotos = Array.isArray(chkItem.evidencias_fotos) ? chkItem.evidencias_fotos : [];
+        for (let fIdx = 0; fIdx < fotos.length; fIdx++) {
+          const f = fotos[fIdx];
+          const urlFoto = typeof f === "string" ? f : f.url_archivo || f.url;
+          if (!urlFoto) continue;
+
+          await client.query(
+            `INSERT INTO admin.recepcion_evidencia_fotos (
+              recepcion_checklist_id, url_archivo, tipo_evidencia, orden_visual,
+              usuario_registro, activo, fecha_registro
+            ) VALUES (
+              $1, $2, 'RECEPCION_CHECKLIST', $3,
+              $4, true, NOW()
+            )`,
+            [
+              recepcion_checklist_id, urlFoto, fIdx + 1,
+              session.usuario_id
+            ]
+          );
+        }
 
         // Mark consolidated staging evidence as ASSOCIATED in durable registry
         if (s3Path && s3Path.startsWith(`staging/emp_${session.empresa_id}/`)) {
@@ -514,7 +536,7 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // 3. Insert Signature (Optional, if provided) with version_terminos using PostgreSQL sequence
+      // 2.1 Insert Digital Signature Audit Proof if available
       if (hasValidSignature) {
         await client.query(
           `INSERT INTO admin.firma_recepcion (
@@ -533,56 +555,23 @@ export async function POST(req: NextRequest) {
 
       let generatedWorkOrderInfo: any = null;
 
-      // 4. Auto-Generate Work Order if requested
+      // 3. Process Initial Services and Dynamic Component Linkage
+      let subtotal_servicios = 0;
+      const preparedServicesData: any[] = [];
+
       if (generar_orden_trabajo) {
-        await client.query(`SELECT pg_advisory_xact_lock(7003)`);
-        const woCodeSeqRes = await client.query(
-          `SELECT COALESCE(MAX(CAST(SUBSTRING(codigo_orden FROM 'OT-\\d{6}-(\\d+)') AS INTEGER)), 0) + 1 AS next_seq
-           FROM admin.ordenes_trabajo
-           WHERE codigo_orden LIKE $1`,
-          [`OT-${yearMonth}-%`]
-        );
-        const nextWoSeq = woCodeSeqRes.rows[0].next_seq;
-        const codigo_orden = `OT-${yearMonth}-${String(nextWoSeq).padStart(4, "0")}`;
-
-        // Resolve Initial Work Order State (RECIBIDA)
-        let estado_orden_id = 1;
-        const estWoRes = await client.query(
-          `SELECT estado_orden_id FROM admin.estado_orden_trabajo WHERE (codigo = 'RECIBIDA' OR estado_orden_id = 1) ORDER BY orden_visual ASC LIMIT 1`
-        );
-        if (estWoRes.rows.length > 0) estado_orden_id = estWoRes.rows[0].estado_orden_id;
-
-        // Resolve Priority
-        let prioridad_orden_id = 1;
-        if (prioridad_id_input && !isNaN(parseInt(prioridad_id_input, 10))) {
-          prioridad_orden_id = parseInt(prioridad_id_input, 10);
-        } else {
-          const prioRes = await client.query(
-            `SELECT prioridad_orden_trabajo_id FROM admin.prioridad_orden_trabajo WHERE activo = true ORDER BY prioridad_orden_trabajo_id ASC LIMIT 1`
-          );
-          if (prioRes.rows.length > 0) prioridad_orden_id = prioRes.rows[0].prioridad_orden_trabajo_id;
-        }
-
-        // Consolidated preliminary diagnosis
-        const consolidated_diagnostico = servicios.map((s, idx) => {
-          const diag = (s.diagnostico_preliminar || "").trim();
-          return diag ? `Servicio #${idx + 1}: ${diag}` : null;
-        }).filter(Boolean).join(" | ");
-
-        let subtotal_servicios = 0.00;
-        const preparedServicesData: any[] = [];
-
         for (let sIdx = 0; sIdx < servicios.length; sIdx++) {
           const s = servicios[sIdx];
           const s_tipo_id = parseInt(s.tipo_servicio_id, 10);
           if (isNaN(s_tipo_id)) continue;
 
           const catTypeRes = await client.query(
-            `SELECT nombre, precio_base FROM admin.tipo_servicio WHERE tipo_servicio_id = $1 LIMIT 1`,
+            `SELECT codigo, nombre, precio_base FROM admin.tipo_servicio WHERE tipo_servicio_id = $1 LIMIT 1`,
             [s_tipo_id]
           );
 
           const typeRow = catTypeRes.rows[0] || {};
+          const sCode = typeRow.codigo || null;
           const sName = typeRow.nombre || `Servicio #${s_tipo_id}`;
           const sPrice = s.precio_estimado !== undefined && s.precio_estimado !== null && s.precio_estimado !== ""
             ? Number(s.precio_estimado)
@@ -691,11 +680,45 @@ export async function POST(req: NextRequest) {
 
           preparedServicesData.push({
             tipo_servicio_id: s_tipo_id,
+            codigo: sCode,
             nombre: sName,
             precio: sPrice,
             bicicleta_componente_id: compId && !isNaN(compId) ? compId : null,
             diagnostico: (s.diagnostico_preliminar || "").trim() || null
           });
+        }
+
+        // Consolidated initial diagnosis
+        const consolidated_diagnostico = [
+          firstDiag,
+          ...preparedServicesData.map((s: any) => s.diagnostico).filter(Boolean)
+        ].filter(Boolean).join(" | ");
+
+        // 4. Auto-Generate Work Order if requested
+        await client.query(`SELECT pg_advisory_xact_lock(7003)`);
+        const woCodeSeqRes = await client.query(
+          `SELECT COALESCE(MAX(SUBSTRING(codigo_orden FROM '[0-9]+$')::integer), 0) + 1 AS next_seq
+           FROM admin.ordenes_trabajo`
+        );
+        const nextWoSeq = woCodeSeqRes.rows[0].next_seq;
+        const codigo_orden = `OT-${yearMonth}-${nextWoSeq}`;
+
+        // Resolve Initial Work Order State (RECIBIDA)
+        let estado_orden_id = 1;
+        const estWoRes = await client.query(
+          `SELECT estado_orden_id FROM admin.estado_orden_trabajo WHERE (codigo = 'RECIBIDA' OR estado_orden_id = 1) ORDER BY orden_visual ASC LIMIT 1`
+        );
+        if (estWoRes.rows.length > 0) estado_orden_id = estWoRes.rows[0].estado_orden_id;
+
+        // Resolve Priority
+        let prioridad_orden_id = 1;
+        if (prioridad_id_input && !isNaN(parseInt(prioridad_id_input, 10))) {
+          prioridad_orden_id = parseInt(prioridad_id_input, 10);
+        } else {
+          const prioRes = await client.query(
+            `SELECT prioridad_orden_trabajo_id FROM admin.prioridad_orden_trabajo WHERE activo = true ORDER BY prioridad_orden_trabajo_id ASC LIMIT 1`
+          );
+          if (prioRes.rows.length > 0) prioridad_orden_id = prioRes.rows[0].prioridad_orden_trabajo_id;
         }
 
         // Insert Work Order initially WITHOUT mechanic (mecanico_id = null) using PostgreSQL sequence
@@ -758,23 +781,24 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        // Insert Services with sequence RETURNING
+        // Insert Services with sequence and catalog codigo_servicio RETURNING
         for (let idx = 0; idx < preparedServicesData.length; idx++) {
           const sData = preparedServicesData[idx];
+          const codigoServicio = sData.codigo || `SRV-${String(idx + 1).padStart(3, "0")}`;
 
           await client.query(
             `INSERT INTO admin.orden_servicios (
               orden_trabajo_id, tipo_servicio_id, estado_orden_servicio_id, estado_aprobacion_id,
-              secuencia, descripcion_servicio, observacion_tecnica, cantidad,
+              secuencia, codigo_servicio, descripcion_servicio, observacion_tecnica, cantidad,
               precio_unitario, subtotal, bicicleta_componente_id, usuario_id, usuario_registro, activo, fecha_registro
             ) VALUES (
               $1, $2, $3, $4,
-              $5, $6, $7, 1,
-              $8, $8, $9, NULL, $10, true, NOW()
-            ) RETURNING orden_servicio_id`,
+              $5, $6, $7, $8, 1,
+              $9, $9, $10, NULL, $11, true, NOW()
+            ) RETURNING orden_servicio_id, codigo_servicio`,
             [
               orden_trabajo_id, sData.tipo_servicio_id, estado_orden_servicio_id, estado_aprobacion_id,
-              idx + 1, sData.nombre, sData.diagnostico,
+              idx + 1, codigoServicio, sData.nombre, sData.diagnostico,
               sData.precio, sData.bicicleta_componente_id, session.usuario_id
             ]
           );
