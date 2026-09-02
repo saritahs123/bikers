@@ -1400,14 +1400,32 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                     disabled={Number(order.estado_orden_id) === 8}
                     className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-[#bfce7f] font-mono text-xs disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <option value="1">1 - Recibida</option>
-                    {(Number(order.estado_orden_id) !== 7 || newStatusId === "5") && <option value="5">5 - En Reparación</option>}
-                    <option value="7" disabled={hasIncompleteServices && Number(order.estado_orden_id) !== 7}>
-                      7 - Lista para Entrega {hasIncompleteServices && Number(order.estado_orden_id) !== 7 ? " (Servicios pendientes)" : ""}
-                    </option>
-                    <option value="8" disabled={hasIncompleteServices}>
-                      8 - Entregada {hasIncompleteServices ? " (Servicios pendientes)" : ""}
-                    </option>
+                    {Number(order.estado_orden_id) === 1 && (
+                      <>
+                        <option value="1">1 - Recibida (Estado actual)</option>
+                        <option value="5">5 - En Reparación</option>
+                      </>
+                    )}
+                    {Number(order.estado_orden_id) === 5 && (
+                      <>
+                        <option value="5">5 - En Reparación (Estado actual)</option>
+                        <option value="7" disabled={hasIncompleteServices}>
+                          7 - Lista para Entrega {hasIncompleteServices ? " (Servicios pendientes)" : ""}
+                        </option>
+                      </>
+                    )}
+                    {Number(order.estado_orden_id) === 7 && (
+                      <>
+                        <option value="7">7 - Lista para Entrega (Estado actual)</option>
+                        <option value="5">5 - En Reparación (Reabrir)</option>
+                        <option value="8" disabled={hasIncompleteServices}>
+                          8 - Entregada {hasIncompleteServices ? " (Servicios pendientes)" : ""}
+                        </option>
+                      </>
+                    )}
+                    {Number(order.estado_orden_id) === 8 && (
+                      <option value="8">8 - Entregada (Finalizada)</option>
+                    )}
                   </select>
                 </div>
 

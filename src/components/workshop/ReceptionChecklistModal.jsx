@@ -315,7 +315,7 @@ export default function ReceptionChecklistModal({
                 </div>
 
                 {/* State Buttons */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                   {estadosCatalog.map((est) => {
                     const isSelected = Number(evaluated.estado_checklist_id) === Number(est.estado_checklist_id);
                     return (
@@ -323,7 +323,7 @@ export default function ReceptionChecklistModal({
                         key={est.estado_checklist_id}
                         type="button"
                         onClick={() => updateItem(item.item_checklist_id, { estado_checklist_id: est.estado_checklist_id })}
-                        className={`py-2 px-2.5 rounded-lg border text-xs font-bold transition-all text-center cursor-pointer ${
+                        className={`py-2 px-2.5 rounded-lg border text-xs font-bold transition-all text-center cursor-pointer last:col-span-2 sm:last:col-span-1 ${
                           isSelected
                             ? "bg-primary-muted border-primary text-primary shadow-sm"
                             : "bg-card border-border text-foreground-muted hover:text-foreground hover:bg-hover"

@@ -248,13 +248,9 @@ export async function POST(
       WHERE orden_trabajo_id = $1
     `, [ordenId]);
 
-    const nextSecuencia = seqRes.rows[0].next_seq;
-    const siguienteNumero = seqRes.rows[0].siguiente_numero;
-    const codigoServicio = `SRV-${String(siguienteNumero).padStart(3, "0")}`;
-
     // Enforce catalog price protection from DB
     const tsRes = await client.query(`
-      SELECT precio_base FROM admin.tipo_servicio WHERE tipo_servicio_id = $1 AND activo = true
+      SELECT codigo, precio_base FROM admin.tipo_servicio WHERE tipo_servicio_id = $1 AND activo = true
     `, [tipo_servicio_id]);
 
     if (tsRes.rows.length === 0) {
@@ -264,6 +260,10 @@ export async function POST(
         message: "El tipo de servicio seleccionado no existe o está inactivo."
       }, { status: 400 });
     }
+
+    const nextSecuencia = seqRes.rows[0].next_seq;
+    const siguienteNumero = seqRes.rows[0].siguiente_numero;
+    const codigoServicio = tsRes.rows[0].codigo || `SRV-${String(siguienteNumero).padStart(3, "0")}`;
 
     const finalPrecio = parseFloat(tsRes.rows[0].precio_base || "0");
     const finalCantidad = cantidad ? parseFloat(cantidad) : 1;
