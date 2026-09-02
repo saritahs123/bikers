@@ -315,7 +315,7 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
     // 1. Audit all real foreign key dependencies across Workshop, Inventory, Purchases
     const [ordenProdCheck, existenciasCheck, movsCheck, ordenCompraCheck, recCompraCheck, provCheck] = await Promise.all([
       query(`SELECT COUNT(*)::int AS count FROM admin.orden_productos WHERE producto_id = $1`, [productoId]),
-      query(`SELECT COUNT(*)::int AS count FROM admin.existencias_producto WHERE producto_id = $1 AND cantidad_actual > 0`, [productoId]),
+      query(`SELECT COUNT(*)::int AS count FROM admin.existencias_producto WHERE producto_id = $1`, [productoId]),
       query(`SELECT COUNT(*)::int AS count FROM admin.movimientos_inventario WHERE producto_id = $1`, [productoId]),
       query(`SELECT COUNT(*)::int AS count FROM admin.detalle_orden_compra WHERE producto_id = $1`, [productoId]),
       query(`SELECT COUNT(*)::int AS count FROM admin.detalle_recepcion_compra WHERE producto_id = $1`, [productoId]),
@@ -359,8 +359,6 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
     }
 
     // 3. Perform physical deletion if 0 dependencies exist
-    // Also clean up zero-count existencias_producto records if any exist
-    await query(`DELETE FROM admin.existencias_producto WHERE producto_id = $1`, [productoId]);
     const delResult = await query(`
       DELETE FROM admin.productos
       WHERE producto_id = $1
