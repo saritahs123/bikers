@@ -35,7 +35,7 @@ export async function GET(
       SELECT 
         os.orden_servicio_id AS servicio_id,
         os.orden_servicio_id,
-        os.codigo_servicio,
+        COALESCE(ts.codigo, os.codigo_servicio) AS codigo_servicio,
         os.orden_trabajo_id,
         os.tipo_servicio_id,
         ts.nombre AS tipo_servicio_nombre,

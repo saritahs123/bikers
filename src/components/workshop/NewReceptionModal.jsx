@@ -145,6 +145,7 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
       }
       discardedStagingKeysRef.current = [];
       navigationStartedRef.current = false;
+      setGenerarOrdenTrabajo(true);
       loadInitialData();
     }
   }, [isOpen]);
@@ -419,7 +420,7 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
     return name.includes(q) || doc.includes(q) || phone.includes(q) || email.includes(q);
   });
 
-  const displayedClients = filteredClientsList.slice(0, 6);
+  const displayedClients = filteredClientsList;
 
   const filteredBikesList = clientBicycles.filter((b) => {
     if (!bikeSearch.trim()) return true;
@@ -441,7 +442,7 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
     );
   });
 
-  const displayedBikes = filteredBikesList.slice(0, 6);
+  const displayedBikes = filteredBikesList;
 
   const getInitials = (name) => {
     if (!name) return "CL";
@@ -1040,7 +1041,7 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
                                   <div>
                                     <p className="font-bold text-foreground">{client.nombre_completo}</p>
                                     <p className="text-[11px] text-foreground-muted">
-                                      {client.identificacion || "Sin ID"} • {client.telefono_principal || "Sin teléfono"}
+                                      {client.identificacion ? `${client.identificacion} • ` : ""}Tel: {client.telefono_principal || "Sin teléfono"}
                                     </p>
                                   </div>
                                 </div>
@@ -1534,13 +1535,17 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
                 </div>
 
                 {/* Step 6: Orden de Trabajo Auto-Generation Settings */}
-                <div className="p-4 bg-surface border border-border rounded-xl space-y-3">
+                <div className={`p-4 rounded-xl border transition-all space-y-3 ${
+                  generarOrdenTrabajo
+                    ? "bg-[#bfce7f]/10 border-[#bfce7f]/40 shadow-sm"
+                    : "bg-surface border-border"
+                }`}>
                   <label className="flex items-center gap-2.5 cursor-pointer select-none">
                     <input
                       type="checkbox"
                       checked={generarOrdenTrabajo}
                       onChange={(e) => setGenerarOrdenTrabajo(e.target.checked)}
-                      className="rounded border-border text-primary focus:ring-primary h-4 w-4 bg-card"
+                      className="rounded border-border accent-[#bfce7f] h-4 w-4 cursor-pointer"
                     />
                     <span className="font-bold text-xs text-foreground">
                       Generar automáticamente Orden de Trabajo (OT) al registrar la recepción

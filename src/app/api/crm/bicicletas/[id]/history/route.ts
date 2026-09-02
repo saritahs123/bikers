@@ -249,9 +249,11 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
     const clienteId = bikeRows?.[0]?.cliente_id || null;
     const currentKm = kilometraje_servicio || bikeRows?.[0]?.kilometraje_actual || 0;
 
-    const countRows = await query(`SELECT COUNT(*) AS total FROM admin.ordenes_trabajo`);
-    const nextSeq = parseInt(countRows?.[0]?.total || "0", 10) + 1;
-    const codigo_orden = `OT-2026-${String(nextSeq).padStart(6, '0')}`;
+    const now = new Date();
+    const yearMonth = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const seqRows = await query(`SELECT COALESCE(MAX(SUBSTRING(codigo_orden FROM '[0-9]+$')::integer), 0) + 1 AS next_seq FROM admin.ordenes_trabajo`);
+    const nextSeq = parseInt(seqRows?.[0]?.next_seq || "1", 10);
+    const codigo_orden = `OT-${yearMonth}-${nextSeq}`;
 
     // Single Component Mode -> Update single component
     if (modo_registro === "ESPECIFICO" && bicicleta_componente_id && nuevo_estado_componente_id) {

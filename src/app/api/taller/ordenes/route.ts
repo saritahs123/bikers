@@ -308,14 +308,14 @@ export async function POST(req: NextRequest) {
     // Acquire business code advisory lock for OT sequence
     await client.query("SELECT pg_advisory_xact_lock(7003)");
 
+    const now = new Date();
+    const yearMonth = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`;
     const codeRes = await client.query(`
-      SELECT COALESCE(MAX(SUBSTRING(codigo_orden FROM 'OT-[0-9]{6}-([0-9]{4})')::integer), 0) + 1 AS next_seq
+      SELECT COALESCE(MAX(SUBSTRING(codigo_orden FROM '[0-9]+$')::integer), 0) + 1 AS next_seq
       FROM admin.ordenes_trabajo
-      WHERE codigo_orden LIKE 'OT-' || TO_CHAR(NOW(), 'YYYYMM') || '-%'
     `);
     const nextSeq = codeRes.rows[0]?.next_seq || 1;
-    const datePrefix = new Date().toISOString().slice(0, 7).replace("-", "");
-    const codigoOrden = `OT-${datePrefix}-${String(nextSeq).padStart(4, "0")}`;
+    const codigoOrden = `OT-${yearMonth}-${nextSeq}`;
 
     const insertSql = `
       INSERT INTO admin.ordenes_trabajo (
