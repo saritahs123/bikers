@@ -57,9 +57,7 @@ function SidebarContent({
         { href: "/workshop?view=list", label: "RECEPCIONES" },
         { href: "/workshop?view=work_orders", label: "ÓRDENES DE TRABAJO" },
         { href: "/workshop?view=kanban", label: "VISTA KANBAN" },
-        { href: "/workshop?view=billing", label: "DESPACHO DE ÓRDENES" },
-        { href: "/workshop/service-types", label: "TIPOS DE SERVICIO" },
-        { href: "/workshop/products", label: "PRODUCTOS" },
+        { href: "/workshop?view=billing", label: "DESPACHO DE ÓRDENES" }
       ]
     },
     {
@@ -68,7 +66,16 @@ function SidebarContent({
       label: "CRM",
       submenu: [
         { href: "/crm/customers", label: "CLIENTES" },
-        { href: "/crm/bicycles", label: "BICICLETAS" },
+        { href: "/crm/bicycles", label: "BICICLETAS" }
+      ]
+    },
+    {
+      id: "configuracion",
+      icon: "settings",
+      label: "CONFIGURACIÓN",
+      submenu: [
+        { href: "/workshop/service-types", label: "TIPOS DE SERVICIO" },
+        { href: "/workshop/products", label: "PRODUCTOS" },
         { href: "/crm/component-categories", label: "CATEGORÍAS COMPONENTES" },
         { href: "/crm/component-states", label: "ESTADOS COMPONENTES" }
       ]
