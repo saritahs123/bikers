@@ -1,7 +1,7 @@
 import CompaniesSecurityView from "../components/CompaniesSecurityView";
 
 export const metadata = {
-  title: "Gestión de Empresas | Bikers Fort",
+  title: "Gestión de Empresas | Ride Lab",
 };
 
 export default function CompaniesPage() {

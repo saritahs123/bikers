@@ -310,7 +310,7 @@ export default function CustomerFormDrawer({
                     type="text"
                     value={formData.nombre}
                     onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-                    placeholder={formData.tipo_cliente === "EMPRESA" ? "Ej: Distribuidora Bikers SRL" : "Ej: Mateo"}
+                    placeholder={formData.tipo_cliente === "EMPRESA" ? "Ej: Distribuidora Ride Lab SRL" : "Ej: Mateo"}
                     className={`w-full bg-surface border rounded-xl px-3.5 py-2.5 text-foreground focus:outline-none transition-all ${
                       errors.nombre ? "border-error focus:border-error" : "border-border focus:border-primary"
                     }`}

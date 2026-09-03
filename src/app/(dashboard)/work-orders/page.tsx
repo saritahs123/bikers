@@ -3,7 +3,7 @@ import WorkOrdersPageClient from "@/components/workshop/WorkOrdersPageClient";
 import { Loader2 } from "lucide-react";
 
 export const metadata = {
-  title: "Órdenes de Trabajo | Bikers Fort Core",
+  title: "Órdenes de Trabajo | Ride Lab",
   description: "Gestión completa de órdenes de trabajo, seguimiento técnico y servicio al cliente."
 };
 

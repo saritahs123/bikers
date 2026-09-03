@@ -508,7 +508,7 @@ export default function CustomersView() {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Clientes_Bikers_${new Date().toISOString().substring(0, 10)}.csv`);
+    link.setAttribute("download", `Clientes_RideLab_${new Date().toISOString().substring(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

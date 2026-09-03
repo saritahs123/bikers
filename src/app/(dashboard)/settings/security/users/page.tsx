@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import UsersSecurityView from "../components/UsersSecurityView";
 
 export const metadata = {
-  title: "Administrar Usuarios | Bikers Fort",
+  title: "Administrar Usuarios | Ride Lab",
 };
 
 export default function UsersPage() {

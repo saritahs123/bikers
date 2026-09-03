@@ -305,7 +305,7 @@ export async function POST(req: Request) {
 
       const emailRes = await sendResetPasswordEmail({
         to: email,
-        subject: "Bienvenido a Bikers’ Fort - Credenciales temporales",
+        subject: "Bienvenido a Ride Lab - Credenciales temporales",
         fullName: `${firstName} ${lastName}`,
         accessIdentifier: mainIdent,
         tempPassword,

@@ -200,7 +200,7 @@ export async function POST(
     // Send email before committing
     const emailRes = await sendResetPasswordEmail({
       to: recoveryEmail,
-      subject: "Restablecimiento de contraseña - Bikers’ Fort",
+      subject: "Restablecimiento de contraseña - Ride Lab",
       fullName,
       accessIdentifier: userRow.correo_electronico || recoveryEmail,
       tempPassword,

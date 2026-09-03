@@ -809,7 +809,7 @@ export default function CompaniesSecurityView() {
                       required
                       value={formData.nombre_comercial}
                       onChange={(e) => updateField("nombre_comercial", e.target.value)}
-                      placeholder="Ej. Bikers Fort Taller Santo Domingo S.R.L."
+                      placeholder="Ej. Ride Lab Taller Santo Domingo S.R.L."
                       className={`w-full bg-input border rounded-xl px-3 py-2 text-xs text-foreground placeholder:text-foreground-disabled focus:outline-none transition-all ${
                         formErrors.nombre_comercial ? "border-error focus:border-error text-error" : "border-border focus:border-primary"
                       }`}
@@ -831,7 +831,7 @@ export default function CompaniesSecurityView() {
                       type="text"
                       value={formData.alias}
                       onChange={(e) => updateField("alias", e.target.value)}
-                      placeholder="Ej. Bikers Fort SD"
+                      placeholder="Ej. Ride Lab SD"
                       className="w-full bg-input border border-border rounded-xl px-3 py-2 text-xs text-foreground placeholder:text-foreground-disabled focus:outline-none focus:border-primary"
                     />
                   </div>
@@ -928,7 +928,7 @@ export default function CompaniesSecurityView() {
                       type="email"
                       value={formData.email}
                       onChange={(e) => handleEmailChange(e.target.value)}
-                      placeholder="contacto@bikersfort.com"
+                      placeholder="contacto@ridelab.com"
                       className={`w-full bg-input border rounded-xl px-3 py-2 text-xs text-foreground placeholder:text-foreground-disabled focus:outline-none transition-all ${
                         formErrors.email ? "border-error focus:border-error text-error" : "border-border focus:border-primary"
                       }`}
