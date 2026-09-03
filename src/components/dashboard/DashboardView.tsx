@@ -4,26 +4,25 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Wrench,
-  DollarSign,
   Users,
   Clock,
-  AlertTriangle,
-  Zap,
   BarChart3,
   PieChart,
   RefreshCw,
   Loader2,
   AlertCircle,
   ArrowRight,
-  CheckCircle2,
   Calendar,
   Filter
 } from "lucide-react";
 
 interface InitialMetrics {
-  ordenesActivas: number;
-  ingresosDia: number;
-  nuevosClientesSemana: number;
+  totalOrdenes?: number;
+  totalClientes?: number;
+  // legacy fallback support
+  ordenesActivas?: number;
+  ingresosDia?: number;
+  nuevosClientesSemana?: number;
 }
 
 export default function DashboardView({ initialMetrics }: { initialMetrics?: InitialMetrics }) {
@@ -102,17 +101,9 @@ export default function DashboardView({ initialMetrics }: { initialMetrics?: Ini
     }
   };
 
-  const formatDOP = (val: number) =>
-    `RD$ ${Number(val || 0).toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
   // Extract snapshot & period data
-  const totalOrdenesVal = dashboardData?.totalOrdenes ?? dashboardData?.total_ordenes ?? ((dashboardData?.ordenesActivas ?? 0) + (dashboardData?.desgloseEstados?.entregadas ?? 0));
-  const ordenesActivasVal = dashboardData?.ordenesActivas ?? initialMetrics?.ordenesActivas ?? 0;
-  const facturacionPeriodoVal = dashboardData?.facturacion_periodo ?? dashboardData?.facturacionPeriodo ?? initialMetrics?.ingresosDia ?? 0;
-  const montoPendienteVal = dashboardData?.monto_pendiente_entrega ?? dashboardData?.montoPendienteEntrega ?? 0;
-  const ordenesPendientesVal = dashboardData?.ordenes_pendientes_entrega ?? dashboardData?.ordenesPendientesEntrega ?? 0;
-  const nuevosClientesVal = dashboardData?.nuevosClientesSemana ?? initialMetrics?.nuevosClientesSemana ?? 0;
-  const ordenesEntregadasVal = dashboardData?.ordenesEntregadasPeriodo ?? 0;
+  const totalOrdenesVal = dashboardData?.totalOrdenes ?? dashboardData?.total_ordenes ?? initialMetrics?.totalOrdenes ?? ((dashboardData?.ordenesActivas ?? 0) + (dashboardData?.desgloseEstados?.entregadas ?? 0));
+  const totalClientesVal = dashboardData?.totalClientes ?? dashboardData?.total_clientes ?? initialMetrics?.totalClientes ?? 0;
   const desgloseEstados = dashboardData?.desgloseEstados || { enProceso: 0, recibidas: 0, listas: 0, entregadas: 0 };
 
   const weeklyData: Array<{
@@ -127,8 +118,6 @@ export default function DashboardView({ initialMetrics }: { initialMetrics?: Ini
 
   const categoryBreakdown: Array<{ name: string; percentage: number; count: string; color: string }> = dashboardData?.categoryBreakdown || [];
   const recentOrdersList: Array<{ id: number; codigo: string; cliente: string; vehiculo: string; servicio: string; estado: string; mecanico: string; tiempo: string }> = dashboardData?.recentOrders || [];
-  const mecanicosCarga: Array<{ id: number; nombre: string; servicios: number }> = dashboardData?.mecanicosCarga || [];
-  const lowStockList: Array<{ id: number; codigo: string; nombre: string; stock: number; minimo: number }> = dashboardData?.lowStockItems || [];
 
   const totalRegistradasPeriodo = dashboardData?.resumenGrafico?.totalOrdenesRegistradas ?? weeklyData.reduce((acc, curr) => acc + (curr.ordenes_registradas || 0), 0);
   const totalEntregadasPeriodo = dashboardData?.resumenGrafico?.totalOrdenesEntregadas ?? weeklyData.reduce((acc, curr) => acc + (curr.ordenes_entregadas || 0), 0);
@@ -159,7 +148,13 @@ export default function DashboardView({ initialMetrics }: { initialMetrics?: Ini
     totalServicios: totalServiciosPeriodo,
     promedioDiario: promedioDiarioVal,
     diaMayorActividad: diaMayorActividadVal,
-    periodoTexto: "Últimos 7 días"
+    periodoTexto: rangeType === 'custom'
+      ? `${customFrom} a ${customTo}`
+      : rangeType === '14d'
+      ? 'Últimos 14 días'
+      : rangeType === '30d'
+      ? 'Últimos 30 días'
+      : 'Últimos 7 días'
   };
 
   // Compute dynamic scale for Y axis
@@ -175,10 +170,6 @@ export default function DashboardView({ initialMetrics }: { initialMetrics?: Ini
 
   const handleNavigateWorkOrders = () => {
     router.push("/work-orders");
-  };
-
-  const handleNavigateInventory = () => {
-    router.push("/inventory");
   };
 
   return (
@@ -198,7 +189,7 @@ export default function DashboardView({ initialMetrics }: { initialMetrics?: Ini
               </span>
             </div>
             <p className="text-foreground-muted font-mono text-xs md:text-sm mt-1">
-              Monitoreo operativo de órdenes de trabajo, facturación, clientes e inventario
+              Monitoreo operativo de órdenes de trabajo, clientes y flujo del taller
             </p>
           </div>
 
@@ -306,134 +297,67 @@ export default function DashboardView({ initialMetrics }: { initialMetrics?: Ini
         </div>
       )}
 
-      {/* 5 Main KPI Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3.5">
+      {/* 2 Main KPI Cards Grid: Total de Órdenes & Total de Clientes */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         
         {/* KPI 1: Total de Órdenes (Snapshot) */}
-        <div className="bg-card border border-border rounded-2xl p-4 shadow-sm relative overflow-hidden group hover:border-primary/50 transition-all flex flex-col justify-between">
+        <div className="bg-card border border-border rounded-2xl p-5 shadow-sm relative overflow-hidden group hover:border-primary/50 transition-all flex flex-col justify-between">
           <div>
             <div className="flex justify-between items-center mb-2">
-              <span className="font-mono text-[10px] text-foreground-muted font-bold uppercase tracking-wider block">
+              <span className="font-mono text-xs text-foreground-muted font-bold uppercase tracking-wider block">
                 TOTAL DE ÓRDENES
               </span>
-              <div className="p-1.5 bg-primary/15 border border-primary/30 rounded-lg text-primary group-hover:scale-110 transition-transform">
-                <Wrench size={16} />
+              <div className="p-2 bg-primary/15 border border-primary/30 rounded-xl text-primary group-hover:scale-110 transition-transform">
+                <Wrench size={18} />
               </div>
             </div>
             <div className="mt-1">
-              <h3 className="font-mono text-2xl 2xl:text-3xl font-black text-primary">
-                {loading ? <Loader2 className="w-6 h-6 animate-spin text-primary" /> : totalOrdenesVal}
+              <h3 className="font-mono text-3xl md:text-4xl font-black text-primary">
+                {loading && !dashboardData && initialMetrics?.totalOrdenes === undefined ? (
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                ) : (
+                  totalOrdenesVal
+                )}
               </h3>
             </div>
-            <p className="text-[9.5px] 2xl:text-[10px] text-foreground-muted font-mono mt-1.5 leading-tight">
+            <p className="text-xs text-foreground-muted font-mono mt-2 leading-relaxed">
               {desgloseEstados.enProceso} en reparación • {desgloseEstados.recibidas} recibidas • {desgloseEstados.listas} {desgloseEstados.listas === 1 ? 'lista' : 'listas'} para entrega • {desgloseEstados.entregadas || 0} entregadas
             </p>
           </div>
-          <div className="mt-3 pt-2 border-t border-border text-[10px] font-mono text-foreground-disabled">
+          <div className="mt-4 pt-3 border-t border-border text-[11px] font-mono text-foreground-disabled">
             Estado General Taller
           </div>
         </div>
 
-        {/* KPI 2: Facturación del Período (Period) */}
-        <div className="bg-card border border-border rounded-2xl p-4 shadow-sm relative overflow-hidden group hover:border-success/50 transition-all flex flex-col justify-between">
+        {/* KPI 2: Total de Clientes (Snapshot Global) */}
+        <div className="bg-card border border-border rounded-2xl p-5 shadow-sm relative overflow-hidden group hover:border-purple-500/50 transition-all flex flex-col justify-between">
           <div>
             <div className="flex justify-between items-center mb-2">
-              <span className="font-mono text-[10px] text-foreground-muted font-bold uppercase tracking-wider block">
-                FACTURACIÓN PERÍODO
+              <span className="font-mono text-xs text-foreground-muted font-bold uppercase tracking-wider block">
+                TOTAL DE CLIENTES
               </span>
-              <div className="p-1.5 bg-success/15 border border-success/30 rounded-lg text-success group-hover:scale-110 transition-transform shrink-0">
-                <DollarSign size={16} />
+              <div className="p-2 bg-purple-500/15 border border-purple-500/30 rounded-xl text-purple-600 dark:text-purple-400 group-hover:scale-110 transition-transform">
+                <Users size={18} />
               </div>
             </div>
             <div className="mt-1">
-              <h3 className="font-mono text-lg 2xl:text-xl font-black text-foreground whitespace-nowrap" title={formatDOP(facturacionPeriodoVal)}>
-                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : formatDOP(facturacionPeriodoVal)}
+              <h3 className="font-mono text-3xl md:text-4xl font-black text-foreground">
+                {loading && !dashboardData && initialMetrics?.totalClientes === undefined ? (
+                  <Loader2 className="w-8 h-8 animate-spin text-purple-600 dark:text-purple-400" />
+                ) : (
+                  totalClientesVal
+                )}
               </h3>
             </div>
-            <span className="inline-flex items-center gap-0.5 font-mono text-[10px] font-bold text-foreground-muted mt-1.5">
-              Órdenes entregadas en el período
-            </span>
+            <p className="text-xs text-purple-600 dark:text-purple-400 font-mono mt-2 font-medium">
+              Clientes activos registrados
+            </p>
           </div>
-          <div className="mt-3 pt-2 border-t border-border text-[10px] font-mono text-foreground-disabled truncate">
-            {resumenGrafico.periodoTexto}
+          <div className="mt-4 pt-3 border-t border-border text-[11px] font-mono text-foreground-disabled">
+            Directorio de Clientes
           </div>
         </div>
 
-        {/* KPI 3: Monto Pendiente de Entrega (Snapshot) */}
-        <div className="bg-card border border-warning/30 rounded-2xl p-4 shadow-sm relative overflow-hidden group hover:border-warning/60 transition-all flex flex-col justify-between">
-          <div>
-            <div className="flex justify-between items-center mb-2">
-              <span className="font-mono text-[10px] text-warning font-bold uppercase tracking-wider block">
-                MONTO PENDIENTE
-              </span>
-              <div className="p-1.5 bg-warning/15 border border-warning/30 rounded-lg text-warning group-hover:scale-110 transition-transform shrink-0">
-                <Clock size={16} />
-              </div>
-            </div>
-            <div className="mt-1">
-              <h3 className="font-mono text-lg 2xl:text-xl font-black text-warning whitespace-nowrap" title={formatDOP(montoPendienteVal)}>
-                {loading ? <Loader2 className="w-5 h-5 animate-spin text-warning" /> : formatDOP(montoPendienteVal)}
-              </h3>
-            </div>
-            <p className="text-[10px] text-warning font-mono mt-1.5 font-bold">
-              {ordenesPendientesVal} órdenes pendientes
-            </p>
-          </div>
-          <div className="mt-3 pt-2 border-t border-border text-[9.5px] font-mono text-foreground-disabled leading-tight">
-            Total de órdenes aún no entregadas
-          </div>
-        </div>
-
-        {/* KPI 4: Mecánicos Asignados (Snapshot) */}
-        <div className="bg-card border border-border rounded-2xl p-4 shadow-sm relative overflow-hidden group hover:border-info/50 transition-all flex flex-col justify-between">
-          <div>
-            <div className="flex justify-between items-center mb-2">
-              <span className="font-mono text-[10px] text-foreground-muted font-bold uppercase tracking-wider block">
-                MECÁNICOS ASIGNADOS
-              </span>
-              <div className="p-1.5 bg-info/15 border border-info/30 rounded-lg text-info group-hover:scale-110 transition-transform">
-                <Zap size={16} />
-              </div>
-            </div>
-            <div className="flex items-baseline gap-2 mt-1">
-              <h3 className="font-mono text-2xl 2xl:text-3xl font-black text-foreground">
-                {loading ? <Loader2 className="w-6 h-6 animate-spin text-info" /> : mecanicosCarga.filter(m => m.servicios > 0).length}
-              </h3>
-              <span className="font-mono text-xs text-foreground-muted">de {mecanicosCarga.length}</span>
-            </div>
-            <p className="text-[10px] text-info font-mono font-bold mt-1.5">
-              Servicios activos
-            </p>
-          </div>
-          <div className="mt-3 pt-2 border-t border-border text-[10px] font-mono text-foreground-disabled">
-            Capacidad Asignada
-          </div>
-        </div>
-
-        {/* KPI 5: Nuevos Clientes (Period) */}
-        <div className="bg-card border border-border rounded-2xl p-4 shadow-sm relative overflow-hidden group hover:border-purple-500/50 transition-all flex flex-col justify-between">
-          <div>
-            <div className="flex justify-between items-center mb-2">
-              <span className="font-mono text-[10px] text-foreground-muted font-bold uppercase tracking-wider block">
-                NUEVOS CLIENTES
-              </span>
-              <div className="p-1.5 bg-purple-500/15 border border-purple-500/30 rounded-lg text-purple-600 dark:text-purple-400 group-hover:scale-110 transition-transform">
-                <Users size={16} />
-              </div>
-            </div>
-            <div className="mt-1">
-              <h3 className="font-mono text-2xl 2xl:text-3xl font-black text-foreground">
-                {loading ? <Loader2 className="w-6 h-6 animate-spin text-purple-600 dark:text-purple-400" /> : `+${nuevosClientesVal}`}
-              </h3>
-            </div>
-            <p className="text-[10px] text-purple-600 dark:text-purple-400 font-mono mt-1.5">
-              Registrados en período
-            </p>
-          </div>
-          <div className="mt-3 pt-2 border-t border-border text-[10px] font-mono text-foreground-disabled truncate">
-            {resumenGrafico.periodoTexto}
-          </div>
-        </div>
       </div>
 
       {/* Middle Grid: Charts Section */}
@@ -467,7 +391,7 @@ export default function DashboardView({ initialMetrics }: { initialMetrics?: Ini
           </div>
 
           {/* Bar Chart Visualization Area */}
-          {loading ? (
+          {loading && !dashboardData ? (
             <div className="flex-1 flex items-center justify-center font-mono text-xs text-foreground-muted gap-2 min-h-[190px]">
               <Loader2 className="w-5 h-5 animate-spin text-primary" /> Cargando datos del flujo operativo...
             </div>
@@ -636,7 +560,7 @@ export default function DashboardView({ initialMetrics }: { initialMetrics?: Ini
             </p>
           </div>
 
-          {loading ? (
+          {loading && !dashboardData ? (
             <div className="flex-1 flex items-center justify-center font-mono text-xs text-foreground-muted gap-2">
               <Loader2 className="w-5 h-5 animate-spin text-info" /> Cargando servicios...
             </div>
@@ -677,198 +601,96 @@ export default function DashboardView({ initialMetrics }: { initialMetrics?: Ini
         </div>
       </div>
 
-      {/* Bottom Grid: Live Orders & Stock Alerts */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        
-        {/* Table: Órdenes Recientes en Taller (7 cols) */}
-        <div className="lg:col-span-7 bg-card border border-border rounded-2xl p-6 shadow-sm space-y-4 transition-colors">
-          <div className="flex justify-between items-center border-b border-border pb-3">
-            <h3 className="font-sans text-base font-bold text-foreground flex items-center gap-2">
-              <Clock size={18} className="text-primary" />
-              Órdenes de Trabajo Recientes
-            </h3>
-            <button
-              onClick={handleNavigateWorkOrders}
-              className="text-xs font-mono text-primary hover:underline font-bold flex items-center gap-1 cursor-pointer"
-            >
-              Ver todas <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
+      {/* Bottom Section: Órdenes de Trabajo Recientes (Full Width) */}
+      <div className="bg-card border border-border rounded-2xl p-6 shadow-sm space-y-4 transition-colors">
+        <div className="flex justify-between items-center border-b border-border pb-3">
+          <h3 className="font-sans text-base font-bold text-foreground flex items-center gap-2">
+            <Clock size={18} className="text-primary" />
+            Órdenes de Trabajo Recientes
+          </h3>
+          <button
+            onClick={handleNavigateWorkOrders}
+            className="text-xs font-mono text-primary hover:underline font-bold flex items-center gap-1 cursor-pointer"
+          >
+            Ver todas <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
 
-          <div className="border border-border rounded-xl overflow-hidden bg-surface">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="border-b border-border bg-surface-subtle select-none">
-                    <th className="py-3 px-4 font-mono text-[10px] text-foreground-secondary font-bold uppercase tracking-wider">CÓDIGO</th>
-                    <th className="py-3 px-4 font-mono text-[10px] text-foreground-secondary font-bold uppercase tracking-wider">CLIENTE / VEHÍCULO</th>
-                    <th className="py-3 px-4 font-mono text-[10px] text-foreground-secondary font-bold uppercase tracking-wider">SERVICIO</th>
-                    <th className="py-3 px-4 font-mono text-[10px] text-foreground-secondary font-bold uppercase tracking-wider text-center">ESTADO</th>
-                    <th className="py-3 px-4 font-mono text-[10px] text-foreground-secondary font-bold uppercase tracking-wider">MECÁNICO</th>
+        <div className="border border-border rounded-xl overflow-hidden bg-surface">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-border bg-surface-subtle select-none">
+                  <th className="py-3.5 px-4 font-mono text-[10px] text-foreground-secondary font-bold uppercase tracking-wider">CÓDIGO</th>
+                  <th className="py-3.5 px-4 font-mono text-[10px] text-foreground-secondary font-bold uppercase tracking-wider">CLIENTE / VEHÍCULO</th>
+                  <th className="py-3.5 px-4 font-mono text-[10px] text-foreground-secondary font-bold uppercase tracking-wider">SERVICIO</th>
+                  <th className="py-3.5 px-4 font-mono text-[10px] text-foreground-secondary font-bold uppercase tracking-wider text-center">ESTADO</th>
+                  <th className="py-3.5 px-4 font-mono text-[10px] text-foreground-secondary font-bold uppercase tracking-wider">MECÁNICO</th>
+                  <th className="py-3.5 px-4 font-mono text-[10px] text-foreground-secondary font-bold uppercase tracking-wider text-right">FECHA RECEPCIÓN</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {loading && !dashboardData ? (
+                  <tr>
+                    <td colSpan={6} className="py-8 text-center font-mono text-xs text-foreground-muted">
+                      <Loader2 className="w-5 h-5 animate-spin mx-auto mb-1 text-primary" />
+                      Cargando órdenes de trabajo...
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {loading ? (
-                    <tr>
-                      <td colSpan={5} className="py-8 text-center font-mono text-xs text-foreground-muted">
-                        <Loader2 className="w-5 h-5 animate-spin mx-auto mb-1 text-primary" />
-                        Cargando órdenes de trabajo...
-                      </td>
-                    </tr>
-                  ) : recentOrdersList.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="py-8 text-center font-mono text-xs text-foreground-disabled">
-                        No hay órdenes de trabajo registradas.
-                      </td>
-                    </tr>
-                  ) : (
-                    recentOrdersList.map((order) => {
-                      const statusClass =
-                        order.estado === "En Reparación" || order.estado === "EN PROCESO"
-                          ? "bg-success/15 text-success border-success/30"
-                          : order.estado === "Lista para Entrega"
-                          ? "bg-primary/15 text-primary border-primary/30"
-                          : order.estado === "Entregada"
-                          ? "bg-surface-subtle text-foreground-muted border-border"
-                          : "bg-info/15 text-info border-info/30";
+                ) : recentOrdersList.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-8 text-center font-mono text-xs text-foreground-disabled">
+                      No hay órdenes de trabajo registradas.
+                    </td>
+                  </tr>
+                ) : (
+                  recentOrdersList.map((order) => {
+                    const statusClass =
+                      order.estado === "En Reparación" || order.estado === "EN PROCESO"
+                        ? "bg-success/15 text-success border-success/30"
+                        : order.estado === "Lista para Entrega"
+                        ? "bg-primary/15 text-primary border-primary/30"
+                        : order.estado === "Entregada"
+                        ? "bg-surface-subtle text-foreground-muted border-border"
+                        : "bg-info/15 text-info border-info/30";
 
-                      return (
-                        <tr
-                          key={order.id}
-                          onClick={() => router.push(`/work-orders?order_id=${order.id}`)}
-                          className="hover:bg-hover transition-colors cursor-pointer"
-                        >
-                          <td className="py-3 px-4 font-mono font-bold text-primary whitespace-nowrap">
-                            {order.codigo}
-                          </td>
-                          <td className="py-3 px-4">
-                            <div className="flex flex-col">
-                              <span className="font-bold text-foreground font-mono">{order.cliente}</span>
-                              <span className="text-[11px] text-foreground-muted font-mono">{order.vehiculo}</span>
-                            </div>
-                          </td>
-                          <td className="py-3 px-4 font-mono text-foreground-secondary text-[11px]">
-                            {order.servicio}
-                          </td>
-                          <td className="py-3 px-4 text-center whitespace-nowrap">
-                            <span className={`px-2.5 py-0.5 rounded-lg border font-mono text-[9.5px] font-bold uppercase tracking-wider ${statusClass}`}>
-                              {order.estado}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 font-mono text-xs text-foreground-secondary whitespace-nowrap">
-                            {order.mecanico}
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
+                    return (
+                      <tr
+                        key={order.id}
+                        onClick={() => router.push(`/work-orders?order_id=${order.id}`)}
+                        className="hover:bg-hover transition-colors cursor-pointer"
+                      >
+                        <td className="py-3.5 px-4 font-mono font-bold text-primary whitespace-nowrap">
+                          {order.codigo}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <div className="flex flex-col">
+                            <span className="font-bold text-foreground font-mono">{order.cliente}</span>
+                            <span className="text-[11px] text-foreground-muted font-mono">{order.vehiculo}</span>
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4 font-mono text-foreground-secondary text-[11px]">
+                          {order.servicio}
+                        </td>
+                        <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                          <span className={`px-2.5 py-0.5 rounded-lg border font-mono text-[9.5px] font-bold uppercase tracking-wider ${statusClass}`}>
+                            {order.estado}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 font-mono text-xs text-foreground-secondary whitespace-nowrap">
+                          {order.mecanico}
+                        </td>
+                        <td className="py-3.5 px-4 font-mono text-xs text-foreground-muted text-right whitespace-nowrap">
+                          {order.tiempo}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
-
-        {/* Sidebar: Carga Mecánicos + Alertas Inventario (5 cols) */}
-        <div className="lg:col-span-5 space-y-6">
-          
-          {/* Carga Mecánicos (Snapshot) */}
-          <div className="bg-card border border-border rounded-2xl p-6 shadow-sm space-y-4 transition-colors">
-            <div className="flex justify-between items-center border-b border-border pb-3">
-              <h3 className="font-sans text-base font-bold text-foreground flex items-center gap-2">
-                <Zap size={18} className="text-warning" />
-                Carga Operativa de Mecánicos
-              </h3>
-              <span className="px-2 py-0.5 rounded bg-warning/15 border border-warning/30 text-warning font-mono text-[10px] font-bold">
-                {mecanicosCarga.length} Técnicos
-              </span>
-            </div>
-
-            {loading ? (
-              <div className="py-6 text-center font-mono text-xs text-foreground-muted">
-                <Loader2 className="w-5 h-5 animate-spin mx-auto mb-1 text-warning" />
-                Cargando mecánicos...
-              </div>
-            ) : mecanicosCarga.length === 0 ? (
-              <p className="text-xs font-mono text-foreground-disabled py-4 text-center">
-                No hay mecánicos registrados en esta empresa.
-              </p>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {mecanicosCarga.map((mec) => (
-                  <div
-                    key={mec.id}
-                    className="p-3 rounded-xl border border-border bg-surface-subtle font-mono hover:border-primary/40 transition-colors"
-                  >
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="text-[11px] font-bold text-foreground truncate max-w-[130px]" title={mec.nombre}>
-                        {mec.nombre}
-                      </span>
-                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${mec.servicios > 0 ? 'bg-success/15 text-success border-success/30' : 'bg-surface text-foreground-muted border-border'}`}>
-                        {mec.servicios > 0 ? `${mec.servicios} Activos` : 'Libre'}
-                      </span>
-                    </div>
-                    <p className="text-[10px] text-foreground-muted">
-                      {mec.servicios} servicio{mec.servicios === 1 ? '' : 's'} asignado{mec.servicios === 1 ? '' : 's'}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Alertas de Stock Crítico Real (Snapshot) */}
-          <div className="bg-card border border-border rounded-2xl p-6 shadow-sm space-y-4 transition-colors">
-            <div className="flex justify-between items-center border-b border-border pb-3">
-              <h3 className="font-sans text-base font-bold text-foreground flex items-center gap-2">
-                <AlertTriangle size={18} className="text-error" />
-                Alertas de Stock Crítico Real
-              </h3>
-              <button
-                onClick={handleNavigateInventory}
-                className="text-[10px] font-mono text-primary hover:underline font-bold cursor-pointer"
-              >
-                Inventario →
-              </button>
-            </div>
-
-            {loading ? (
-              <div className="py-6 text-center font-mono text-xs text-foreground-muted">
-                <Loader2 className="w-5 h-5 animate-spin mx-auto mb-1 text-error" />
-                Cargando inventario...
-              </div>
-            ) : lowStockList.length === 0 ? (
-              <p className="text-xs font-mono text-foreground-disabled py-4 text-center">
-                Sin productos en stock crítico.
-              </p>
-            ) : (
-              <div className="space-y-2.5">
-                {lowStockList.map((item) => (
-                  <div
-                    key={item.id}
-                    onClick={handleNavigateInventory}
-                    className="p-3 bg-surface-subtle border border-border rounded-xl flex items-center justify-between font-mono hover:border-error/40 transition-colors cursor-pointer"
-                  >
-                    <div className="flex flex-col">
-                      <span className="text-xs font-bold text-foreground truncate max-w-[180px]">
-                        {item.nombre}
-                      </span>
-                      <span className="text-[10px] text-foreground-muted">
-                        Código: {item.codigo}
-                      </span>
-                    </div>
-                    <div className="text-right">
-                      <span className="px-2 py-0.5 rounded bg-error/15 text-error border border-error/30 text-[10px] font-bold block">
-                        Stock: {item.stock} (mín: {item.minimo})
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-        </div>
-
       </div>
 
     </div>
