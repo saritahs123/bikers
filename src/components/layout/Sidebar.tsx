@@ -54,7 +54,6 @@ function SidebarContent({
       label: "TALLER",
       submenu: [
         { href: "/", label: "DASHBOARD" },
-        { href: "/workshop", label: "PANEL OPERATIVO" },
         { href: "/workshop?view=list", label: "RECEPCIONES" },
         { href: "/workshop?view=work_orders", label: "ÓRDENES DE TRABAJO" },
         { href: "/workshop?view=kanban", label: "VISTA KANBAN" },
@@ -103,11 +102,8 @@ function SidebarContent({
     if (subHref === "/") {
       return pathname === "/";
     }
-    if (subHref === "/workshop") {
-      return pathname === "/workshop" && !currentView && !currentAction && !currentId && !currentOrderId && !currentInvoiceOrderId;
-    }
     if (subHref === "/workshop?view=list") {
-      return pathname === "/workshop" && (currentView === "list" || (!!currentId && !currentOrderId && !currentInvoiceOrderId));
+      return pathname === "/workshop" && (currentView === "list" || (!currentView && !currentAction && !currentId && !currentOrderId && !currentInvoiceOrderId) || (!!currentId && !currentOrderId && !currentInvoiceOrderId));
     }
     if (subHref === "/workshop?action=new") {
       return pathname === "/workshop" && currentAction === "new";
