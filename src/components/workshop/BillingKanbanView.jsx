@@ -78,12 +78,36 @@ export default function BillingKanbanView({ onViewInvoiceDetail }) {
 
       setOrders(data.data || []);
       const operationalEstados = [
-        { estado_orden_id: 1, codigo: "RECIBIDA", nombre: "Recibida", color_estado: "#38BDF8" },
-        { estado_orden_id: 5, codigo: "REPARACION", nombre: "En Reparación", color_estado: "#F59E0B" },
-        { estado_orden_id: 7, codigo: "LISTA_ENTREGA", nombre: "Lista para Entrega", color_estado: "#10B981" },
-        { estado_orden_id: 8, codigo: "ENTREGADA", nombre: "Entregada", color_estado: "#64748B" }
+        {
+          key: "PENDIENTE",
+          codigos: ["RECIBIDA", "RECIBIDAS", "DIAGNOSTICO", "APROBACION", "REPUESTOS"],
+          estado_ids: [1, 2, 3, 4],
+          nombre: "Pendiente",
+          color_estado: "#38BDF8"
+        },
+        {
+          key: "EN_EJECUCION",
+          codigos: ["REPARACION", "EN_REPARACION", "CALIDAD"],
+          estado_ids: [5, 6],
+          nombre: "En Ejecución",
+          color_estado: "#F59E0B"
+        },
+        {
+          key: "COMPLETADA",
+          codigos: ["LISTA_ENTREGA", "LISTA_PARA_ENTREGA", "LISTAS_PARA_ENTREGA"],
+          estado_ids: [7],
+          nombre: "Completada",
+          color_estado: "#10B981"
+        },
+        {
+          key: "ENTREGADA",
+          codigos: ["ENTREGADA", "ENTREGADAS"],
+          estado_ids: [8],
+          nombre: "Entregada",
+          color_estado: "#64748B"
+        }
       ];
-      setEstados(data.catalogs?.estados || operationalEstados);
+      setEstados(operationalEstados);
     } catch (err) {
       console.error("fetchBillingData Error:", err);
       if (!isSilent) {
@@ -124,11 +148,20 @@ export default function BillingKanbanView({ onViewInvoiceDetail }) {
   };
 
   const renderColumn = (estado) => {
-    const columnOrders = orders.filter((o) => o.estado_orden_id === estado.estado_orden_id);
+    const columnOrders = orders.filter((o) => {
+      const codigo = String(o.estado_codigo || "").trim().toUpperCase();
+      if (codigo && estado.codigos) {
+        return estado.codigos.includes(codigo);
+      }
+      if (o.estado_orden_id && estado.estado_ids) {
+        return estado.estado_ids.includes(Number(o.estado_orden_id));
+      }
+      return false;
+    });
 
     return (
       <div
-        key={estado.estado_orden_id}
+        key={estado.key || estado.nombre}
         className="flex flex-col bg-slate-900/60 border border-slate-800 rounded-2xl p-3.5 transition-all min-h-[300px] w-full"
       >
         {/* Column Header */}

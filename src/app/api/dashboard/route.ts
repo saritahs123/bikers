@@ -106,111 +106,20 @@ export async function GET(request: NextRequest) {
     const listasVal = ordActRows[0]?.listas || 0;
     const entregadasVal = ordActRows[0]?.entregadas || 0;
 
-    // B. Monto Pendiente de Entrega (Suma total de órdenes activas no entregadas)
-    const pendingMontoRows = await query<any>(`
-      SELECT
-        COALESCE(SUM(COALESCE(ot.total_orden, 0)), 0)::numeric AS monto_pendiente,
-        COUNT(ot.orden_trabajo_id)::int AS ordenes_pendientes
-      FROM admin.ordenes_trabajo ot
-      JOIN admin.clientes c ON ot.cliente_id = c.cliente_id
-      LEFT JOIN admin.estado_orden_trabajo eot ON eot.estado_orden_id = ot.estado_orden_id
-      WHERE (c.empresa_id = $1 OR ot.usuario_registro IN (SELECT usuario_id FROM admin.usuario WHERE empresa_id = $1))
-        AND (ot.activo IS DISTINCT FROM false)
-        AND eot.codigo IN ('RECIBIDA', 'REPARACION', 'LISTA_ENTREGA');
-    `, [empresaId]);
-
-    const montoPendienteVal = Number(pendingMontoRows[0]?.monto_pendiente || 0);
-    const ordenesPendientesVal = Number(pendingMontoRows[0]?.ordenes_pendientes || 0);
-
-    // C. Carga Operativa Real de Mecánicos
-    const mecWorkloadRows = await query<any>(`
-      SELECT 
-        u.usuario_id AS id,
-        COALESCE(NULLIF(TRIM(CONCAT_WS(' ', ui.nombre, ui.apellido)), ''), CONCAT('Técnico #', u.usuario_id)) AS nombre,
-        COUNT(DISTINCT ot.orden_trabajo_id) FILTER (WHERE eot.codigo IN ('RECIBIDA', 'REPARACION', 'LISTA_ENTREGA'))::int AS servicios_activos
-      FROM admin.usuario u
-      JOIN admin.tipo_usuario tu ON tu.tipo_usuario_id = u.tipo_usuario_id
-      LEFT JOIN admin.usuario_identidad ui ON u.usuario_id = ui.usuario_id
-      LEFT JOIN admin.cargo c ON c.cargo_id = ui.cargo_id
-      LEFT JOIN admin.ordenes_trabajo ot ON ot.mecanico_id = u.usuario_id AND (ot.activo IS DISTINCT FROM false)
-      LEFT JOIN admin.estado_orden_trabajo eot ON eot.estado_orden_id = ot.estado_orden_id
-      WHERE u.empresa_id = $1
-        AND (u.estado = 'ACTIVO' OR u.estado IS NULL)
-        AND (tu.codigo = 'MECANICO' OR c.nombre ILIKE '%Mecánico%' OR c.nombre ILIKE '%Técnico%')
-      GROUP BY u.usuario_id, ui.nombre, ui.apellido
-      ORDER BY servicios_activos DESC, u.usuario_id ASC
-      LIMIT 6;
-    `, [empresaId]);
-
-    const mecanicosCarga = (mecWorkloadRows || []).map((m: any) => ({
-      id: m.id,
-      nombre: m.nombre,
-      servicios: Number(m.servicios_activos || 0)
-    }));
-
-    // D. Alertas de Stock Crítico Real
-    const stockRows = await query<any>(`
-      SELECT 
-        p.producto_id AS id,
-        p.codigo_producto AS codigo,
-        p.nombre,
-        COALESCE(ep.cantidad_actual, 0)::numeric AS stock,
-        COALESCE(ep.stock_minimo, p.stock_minimo, 0)::numeric AS minimo
-      FROM admin.productos p
-      LEFT JOIN admin.existencias_producto ep ON p.producto_id = ep.producto_id
-      JOIN admin.usuario u_prod ON u_prod.usuario_id = p.usuario_registro
-      WHERE u_prod.empresa_id = $1
-        AND (p.estado = 'ACTIVO' OR p.estado IS NULL)
-        AND (
-          (ep.cantidad_actual IS NOT NULL AND ep.cantidad_actual <= ep.stock_minimo)
-          OR (ep.cantidad_actual IS NULL AND p.stock_minimo IS NOT NULL)
-        )
-      LIMIT 5
-    `, [empresaId]);
-
-    const lowStockItems = (stockRows || []).map((p: any) => ({
-      id: p.id,
-      codigo: p.codigo,
-      nombre: p.nombre,
-      stock: Number(p.stock || 0),
-      minimo: Number(p.minimo || 0)
-    }));
-
-
-    // --- 2. PERIOD METRICS (MÉTRICAS FILTRADAS POR EL RANGO DE FECHAS SELECCIONADO) ---
-
-    // A. Facturación del Período (Órdenes ENTREGADAS dentro del rango según fecha de entrega/facturación)
-    const facturacionRows = await query<any>(`
-      SELECT 
-        COALESCE(SUM(COALESCE(ot.total_orden, 0)), 0)::numeric AS facturacion_periodo,
-        COUNT(ot.orden_trabajo_id)::int AS ordenes_facturadas
-      FROM admin.ordenes_trabajo ot
-      JOIN admin.clientes c ON ot.cliente_id = c.cliente_id
-      JOIN admin.estado_orden_trabajo eot ON eot.estado_orden_id = ot.estado_orden_id
-      WHERE (c.empresa_id = $1 OR ot.usuario_registro IN (SELECT usuario_id FROM admin.usuario WHERE empresa_id = $1))
-        AND (ot.activo IS DISTINCT FROM false)
-        AND (eot.codigo = 'ENTREGADA' OR ot.estado_orden_id = 8)
-        AND (COALESCE(ot.fecha_entrega_real, ot.fecha_facturacion, ot.fecha_finalizacion, ot.fecha_registro) AT TIME ZONE 'America/Santo_Domingo')::date BETWEEN $2::date AND $3::date;
-    `, [empresaId, startDateStr, endDateStr]);
-
-    const facturacionPeriodo = Number(facturacionRows[0]?.facturacion_periodo || 0);
-    const ordenesFacturadasPeriodo = Number(facturacionRows[0]?.ordenes_facturadas || 0);
-
-    // B. Nuevos Clientes en el Período
-    const cliRows = await query<any>(`
+    // B. Total de Clientes Activos Global (Snapshot)
+    const totalClientesRows = await query<any>(`
       SELECT COUNT(*)::int AS total_clientes
       FROM admin.clientes c
       WHERE c.empresa_id = $1
-        AND (c.activo IS DISTINCT FROM false)
-        AND (c.fecha_creacion AT TIME ZONE 'America/Santo_Domingo')::date BETWEEN $2::date AND $3::date;
-    `, [empresaId, startDateStr, endDateStr]);
+        AND c.fecha_eliminacion IS NULL
+        AND (c.activo IS DISTINCT FROM false);
+    `, [empresaId]);
 
-    const nuevosClientesVal = cliRows[0]?.total_clientes || 0;
+    const totalClientesVal = totalClientesRows[0]?.total_clientes || 0;
 
-    // C. Órdenes Entregadas en el Período
-    const ordenesEntregadasVal = ordenesFacturadasPeriodo;
+    // --- 2. PERIOD METRICS (MÉTRICAS FILTRADAS POR EL RANGO DE FECHAS SELECCIONADO) ---
 
-    // D. Flujo Operativo Diario (generate_series entre startDateStr y endDateStr)
+    // A. Flujo Operativo Diario (generate_series entre startDateStr y endDateStr)
     const flujoRows = await query<any>(`
       WITH days AS (
         SELECT
@@ -385,6 +294,8 @@ export async function GET(request: NextRequest) {
       data: {
         totalOrdenes: totalOrdenesVal,
         total_ordenes: totalOrdenesVal,
+        totalClientes: totalClientesVal,
+        total_clientes: totalClientesVal,
         ordenesActivas: ordenesActivasVal,
         desgloseEstados: {
           enProceso: enProcesoVal,
@@ -392,15 +303,6 @@ export async function GET(request: NextRequest) {
           listas: listasVal,
           entregadas: entregadasVal
         },
-        facturacionPeriodo,
-        facturacion_periodo: facturacionPeriodo,
-        ordenes_facturadas_periodo: ordenesFacturadasPeriodo,
-        montoPendienteEntrega: montoPendienteVal,
-        monto_pendiente_entrega: montoPendienteVal,
-        ordenesPendientesEntrega: ordenesPendientesVal,
-        ordenes_pendientes_entrega: ordenesPendientesVal,
-        nuevosClientesSemana: nuevosClientesVal,
-        ordenesEntregadasPeriodo: ordenesEntregadasVal,
         resumenGrafico: {
           totalOrdenes: totalOrdenesRegistradas,
           totalOrdenesRegistradas,
@@ -409,7 +311,6 @@ export async function GET(request: NextRequest) {
           totalServicios: totalServiciosPeriodo,
           promedioDiario,
           diaMayorActividad,
-          facturacionPeriodo,
           periodoTexto: canonicalRange === 'custom'
             ? `${startDateStr} a ${endDateStr}`
             : canonicalRange === '14d'
@@ -420,9 +321,7 @@ export async function GET(request: NextRequest) {
         },
         weeklyData,
         categoryBreakdown,
-        recentOrders: recOrdRows || [],
-        mecanicosCarga,
-        lowStockItems
+        recentOrders: recOrdRows || []
       }
     });
 

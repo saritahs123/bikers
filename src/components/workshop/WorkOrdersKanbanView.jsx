@@ -11,13 +11,10 @@ import {
   Minimize,
   Bike,
   User,
+  Phone,
   AlertCircle,
   Loader2,
   Calendar,
-  DollarSign,
-  AlertTriangle,
-  ChevronRight,
-  Sparkles,
   X
 } from "lucide-react";
 
@@ -31,51 +28,51 @@ const PERIOD_OPTIONS = [
 const KANBAN_COLUMNS = [
   {
     key: "RECIBIDAS",
-    codigo: "RECIBIDA",
-    estado_id: 1,
-    title: "RECIBIDAS",
+    codigos: ["RECIBIDA", "RECIBIDAS", "DIAGNOSTICO", "APROBACION", "REPUESTOS"],
+    estado_ids: [1, 2, 3, 4],
+    title: "PENDIENTE",
     subtitle: "Pendientes de inicio",
     icon: Clock,
-    headerColor: "text-sky-400",
-    badgeBg: "bg-sky-500/15 text-sky-300 border-sky-500/30",
+    headerColor: "text-sky-500 dark:text-sky-400",
+    badgeBg: "bg-sky-500/15 text-sky-600 dark:text-sky-300 border-sky-500/30",
     borderTop: "border-t-sky-500",
-    ringColor: "ring-sky-500/20"
+    cardAccent: "border-l-sky-500"
   },
   {
     key: "REPARACION",
-    codigo: "REPARACION",
-    estado_id: 5,
-    title: "EN REPARACIÓN",
+    codigos: ["REPARACION", "EN_REPARACION", "CALIDAD"],
+    estado_ids: [5, 6],
+    title: "EN EJECUCIÓN",
     subtitle: "Trabajo técnico activo",
     icon: Wrench,
-    headerColor: "text-amber-400",
-    badgeBg: "bg-amber-500/15 text-amber-300 border-amber-500/30",
+    headerColor: "text-amber-500 dark:text-amber-400",
+    badgeBg: "bg-amber-500/15 text-amber-600 dark:text-amber-300 border-amber-500/30",
     borderTop: "border-t-amber-500",
-    ringColor: "ring-amber-500/20"
+    cardAccent: "border-l-amber-500"
   },
   {
     key: "LISTA_ENTREGA",
-    codigo: "LISTA_ENTREGA",
-    estado_id: 7,
-    title: "LISTAS PARA ENTREGA",
-    subtitle: "Listas para cliente",
+    codigos: ["LISTA_ENTREGA", "LISTA_PARA_ENTREGA", "LISTAS_PARA_ENTREGA"],
+    estado_ids: [7],
+    title: "COMPLETADA",
+    subtitle: "Lista para entrega",
     icon: ClipboardCheck,
-    headerColor: "text-emerald-400",
-    badgeBg: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
+    headerColor: "text-emerald-500 dark:text-emerald-400",
+    badgeBg: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border-emerald-500/30",
     borderTop: "border-t-emerald-500",
-    ringColor: "ring-emerald-500/20"
+    cardAccent: "border-l-emerald-500"
   },
   {
     key: "ENTREGADAS",
-    codigo: "ENTREGADA",
-    estado_id: 8,
-    title: "ENTREGADAS",
-    subtitle: "Completadas",
+    codigos: ["ENTREGADA", "ENTREGADAS"],
+    estado_ids: [8],
+    title: "ENTREGADA",
+    subtitle: "Finalizadas",
     icon: CheckCircle2,
-    headerColor: "text-slate-300",
-    badgeBg: "bg-slate-700/40 text-slate-300 border-slate-600/40",
+    headerColor: "text-slate-500 dark:text-slate-300",
+    badgeBg: "bg-slate-500/15 text-slate-600 dark:text-slate-300 border-slate-500/30",
     borderTop: "border-t-slate-500",
-    ringColor: "ring-slate-500/20"
+    cardAccent: "border-l-slate-500"
   }
 ];
 
@@ -209,7 +206,8 @@ export default function WorkOrdersKanbanView({ onViewDetail, onOpenNewModal, onT
 
   const formatTimeAgo = (date) => {
     if (!date) return "";
-    return date.toLocaleTimeString("es-DO", {
+    return date.toLocaleTimeString("en-US", {
+      timeZone: "America/Santo_Domingo",
       hour: "2-digit",
       minute: "2-digit",
       second: "2-digit",
@@ -217,88 +215,50 @@ export default function WorkOrdersKanbanView({ onViewDetail, onOpenNewModal, onT
     });
   };
 
-  const formatOrderDate = (dateString) => {
-    if (!dateString) return "";
-    try {
-      const d = new Date(dateString);
-      return d.toLocaleDateString("es-DO", {
-        day: "2-digit",
-        month: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: true
-      });
-    } catch {
-      return dateString;
-    }
-  };
-
   // Group orders by column
   const getOrdersForColumn = (column) => {
     return orders.filter((o) => {
-      if (o.estado_codigo) {
-        return o.estado_codigo === column.codigo;
+      const codigo = String(o.estado_codigo || "").trim().toUpperCase();
+      if (codigo && column.codigos) {
+        return column.codigos.includes(codigo);
       }
-      return o.estado_orden_id === column.estado_id;
+      if (o.estado_orden_id && column.estado_ids) {
+        return column.estado_ids.includes(Number(o.estado_orden_id));
+      }
+      return false;
     });
   };
 
   return (
     <div
       ref={containerRef}
-      className={`w-full flex flex-col space-y-4 font-sans text-slate-100 ${
-        isFullscreen ? "bg-[#0c0f14] p-6 min-h-screen overflow-y-auto" : ""
+      className={`w-full flex flex-col space-y-6 font-sans text-foreground transition-colors ${
+        isFullscreen ? "bg-background p-6 md:p-8 min-h-screen overflow-y-auto" : ""
       }`}
     >
-      {/* 1. ENCABEZADO SIMPLE SIN TARJETA */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-2 border-b border-[#2d3748]/50">
+      {/* 1. ENCABEZADO: FLUJO DE TALLER */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-border">
         {/* Lado Izquierdo */}
         <div>
-          <div className="text-xs text-slate-500 font-mono flex items-center gap-1.5 mb-1">
-            <span
-              className="hover:text-slate-300 transition-colors cursor-pointer"
-              onClick={onToggleList}
-            >
-              Taller
-            </span>
-            <span>/</span>
-            <span
-              className="hover:text-slate-300 transition-colors cursor-pointer"
-              onClick={onToggleList}
-            >
-              Órdenes de Trabajo
-            </span>
-            <span>/</span>
-            <span className="text-[#bfce7f] font-bold">Vista Kanban</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl md:text-3xl font-black text-slate-100 tracking-tight font-sans">
-              Monitoreo de Órdenes
-            </h1>
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-[#bfce7f]/15 border border-[#bfce7f]/30 text-[#bfce7f]">
-              <span className="w-2 h-2 rounded-full bg-[#bfce7f] animate-pulse" />
-              {orders.length} Órdenes
-            </span>
-          </div>
-          <p className="text-xs text-slate-400 mt-0.5 font-medium">
-            Seguimiento operativo del taller en tiempo real
-          </p>
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-foreground tracking-tight font-sans uppercase">
+            Flujo de taller
+          </h1>
         </div>
 
         {/* Lado Derecho: Controles Operativos */}
         <div className="flex flex-wrap items-center gap-3">
           {/* Selector de Período Segmentado */}
-          <div className="bg-[#161a21] border border-[#2d3748] p-1 rounded-xl flex items-center shadow-inner">
+          <div className="bg-surface border border-border p-1 rounded-xl flex items-center shadow-sm">
             {PERIOD_OPTIONS.map((opt) => {
               const isActive = selectedPeriod === opt.id;
               return (
                 <button
                   key={opt.id}
                   onClick={() => handlePeriodChange(opt.id)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer whitespace-nowrap ${
                     isActive
-                      ? "bg-[#bfce7f] text-slate-950 shadow-sm"
-                      : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-foreground-muted hover:text-foreground hover:bg-hover"
                   }`}
                 >
                   {opt.label}
@@ -312,8 +272,8 @@ export default function WorkOrdersKanbanView({ onViewDetail, onOpenNewModal, onT
 
           {/* Indicador de Última Actualización */}
           {lastUpdated && (
-            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-[#161a21] border border-[#2d3748] rounded-xl text-[11px] font-mono text-slate-400">
-              <Clock className="w-3.5 h-3.5 text-[#bfce7f]" />
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-surface border border-border rounded-xl text-xs font-mono text-foreground-muted">
+              <Clock className="w-3.5 h-3.5 text-primary" />
               <span>{formatTimeAgo(lastUpdated)}</span>
             </div>
           )}
@@ -322,26 +282,26 @@ export default function WorkOrdersKanbanView({ onViewDetail, onOpenNewModal, onT
           <button
             onClick={() => fetchOrders(false)}
             disabled={isRefreshing}
-            className="p-2.5 bg-[#161a21] hover:bg-slate-800 border border-[#2d3748] text-slate-300 hover:text-[#bfce7f] rounded-xl transition-all shadow-sm cursor-pointer disabled:opacity-50"
+            className="p-2.5 bg-surface hover:bg-hover border border-border text-foreground-secondary hover:text-primary rounded-xl transition-all shadow-sm cursor-pointer disabled:opacity-50"
             title="Actualizar datos ahora"
           >
-            <RotateCcw className={`w-4 h-4 ${isRefreshing ? "animate-spin text-[#bfce7f]" : ""}`} />
+            <RotateCcw className={`w-4 h-4 ${isRefreshing ? "animate-spin text-primary" : ""}`} />
           </button>
 
           {/* Botón de Pantalla Completa para Proyección en TV */}
           <button
             onClick={toggleFullscreen}
-            className="flex items-center gap-1.5 px-3 py-2 bg-[#161a21] hover:bg-slate-800 border border-[#2d3748] text-slate-300 hover:text-white rounded-xl transition-all shadow-sm text-xs font-mono font-bold cursor-pointer"
+            className="flex items-center gap-2 px-3.5 py-2 bg-surface hover:bg-hover border border-border text-foreground rounded-xl transition-all shadow-sm text-xs font-mono font-bold cursor-pointer"
             title={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa para TV / Monitor"}
           >
             {isFullscreen ? (
               <>
-                <Minimize className="w-4 h-4 text-amber-400" />
+                <Minimize className="w-4 h-4 text-amber-500" />
                 <span className="hidden md:inline">Salir</span>
               </>
             ) : (
               <>
-                <Maximize className="w-4 h-4 text-[#bfce7f]" />
+                <Maximize className="w-4 h-4 text-primary" />
                 <span className="hidden md:inline">Pantalla Completa</span>
               </>
             )}
@@ -349,96 +309,28 @@ export default function WorkOrdersKanbanView({ onViewDetail, onOpenNewModal, onT
         </div>
       </div>
 
-      {/* Modal para Período Personalizado mediante Portal a document.body */}
+      {/* Modal para Período Personalizado */}
       {mounted && showCustomModal && typeof document !== "undefined"
         ? createPortal(
-            <div
-              style={{
-                position: "fixed",
-                inset: 0,
-                zIndex: 999999,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: "16px",
-                backgroundColor: "rgba(0, 0, 0, 0.8)",
-                backdropFilter: "blur(6px)"
-              }}
-              onClick={(e) => {
-                if (e.target === e.currentTarget) setShowCustomModal(false);
-              }}
-            >
+            <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
               <div
-                style={{
-                  width: "440px",
-                  maxWidth: "95vw",
-                  minWidth: "320px",
-                  backgroundColor: "#161a21",
-                  border: "1px solid #2d3748",
-                  borderRadius: "16px",
-                  padding: "24px",
-                  boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.7)",
-                  color: "#f8fafc",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "20px",
-                  flexShrink: 0
-                }}
+                className="w-[440px] max-w-[95vw] bg-card border border-border rounded-2xl p-6 shadow-2xl text-foreground flex flex-col gap-5"
                 onClick={(e) => e.stopPropagation()}
               >
                 {/* Header */}
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    borderBottom: "1px solid #2d3748",
-                    paddingBottom: "14px"
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                    <div
-                      style={{
-                        padding: "8px",
-                        borderRadius: "10px",
-                        backgroundColor: "rgba(191, 206, 127, 0.15)",
-                        border: "1px solid rgba(191, 206, 127, 0.3)",
-                        color: "#bfce7f",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center"
-                      }}
-                    >
+                <div className="flex items-center justify-between border-b border-border pb-3.5">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-xl bg-primary/15 border border-primary/30 text-primary flex items-center justify-center">
                       <Calendar className="w-4 h-4" />
                     </div>
-                    <h3
-                      style={{
-                        fontSize: "14px",
-                        fontWeight: "700",
-                        color: "#f8fafc",
-                        fontFamily: "monospace",
-                        textTransform: "uppercase",
-                        letterSpacing: "0.05em",
-                        margin: 0
-                      }}
-                    >
+                    <h3 className="text-sm font-bold text-foreground font-mono uppercase tracking-wider">
                       Rango de Fecha Personalizado
                     </h3>
                   </div>
                   <button
                     type="button"
                     onClick={() => setShowCustomModal(false)}
-                    style={{
-                      padding: "6px",
-                      borderRadius: "8px",
-                      background: "transparent",
-                      border: "none",
-                      color: "#94a3b8",
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center"
-                    }}
+                    className="p-1.5 rounded-lg text-foreground-muted hover:text-foreground cursor-pointer"
                     title="Cerrar"
                   >
                     <X className="w-4 h-4" />
@@ -446,104 +338,37 @@ export default function WorkOrdersKanbanView({ onViewDetail, onOpenNewModal, onT
                 </div>
 
                 {/* Inputs en 2 columnas */}
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: "16px"
-                  }}
-                >
-                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                    <label
-                      style={{
-                        fontSize: "11px",
-                        fontFamily: "monospace",
-                        fontWeight: "700",
-                        color: "#94a3b8",
-                        textTransform: "uppercase",
-                        letterSpacing: "0.05em"
-                      }}
-                    >
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-mono font-bold text-foreground-muted uppercase tracking-wider">
                       Desde
                     </label>
                     <input
                       type="date"
                       value={customFrom}
                       onChange={(e) => setCustomFrom(e.target.value)}
-                      style={{
-                        width: "100%",
-                        backgroundColor: "#0a0c10",
-                        border: "1px solid #2d3748",
-                        borderRadius: "10px",
-                        padding: "10px 12px",
-                        fontSize: "12px",
-                        color: "#f1f5f9",
-                        outline: "none",
-                        fontFamily: "monospace",
-                        colorScheme: "dark",
-                        boxSizing: "border-box"
-                      }}
+                      className="w-full bg-input border border-border rounded-xl p-2.5 text-xs text-foreground font-mono outline-none focus:border-primary"
                     />
                   </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                    <label
-                      style={{
-                        fontSize: "11px",
-                        fontFamily: "monospace",
-                        fontWeight: "700",
-                        color: "#94a3b8",
-                        textTransform: "uppercase",
-                        letterSpacing: "0.05em"
-                      }}
-                    >
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-mono font-bold text-foreground-muted uppercase tracking-wider">
                       Hasta
                     </label>
                     <input
                       type="date"
                       value={customTo}
                       onChange={(e) => setCustomTo(e.target.value)}
-                      style={{
-                        width: "100%",
-                        backgroundColor: "#0a0c10",
-                        border: "1px solid #2d3748",
-                        borderRadius: "10px",
-                        padding: "10px 12px",
-                        fontSize: "12px",
-                        color: "#f1f5f9",
-                        outline: "none",
-                        fontFamily: "monospace",
-                        colorScheme: "dark",
-                        boxSizing: "border-box"
-                      }}
+                      className="w-full bg-input border border-border rounded-xl p-2.5 text-xs text-foreground font-mono outline-none focus:border-primary"
                     />
                   </div>
                 </div>
 
-                {/* Footer Buttons */}
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "flex-end",
-                    gap: "12px",
-                    borderTop: "1px solid #2d3748",
-                    paddingTop: "16px"
-                  }}
-                >
+                {/* Footer Actions */}
+                <div className="flex items-center justify-end gap-3 pt-2 border-t border-border">
                   <button
                     type="button"
                     onClick={() => setShowCustomModal(false)}
-                    style={{
-                      padding: "8px 16px",
-                      borderRadius: "10px",
-                      fontSize: "12px",
-                      fontFamily: "monospace",
-                      fontWeight: "700",
-                      color: "#94a3b8",
-                      backgroundColor: "transparent",
-                      border: "1px solid transparent",
-                      cursor: "pointer"
-                    }}
+                    className="px-4 py-2 bg-surface hover:bg-hover text-foreground-muted hover:text-foreground font-mono font-bold rounded-xl text-xs cursor-pointer"
                   >
                     Cancelar
                   </button>
@@ -551,18 +376,7 @@ export default function WorkOrdersKanbanView({ onViewDetail, onOpenNewModal, onT
                     type="button"
                     onClick={handleApplyCustomPeriod}
                     disabled={!customFrom || !customTo}
-                    style={{
-                      padding: "8px 20px",
-                      backgroundColor: !customFrom || !customTo ? "#2d3748" : "#bfce7f",
-                      color: !customFrom || !customTo ? "#64748b" : "#0f172a",
-                      fontFamily: "monospace",
-                      fontWeight: "700",
-                      borderRadius: "10px",
-                      fontSize: "12px",
-                      border: "none",
-                      cursor: !customFrom || !customTo ? "not-allowed" : "pointer",
-                      boxShadow: !customFrom || !customTo ? "none" : "0 4px 12px rgba(191, 206, 127, 0.25)"
-                    }}
+                    className="px-5 py-2 bg-primary-button-bg text-primary-foreground font-mono font-bold rounded-xl text-xs cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-md"
                   >
                     Aplicar Filtro
                   </button>
@@ -573,25 +387,25 @@ export default function WorkOrdersKanbanView({ onViewDetail, onOpenNewModal, onT
           )
         : null}
 
-      {/* 2. TABLERO KANBAN — 4 COLUMNAS SIMULTÁNEAS OPTIMIZADAS PARA PANTALLA GRANDE */}
+      {/* 2. TABLERO KANBAN — 4 COLUMNAS SIMULTÁNEAS OPTIMIZADAS PARA PANTALLA GRANDE / TV */}
       {loading && !orders.length ? (
-        <div className="p-16 flex flex-col items-center justify-center bg-[#161a21]/60 border border-[#2d3748] rounded-2xl text-slate-400 gap-3 min-h-[400px]">
-          <Loader2 className="w-8 h-8 animate-spin text-[#bfce7f]" />
-          <span className="text-sm font-mono tracking-wide">Cargando tablero operativo en tiempo real...</span>
+        <div className="p-16 flex flex-col items-center justify-center bg-card/60 border border-border rounded-2xl text-foreground-muted gap-3 min-h-[420px]">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <span className="text-sm font-mono tracking-wide">Cargando flujo de taller en tiempo real...</span>
         </div>
       ) : error ? (
-        <div className="p-8 bg-rose-500/10 border border-rose-500/30 rounded-2xl text-rose-300 text-sm font-mono text-center space-y-3">
-          <AlertCircle className="w-8 h-8 mx-auto text-rose-400" />
+        <div className="p-8 bg-error-muted border border-error/30 rounded-2xl text-error text-sm font-mono text-center space-y-3">
+          <AlertCircle className="w-8 h-8 mx-auto text-error" />
           <p>{error}</p>
           <button
             onClick={() => fetchOrders(false)}
-            className="px-4 py-2 bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 rounded-xl font-bold transition-all cursor-pointer"
+            className="px-4 py-2 bg-card border border-border text-foreground hover:bg-hover rounded-xl font-bold transition-all cursor-pointer"
           >
             Reintentar
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 xl:gap-5 w-full items-start">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 xl:gap-4.5 2xl:gap-5 w-full items-start">
           {KANBAN_COLUMNS.map((col) => {
             const colOrders = getOrdersForColumn(col);
             const IconComponent = col.icon;
@@ -599,96 +413,89 @@ export default function WorkOrdersKanbanView({ onViewDetail, onOpenNewModal, onT
             return (
               <div
                 key={col.key}
-                className={`bg-[#12161f] border border-[#2d3748] rounded-2xl flex flex-col overflow-hidden shadow-xl ${col.borderTop} border-t-4 transition-all`}
+                className={`bg-card border border-border rounded-2xl flex flex-col overflow-hidden shadow-lg ${col.borderTop} border-t-4 transition-all`}
               >
                 {/* Encabezado de Columna */}
-                <div className="p-4 bg-[#161a21]/90 border-b border-[#2d3748] flex items-center justify-between sticky top-0 z-10">
+                <div className="p-3.5 bg-surface/90 border-b border-border flex items-center justify-between sticky top-0 z-10">
                   <div className="flex items-center gap-2.5">
-                    <div className={`p-2 rounded-xl bg-slate-900 border border-[#2d3748] ${col.headerColor}`}>
+                    <div className={`p-2 rounded-xl bg-card border border-border ${col.headerColor}`}>
                       <IconComponent className="w-4 h-4" />
                     </div>
                     <div>
                       <h2 className={`font-mono text-xs md:text-sm font-extrabold tracking-wider uppercase ${col.headerColor}`}>
                         {col.title}
                       </h2>
-                      <p className="text-[10px] text-slate-400 font-sans">{col.subtitle}</p>
+                      <p className="text-[11px] text-foreground-muted font-sans">{col.subtitle}</p>
                     </div>
                   </div>
-                  <span className={`font-mono text-xs font-extrabold px-2.5 py-1 rounded-full border ${col.badgeBg}`}>
+                  <span className={`font-mono text-xs font-extrabold px-2.5 py-0.5 rounded-full border ${col.badgeBg}`}>
                     {colOrders.length}
                   </span>
                 </div>
 
-                {/* Lista de Tarjetas Operativas */}
-                <div className="p-3 space-y-3 max-h-[calc(100vh-230px)] overflow-y-auto custom-scrollbar min-h-[180px]">
+                {/* Lista de Tarjetas Operativas (No Clickeables, Formato Grande para TV/Monitor) */}
+                <div className={`p-3 space-y-3 overflow-y-auto custom-scrollbar min-h-[200px] ${
+                  isFullscreen ? "max-h-[calc(100vh-190px)]" : "max-h-[calc(100vh-250px)]"
+                }`}>
                   {colOrders.length === 0 ? (
-                    <div className="py-10 px-4 text-center text-slate-500 text-xs font-mono border-2 border-dashed border-slate-800/60 rounded-xl">
-                      Sin órdenes en esta etapa
+                    <div className="py-12 px-4 text-center text-foreground-muted text-xs font-mono border-2 border-dashed border-border rounded-xl flex flex-col items-center justify-center gap-2">
+                      <IconComponent className="w-5 h-5 opacity-40 mb-0.5" />
+                      <span>Sin órdenes en esta etapa</span>
                     </div>
                   ) : (
                     colOrders.map((ord) => {
-                      const totalNum = parseFloat(ord.total_orden || ord.total_estimado || 0);
                       const priorityColor =
                         ord.prioridad_codigo === "URGENTE"
-                          ? "bg-rose-500/20 text-rose-300 border-rose-500/40"
+                          ? "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30"
                           : ord.prioridad_codigo === "ALTA"
-                          ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
-                          : "bg-slate-800 text-slate-400 border-slate-700";
+                          ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30"
+                          : "bg-surface text-foreground-muted border-border";
+
+                      const bikeDescriptor =
+                        ord.bicicleta_marca || ord.bicicleta_modelo
+                          ? `${ord.bicicleta_marca || ""} ${ord.bicicleta_modelo || ""}`.trim()
+                          : "Bicicleta de taller";
 
                       return (
                         <div
                           key={ord.orden_id || ord.orden_trabajo_id}
-                          onClick={() => onViewDetail && onViewDetail(ord.orden_id || ord.orden_trabajo_id)}
-                          className="bg-[#161a21] hover:bg-[#1a202c] border border-[#2d3748] hover:border-[#bfce7f]/60 rounded-xl p-3.5 space-y-2.5 transition-all shadow-md cursor-pointer group hover:shadow-lg relative overflow-hidden"
+                          className={`bg-surface border border-border border-l-4 ${col.cardAccent} rounded-xl p-4 space-y-2.5 shadow-sm select-none transition-all cursor-default`}
                         >
-                          {/* Línea Superior: Código y Prioridad */}
-                          <div className="flex items-center justify-between">
-                            <span className="font-mono text-sm font-black text-slate-100 group-hover:text-[#bfce7f] transition-colors tracking-wide">
+                          {/* 1. NÚMERO DE ORDEN + PRIORIDAD */}
+                          <div className="flex items-center justify-between gap-2 border-b border-border/50 pb-2 min-w-0">
+                            <span className="font-mono text-base sm:text-lg xl:text-lg 2xl:text-xl font-black text-foreground tracking-tight whitespace-nowrap shrink-0">
                               {ord.codigo_orden}
                             </span>
                             {ord.prioridad_nombre && (
                               <span
-                                className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border uppercase tracking-wider ${priorityColor}`}
+                                className={`text-[10px] xl:text-[11px] font-mono font-bold px-2 py-0.5 rounded border uppercase tracking-wider shrink-0 whitespace-nowrap ${priorityColor}`}
                               >
                                 {ord.prioridad_nombre}
                               </span>
                             )}
                           </div>
 
-                          {/* Cliente */}
-                          <div className="text-xs md:text-sm font-bold text-slate-200 truncate">
-                            {ord.cliente_nombre || "Cliente Sin Nombre"}
-                          </div>
-
-                          {/* Bicicleta / Vehículo */}
-                          {(ord.bicicleta_marca || ord.bicicleta_modelo) && (
-                            <div className="flex items-center gap-1.5 text-[11px] text-slate-400 truncate">
-                              <Bike className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                              <span className="truncate">
-                                {ord.bicicleta_marca} {ord.bicicleta_modelo}
-                              </span>
-                            </div>
-                          )}
-
-                          {/* Mecánico Asignado */}
-                          <div className="flex items-center gap-1.5 text-[11px]">
-                            <User className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                            <span
-                              className={`truncate font-medium ${
-                                ord.mecanico_asignado ? "text-amber-300/90" : "text-slate-500 italic"
-                              }`}
-                            >
-                              {ord.mecanico_asignado ? ord.mecanico_asignado : "Mecánico por asignar"}
+                          {/* 2. BICICLETA */}
+                          <div className="flex items-center gap-2 text-xs sm:text-sm md:text-base font-bold text-foreground-secondary min-w-0">
+                            <Bike className="w-4 h-4 text-primary shrink-0" />
+                            <span className="truncate leading-tight">
+                              {bikeDescriptor}
                             </span>
                           </div>
 
-                          {/* Línea Inferior: Total y Fecha */}
-                          <div className="pt-2 border-t border-[#2d3748]/60 flex items-center justify-between font-mono text-xs">
-                            <span className="font-extrabold text-[#bfce7f]">
-                              RD$ {totalNum.toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {/* 3. NOMBRE DEL CLIENTE */}
+                          <div className="flex items-center gap-2 text-sm sm:text-base md:text-lg font-extrabold text-foreground font-sans min-w-0">
+                            <User className="w-4 h-4 text-foreground-muted shrink-0" />
+                            <span className="truncate leading-tight">
+                              {ord.cliente_nombre || "Cliente Sin Nombre"}
                             </span>
-                            <span className="text-[10px] text-slate-500">
-                              {formatOrderDate(ord.fecha_registro)}
+                          </div>
+
+                          {/* 4. TELÉFONO */}
+                          <div className="flex items-center gap-2 text-xs sm:text-sm md:text-base font-mono font-bold text-foreground-muted min-w-0">
+                            <Phone className="w-3.5 h-3.5 text-foreground-muted shrink-0" />
+                            <span className="whitespace-nowrap leading-tight">
+                              {ord.cliente_telefono ? ord.cliente_telefono : "Sin teléfono"}
                             </span>
                           </div>
                         </div>
