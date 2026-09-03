@@ -1,8 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { LayoutDashboard, ClipboardList, Wrench, Plus } from "lucide-react";
-import WorkshopDashboardView from "./WorkshopDashboardView";
 import ReceptionsListView from "./ReceptionsListView";
 import ReceptionDetailView from "./ReceptionDetailView";
 import NewReceptionModal from "./NewReceptionModal";
@@ -16,7 +14,7 @@ import BillingOrderDetailView from "./BillingOrderDetailView";
 export default function WorkshopModuleContainer() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState("dashboard"); // 'dashboard' | 'recepciones' | 'work_orders' | 'kanban' | 'billing'
+  const [activeTab, setActiveTab] = useState("recepciones"); // 'recepciones' | 'work_orders' | 'kanban' | 'billing'
   const [selectedRecepcionId, setSelectedRecepcionId] = useState(null);
   const [selectedOrderId, setSelectedOrderId] = useState(null);
   const [selectedInvoiceOrderId, setSelectedInvoiceOrderId] = useState(null);
@@ -70,7 +68,7 @@ export default function WorkshopModuleContainer() {
       setIsNewOrderModalOpen(false);
     }
 
-    if (viewParam === "list") {
+    if (viewParam === "list" || viewParam === "dashboard" || (!viewParam && !idParam && !orderIdParam && !invoiceOrderIdParam)) {
       setActiveTab("recepciones");
     } else if (viewParam === "work_orders") {
       setActiveTab("work_orders");
@@ -78,8 +76,6 @@ export default function WorkshopModuleContainer() {
       setActiveTab("kanban");
     } else if (viewParam === "billing") {
       setActiveTab("billing");
-    } else if (viewParam === "dashboard" || (!viewParam && !idParam && !orderIdParam && !invoiceOrderIdParam)) {
-      setActiveTab("dashboard");
     }
   }, [searchParams]);
 
@@ -194,13 +190,6 @@ export default function WorkshopModuleContainer() {
         <WorkOrderDetailView ordenId={selectedOrderId} onBack={handleBackFromDetail} />
       ) : activeTab === "billing" ? (
         <BillingKanbanView onViewInvoiceDetail={(oid) => handleNavigateInvoiceDetail(oid)} />
-      ) : activeTab === "dashboard" ? (
-        <WorkshopDashboardView
-          onNavigateList={() => setActiveTab("recepciones")}
-          onNavigateWorkOrders={() => setActiveTab("work_orders")}
-          onViewDetail={(id) => handleNavigateRecepcionDetail(id)}
-          onViewOrderDetail={(oid) => handleNavigateOrderDetail(oid)}
-        />
       ) : activeTab === "recepciones" ? (
         <ReceptionsListView onViewDetail={(id) => handleNavigateRecepcionDetail(id)} />
       ) : activeTab === "kanban" ? (

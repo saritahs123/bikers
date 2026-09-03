@@ -5,9 +5,6 @@ import {
   Search,
   RefreshCw,
   Eye,
-  Calendar,
-  Wrench,
-  Clock,
   AlertCircle,
   Loader2,
   ChevronLeft,
@@ -19,11 +16,6 @@ import ReceptionDetailView from "./ReceptionDetailView";
 
 export default function ReceptionsListView({ onViewDetail }) {
   const [recepciones, setRecepciones] = useState([]);
-  const [metrics, setMetrics] = useState({
-    recepciones_hoy: 0,
-    recepciones_pendientes: 0,
-    convertidas_ot: 0
-  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -69,13 +61,6 @@ export default function ReceptionsListView({ onViewDetail }) {
 
       setRecepciones(json.data || []);
       setPagination(json.pagination || { total: 0, totalPages: 1 });
-      if (json.metricas) {
-        setMetrics({
-          recepciones_hoy: json.metricas.recepciones_hoy || 0,
-          recepciones_pendientes: json.metricas.recepciones_pendientes || 0,
-          convertidas_ot: json.metricas.convertidas_ot || 0
-        });
-      }
     } catch (err) {
       console.error("fetchRecepciones Error:", err);
       setError(err.message || "No se pudo obtener el listado de recepciones.");
@@ -100,30 +85,6 @@ export default function ReceptionsListView({ onViewDetail }) {
       />
     );
   }
-
-  const kpis = [
-    {
-      title: "Recepciones Hoy",
-      value: metrics.recepciones_hoy,
-      icon: Calendar,
-      color: "bg-surface border-border text-primary",
-      description: "Bicicletas ingresadas durante el día de hoy"
-    },
-    {
-      title: "Recepciones Pendientes",
-      value: metrics.recepciones_pendientes,
-      icon: Clock,
-      color: "bg-surface border-border text-warning",
-      description: "Ingresos pendientes de completar o convertir en OT"
-    },
-    {
-      title: "Convertidas a OT",
-      value: metrics.convertidas_ot,
-      icon: Wrench,
-      color: "bg-surface border-border text-info",
-      description: "Recepciones que generaron una orden de trabajo"
-    }
-  ];
 
   return (
     <div className="space-y-6 font-sans">
@@ -152,26 +113,6 @@ export default function ReceptionsListView({ onViewDetail }) {
           <Plus className="w-4 h-4" />
           NUEVA RECEPCIÓN
         </button>
-      </div>
-
-      {/* KPI Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-mono">
-        {kpis.map((kpi, idx) => {
-          const Icon = kpi.icon;
-          return (
-            <div
-              key={idx}
-              className={`p-5 rounded-2xl border ${kpi.color} shadow-sm transition-all hover:scale-[1.01]`}
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase tracking-wider">{kpi.title}</span>
-                <Icon className="w-5 h-5 opacity-80" />
-              </div>
-              <p className="text-2xl sm:text-3xl font-extrabold text-foreground mt-2">{kpi.value}</p>
-              <p className="text-[11px] text-foreground-muted mt-1 font-sans">{kpi.description}</p>
-            </div>
-          );
-        })}
       </div>
 
       {/* Search & Refresh Toolbar */}
@@ -239,12 +180,11 @@ export default function ReceptionsListView({ onViewDetail }) {
               <table className="w-full text-left border-collapse text-xs font-sans">
                 <thead>
                   <tr className="bg-surface border-b border-border font-mono text-xs text-foreground-secondary font-semibold uppercase tracking-wider">
+                    <th className="p-3.5 whitespace-nowrap">Fecha</th>
                     <th className="p-3.5 whitespace-nowrap">Código</th>
                     <th className="p-3.5 whitespace-nowrap">Cliente</th>
                     <th className="p-3.5 whitespace-nowrap">Bicicleta</th>
-                    <th className="p-3.5 whitespace-nowrap">Estado</th>
                     <th className="p-3.5 whitespace-nowrap text-right">Presupuesto</th>
-                    <th className="p-3.5 whitespace-nowrap">Fecha</th>
                     <th className="p-3.5 whitespace-nowrap text-center">Acciones</th>
                   </tr>
                 </thead>
@@ -258,33 +198,45 @@ export default function ReceptionsListView({ onViewDetail }) {
                       r.bicicleta?.resumen ||
                       r.bicicleta_resumen ||
                       (typeof r.bicicleta === "string" ? r.bicicleta : "Bicicleta");
-                    const estadoNombre = r.estado?.nombre || r.estado_nombre || "INGRESADO";
+
+                    const dateObj = r.fecha_recepcion ? new Date(r.fecha_recepcion) : null;
+                    const isValidDate = dateObj && !isNaN(dateObj.getTime());
+                    const datePart = isValidDate
+                      ? dateObj.toLocaleDateString("es-DO", {
+                          timeZone: "America/Santo_Domingo",
+                          day: "2-digit",
+                          month: "2-digit",
+                          year: "numeric"
+                        })
+                      : "—";
+                    const timePart = isValidDate
+                      ? dateObj.toLocaleTimeString("en-US", {
+                          timeZone: "America/Santo_Domingo",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          hour12: true
+                        })
+                      : "";
 
                     return (
                       <tr key={r.recepcion_id} className="hover:bg-hover transition-colors">
-                        <td className="p-3.5">
+                        <td className="p-3.5 whitespace-nowrap font-mono text-xs">
+                          <span className="font-bold text-foreground">{datePart}</span>
+                          {timePart && (
+                            <span className="text-foreground-muted ml-2">{timePart}</span>
+                          )}
+                        </td>
+                        <td className="p-3.5 whitespace-nowrap">
                           <span className="font-extrabold text-primary bg-primary-muted px-2 py-0.5 rounded border border-primary/20">
                             {r.codigo_recepcion}
                           </span>
                         </td>
                         <td className="p-3.5 font-bold text-foreground font-sans">{clienteNombre}</td>
                         <td className="p-3.5 text-foreground-secondary font-sans">{bicicletaResumen}</td>
-                        <td className="p-3.5">
-                          <span className="px-2.5 py-1 rounded text-[11px] font-bold bg-surface text-foreground border border-border uppercase">
-                            {estadoNombre}
-                          </span>
-                        </td>
                         <td className="p-3.5 text-right font-bold text-foreground">
                           RD$ {parseFloat(r.presupuesto_estimado || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })}
                         </td>
-                        <td className="p-3.5 text-foreground-muted">
-                          {new Date(r.fecha_recepcion).toLocaleDateString("es-ES", {
-                            day: "2-digit",
-                            month: "short",
-                            year: "numeric"
-                          })}
-                        </td>
-                        <td className="p-3.5 text-center">
+                        <td className="p-3.5 text-center whitespace-nowrap">
                           <button
                             onClick={() => handleOpenDetail(r.recepcion_id)}
                             className="p-1.5 text-foreground-muted hover:text-primary hover:bg-hover rounded-lg transition-colors cursor-pointer"
