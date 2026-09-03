@@ -210,7 +210,7 @@ export default function ReceptionsListView({ onViewDetail }) {
                         })
                       : "—";
                     const timePart = isValidDate
-                      ? dateObj.toLocaleTimeString("es-DO", {
+                      ? dateObj.toLocaleTimeString("en-US", {
                           timeZone: "America/Santo_Domingo",
                           hour: "2-digit",
                           minute: "2-digit",
@@ -220,13 +220,11 @@ export default function ReceptionsListView({ onViewDetail }) {
 
                     return (
                       <tr key={r.recepcion_id} className="hover:bg-hover transition-colors">
-                        <td className="p-3.5 whitespace-nowrap">
-                          <div className="flex flex-col">
-                            <span className="font-bold text-foreground font-mono text-xs">{datePart}</span>
-                            {timePart && (
-                              <span className="text-[11px] text-foreground-muted font-mono">{timePart}</span>
-                            )}
-                          </div>
+                        <td className="p-3.5 whitespace-nowrap font-mono text-xs">
+                          <span className="font-bold text-foreground">{datePart}</span>
+                          {timePart && (
+                            <span className="text-foreground-muted ml-2">{timePart}</span>
+                          )}
                         </td>
                         <td className="p-3.5 whitespace-nowrap">
                           <span className="font-extrabold text-primary bg-primary-muted px-2 py-0.5 rounded border border-primary/20">

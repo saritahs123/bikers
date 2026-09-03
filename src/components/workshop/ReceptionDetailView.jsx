@@ -11,7 +11,6 @@ import {
   Loader2,
   Calendar,
   DollarSign,
-  Printer,
   ArrowRight,
   Camera,
   ImageOff,
@@ -190,12 +189,6 @@ export default function ReceptionDetailView({ recepcionId, onBack }) {
     }
   };
 
-  const handlePrint = () => {
-    if (typeof window !== "undefined") {
-      window.print();
-    }
-  };
-
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center p-16 space-y-4">
@@ -226,14 +219,19 @@ export default function ReceptionDetailView({ recepcionId, onBack }) {
     if (!dateStr) return "—";
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) return "—";
-    return d.toLocaleString("es-DO", {
+    const datePart = d.toLocaleDateString("es-DO", {
+      timeZone: "America/Santo_Domingo",
       day: "2-digit",
-      month: "short",
-      year: "numeric",
+      month: "2-digit",
+      year: "numeric"
+    });
+    const timePart = d.toLocaleTimeString("en-US", {
+      timeZone: "America/Santo_Domingo",
       hour: "2-digit",
       minute: "2-digit",
       hour12: true
     });
+    return `${datePart} ${timePart}`;
   };
 
   const itemsChecklistTotal = data.checklist ? data.checklist.length : 0;
@@ -300,15 +298,6 @@ export default function ReceptionDetailView({ recepcionId, onBack }) {
 
         {/* Top Action Buttons */}
         <div className="flex items-center gap-3 font-mono text-xs">
-          <button
-            type="button"
-            onClick={handlePrint}
-            className="flex items-center gap-2 px-4 py-2 bg-surface hover:bg-hover border border-border text-foreground rounded-xl font-medium transition-colors cursor-pointer"
-          >
-            <Printer className="w-4 h-4 text-foreground-muted" />
-            Imprimir Recibo
-          </button>
-
           {hasLinkedOT ? (
             <span className="flex items-center gap-2 px-4 py-2 bg-primary-muted border border-primary text-primary font-bold rounded-xl">
               <Wrench size={15} />
