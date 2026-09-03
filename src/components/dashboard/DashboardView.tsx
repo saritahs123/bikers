@@ -37,6 +37,20 @@ export default function DashboardView({ initialMetrics }: { initialMetrics?: Ini
   const [error, setError] = useState<string>("");
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [hoveredBarIndex, setHoveredBarIndex] = useState<number | null>(null);
+  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
+  const chartScrollRef = React.useRef<HTMLDivElement>(null);
+  const chartCardRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (chartScrollRef.current && (dashboardData?.weeklyData?.length || 0) > 10) {
+      const timer = setTimeout(() => {
+        if (chartScrollRef.current) {
+          chartScrollRef.current.scrollLeft = chartScrollRef.current.scrollWidth;
+        }
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [dashboardData, rangeType]);
 
   // Set default custom dates (last 7 days)
   useEffect(() => {
@@ -364,7 +378,45 @@ export default function DashboardView({ initialMetrics }: { initialMetrics?: Ini
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
         {/* Chart 1: Flujo Operativo Diario (8 cols) */}
-        <div className="lg:col-span-8 bg-card border border-border rounded-2xl p-6 shadow-sm flex flex-col justify-between min-h-[380px] max-h-[440px] transition-colors">
+        <div
+          ref={chartCardRef}
+          className="lg:col-span-8 bg-card border border-border rounded-2xl p-6 shadow-sm flex flex-col justify-between min-h-[400px] max-h-[490px] transition-colors min-w-0 relative"
+        >
+          {/* Floating Tooltip outside scroll clipping boundary */}
+          {hoveredBarIndex !== null && weeklyData[hoveredBarIndex] && tooltipPos && (
+            <div
+              style={{
+                left: `${Math.min(Math.max(115, tooltipPos.x), (chartCardRef.current?.clientWidth || 600) - 115)}px`,
+                top: `${Math.max(65, tooltipPos.y - 130)}px`,
+                transform: "translateX(-50%)"
+              }}
+              className="absolute bg-surface-elevated/95 backdrop-blur-md border border-primary/60 p-3 rounded-xl shadow-2xl text-foreground font-mono text-xs z-50 min-w-[210px] pointer-events-none animate-in fade-in zoom-in-95 duration-100"
+            >
+              <div className="font-bold border-b border-border pb-1 mb-1.5 text-primary flex justify-between">
+                <span>{weeklyData[hoveredBarIndex].label ? `${weeklyData[hoveredBarIndex].day} ${weeklyData[hoveredBarIndex].label}` : weeklyData[hoveredBarIndex].etiqueta}</span>
+                <span className="text-foreground-muted text-[10px]">Ver órdenes →</span>
+              </div>
+              <div className="space-y-1.5 text-[11px]">
+                <div className="flex justify-between items-center">
+                  <span className="text-foreground-muted flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-sm bg-primary" /> Registradas:
+                  </span>
+                  <span className="font-bold text-primary">{weeklyData[hoveredBarIndex].ordenes_registradas || 0}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-foreground-muted flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-sm bg-info" /> Entregadas:
+                  </span>
+                  <span className="font-bold text-info">{weeklyData[hoveredBarIndex].ordenes_entregadas || 0}</span>
+                </div>
+                <div className="flex justify-between items-center pt-1 border-t border-border/60 text-foreground-muted text-[10px]">
+                  <span>Servicios completados:</span>
+                  <span className="font-bold text-foreground">{weeklyData[hoveredBarIndex].servicios_realizados || 0}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Header & Static Legend */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border pb-3 mb-3 shrink-0">
             <div>
@@ -392,122 +444,151 @@ export default function DashboardView({ initialMetrics }: { initialMetrics?: Ini
 
           {/* Bar Chart Visualization Area */}
           {loading && !dashboardData ? (
-            <div className="flex-1 flex items-center justify-center font-mono text-xs text-foreground-muted gap-2 min-h-[190px]">
+            <div className="flex-1 flex items-center justify-center font-mono text-xs text-foreground-muted gap-2 min-h-[210px]">
               <Loader2 className="w-5 h-5 animate-spin text-primary" /> Cargando datos del flujo operativo...
             </div>
           ) : weeklyData.length === 0 || !hasAnyActivity ? (
-            <div className="flex-1 flex flex-col items-center justify-center font-mono text-xs text-foreground-disabled gap-2 min-h-[190px]">
+            <div className="flex-1 flex flex-col items-center justify-center font-mono text-xs text-foreground-disabled gap-2 min-h-[210px]">
               <BarChart3 size={28} className="text-foreground-disabled opacity-60" />
               <span>No se registraron ni entregaron órdenes en este período.</span>
             </div>
           ) : (
-            <div className="flex-1 min-h-[190px] relative flex flex-col justify-end pt-4 pb-1">
-              
-              {/* Horizontal Grid Lines & Y-Axis Labels */}
-              <div className="absolute inset-x-0 inset-y-6 flex flex-col justify-between pointer-events-none pb-7">
-                {distinctYTicks.map((tickVal, tIdx) => (
-                  <div key={tIdx} className="w-full flex items-center gap-2">
-                    <span className="text-[9px] font-mono text-foreground-disabled w-4 text-right shrink-0">
+            <div className="flex-1 min-h-[220px] relative flex flex-col justify-end pt-3 pb-1 min-w-0 overflow-hidden">
+              <div className="flex items-stretch h-full relative min-w-0">
+                {/* 1. Pinned Y-Axis column (Fixed on the left) */}
+                <div className="w-7 shrink-0 flex flex-col justify-between pb-10 pr-1.5 select-none pointer-events-none">
+                  {distinctYTicks.map((tickVal, tIdx) => (
+                    <span key={tIdx} className="text-[9.5px] font-mono font-bold text-foreground-disabled text-right block leading-none">
                       {tickVal}
                     </span>
-                    <div className="border-t border-border/60 w-full h-0" />
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
 
-              {/* Grouped Bars Container */}
-              <div className="w-full h-40 flex items-end justify-around gap-2 pl-6 pr-2 z-10">
-                {weeklyData.map((item, idx) => {
-                  const regCount = item.ordenes_registradas || 0;
-                  const entCount = item.ordenes_entregadas || 0;
-                  
-                  const regHeightPct = regCount > 0 ? Math.max(10, Math.round((regCount / yAxisMax) * 100)) : 0;
-                  const entHeightPct = entCount > 0 ? Math.max(10, Math.round((entCount / yAxisMax) * 100)) : 0;
-
-                  return (
-                    <div
-                      key={idx}
-                      onClick={() => {
-                        if (regCount > 0 || entCount > 0) {
-                          router.push(`/work-orders?from=${item.fecha}&to=${item.fecha}`);
-                        }
-                      }}
-                      onMouseEnter={() => setHoveredBarIndex(idx)}
-                      onMouseLeave={() => setHoveredBarIndex(null)}
-                      className="flex-1 h-full flex flex-col justify-end items-center group relative cursor-pointer"
-                    >
-                      {/* Tooltip (Hover) */}
-                      {hoveredBarIndex === idx && (
-                        <div className="absolute bottom-full mb-2 bg-surface-elevated border border-primary/60 p-3 rounded-xl shadow-2xl text-foreground font-mono text-xs z-50 min-w-[210px] pointer-events-none animate-in fade-in zoom-in-95 duration-150">
-                          <div className="font-bold border-b border-border pb-1 mb-1.5 text-primary flex justify-between">
-                            <span>{item.label || item.etiqueta}</span>
-                            <span className="text-foreground-muted text-[10px]">Ver órdenes →</span>
-                          </div>
-                          <div className="space-y-1.5 text-[11px]">
-                            <div className="flex justify-between items-center">
-                              <span className="text-foreground-muted flex items-center gap-1.5">
-                                <span className="w-2 h-2 rounded-sm bg-primary" /> Registradas:
-                              </span>
-                              <span className="font-bold text-primary">{regCount}</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-foreground-muted flex items-center gap-1.5">
-                                <span className="w-2 h-2 rounded-sm bg-info" /> Entregadas:
-                              </span>
-                              <span className="font-bold text-info">{entCount}</span>
-                            </div>
-                            <div className="flex justify-between items-center pt-1 border-t border-border/60 text-foreground-muted text-[10px]">
-                              <span>Servicios completados:</span>
-                              <span className="font-bold text-foreground">{item.servicios_realizados || 0}</span>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Dual Bars Pair */}
-                      <div className="w-full flex items-end justify-center gap-1 sm:gap-1.5 h-32 pb-0.5">
-                        {/* Bar 1: Registradas */}
-                        <div className="flex flex-col items-center justify-end h-full">
-                          {regCount > 0 && (
-                            <span className="text-[9px] font-mono font-bold text-primary mb-0.5 animate-in fade-in">
-                              {regCount}
-                            </span>
-                          )}
-                          <div
-                            style={{ height: `${regHeightPct}%` }}
-                            className={`w-2.5 sm:w-4 rounded-t-md transition-all duration-300 ${
-                              regCount > 0
-                                ? "bg-gradient-to-t from-primary/70 to-primary shadow-sm shadow-primary/20 group-hover:brightness-125"
-                                : "h-0"
-                            }`}
-                          />
-                        </div>
-
-                        {/* Bar 2: Entregadas */}
-                        <div className="flex flex-col items-center justify-end h-full">
-                          {entCount > 0 && (
-                            <span className="text-[9px] font-mono font-bold text-info mb-0.5 animate-in fade-in">
-                              {entCount}
-                            </span>
-                          )}
-                          <div
-                            style={{ height: `${entHeightPct}%` }}
-                            className={`w-2.5 sm:w-4 rounded-t-md transition-all duration-300 ${
-                              entCount > 0
-                                ? "bg-gradient-to-t from-info/70 to-info shadow-sm shadow-info/20 group-hover:brightness-125"
-                                : "h-0"
-                            }`}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Date Label below bars */}
-                      <span className="font-mono text-[10px] font-bold text-foreground-muted group-hover:text-foreground transition-colors mt-2 truncate max-w-full">
-                        {weeklyData.length <= 10 ? item.etiqueta : item.day}
-                      </span>
+                {/* 2. Scrollable Plot Area Container */}
+                <div
+                  ref={chartScrollRef}
+                  className="flex-1 min-w-0 overflow-x-auto custom-scrollbar relative flex flex-col justify-end pb-1"
+                >
+                  {/* Dynamic Canvas with width proportional to days (Full width on 7d/14d, scrollable on 30d+) */}
+                  <div
+                    style={{
+                      minWidth: weeklyData.length > 14 ? `${weeklyData.length * 52}px` : "100%",
+                    }}
+                    className="w-full h-full flex flex-col justify-end relative"
+                  >
+                    {/* Horizontal Grid Lines spanning full available width */}
+                    <div className="absolute inset-x-0 inset-y-0 flex flex-col justify-between pointer-events-none pb-10">
+                      {distinctYTicks.map((_, tIdx) => (
+                        <div key={tIdx} className="w-full border-t border-border/60 h-0" />
+                      ))}
                     </div>
-                  );
-                })}
+
+                    {/* Grouped Bars Container */}
+                    <div className="w-full h-44 flex items-end justify-around gap-1 sm:gap-2 px-1 z-10">
+                      {weeklyData.map((item, idx) => {
+                        const regCount = item.ordenes_registradas || 0;
+                        const entCount = item.ordenes_entregadas || 0;
+
+                        const regHeightPct = regCount > 0 ? Math.max(14, Math.round((regCount / yAxisMax) * 100)) : 0;
+                        const entHeightPct = entCount > 0 ? Math.max(14, Math.round((entCount / yAxisMax) * 100)) : 0;
+
+                        const parts = (item.fecha || "").split("-");
+                        const dayNum = parseInt(parts[2] || "1", 10);
+                        const monthNamesShort = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+                        const monthName = monthNamesShort[parseInt(parts[1] || "1", 10) - 1] || "";
+                        const prevItem = idx > 0 ? weeklyData[idx - 1] : null;
+                        const prevParts = prevItem ? (prevItem.fecha || "").split("-") : [];
+                        const isMonthStart = idx === 0 || parts[1] !== prevParts[1] || dayNum === 1;
+
+                        const barWidthClass =
+                          weeklyData.length <= 7
+                            ? "w-4 sm:w-6 md:w-7"
+                            : weeklyData.length <= 14
+                            ? "w-3.5 sm:w-4.5 md:w-5"
+                            : "w-3 sm:w-3.5";
+
+                        return (
+                          <div
+                            key={idx}
+                            style={{ minWidth: weeklyData.length > 14 ? "44px" : undefined }}
+                            onClick={() => {
+                              if (regCount > 0 || entCount > 0) {
+                                router.push(`/work-orders?from=${item.fecha}&to=${item.fecha}`);
+                              }
+                            }}
+                            onMouseEnter={(e) => {
+                              setHoveredBarIndex(idx);
+                              if (chartCardRef.current) {
+                                const rect = chartCardRef.current.getBoundingClientRect();
+                                setTooltipPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+                              }
+                            }}
+                            onMouseMove={(e) => {
+                              if (chartCardRef.current) {
+                                const rect = chartCardRef.current.getBoundingClientRect();
+                                setTooltipPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+                              }
+                            }}
+                            onMouseLeave={() => {
+                              setHoveredBarIndex(null);
+                              setTooltipPos(null);
+                            }}
+                            className="flex-1 h-full flex flex-col justify-end items-center group relative cursor-pointer hover:bg-surface-subtle/40 rounded-xl transition-colors py-1"
+                          >
+                            {/* Dual Bars Pair */}
+                            <div className="w-full flex items-end justify-center gap-1.5 sm:gap-2 h-34 pb-0.5">
+                              {/* Bar 1: Registradas */}
+                              <div className="flex flex-col items-center justify-end h-full">
+                                {regCount > 0 && (
+                                  <span className="text-[10px] sm:text-[11px] font-mono font-black text-primary mb-1 animate-in fade-in leading-none drop-shadow-sm">
+                                    {regCount}
+                                  </span>
+                                )}
+                                <div
+                                  style={{ height: `${regHeightPct}%` }}
+                                  className={`${barWidthClass} rounded-t-lg transition-all duration-300 ${
+                                    regCount > 0
+                                      ? "bg-gradient-to-t from-primary/75 via-primary/90 to-primary shadow-sm shadow-primary/30 group-hover:brightness-125"
+                                      : "h-0"
+                                  }`}
+                                />
+                              </div>
+
+                              {/* Bar 2: Entregadas */}
+                              <div className="flex flex-col items-center justify-end h-full">
+                                {entCount > 0 && (
+                                  <span className="text-[10px] sm:text-[11px] font-mono font-black text-info mb-1 animate-in fade-in leading-none drop-shadow-sm">
+                                    {entCount}
+                                  </span>
+                                )}
+                                <div
+                                  style={{ height: `${entHeightPct}%` }}
+                                  className={`${barWidthClass} rounded-t-lg transition-all duration-300 ${
+                                    entCount > 0
+                                      ? "bg-gradient-to-t from-info/75 via-info/90 to-info shadow-sm shadow-info/30 group-hover:brightness-125"
+                                      : "h-0"
+                                  }`}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Date Label below bars */}
+                            <div className="flex flex-col items-center leading-tight mt-2 min-w-0 select-none">
+                              <span className="font-mono text-[9.5px] sm:text-[10.5px] font-semibold text-foreground-muted group-hover:text-foreground transition-colors truncate">
+                                {item.day}
+                              </span>
+                              <span className={`font-mono text-[10px] sm:text-[11px] ${
+                                isMonthStart ? "font-black text-primary" : "text-foreground-secondary font-medium"
+                              }`}>
+                                {dayNum < 10 ? `0${dayNum}` : dayNum}{isMonthStart && weeklyData.length > 7 ? ` ${monthName}` : ""}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -549,7 +630,7 @@ export default function DashboardView({ initialMetrics }: { initialMetrics?: Ini
         </div>
 
         {/* Chart 2: Servicios Realizados en el Período (4 cols) */}
-        <div className="lg:col-span-4 bg-card border border-border rounded-2xl p-6 shadow-sm flex flex-col justify-between min-h-[380px] max-h-[440px] transition-colors">
+        <div className="lg:col-span-4 bg-card border border-border rounded-2xl p-6 shadow-sm flex flex-col justify-between min-h-[400px] max-h-[490px] transition-colors min-w-0">
           <div className="border-b border-border pb-3 mb-3 shrink-0">
             <h3 className="font-sans text-base font-bold text-foreground flex items-center gap-2">
               <PieChart size={18} className="text-info" />

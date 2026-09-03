@@ -1,7 +1,7 @@
 import PermissionsSecurityView from "../components/PermissionsSecurityView";
 
 export const metadata = {
-  title: "Reglas Operativas | Bikers Fort",
+  title: "Reglas Operativas | Ride Lab",
 };
 
 export default function PermissionsPage() {

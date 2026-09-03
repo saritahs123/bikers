@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import WorkshopModuleContainer from "@/components/workshop/WorkshopModuleContainer";
 
 export const metadata = {
-  title: "Módulo de Taller | Bikers Fort Core",
+  title: "Módulo de Taller | Ride Lab",
   description: "Gestión de recepciones, inspección inicial y firma digital de taller."
 };
 

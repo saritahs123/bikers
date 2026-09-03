@@ -1,7 +1,7 @@
 import AreasSecurityView from "../components/AreasSecurityView";
 
 export const metadata = {
-  title: "Gestión de Áreas | Bikers Fort",
+  title: "Gestión de Áreas | Ride Lab",
 };
 
 export default function AreasPage() {

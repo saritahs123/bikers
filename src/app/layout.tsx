@@ -17,8 +17,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Bikers' Fort Core",
-  description: "Plataforma integrada de gestión para tienda y taller de bicicletas premium.",
+  title: "Ride Lab",
+  description: "Sistema de gestión para tienda y taller de bicicletas",
 };
 
 export default async function RootLayout({

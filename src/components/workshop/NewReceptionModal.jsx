@@ -120,7 +120,6 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
   // Work Order Auto-Creation State
   const [generarOrdenTrabajo, setGenerarOrdenTrabajo] = useState(true);
   const [prioridadId, setPrioridadId] = useState("");
-  const [observacionesOT, setObservacionesOT] = useState("");
 
   // Digital Signature State
   const [signatureData, setSignatureData] = useState(null);
@@ -784,8 +783,18 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
   const handleCustomerCreated = (newClient) => {
     setIsCustomerDrawerOpen(false);
     if (newClient) {
-      setClients((prev) => [newClient, ...prev]);
-      applyClientSelection(newClient);
+      const cid = newClient.cliente_id || newClient.id;
+      const formattedClient = {
+        ...newClient,
+        id: cid,
+        cliente_id: cid,
+        nombre_completo: newClient.nombre_completo || `${newClient.nombre || ""} ${newClient.apellido || ""}`.trim() || newClient.nombre || "Nuevo Cliente",
+        telefono_principal: newClient.telefono_principal || newClient.telefono || "",
+        identificacion: newClient.identificacion || newClient.rnc_cedula || "",
+        tipo_cliente: newClient.tipo_cliente || "PERSONA"
+      };
+      setClients((prev) => [formattedClient, ...prev.filter((c) => (c.id || c.cliente_id) !== cid)]);
+      applyClientSelection(formattedClient);
     }
   };
 
@@ -876,7 +885,7 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
         orden_trabajo: generarOrdenTrabajo
           ? {
               prioridad_id: prioridadId ? parseInt(prioridadId, 10) : null,
-              observaciones: observacionesOT
+              observaciones: null
             }
           : null
       };
@@ -1084,12 +1093,12 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
                   )}
                 </div>
 
-                {/* Step 2: Selección de Bicicleta & Quick Create */}
+                {/* Selección de Bicicleta & Quick Create */}
                 {selectedClient && (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <label className="text-xs font-semibold text-foreground-secondary block">
-                        2. Bicicleta a Recibir <span className="text-error">*</span>
+                        Bicicleta a Recibir <span className="text-error">*</span>
                       </label>
                       {canCreateBike && (
                         <button
@@ -1098,7 +1107,7 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
                           className="text-xs text-primary hover:underline flex items-center gap-1 font-semibold cursor-pointer"
                         >
                           <Plus size={13} />
-                          <span>+ Registrar Bicicleta</span>
+                          <span>Registrar Bicicleta</span>
                         </button>
                       )}
                     </div>
@@ -1246,10 +1255,28 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
                   </div>
                 )}
 
-                {/* Step 3: Motivo de Ingreso del Cliente */}
-                <div className="space-y-1.5">
+                {/* Step 2: Prioridad de Orden de Trabajo */}
+                <div className="space-y-1.5 pt-2 border-t border-border-subtle">
                   <label className="text-xs font-semibold text-foreground-secondary block">
-                    Motivo de Ingreso (Declarado por el Cliente)
+                    2. Prioridad de Orden de Trabajo <span className="text-error">*</span>
+                  </label>
+                  <select
+                    value={prioridadId}
+                    onChange={(e) => setPrioridadId(e.target.value)}
+                    className="w-full p-2.5 bg-surface border border-border rounded-xl text-xs text-foreground focus:outline-none focus:border-primary font-sans"
+                  >
+                    {catalogs.prioridades.map((p) => (
+                      <option key={p.prioridad_id || p.prioridad_orden_trabajo_id} value={p.prioridad_id || p.prioridad_orden_trabajo_id}>
+                        {p.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Step 3: Observaciones */}
+                <div className="space-y-1.5 pt-2 border-t border-border-subtle">
+                  <label className="text-xs font-semibold text-foreground-secondary block">
+                    3. Observaciones
                   </label>
                   <textarea
                     value={observacionesCliente}
@@ -1257,27 +1284,33 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
                       setObservacionesCliente(e.target.value);
                       setSignatureData(null);
                     }}
-                    placeholder="Indique los síntomas, ruidos o requerimientos que expresa el cliente..."
+                    placeholder="Indique observaciones, síntomas, ruidos o requerimientos informados por el cliente..."
                     rows={2}
-                    className="w-full p-2.5 bg-surface border border-border rounded-xl text-xs text-foreground focus:outline-none focus:border-primary resize-none"
+                    className="w-full p-2.5 bg-surface border border-border rounded-xl text-xs text-foreground focus:outline-none focus:border-primary resize-none font-sans"
                   />
                 </div>
 
-                {/* Step 4: Multi-Service Configuration */}
+                {/* Step 4: Servicios a Realizar */}
                 <div className="space-y-3 pt-2 border-t border-border-subtle">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-semibold text-foreground-secondary block">
-                      3. Servicios a Realizar <span className="text-error">*</span>
+                      4. Servicios a Realizar <span className="text-error">*</span>
                     </label>
                     <span className="text-xs font-mono text-primary font-bold">
                       Presupuesto: RD$ {presupuestoEstimado}
                     </span>
                   </div>
 
-                  {/* Sub-form to Add/Edit Service */}
+                  {/* Formulario de Alta de Servicio (Zona de Entrada) */}
                   <div className="p-3.5 bg-surface border border-border rounded-xl space-y-3">
-                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
-                      <div className="sm:col-span-5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-foreground-secondary uppercase tracking-wider">
+                        {editingTempId ? "Editar Servicio Seleccionado" : "Agregar Servicio a la Recepción"}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                      <div className="sm:col-span-8">
                         <label className="block text-[11px] text-foreground-muted mb-1 font-semibold">
                           Tipo de Servicio <span className="text-error">*</span>
                         </label>
@@ -1296,8 +1329,8 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
                                 }}
                                 onFocus={() => setIsServiceDropdownOpen(true)}
                                 onKeyDown={handleServiceKeyDown}
-                                placeholder="Buscar por código o servicio..."
-                                className={`w-full pl-9 pr-8 py-2 bg-card border rounded-lg text-xs text-foreground placeholder-foreground-muted focus:outline-none focus:border-primary transition-all font-mono ${
+                                placeholder="Buscar por código o nombre de servicio..."
+                                className={`w-full pl-9 pr-8 py-2 bg-card border rounded-xl text-xs text-foreground placeholder-foreground-muted focus:outline-none focus:border-primary transition-all font-mono ${
                                   serviceDraftErrors.tipo_servicio_id ? "border-error focus:border-error" : "border-border"
                                 }`}
                               />
@@ -1341,8 +1374,8 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
                             )}
                           </div>
                         ) : (
-                          <div className="p-2 bg-card border border-border rounded-lg flex items-center justify-between">
-                            <div className="flex items-center gap-2 min-w-0">
+                          <div className="p-2 bg-card border border-border rounded-xl flex items-center justify-between">
+                            <div className="flex items-center gap-2.5 min-w-0">
                               <div className="w-7 h-7 rounded-lg bg-primary-muted border border-primary/30 flex items-center justify-center font-bold text-primary shrink-0 font-mono">
                                 <Wrench size={14} />
                               </div>
@@ -1368,8 +1401,10 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
                         )}
                       </div>
 
-                      <div className="sm:col-span-3">
-                        <label className="block text-[11px] text-foreground-muted mb-1">Precio Estimado (RD$)</label>
+                      <div className="sm:col-span-4">
+                        <label className="block text-[11px] text-foreground-muted mb-1 font-semibold">
+                          Precio Estimado (RD$) <span className="text-error">*</span>
+                        </label>
                         <input
                           type="number"
                           step="0.01"
@@ -1379,45 +1414,17 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
                             setServiceDraftErrors((prev) => ({ ...prev, precio_estimado: "" }));
                           }}
                           placeholder="0.00"
-                          className="w-full p-2 bg-card border border-border rounded-lg text-xs text-foreground focus:outline-none focus:border-primary font-mono"
+                          className={`w-full p-2 bg-card border rounded-xl text-xs text-foreground focus:outline-none focus:border-primary font-mono ${
+                            serviceDraftErrors.precio_estimado ? "border-error focus:border-error" : "border-border"
+                          }`}
                         />
                         {serviceDraftErrors.precio_estimado && (
                           <p className="text-error text-[10px] mt-1">{serviceDraftErrors.precio_estimado}</p>
                         )}
                       </div>
-
-                      <div className="sm:col-span-4">
-                        <label className="block text-[11px] text-foreground-muted mb-1">Componente Vinculado</label>
-                        {attachedNewComponent ? (
-                          <div className="p-2 bg-primary-muted border border-primary/30 rounded-lg text-xs text-primary flex items-center justify-between">
-                            <span className="truncate">{attachedNewComponent.categoria_nombre}</span>
-                            <button
-                              type="button"
-                              onClick={() => setAttachedNewComponent(null)}
-                              className="text-foreground-muted hover:text-error text-xs"
-                            >
-                              <X size={12} />
-                            </button>
-                          </div>
-                        ) : (
-                          <select
-                            value={currentBicicletaComponenteId}
-                            onChange={(e) => setCurrentBicicletaComponenteId(e.target.value)}
-                            disabled={!selectedBike || bikeComponents.length === 0}
-                            className="w-full p-2 bg-card border border-border rounded-lg text-xs text-foreground focus:outline-none focus:border-primary disabled:opacity-50"
-                          >
-                            <option value="">General (Sin componente específico)</option>
-                            {bikeComponents.map((c) => (
-                              <option key={c.bicicleta_componente_id} value={c.bicicleta_componente_id}>
-                                {c.categoria_nombre || "Componente"}{c.marca ? ` - ${c.marca}` : ""}
-                              </option>
-                            ))}
-                          </select>
-                        )}
-                      </div>
                     </div>
 
-                    <div className="flex items-center justify-end gap-2">
+                    <div className="flex items-center justify-end gap-2 pt-1">
                       {editingTempId && (
                         <button
                           type="button"
@@ -1428,7 +1435,7 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
                             setCurrentBicicletaComponenteId("");
                             setAttachedNewComponent(null);
                           }}
-                          className="px-3 py-1.5 text-xs text-foreground-muted hover:text-foreground"
+                          className="px-3 py-1.5 text-xs text-foreground-muted hover:text-foreground cursor-pointer"
                         >
                           Cancelar Edición
                         </button>
@@ -1436,151 +1443,115 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
                       <button
                         type="button"
                         onClick={handleAddOrUpdateService}
-                        className="px-4 py-1.5 bg-primary-button-bg text-primary-foreground font-bold text-xs rounded-lg hover:bg-primary-button-hover transition-colors flex items-center gap-1.5"
+                        className="px-4 py-2 bg-primary-button-bg text-primary-foreground font-bold text-xs rounded-xl hover:bg-primary-button-hover transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
                       >
                         <Plus size={14} />
-                        <span>{editingTempId ? "Actualizar Servicio" : "Agregar Servicio"}</span>
+                        <span>{editingTempId ? "Actualizar Servicio" : "+ Agregar Servicio"}</span>
                       </button>
                     </div>
                   </div>
 
-                  {/* List of Added Services */}
+                  {/* Lista de Servicios Ya Agregados (Card Confirmada) */}
                   {serviciosList.length > 0 && (
-                    <div className="space-y-1.5">
-                      {serviciosList.map((srv) => (
-                        <div
-                          key={srv.tempId}
-                          className="p-2.5 bg-surface border border-border rounded-xl flex items-center justify-between text-xs"
-                        >
-                          <div>
-                            <span className="font-bold text-foreground">{srv.nombre_servicio}</span>
-                            {srv.componente_nombre && (
-                              <span className="ml-2 text-[11px] text-foreground-muted font-mono">
-                                ({srv.componente_nombre})
+                    <div className="space-y-2 pt-1">
+                      <p className="text-[11px] font-bold text-foreground-secondary uppercase tracking-wider">
+                        Servicios Agregados ({serviciosList.length})
+                      </p>
+                      <div className="space-y-2">
+                        {serviciosList.map((srv) => (
+                          <div
+                            key={srv.tempId}
+                            className="p-3 bg-card border border-primary/20 rounded-xl flex items-center justify-between gap-3 text-xs shadow-sm hover:border-primary/40 transition-all"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-8 h-8 rounded-lg bg-primary-muted border border-primary/30 flex items-center justify-center font-bold text-primary shrink-0 font-mono">
+                                <Wrench size={15} />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="font-bold text-foreground truncate text-xs">{srv.nombre_servicio}</p>
+                                <p className="text-[10px] text-foreground-muted font-mono">Servicio confirmado</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3 shrink-0">
+                              <span className="font-mono font-bold text-primary text-xs">
+                                RD$ {parseFloat(srv.precio_estimado).toFixed(2)}
                               </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="font-mono font-bold text-primary">
-                              RD$ {parseFloat(srv.precio_estimado).toFixed(2)}
-                            </span>
-                            <div className="flex items-center gap-1">
-                              <button
-                                type="button"
-                                onClick={() => handleEditServiceClick(srv)}
-                                className="p-1 text-foreground-muted hover:text-foreground"
-                              >
-                                <Edit2 size={13} />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteServiceClick(srv.tempId)}
-                                className="p-1 text-foreground-muted hover:text-error"
-                              >
-                                <Trash2 size={13} />
-                              </button>
+                              <div className="flex items-center gap-1 border-l border-border pl-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleEditServiceClick(srv)}
+                                  className="p-1.5 text-foreground-muted hover:text-foreground hover:bg-hover rounded-lg transition-colors cursor-pointer"
+                                  title="Editar servicio"
+                                >
+                                  <Edit2 size={13} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteServiceClick(srv.tempId)}
+                                  className="p-1.5 text-foreground-muted hover:text-error hover:bg-error-muted rounded-lg transition-colors cursor-pointer"
+                                  title="Eliminar servicio"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
 
-                {/* Step 5: Checklist & Digital Signature Action Cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-border-subtle">
-                  {/* Checklist Card */}
-                  <div
-                    onClick={() => setIsChecklistOpen(true)}
-                    className="p-4 bg-surface border border-border rounded-xl cursor-pointer hover:border-primary/50 transition-colors flex items-center justify-between"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-primary-muted border border-primary/20 rounded-lg text-primary">
-                        <ClipboardCheck size={18} />
-                      </div>
-                      <div>
-                        <p className="font-bold text-xs text-foreground">Checklist de Inspección</p>
-                        <p className="text-[11px] text-foreground-muted">
-                          {checklistState.length > 0
-                            ? `${checklistState.length} puntos evaluados`
-                            : "Completar inspección previa"}
-                        </p>
-                      </div>
-                    </div>
-                    <span className="text-xs text-primary font-semibold">
-                      {checklistState.length > 0 ? "Modificar" : "Abrir"}
-                    </span>
-                  </div>
-
-                  {/* Digital Signature Card (Deshabilitada) */}
-                  <div
-                    className="p-4 bg-surface/50 border border-border/40 rounded-xl opacity-50 cursor-not-allowed select-none flex items-center justify-between"
-                    title="Firma digital deshabilitada temporalmente"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-card border border-border/40 rounded-lg text-foreground-muted">
-                        <FileSignature size={18} />
-                      </div>
-                      <div>
-                        <p className="font-bold text-xs text-foreground-muted">Firma de Consentimiento</p>
-                        <p className="text-[11px] text-foreground-muted/70">
-                          Deshabilitada (No requerida)
-                        </p>
-                      </div>
-                    </div>
-                    <span className="text-[11px] text-foreground-muted font-semibold bg-card px-2 py-0.5 rounded border border-border/40">
-                      Deshabilitada
-                    </span>
-                  </div>
-                </div>
-
-                {/* Step 6: Orden de Trabajo Auto-Generation Settings */}
-                <div className={`p-4 rounded-xl border transition-all space-y-3 ${
-                  generarOrdenTrabajo
-                    ? "bg-[#bfce7f]/10 border-[#bfce7f]/40 shadow-sm"
-                    : "bg-surface border-border"
-                }`}>
-                  <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={generarOrdenTrabajo}
-                      onChange={(e) => setGenerarOrdenTrabajo(e.target.checked)}
-                      className="rounded border-border accent-[#bfce7f] h-4 w-4 cursor-pointer"
-                    />
-                    <span className="font-bold text-xs text-foreground">
-                      Generar automáticamente Orden de Trabajo (OT) al registrar la recepción
-                    </span>
+                {/* Step 5: Checklist e Inspección */}
+                <div className="space-y-2 pt-2 border-t border-border-subtle">
+                  <label className="text-xs font-semibold text-foreground-secondary block">
+                    5. Inspección y Consentimiento
                   </label>
-
-                  {generarOrdenTrabajo && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                      <div>
-                        <label className="block text-[11px] text-foreground-muted mb-1">Prioridad de OT</label>
-                        <select
-                          value={prioridadId}
-                          onChange={(e) => setPrioridadId(e.target.value)}
-                          className="w-full p-2 bg-card border border-border rounded-lg text-xs text-foreground focus:outline-none focus:border-primary"
-                        >
-                          {catalogs.prioridades.map((p) => (
-                            <option key={p.prioridad_id} value={p.prioridad_id}>
-                              {p.nombre}
-                            </option>
-                          ))}
-                        </select>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Checklist Card */}
+                    <div
+                      onClick={() => setIsChecklistOpen(true)}
+                      className="p-4 bg-surface border border-border rounded-xl cursor-pointer hover:border-primary/50 transition-colors flex items-center justify-between"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-primary-muted border border-primary/20 rounded-lg text-primary">
+                          <ClipboardCheck size={18} />
+                        </div>
+                        <div>
+                          <p className="font-bold text-xs text-foreground">Checklist de Inspección</p>
+                          <p className="text-[11px] text-foreground-muted">
+                            {checklistState.length > 0
+                              ? `${checklistState.length} puntos evaluados`
+                              : "Completar inspección previa"}
+                          </p>
+                        </div>
                       </div>
-
-                      <div>
-                        <label className="block text-[11px] text-foreground-muted mb-1">Observaciones Internas de OT</label>
-                        <input
-                          type="text"
-                          value={observacionesOT}
-                          onChange={(e) => setObservacionesOT(e.target.value)}
-                          placeholder="Instrucciones para el equipo técnico..."
-                          className="w-full p-2 bg-card border border-border rounded-lg text-xs text-foreground focus:outline-none focus:border-primary"
-                        />
-                      </div>
+                      <span className="text-xs text-primary font-semibold">
+                        {checklistState.length > 0 ? "Modificar" : "Abrir"}
+                      </span>
                     </div>
-                  )}
+
+                    {/* Digital Signature Card (Deshabilitada) */}
+                    <div
+                      className="p-4 bg-surface/50 border border-border/40 rounded-xl opacity-50 cursor-not-allowed select-none flex items-center justify-between"
+                      title="Firma digital deshabilitada temporalmente"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-card border border-border/40 rounded-lg text-foreground-muted">
+                          <FileSignature size={18} />
+                        </div>
+                        <div>
+                          <p className="font-bold text-xs text-foreground-muted">Firma de Consentimiento</p>
+                          <p className="text-[11px] text-foreground-muted/70">
+                            Deshabilitada (No requerida)
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-[11px] text-foreground-muted font-semibold bg-card px-2 py-0.5 rounded border border-border/40">
+                        Deshabilitada
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -1619,16 +1590,18 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
         </div>
       </div>
 
-      {/* Sub-Modal: Quick Customer Creation (CRM Drawer) */}
+      {/* Sub-Modal: Quick Customer Creation (Centered Modal Mode) */}
       <CustomerFormDrawer
         isOpen={isCustomerDrawerOpen}
+        presentation="modal"
         onClose={() => setIsCustomerDrawerOpen(false)}
         onSuccess={handleCustomerCreated}
       />
 
-      {/* Sub-Modal: Quick Bicycle Registration (CRM Drawer) */}
+      {/* Sub-Modal: Quick Bicycle Registration (Centered Modal Mode) */}
       <BikeFormDrawer
         isOpen={isBikeDrawerOpen}
+        presentation="modal"
         lockCliente={true}
         preselectedClienteId={selectedClient?.id || selectedClient?.cliente_id}
         preselectedClienteName={selectedClient?.nombre_completo}

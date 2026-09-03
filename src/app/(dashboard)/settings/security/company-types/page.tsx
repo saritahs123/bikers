@@ -1,7 +1,7 @@
 import CompanyTypesSecurityView from "../components/CompanyTypesSecurityView";
 
 export const metadata = {
-  title: "Tipos de Empresa | Bikers Fort",
+  title: "Tipos de Empresa | Ride Lab",
 };
 
 export default function CompanyTypesPage() {
