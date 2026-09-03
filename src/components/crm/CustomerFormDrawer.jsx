@@ -38,6 +38,7 @@ export {
 export default function CustomerFormDrawer({
   isOpen = false,
   editingItem = null,
+  presentation = "drawer", // "drawer" | "modal"
   onClose,
   onSuccess,
   showToast
@@ -210,49 +211,34 @@ export default function CustomerFormDrawer({
     }
   };
 
-  const drawerContent = (
-    <div className="fixed inset-0 z-[999999] overflow-hidden">
-      {/* Backdrop */}
-      <div
-        onClick={() => !isSaving && onClose && onClose()}
-        className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity animate-in fade-in duration-200"
-      />
+  const isModal = presentation === "modal";
 
-      <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
-        <div
-          style={{
-            width: "100vw",
-            maxWidth: "540px",
-            display: "flex",
-            flexDirection: "column",
-            zIndex: 1000000
-          }}
-          className="bg-card border-l border-border shadow-2xl font-sans"
+  const formInner = (
+    <>
+      {/* Header */}
+      <div className="p-5 border-b border-border bg-surface flex items-start justify-between shrink-0">
+        <div>
+          <h2 className="text-lg font-bold text-foreground tracking-tight flex items-center gap-2">
+            <Users size={18} className="text-primary" />
+            <span>{editingItem ? "Editar Cliente" : "Registrar Nuevo Cliente"}</span>
+          </h2>
+          <p className="text-xs text-foreground-muted mt-0.5 font-mono">
+            {editingItem
+              ? "Modifique la información registrada del cliente."
+              : "Complete el formulario para crear un nuevo cliente en el CRM."}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => !isSaving && onClose && onClose()}
+          className="p-1.5 rounded-lg text-foreground-muted hover:text-foreground hover:bg-hover transition-colors cursor-pointer"
         >
-          {/* Header */}
-          <div className="p-5 border-b border-border bg-surface flex items-start justify-between shrink-0">
-            <div>
-              <h2 className="text-lg font-bold text-foreground tracking-tight flex items-center gap-2">
-                <Users size={18} className="text-primary" />
-                <span>{editingItem ? "Editar Cliente" : "Registrar Nuevo Cliente"}</span>
-              </h2>
-              <p className="text-xs text-foreground-muted mt-0.5 font-mono">
-                {editingItem
-                  ? "Modifique la información registrada del cliente."
-                  : "Complete el formulario para crear un nuevo cliente en el CRM."}
-              </p>
-            </div>
+          <X size={18} />
+        </button>
+      </div>
 
-            <button
-              type="button"
-              onClick={() => !isSaving && onClose && onClose()}
-              className="p-1.5 rounded-lg text-foreground-muted hover:text-foreground hover:bg-hover transition-colors"
-            >
-              <X size={18} />
-            </button>
-          </div>
-
-          {/* Scrollable Form Body */}
+      {/* Scrollable Form Body */}
           <form onSubmit={handleSave} className="p-6 overflow-y-auto flex-1 space-y-6 font-mono text-xs">
             {/* Tipo de Cliente Selector */}
             <div className="space-y-2">
@@ -518,8 +504,39 @@ export default function CustomerFormDrawer({
               )}
             </button>
           </div>
+    </>
+  );
+
+  const drawerContent = (
+    <div className={`fixed inset-0 z-[999999] overflow-hidden ${isModal ? "flex items-center justify-center p-3 sm:p-4 overflow-y-auto" : ""}`}>
+      {/* Backdrop */}
+      <div
+        onClick={() => !isSaving && onClose && onClose()}
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity animate-in fade-in duration-200"
+      />
+
+      {isModal ? (
+        <div
+          className="relative w-full max-w-2xl max-h-[90vh] bg-card border border-border rounded-2xl shadow-2xl flex flex-col overflow-hidden font-sans my-auto animate-in fade-in zoom-in-95 duration-200 z-[1000000]"
+        >
+          {formInner}
         </div>
-      </div>
+      ) : (
+        <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
+          <div
+            style={{
+              width: "100vw",
+              maxWidth: "540px",
+              display: "flex",
+              flexDirection: "column",
+              zIndex: 1000000
+            }}
+            className="bg-card border-l border-border shadow-2xl font-sans"
+          >
+            {formInner}
+          </div>
+        </div>
+      )}
     </div>
   );
 
