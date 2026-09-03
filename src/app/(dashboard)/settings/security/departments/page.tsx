@@ -1,7 +1,7 @@
 import DepartmentsSecurityView from "../components/DepartmentsSecurityView";
 
 export const metadata = {
-  title: "Gestión de Departamentos | Bikers Fort",
+  title: "Gestión de Departamentos | Ride Lab",
 };
 
 export default function DepartmentsPage() {

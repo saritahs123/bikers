@@ -24,6 +24,7 @@ import BicyclePhotosEditor from "./BicyclePhotosEditor";
 
 export default function BikeFormDrawer({
   isOpen = false,
+  presentation = "drawer",
   editingItem = null,
   clientes = [],
   preselectedClienteId = null,
@@ -35,6 +36,7 @@ export default function BikeFormDrawer({
 }) {
   const [mounted, setMounted] = useState(false);
   const [activeTab, setActiveTab] = useState("general");
+  const isModal = presentation === "modal";
 
   const [formData, setFormData] = useState({
     cliente_id: "",
@@ -528,31 +530,10 @@ export default function BikeFormDrawer({
   );
   const clientDisplayName = preselectedClienteName || matchedClient?.nombre_completo || (matchedClient ? `${matchedClient.nombre || ""} ${matchedClient.apellido || ""}`.trim() : `Cliente #${preselectedClienteId || formData.cliente_id}`);
 
-  const drawerContent = (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 999999, display: 'flex', justifyContent: 'flex-end' }} className="font-mono text-xs">
-      {/* Overlay Backdrop */}
-      <div
-        style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0, 0, 0, 0.65)', backdropFilter: 'blur(3px)' }}
-        onClick={handleCloseDrawer}
-      />
-
-      {/* Side Drawer Card - Expanded for multi-tab space */}
-      <div
-        style={{
-          position: 'relative',
-          width: '900px',
-          maxWidth: '95vw',
-          height: '100vh',
-          backgroundColor: '#161a21',
-          borderLeft: '1px solid #2d3748',
-          boxShadow: '-10px 0 35px rgba(0,0,0,0.7)',
-          display: 'flex',
-          flexDirection: 'column',
-          zIndex: 1000000
-        }}
-      >
-        {/* Drawer Header */}
-        <div className="p-5 border-b border-[#2d3748] bg-[#0e1117] flex items-center justify-between shrink-0 font-mono">
+  const formInner = (
+    <>
+      {/* Drawer / Modal Header */}
+      <div className="p-5 border-b border-[#2d3748] bg-[#0e1117] flex items-center justify-between shrink-0 font-mono">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-[#bfce7f]/10 border border-[#bfce7f]/30 flex items-center justify-center text-[#bfce7f] shrink-0">
               <Bike size={20} />
@@ -914,7 +895,44 @@ export default function BikeFormDrawer({
             )}
           </div>
         </div>
-      </div>
+    </>
+  );
+
+  const drawerContent = (
+    <div className={`fixed inset-0 z-[999999] overflow-hidden ${isModal ? "flex items-center justify-center p-3 sm:p-4 overflow-y-auto" : ""}`}>
+      {/* Backdrop */}
+      <div
+        onClick={handleCloseDrawer}
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity animate-in fade-in duration-200"
+      />
+
+      {isModal ? (
+        <div
+          className="relative w-full max-w-4xl max-h-[90vh] bg-card border border-border rounded-2xl shadow-2xl flex flex-col overflow-hidden font-sans my-auto animate-in fade-in zoom-in-95 duration-200 z-[1000000]"
+        >
+          {formInner}
+        </div>
+      ) : (
+        <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
+          <div
+            style={{
+              position: 'relative',
+              width: '900px',
+              maxWidth: '95vw',
+              height: '100vh',
+              backgroundColor: '#161a21',
+              borderLeft: '1px solid #2d3748',
+              boxShadow: '-10px 0 35px rgba(0,0,0,0.7)',
+              display: 'flex',
+              flexDirection: 'column',
+              zIndex: 1000000
+            }}
+            className="font-mono text-xs"
+          >
+            {formInner}
+          </div>
+        </div>
+      )}
     </div>
   );
 

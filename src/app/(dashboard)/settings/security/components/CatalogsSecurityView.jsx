@@ -201,7 +201,7 @@ export default function CatalogsSecurityView() {
             Catálogos del Sistema
           </h1>
           <p className="text-sm text-foreground-secondary mt-1">
-            Administración centralizada de entidades organizacionales y parámetros maestros de Bikers&apos; Fort Core.
+            Administración centralizada de entidades organizacionales y parámetros maestros de Ride Lab.
           </p>
         </div>
 

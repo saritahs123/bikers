@@ -1,7 +1,7 @@
 import CatalogsSecurityView from "../components/CatalogsSecurityView";
 
 export const metadata = {
-  title: "Panel de Catálogos Maestros | Bikers Fort",
+  title: "Panel de Catálogos Maestros | Ride Lab",
 };
 
 export default function CatalogsPage() {

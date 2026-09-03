@@ -1260,7 +1260,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    const filename = `usuarios_bikers_${new Date().toISOString().slice(0, 10)}.csv`;
+    const filename = `usuarios_ridelab_${new Date().toISOString().slice(0, 10)}.csv`;
     link.setAttribute('href', url);
     link.setAttribute('download', filename);
     document.body.appendChild(link);
@@ -2395,7 +2395,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
           </style>
         </head>
         <body>
-          <h1>Bikers' Fort - Reporte de Bitácora Operativa</h1>
+          <h1>Ride Lab - Reporte de Bitácora Operativa</h1>
           <p>Usuario: <strong>${userName || 'N/A'}</strong> | Fecha de Generación: ${new Date().toLocaleString('es-DO')}</p>
           <table>
             <thead>
@@ -2621,7 +2621,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
           </head>
           <body>
             <div class="header">
-              <h1>Bikers' Fort — Bitácora de Auditoría Administrativa</h1>
+              <h1>Ride Lab — Bitácora de Auditoría Administrativa</h1>
               <div class="meta">
                 <span><strong>Usuario Auditado:</strong> ${detailUser.full_name || 'N/A'} (${detailUser.email || 'N/A'})</span>
                 <span><strong>Fecha de Generación:</strong> ${new Date().toLocaleString('es-DO')}</span>
@@ -4330,7 +4330,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                           HISTORIAL DE SESIONES
                         </h4>
                         <p className="text-[11px] text-foreground-muted mt-0.5">
-                          Monitor continuo de conexiones activas, historial de accesos e inactividad en Bikers’ Fort.
+                          Monitor continuo de conexiones activas, historial de accesos e inactividad en Ride Lab.
                         </p>
                       </div>
 
@@ -4650,7 +4650,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                           ACTIVIDAD DEL USUARIO
                         </h4>
                         <p className="text-[11px] text-foreground-muted mt-0.5">
-                          Registro cronológico de todas las operaciones realizadas por este usuario dentro de Bikers’ Fort.
+                          Registro cronológico de todas las operaciones realizadas por este usuario dentro de Ride Lab.
                         </p>
                       </div>
 
@@ -5465,7 +5465,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
             Usuarios
           </h1>
           <p className="text-foreground-muted font-mono text-xs md:text-sm mt-1">
-            Administra los usuarios, accesos, roles, permisos y alcance operativo dentro de Bikers’ Fort.
+            Administra los usuarios, accesos, roles, permisos y alcance operativo dentro de Ride Lab.
           </p>
         </div>
 

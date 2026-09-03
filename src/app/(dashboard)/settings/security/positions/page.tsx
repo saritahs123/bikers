@@ -1,7 +1,7 @@
 import PositionsSecurityView from "../components/PositionsSecurityView";
 
 export const metadata = {
-  title: "Gestión de Cargos | Bikers Fort",
+  title: "Gestión de Cargos | Ride Lab",
 };
 
 export default function PositionsPage() {

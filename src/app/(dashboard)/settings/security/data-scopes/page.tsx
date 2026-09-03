@@ -1,7 +1,7 @@
 import DataScopesSecurityView from "../components/DataScopesSecurityView";
 
 export const metadata = {
-  title: "Alcance de Datos | Bikers Fort",
+  title: "Alcance de Datos | Ride Lab",
 };
 
 export default function DataScopesPage() {

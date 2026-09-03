@@ -167,11 +167,11 @@ export async function GET(
 
     // 2. Fetch Company Info from admin.empresa
     let empresaInfo = {
-      nombre_comercial: "BIKERS' FORT CORE",
+      nombre_comercial: "RIDE LAB",
       subtitulo: "Tienda y Taller de Bicicletas",
       direccion: "Av. Los Próceres #123, Santo Domingo, RD 10107",
       telefono: "809-123-4567",
-      email: "info@bikersfortcore.com",
+      email: "info@ridelab.com",
       rnc: "1-31-12345-6",
       logotipo_url: null as string | null
     };

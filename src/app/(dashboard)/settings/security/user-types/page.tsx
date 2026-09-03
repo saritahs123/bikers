@@ -1,7 +1,7 @@
 import UserTypesSecurityView from "../components/UserTypesSecurityView";
 
 export const metadata = {
-  title: "Gestión de Tipos de Usuario | Bikers Fort",
+  title: "Gestión de Tipos de Usuario | Ride Lab",
 };
 
 export default function UserTypesPage() {

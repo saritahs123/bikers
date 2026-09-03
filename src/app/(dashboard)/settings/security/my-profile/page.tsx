@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import UsersSecurityView from "@/app/(dashboard)/settings/security/components/UsersSecurityView";
 
 export const metadata = {
-  title: "Mi Perfil | Bikers Fort",
+  title: "Mi Perfil | Ride Lab",
 };
 
 export default function SettingsMyProfilePage() {

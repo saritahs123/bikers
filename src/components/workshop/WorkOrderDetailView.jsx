@@ -1677,9 +1677,9 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
         {/* Institutional Header */}
         <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4 mb-6">
           <div>
-            <h1 className="text-2xl font-black tracking-tight text-slate-900 font-mono">BIKER'S FORT CORE</h1>
-            <p className="text-[11px] text-slate-600 font-medium mt-0.5">Taller & Tienda Especializada | C/ Principal #45, Santiago, R.D.</p>
-            <p className="text-[11px] text-slate-600">RNC: 1-32-45678-9 • Tel: +1 (809) 555-0192 • info@bikersfortcore.com</p>
+            <h1 className="text-2xl font-black tracking-tight text-slate-900 font-mono">RIDE LAB</h1>
+            <p className="text-[11px] text-slate-600 font-medium mt-0.5">Tienda y Taller de Bicicletas | C/ Principal #45, Santiago, R.D.</p>
+            <p className="text-[11px] text-slate-600">RNC: 1-32-45678-9 • Tel: +1 (809) 555-0192 • info@ridelab.com</p>
           </div>
           <div className="text-right">
             <div className="text-xl font-bold font-mono text-slate-900">ORDEN DE TRABAJO</div>

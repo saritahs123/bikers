@@ -54,13 +54,12 @@ export async function sendResetPasswordEmail(options: SendEmailOptions): Promise
 
     const loginUrl = (providedLoginUrl || process.env.LOGIN_URL || process.env.FRONTEND_URL || process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000/login").trim();
     const currentYear = new Date().getFullYear();
-
     const textContent = `
 Restablecimiento de contraseña
 
 Hola, ${fullName || 'Usuario'}:
 
-Un administrador ha restablecido la contraseña de su cuenta en Bikers’ Fort.
+Un administrador ha restablecido la contraseña de su cuenta en Ride Lab.
 
 Usuario de acceso: ${accessIdentifier}
 Contraseña temporal: ${tempPassword || '***'}
@@ -73,9 +72,9 @@ Ingresar al sistema: ${loginUrl}
 
 Si usted no solicitó este cambio, comuníquese con el administrador del sistema.
 
-Este correo fue enviado automáticamente por Bikers’ Fort.
+Este correo fue enviado automáticamente por Ride Lab.
 Por favor, no responda a este mensaje.
-© ${currentYear} Bikers’ Fort. Todos los derechos reservados.
+© ${currentYear} Ride Lab. Todos los derechos reservados.
     `.trim();
 
     const htmlContent = `
@@ -109,9 +108,9 @@ Por favor, no responda a este mensaje.
           <!-- HEADER -->
           <tr>
             <td align="center" style="background-color: #111827; padding: 28px 24px; border-radius: 12px 12px 0 0; text-align: center;">
-              ${logoUrl ? `<img src="${logoUrl}" alt="Bikers’ Fort" width="140" style="display: block; margin: 0 auto 12px auto; max-height: 50px; border: 0;" />` : ''}
-              <div style="font-size: 22px; font-weight: 800; color: #D4E881; letter-spacing: 1.5px; text-transform: uppercase; font-family: Arial, Helvetica, sans-serif;">BIKERS’ FORT</div>
-              <div style="font-size: 11px; font-weight: 600; color: #9CA3AF; letter-spacing: 2px; text-transform: uppercase; margin-top: 4px; font-family: Arial, Helvetica, sans-serif;">Core Management</div>
+              ${logoUrl ? `<img src="${logoUrl}" alt="Ride Lab" width="140" style="display: block; margin: 0 auto 12px auto; max-height: 50px; border: 0;" />` : ''}
+              <div style="font-size: 22px; font-weight: 800; color: #D4E881; letter-spacing: 1.5px; text-transform: uppercase; font-family: Arial, Helvetica, sans-serif;">RIDE LAB</div>
+              <div style="font-size: 11px; font-weight: 600; color: #9CA3AF; letter-spacing: 2px; text-transform: uppercase; margin-top: 4px; font-family: Arial, Helvetica, sans-serif;">Tienda y Taller de Bicicletas</div>
             </td>
           </tr>
 
@@ -125,7 +124,7 @@ Por favor, no responda a este mensaje.
               </p>
               
               <p style="font-size: 14px; line-height: 1.6; color: #374151; margin: 0 0 24px 0; font-family: Arial, Helvetica, sans-serif;">
-                Un administrador ha restablecido la contraseña de su cuenta en Bikers’ Fort.
+                Un administrador ha restablecido la contraseña de su cuenta en Ride Lab.
               </p>
 
               <!-- CREDENTIALS CARD -->
@@ -138,45 +137,44 @@ Por favor, no responda a este mensaje.
                     
                     <!-- Temp Password -->
                     <div style="font-size: 12px; font-weight: 600; color: #6B7280; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; font-family: Arial, Helvetica, sans-serif;">Contraseña temporal</div>
-                    <div style="margin-bottom: 16px;">
-                      <div style="display: inline-block; background-color: #1F2937; color: #D4E881; font-family: 'Courier New', Courier, monospace; font-size: 16px; font-weight: 700; padding: 10px 16px; border-radius: 8px; letter-spacing: 2px; word-break: break-all;">${tempPassword || '***'}</div>
+                    <div style="font-size: 16px; font-weight: 700; color: #047857; font-family: 'Courier New', Courier, monospace; background-color: #ECFDF5; border: 1px dashed #A7F3D0; padding: 10px 14px; border-radius: 6px; display: inline-block; letter-spacing: 1px; margin-bottom: 16px;">
+                      ${tempPassword || '***'}
                     </div>
-                    
-                    <!-- Expiration Date -->
-                    <div style="font-size: 12px; font-weight: 600; color: #6B7280; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; font-family: Arial, Helvetica, sans-serif;">Fecha de expiración</div>
-                    <div style="font-size: 14px; font-weight: 600; color: #111827; font-family: Arial, Helvetica, sans-serif;">${expiresAtFormatted || '7 días a partir de la emisión'}</div>
+
+                    <!-- Expiration Info -->
+                    <div style="font-size: 12px; color: #6B7280; line-height: 1.5; font-family: Arial, Helvetica, sans-serif;">
+                      ⏰ Esta contraseña expirará en: <strong>${expiresAtFormatted || '7 días'}</strong>
+                    </div>
                   </td>
                 </tr>
               </table>
 
-              <!-- SECURITY NOTICE -->
-              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #FFF7ED; border-left: 4px solid #F59E0B; border-radius: 8px; margin-bottom: 28px;">
+              <!-- SECURITY WARNING -->
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #FFFBEB; border-left: 4px solid #F59E0B; border-radius: 4px; margin-bottom: 28px;">
                 <tr>
-                  <td style="padding: 14px 16px;">
-                    <div style="font-size: 13px; line-height: 1.5; color: #92400E; font-weight: 700; margin-bottom: 4px; font-family: Arial, Helvetica, sans-serif;">Por seguridad, deberá cambiar esta contraseña la próxima vez que inicie sesión.</div>
-                    <div style="font-size: 13px; line-height: 1.5; color: #92400E; font-family: Arial, Helvetica, sans-serif;">No comparta esta contraseña con ninguna persona.</div>
+                  <td style="padding: 14px 16px; font-size: 13px; color: #92400E; line-height: 1.5; font-family: Arial, Helvetica, sans-serif;">
+                    🔒 <strong>Medida de seguridad obligatoria:</strong> Deberá cambiar esta contraseña temporal la primera vez que ingrese al sistema. Por favor, no la comparta con nadie.
                   </td>
                 </tr>
               </table>
 
-              <!-- LOGIN BUTTON -->
-              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+              <!-- CTA BUTTON -->
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 28px;">
                 <tr>
-                  <td align="center" style="padding: 4px 0 20px 0;">
-                    <a href="${loginUrl}" target="_blank" class="btn-responsive" style="display: inline-block; background-color: #C5D87A; color: #111827; font-family: Arial, Helvetica, sans-serif; font-size: 15px; font-weight: 700; text-decoration: none; padding: 14px 28px; border-radius: 8px; text-align: center; border: 0;">Ingresar al sistema</a>
+                  <td align="center">
+                    <!--[if mso]>
+                    <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${loginUrl}" style="height:48px;v-text-anchor:middle;width:240px;" arcsize="18%" stroke="f" fillcolor="#D4E881">
+                      <w:anchorlock/>
+                      <center style="color:#111827;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;">Iniciar Sesión</center>
+                    </v:roundrect>
+                    <![endif]-->
+                    <a href="${loginUrl}" target="_blank" class="btn-responsive" style="background-color: #D4E881; color: #111827; display: inline-block; font-family: Arial, Helvetica, sans-serif; font-size: 15px; font-weight: 700; line-height: 48px; text-align: center; text-decoration: none; padding: 0 32px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); -webkit-text-size-adjust: none; mso-hide: all;">
+                      Iniciar Sesión en Ride Lab &rarr;
+                    </a>
                   </td>
                 </tr>
               </table>
 
-              <!-- LINK ALTERNATIVE -->
-              <p style="font-size: 12px; color: #6B7280; margin: 0 0 6px 0; text-align: center; font-family: Arial, Helvetica, sans-serif;">
-                Si el botón no funciona, copie y pegue este enlace en su navegador:
-              </p>
-              <div style="font-size: 12px; color: #2563EB; text-align: center; word-break: break-all; line-height: 1.4; margin-bottom: 24px; font-family: Arial, Helvetica, sans-serif;">
-                <a href="${loginUrl}" target="_blank" style="color: #2563EB; text-decoration: underline;">${loginUrl}</a>
-              </div>
-
-              <!-- ADDITIONAL DISCLAIMER -->
               <div style="border-top: 1px solid #F3F4F6; padding-top: 16px; font-size: 12px; color: #6B7280; line-height: 1.5; text-align: center; font-family: Arial, Helvetica, sans-serif;">
                 Si usted no solicitó este cambio, comuníquese con el administrador del sistema.
               </div>
@@ -186,9 +184,9 @@ Por favor, no responda a este mensaje.
           <!-- FOOTER -->
           <tr>
             <td style="background-color: #F9FAFB; border-top: 1px solid #E5E7EB; border-radius: 0 0 12px 12px; padding: 20px; text-align: center; font-size: 12px; color: #6B7280; line-height: 1.6; font-family: Arial, Helvetica, sans-serif;">
-              Este correo fue enviado automáticamente por Bikers’ Fort.<br>
+              Este correo fue enviado automáticamente por Ride Lab.<br>
               Por favor, no responda a este mensaje.<br>
-              <span style="font-size: 11px; color: #9CA3AF; margin-top: 6px; display: inline-block;">© ${currentYear} Bikers’ Fort. Todos los derechos reservados.</span>
+              <span style="font-size: 11px; color: #9CA3AF; margin-top: 6px; display: inline-block;">© ${currentYear} Ride Lab. Todos los derechos reservados.</span>
             </td>
           </tr>
 
@@ -202,7 +200,7 @@ Por favor, no responda a este mensaje.
     `;
 
     const command = new SendEmailCommand({
-      Source: `Bikers' Fort Core <${sender}>`,
+      Source: `Ride Lab <${sender}>`,
       Destination: {
         ToAddresses: [recipient],
       },

@@ -54,8 +54,8 @@ export default function LoginForm() {
             {/* Logo Header */}
             <div className="mb-6 sm:mb-8 w-full flex justify-center relative h-24 sm:h-28 md:h-32">
               <img
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuDQsHXizSsIBMDwL7CfWGuh1piUa7nML2qajgrM7gURI1WTI23Yiqdyx4mb2NmBQQFg9HuPpoAeKbkqw42UqACCcF9d10BLrZ8jL5tntjp1Xft5wGazfeqHkVGJga6K99Fs_qAGUVq52QUz55MLEgC8Jt8rVZknQjwy8cGdpLKrcH9V7qLKmsUfsNZb2KvT8Y0Ob7ooWBCQVup0AZRys0LGLsIdd4dN1aIpJP18pMDQbfg-2SRWVgSbcyGKMbiHh1830A"
-                alt="Bikers' Fort Core Logo"
+                src="/ridelab-logo.png"
+                alt="Ride Lab Logo"
                 className="h-full w-auto object-contain"
               />
             </div>
@@ -174,14 +174,14 @@ export default function LoginForm() {
       {/* Footer */}
       <footer className="w-full mt-8 py-6 px-4 md:px-10 border-t border-[#46483b]/30 z-10 flex flex-col md:flex-row justify-between items-center gap-3 text-center md:text-left text-[#c7c8b7] font-mono text-[10px] sm:text-[11px] tracking-widest uppercase">
         <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 sm:gap-4">
-          <span>© 2024 BIKER&apos;S FORT CORE. TODOS LOS DERECHOS RESERVADOS.</span>
+          <span>© {new Date().getFullYear()} RIDE LAB. TODOS LOS DERECHOS RESERVADOS.</span>
           <span className="hidden md:inline">|</span>
           <span>SYSTEM STATUS: <span className="text-[#bfce7f]">ONLINE</span></span>
         </div>
         <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-6">
           <a className="hover:text-[#bfce7f] transition-colors" href="#">SOPORTE TÉCNICO</a>
           <a className="hover:text-[#bfce7f] transition-colors" href="#">POLÍTICA DE PRIVACIDAD</a>
-          <span className="text-[#e4e3d9]">BUILD ID: 03.11.2024.BFC</span>
+          <span className="text-[#e4e3d9]">BUILD ID: 03.11.2026.RL</span>
         </div>
       </footer>
     </main>

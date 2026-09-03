@@ -286,13 +286,13 @@ function SidebarContent({
             href="/"
             onClick={onNavigate}
             className="flex items-center justify-center transition-transform hover:scale-[1.03] focus:outline-none"
-            title="Bikers' Fort Core"
+            title="Ride Lab"
           >
             <Image
-              src="/logo.png"
-              alt="Bikers' Fort Logo"
+              src="/ridelab-logo.png"
+              alt="Ride Lab Logo"
               width={180}
-              height={55}
+              height={72}
               className="h-12 max-h-14 w-auto object-contain"
               priority
             />

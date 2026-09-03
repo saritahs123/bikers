@@ -145,13 +145,13 @@ export function generateInvoicePdfDocument(data: InvoicePdfData): jsPDF {
 
   // 1. Draw Company Brand Logo
   try {
-    doc.addImage(COMPANY_LOGO_BASE64, "PNG", marginX, currentY - 2, 28, 18.9);
+    doc.addImage(COMPANY_LOGO_BASE64, "PNG", marginX, currentY - 2, 32, 12.9);
   } catch {
     // Fallback text if image cannot be embedded
     doc.setTextColor(textDark[0], textDark[1], textDark[2]);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(14);
-    doc.text(data.empresa?.nombre_comercial || "BIKERS' FORT CORE", marginX, currentY + 4);
+    doc.text(data.empresa?.nombre_comercial || "RIDE LAB", marginX, currentY + 4);
   }
 
   // Company Info Lines - Clean labels without emojis/Unicode icons
@@ -499,7 +499,7 @@ export function generateInvoicePdfDocument(data: InvoicePdfData): jsPDF {
     doc.setTextColor(primaryGreen[0], primaryGreen[1], primaryGreen[2]);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8);
-    doc.text(`Gracias por confiar en ${data.empresa.nombre_comercial || "Bikers' Fort Core"}`, pageWidth / 2, footerY, {
+    doc.text(`Gracias por confiar en ${data.empresa.nombre_comercial || "Ride Lab"}`, pageWidth / 2, footerY, {
       align: "center"
     });
 

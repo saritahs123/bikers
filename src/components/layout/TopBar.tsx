@@ -85,14 +85,14 @@ export function TopBar({
             <Link
               href="/"
               className="flex items-center transition-transform hover:scale-[1.02] focus:outline-none shrink-0"
-              title="Bikers' Fort Core"
+              title="Ride Lab"
             >
               <Image
-                src="/logo.png"
-                alt="Bikers' Fort Logo"
+                src="/ridelab-logo.png"
+                alt="Ride Lab Logo"
                 width={160}
-                height={50}
-                className="h-9 sm:h-11 md:h-12 w-auto object-contain shrink-0"
+                height={64}
+                className="h-8 sm:h-9 md:h-10 w-auto object-contain shrink-0"
                 priority
               />
             </Link>
