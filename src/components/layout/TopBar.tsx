@@ -88,7 +88,7 @@ export function TopBar({
               title="Ride Lab"
             >
               <Image
-                src="/logo.png"
+                src="/ridelab-logo.png"
                 alt="Ride Lab Logo"
                 width={160}
                 height={64}

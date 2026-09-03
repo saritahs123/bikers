@@ -54,7 +54,7 @@ export default function LoginForm() {
             {/* Logo Header */}
             <div className="mb-6 sm:mb-8 w-full flex justify-center relative h-24 sm:h-28 md:h-32">
               <img
-                src="/logo.png"
+                src="/ridelab-logo.png"
                 alt="Ride Lab Logo"
                 className="h-full w-auto object-contain"
               />
