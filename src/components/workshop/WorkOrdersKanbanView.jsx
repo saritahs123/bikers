@@ -444,13 +444,6 @@ export default function WorkOrdersKanbanView({ onViewDetail, onOpenNewModal, onT
                     </div>
                   ) : (
                     colOrders.map((ord) => {
-                      const priorityColor =
-                        ord.prioridad_codigo === "URGENTE"
-                          ? "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30"
-                          : ord.prioridad_codigo === "ALTA"
-                          ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30"
-                          : "bg-surface text-foreground-muted border-border";
-
                       const bikeDescriptor =
                         ord.bicicleta_marca || ord.bicicleta_modelo
                           ? `${ord.bicicleta_marca || ""} ${ord.bicicleta_modelo || ""}`.trim()
@@ -461,41 +454,34 @@ export default function WorkOrdersKanbanView({ onViewDetail, onOpenNewModal, onT
                           key={ord.orden_id || ord.orden_trabajo_id}
                           className={`bg-surface border border-border border-l-4 ${col.cardAccent} rounded-xl p-4 space-y-2.5 shadow-sm select-none transition-all cursor-default`}
                         >
-                          {/* 1. NÚMERO DE ORDEN + PRIORIDAD */}
+                          {/* 1. NÚMERO DE ORDEN */}
                           <div className="flex items-center justify-between gap-2 border-b border-border/50 pb-2 min-w-0">
                             <span className="font-mono text-base sm:text-lg xl:text-lg 2xl:text-xl font-black text-foreground tracking-tight whitespace-nowrap shrink-0">
                               {ord.codigo_orden}
                             </span>
-                            {ord.prioridad_nombre && (
-                              <span
-                                className={`text-[10px] xl:text-[11px] font-mono font-bold px-2 py-0.5 rounded border uppercase tracking-wider shrink-0 whitespace-nowrap ${priorityColor}`}
-                              >
-                                {ord.prioridad_nombre}
+                          </div>
+
+                          {/* 2. BICICLETA + CLIENTE EN LA MISMA LÍNEA */}
+                          <div className="flex items-start justify-between gap-2.5 min-w-0">
+                            <div className="flex items-start gap-1.5 min-w-0 flex-1">
+                              <Bike className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+                              <span className="text-xs font-bold text-foreground leading-tight break-words whitespace-normal">
+                                {bikeDescriptor}
                               </span>
-                            )}
+                            </div>
+                            <div className="flex items-start gap-1.5 min-w-0 shrink-0 max-w-[50%] font-sans">
+                              <User className="w-3 h-3 text-foreground-muted shrink-0 mt-0.5" />
+                              <span className="text-[11px] font-medium text-foreground-muted leading-tight break-words whitespace-normal text-right">
+                                {ord.cliente_nombre || "Cliente Sin Nombre"}
+                              </span>
+                            </div>
                           </div>
 
-                          {/* 2. BICICLETA */}
-                          <div className="flex items-center gap-2 text-xs sm:text-sm md:text-base font-bold text-foreground-secondary min-w-0">
-                            <Bike className="w-4 h-4 text-primary shrink-0" />
-                            <span className="truncate leading-tight">
-                              {bikeDescriptor}
-                            </span>
-                          </div>
-
-                          {/* 3. NOMBRE DEL CLIENTE */}
-                          <div className="flex items-center gap-2 text-sm sm:text-base md:text-lg font-extrabold text-foreground font-sans min-w-0">
-                            <User className="w-4 h-4 text-foreground-muted shrink-0" />
-                            <span className="truncate leading-tight">
-                              {ord.cliente_nombre || "Cliente Sin Nombre"}
-                            </span>
-                          </div>
-
-                          {/* 4. TELÉFONO */}
-                          <div className="flex items-center gap-2 text-xs sm:text-sm md:text-base font-mono font-bold text-foreground-muted min-w-0">
-                            <Phone className="w-3.5 h-3.5 text-foreground-muted shrink-0" />
-                            <span className="whitespace-nowrap leading-tight">
-                              {ord.cliente_telefono ? ord.cliente_telefono : "Sin teléfono"}
+                          {/* 3. PRIMER SERVICIO (CONSERVA ICONO DE TELÉFONO) */}
+                          <div className="flex items-start gap-2 min-w-0 pt-0.5">
+                            <Phone className="w-3.5 h-3.5 text-foreground-muted shrink-0 mt-0.5" />
+                            <span className="text-xs sm:text-sm font-sans font-medium text-foreground-muted leading-snug break-words whitespace-normal flex-1 min-w-0">
+                              {ord.primer_servicio || "Sin servicio asignado"}
                             </span>
                           </div>
                         </div>

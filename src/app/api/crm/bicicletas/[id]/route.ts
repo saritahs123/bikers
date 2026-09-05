@@ -33,6 +33,26 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
         c.correo AS cliente_correo,
         c.telefono_principal AS cliente_telefono,
         c.tipo_cliente AS cliente_nivel,
+        COALESCE(
+          (
+            SELECT MAX(COALESCE(ot.fecha_entrega_real, ot.fecha_finalizacion, ot.fecha_recepcion, ot.fecha_registro))
+            FROM admin.ordenes_trabajo ot
+            WHERE ot.bicicleta_id = b.bicicleta_id AND (ot.activo = true OR ot.activo IS NULL)
+          ),
+          b.fecha_ultima_revision
+        ) AS fecha_ultima_revision_calculada,
+        (
+          SELECT COUNT(*)::int
+          FROM admin.ordenes_trabajo ot
+          WHERE ot.bicicleta_id = b.bicicleta_id AND (ot.activo = true OR ot.activo IS NULL)
+        ) AS total_servicios,
+        (
+          SELECT ot.salud_global_porcentaje
+          FROM admin.ordenes_trabajo ot
+          WHERE ot.bicicleta_id = b.bicicleta_id AND (ot.activo = true OR ot.activo IS NULL) AND ot.salud_global_porcentaje IS NOT NULL
+          ORDER BY ot.orden_trabajo_id DESC
+          LIMIT 1
+        ) AS salud_calculada,
         f.url_archivo AS foto_url
       FROM admin.bicicletas b
       JOIN admin.clientes c ON b.cliente_id = c.cliente_id
@@ -52,11 +72,19 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
 
     const rawBike = rows[0];
     const foto_url = (rawBike.foto_url && !rawBike.foto_url.includes("default.png")) ? rawBike.foto_url : null;
-    const salud = null;
+    const rawFecha = rawBike.fecha_ultima_revision_calculada || rawBike.fecha_ultima_revision;
+    const fecha_ultima_revision = rawFecha
+      ? (rawFecha instanceof Date ? rawFecha.toISOString() : new Date(rawFecha).toISOString())
+      : null;
+    const salud = rawBike.salud_calculada !== null && rawBike.salud_calculada !== undefined
+      ? Number(rawBike.salud_calculada)
+      : null;
 
     return NextResponse.json({
       id: rawBike.bicicleta_id,
       ...rawBike,
+      fecha_ultima_revision,
+      total_servicios: Number(rawBike.total_servicios || 0),
       foto_url,
       salud
     });

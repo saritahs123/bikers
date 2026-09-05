@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   Camera,
   Upload,
@@ -24,6 +24,7 @@ export default function BicyclePhotosEditor({
   showToast,
   readOnly = false
 }) {
+  const fileInputRef = useRef(null);
   const [editingPhoto, setEditingPhoto] = useState(null);
   const [selectedPhotoFile, setSelectedPhotoFile] = useState(null);
   const [selectedPhotoDataUrl, setSelectedPhotoDataUrl] = useState("");
@@ -87,6 +88,7 @@ export default function BicyclePhotosEditor({
       setNewPhotoType("GENERAL");
       setNewPhotoComponentId("");
       setNewPhotoEsPrincipal(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
@@ -101,6 +103,7 @@ export default function BicyclePhotosEditor({
       URL.revokeObjectURL(selectedPhotoDataUrl);
     }
     setSelectedPhotoDataUrl("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const handleSelectPhotoForEdit = (photo) => {
@@ -109,6 +112,10 @@ export default function BicyclePhotosEditor({
     setNewPhotoType(photo.tipo_foto || "GENERAL");
     setNewPhotoComponentId(photo.bicicleta_componente_id || "");
     setNewPhotoEsPrincipal(Boolean(photo.es_principal));
+    setSelectedPhotoFile(null);
+    if (selectedPhotoDataUrl) URL.revokeObjectURL(selectedPhotoDataUrl);
+    setSelectedPhotoDataUrl("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const handleSavePhotoDraftOrPersisted = async () => {
@@ -303,7 +310,7 @@ export default function BicyclePhotosEditor({
 
           <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
             <div className="md:col-span-4">
-              <label className="block text-foreground-muted mb-1">
+              <label className="block text-foreground-muted mb-1 font-bold">
                 {editingPhoto ? "Imagen Registrada" : "Seleccionar Imagen (JPG, PNG, WEBP)"}
               </label>
               {editingPhoto ? (
@@ -313,6 +320,7 @@ export default function BicyclePhotosEditor({
                 </div>
               ) : (
                 <input
+                  ref={fileInputRef}
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
                   onChange={handleFileSelect}
@@ -322,7 +330,7 @@ export default function BicyclePhotosEditor({
             </div>
 
             <div className="md:col-span-3">
-              <label className="block text-foreground-muted mb-1">Descripción / Módulo</label>
+              <label className="block text-foreground-muted mb-1 font-bold">Descripción / Módulo</label>
               <input
                 type="text"
                 value={newPhotoDesc}
@@ -333,11 +341,11 @@ export default function BicyclePhotosEditor({
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-foreground-muted mb-1">Tipo</label>
+              <label className="block text-foreground-muted mb-1 font-bold">Tipo</label>
               <select
                 value={newPhotoType}
                 onChange={(e) => setNewPhotoType(e.target.value)}
-                className="w-full bg-background border border-border rounded-xl px-2 py-2 text-foreground focus:outline-none focus:border-primary"
+                className="w-full bg-background border border-border rounded-xl px-2 py-2 text-foreground focus:outline-none focus:border-primary cursor-pointer"
               >
                 <option value="GENERAL">GENERAL</option>
                 <option value="PRINCIPAL">PRINCIPAL</option>
@@ -351,11 +359,11 @@ export default function BicyclePhotosEditor({
             </div>
 
             <div className="md:col-span-3">
-              <label className="block text-slate-300 mb-1">Componente Vinculado</label>
+              <label className="block text-foreground-muted mb-1 font-bold">Componente Vinculado</label>
               <select
                 value={newPhotoComponentId}
                 onChange={(e) => setNewPhotoComponentId(e.target.value)}
-                className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#bfce7f] cursor-pointer"
+                className="w-full bg-background border border-border rounded-xl px-3 py-2 text-foreground focus:outline-none focus:border-primary cursor-pointer"
               >
                 <option value="">-- Sin Componente Vinculado --</option>
                 {componentsList.map((comp) => (
@@ -367,42 +375,85 @@ export default function BicyclePhotosEditor({
             </div>
           </div>
 
-          <div className="flex items-center justify-between pt-2 border-t border-[#2d3748]/50">
+          {/* Selected File Preview Box when pending upload */}
+          {selectedPhotoDataUrl && !editingPhoto && (
+            <div className="flex items-center gap-3 p-3 bg-background/80 border border-primary/40 rounded-xl">
+              <img
+                src={selectedPhotoDataUrl}
+                alt="Vista previa seleccionada"
+                className="w-16 h-12 object-cover rounded-lg border border-border shadow-sm shrink-0"
+              />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-foreground truncate">{selectedPhotoFile?.name}</p>
+                <p className="text-[10px] text-foreground-muted">
+                  {selectedPhotoFile?.size ? (selectedPhotoFile.size / (1024 * 1024)).toFixed(2) : 0} MB • Listo para subir y guardar
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedPhotoFile(null);
+                  if (selectedPhotoDataUrl) URL.revokeObjectURL(selectedPhotoDataUrl);
+                  setSelectedPhotoDataUrl("");
+                  if (fileInputRef.current) fileInputRef.current.value = "";
+                }}
+                className="p-1.5 text-foreground-muted hover:text-rose-400 transition-colors rounded-lg hover:bg-surface"
+                title="Quitar archivo seleccionado"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between pt-2 border-t border-border">
             <div className="flex items-center gap-2">
               <input
                 type="checkbox"
                 id="es_principal_chk"
                 checked={newPhotoEsPrincipal}
                 onChange={(e) => setNewPhotoEsPrincipal(e.target.checked)}
-                className="w-4 h-4 rounded bg-[#0e1117] border-[#2d3748] text-[#bfce7f] focus:ring-0 cursor-pointer accent-[#bfce7f]"
+                className="w-4 h-4 rounded bg-background border-border text-primary focus:ring-0 cursor-pointer accent-primary"
               />
-              <label htmlFor="es_principal_chk" className="font-bold text-xs select-none flex items-center gap-1.5 text-[#bfce7f] cursor-pointer">
-                <Star size={14} className={newPhotoEsPrincipal ? "fill-[#bfce7f]" : ""} />
+              <label htmlFor="es_principal_chk" className="font-bold text-xs select-none flex items-center gap-1.5 text-primary cursor-pointer">
+                <Star size={14} className={newPhotoEsPrincipal ? "fill-primary" : ""} />
                 <span>Marcar como Fotografía Principal</span>
               </label>
             </div>
 
-            {editingPhoto && (
-              <button
-                type="button"
-                disabled={isUploading}
-                onClick={handleSavePhotoDraftOrPersisted}
-                className="px-5 py-2 bg-[#bfce7f] hover:bg-[#a9ba6b] text-[#1d1f18] font-bold rounded-xl transition-all disabled:opacity-40 flex items-center justify-center gap-1.5 cursor-pointer shadow-lg shrink-0"
-              >
-                {isUploading ? <RefreshCw size={15} className="animate-spin" /> : <Save size={15} />}
-                <span>Guardar Cambios</span>
-              </button>
-            )}
+            {/* Action Button: Visible for both New Upload and Edit */}
+            <button
+              type="button"
+              disabled={isUploading || (!editingPhoto && !selectedPhotoFile)}
+              onClick={handleSavePhotoDraftOrPersisted}
+              className="px-5 py-2.5 bg-primary hover:opacity-90 text-primary-foreground font-bold rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer shadow-lg shrink-0 text-xs"
+            >
+              {isUploading ? (
+                <>
+                  <RefreshCw size={15} className="animate-spin" />
+                  <span>{editingPhoto ? "Actualizando..." : "Subiendo imagen..."}</span>
+                </>
+              ) : editingPhoto ? (
+                <>
+                  <Save size={15} />
+                  <span>Actualizar Fotografía</span>
+                </>
+              ) : (
+                <>
+                  <Upload size={15} />
+                  <span>Subir Fotografía</span>
+                </>
+              )}
+            </button>
           </div>
         </div>
       )}
 
       {/* Photo Gallery Grid */}
       {photos.length === 0 ? (
-        <div className="p-8 text-center bg-[#161a21] border border-[#2d3748] rounded-2xl space-y-3 shadow-xl">
-          <Camera size={36} className="mx-auto text-slate-500" />
-          <p className="text-slate-300 font-bold">No hay fotografías registradas aún</p>
-          <p className="text-slate-500 text-[11px]">
+        <div className="p-8 text-center bg-card border border-border rounded-2xl space-y-3 shadow-xl">
+          <Camera size={36} className="mx-auto text-foreground-muted opacity-50" />
+          <p className="text-foreground font-bold">No hay fotografías registradas aún</p>
+          <p className="text-foreground-muted text-[11px]">
             {mode === "draft"
               ? "Seleccione archivos de imagen para previsualizar y adjuntar a la nueva bicicleta."
               : "Utilice el panel superior para cargar imágenes y fotografías de la bicicleta."}
@@ -412,6 +463,7 @@ export default function BicyclePhotosEditor({
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
           {photos.map((photo) => {
             const key = photo.tempId || photo.id;
+            const isSelectedForEdit = editingPhoto && (editingPhoto.tempId || editingPhoto.id) === key;
             const rawSrc = photo.previewUrl || photo.url_archivo;
             const imgSrc = (rawSrc && !rawSrc.includes("default.png")) ? rawSrc : null;
 
@@ -419,10 +471,10 @@ export default function BicyclePhotosEditor({
               <div
                 key={key}
                 onClick={() => !readOnly && handleSelectPhotoForEdit(photo)}
-                className={`bg-[#161a21] rounded-2xl overflow-hidden shadow-lg group relative flex flex-col justify-between cursor-pointer transition-all ${
+                className={`bg-card rounded-2xl overflow-hidden shadow-lg group relative flex flex-col justify-between cursor-pointer transition-all ${
                   isSelectedForEdit
-                    ? "ring-2 ring-[#bfce7f] border-2 border-[#bfce7f] bg-[#1f242d]"
-                    : "border border-[#2d3748] hover:border-[#bfce7f]/60"
+                    ? "ring-2 ring-primary border-2 border-primary bg-card/90"
+                    : "border border-border hover:border-primary/60"
                 }`}
               >
                 <div className="aspect-video w-full relative overflow-hidden bg-black/40 flex items-center justify-center">
@@ -433,16 +485,16 @@ export default function BicyclePhotosEditor({
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
                   ) : (
-                    <div className="w-full h-full bg-[#11151c] flex flex-col items-center justify-center text-slate-500 gap-1.5 p-3 text-center font-mono">
-                      <Camera size={24} className="text-slate-600" />
+                    <div className="w-full h-full bg-background flex flex-col items-center justify-center text-foreground-muted gap-1.5 p-3 text-center font-mono">
+                      <Camera size={24} className="text-foreground-muted opacity-60" />
                       <span className="text-[10px] uppercase tracking-wider">Sin imagen disponible</span>
                     </div>
                   )}
 
                   <div className="absolute top-2 left-2 flex gap-1 flex-wrap">
                     {photo.es_principal && (
-                      <span className="px-2 py-0.5 rounded bg-[#bfce7f] text-[#1d1f18] text-[9px] font-bold uppercase shadow flex items-center gap-1">
-                        <Star size={10} className="fill-[#1d1f18]" /> Principal
+                      <span className="px-2 py-0.5 rounded bg-primary text-primary-foreground text-[9px] font-bold uppercase shadow flex items-center gap-1">
+                        <Star size={10} className="fill-primary-foreground" /> Principal
                       </span>
                     )}
                     <span className="px-2 py-0.5 rounded bg-black/70 backdrop-blur-md border border-white/20 text-white text-[9px] font-bold uppercase">
@@ -467,12 +519,12 @@ export default function BicyclePhotosEditor({
                   )}
                 </div>
 
-                <div className="p-3 space-y-1 bg-[#161a21]">
-                  <p className="text-white font-bold text-xs truncate">
+                <div className="p-3 space-y-1 bg-card">
+                  <p className="text-foreground font-bold text-xs truncate">
                     {photo.descripcion || photo.nombre_archivo || "Fotografía de Activo"}
                   </p>
                   {photo.componente_nombre && (
-                    <p className="text-[#bfce7f] text-[10px] truncate font-bold">
+                    <p className="text-primary text-[10px] truncate font-bold">
                       ⚙️ {photo.componente_nombre}
                     </p>
                   )}

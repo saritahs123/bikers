@@ -50,7 +50,26 @@ export async function GET(req: Request) {
         b.numero_serie_cuadro,
         b.descripcion,
         b.kilometraje_actual,
-        b.fecha_ultima_revision,
+        COALESCE(
+          (
+            SELECT MAX(COALESCE(ot.fecha_entrega_real, ot.fecha_finalizacion, ot.fecha_recepcion, ot.fecha_registro))
+            FROM admin.ordenes_trabajo ot
+            WHERE ot.bicicleta_id = b.bicicleta_id AND (ot.activo = true OR ot.activo IS NULL)
+          ),
+          b.fecha_ultima_revision
+        ) AS fecha_ultima_revision,
+        (
+          SELECT COUNT(*)::int
+          FROM admin.ordenes_trabajo ot
+          WHERE ot.bicicleta_id = b.bicicleta_id AND (ot.activo = true OR ot.activo IS NULL)
+        ) AS total_servicios,
+        (
+          SELECT ot.salud_global_porcentaje
+          FROM admin.ordenes_trabajo ot
+          WHERE ot.bicicleta_id = b.bicicleta_id AND (ot.activo = true OR ot.activo IS NULL) AND ot.salud_global_porcentaje IS NOT NULL
+          ORDER BY ot.orden_trabajo_id DESC
+          LIMIT 1
+        ) AS salud,
         b.notas_tecnicas,
         b.activo,
         b.fecha_creacion,
@@ -92,12 +111,17 @@ export async function GET(req: Request) {
       numero_serie_cuadro: r.numero_serie_cuadro || '',
       descripcion: r.descripcion || '',
       kilometraje_actual: Number(r.kilometraje_actual || 0),
-      fecha_ultima_revision: r.fecha_ultima_revision ? String(r.fecha_ultima_revision).substring(0, 10) : null,
+      fecha_ultima_revision: r.fecha_ultima_revision
+        ? (r.fecha_ultima_revision instanceof Date ? r.fecha_ultima_revision.toISOString() : new Date(r.fecha_ultima_revision).toISOString())
+        : null,
+      total_servicios: Number(r.total_servicios || 0),
+      salud: r.salud !== null && r.salud !== undefined ? Number(r.salud) : null,
       notas_tecnicas: r.notas_tecnicas || '',
       foto_url: (r.foto_url && !r.foto_url.includes("default.png")) ? r.foto_url : null,
-      salud: null,
       activo: r.activo !== false,
-      fecha_creacion: r.fecha_creacion ? String(r.fecha_creacion).substring(0, 10) : null
+      fecha_creacion: r.fecha_creacion
+        ? (r.fecha_creacion instanceof Date ? r.fecha_creacion.toISOString() : new Date(r.fecha_creacion).toISOString())
+        : null
     }));
 
     const res = NextResponse.json(mapped);

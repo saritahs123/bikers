@@ -74,7 +74,7 @@ function SidebarContent({
       icon: "settings",
       label: "CONFIGURACIÓN",
       submenu: [
-        { href: "/workshop/service-types", label: "TIPOS DE SERVICIO" },
+        { href: "/workshop/service-types", label: "SERVICIOS" },
         { href: "/workshop/products", label: "PRODUCTOS" },
         { href: "/crm/component-categories", label: "CATEGORÍAS COMPONENTES" },
         { href: "/crm/component-states", label: "ESTADOS COMPONENTES" }

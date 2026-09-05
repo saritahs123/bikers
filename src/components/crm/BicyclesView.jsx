@@ -60,6 +60,21 @@ export const formatDateForInput = (dateVal) => {
   }
 };
 
+export const formatServiceDate = (dateVal) => {
+  if (!dateVal) return "Sin intervenciones";
+  try {
+    const d = new Date(typeof dateVal === "string" && !dateVal.includes("T") ? `${dateVal}T12:00:00` : dateVal);
+    if (isNaN(d.getTime())) return String(dateVal);
+    return d.toLocaleDateString("es-DO", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric"
+    });
+  } catch {
+    return String(dateVal);
+  }
+};
+
 const VALID_BICYCLE_TABS = new Set([
   "general",
   "componentes",
@@ -493,7 +508,7 @@ export default function BicyclesView({ initialBikeId = null, initialTab = "gener
     const eBikeCount = data.filter((b) => (b.tipo_bicicleta || "").toUpperCase().includes("E-BIKE") || (b.tipo_bicicleta || "").toUpperCase().includes("EBIKE")).length;
     const otherCount = Math.max(0, total - mtbCount - roadCount - eBikeCount);
     const withOwner = data.filter((b) => b.cliente_id && b.cliente_nombre).length;
-    const withServices = data.filter((b) => Boolean(b.fecha_ultima_revision)).length;
+    const withServices = data.filter((b) => Boolean(b.fecha_ultima_revision) || (Number(b.total_servicios) > 0)).length;
 
     return {
       total,
@@ -856,8 +871,8 @@ export default function BicyclesView({ initialBikeId = null, initialTab = "gener
                       {item.cliente_nombre}
                     </td>
 
-                    <td className="py-3.5 px-4 text-foreground-muted">
-                      {item.fecha_ultima_revision ? item.fecha_ultima_revision : "Sin intervenciones"}
+                    <td className="py-3.5 px-4 text-foreground-muted font-mono">
+                      {formatServiceDate(item.fecha_ultima_revision)}
                     </td>
 
                     <td className="py-3.5 px-4 text-center">
@@ -1169,7 +1184,7 @@ export default function BicyclesView({ initialBikeId = null, initialTab = "gener
                 </div>
                 <div className="flex justify-between text-[11px] text-foreground-muted pt-1">
                   <span>Kilometraje: {detailBike.kilometraje_actual || 0} KM</span>
-                  <span>Último servicio: {detailBike.fecha_ultima_revision || "Sin intervenciones"}</span>
+                  <span>Último servicio: {formatServiceDate(detailBike.fecha_ultima_revision)}</span>
                 </div>
               </div>
 
@@ -1331,7 +1346,7 @@ export default function BicyclesView({ initialBikeId = null, initialTab = "gener
                         </div>
                         <div className="flex justify-between py-1">
                           <span className="text-foreground-muted">Fecha Registro:</span>
-                          <span className="text-foreground">{detailBike.fecha_creacion || "Reciente"}</span>
+                          <span className="text-foreground">{detailBike.fecha_creacion ? formatServiceDate(detailBike.fecha_creacion) : "Reciente"}</span>
                         </div>
                       </div>
                     </div>
