@@ -251,6 +251,16 @@ export default function BillingOrderDetailView({ ordenId, onBack }) {
     }
   };
 
+  // Operational Action 4: ABRIR TICKET POS TÉRMICO (80 mm)
+  const handleOpenPosTicket = () => {
+    if (!ordenId) return;
+    window.open(
+      `/workshop/billing/${ordenId}/ticket`,
+      "_blank",
+      "noopener,noreferrer,width=440,height=800,scrollbars=yes,resizable=yes"
+    );
+  };
+
   const formatMoney = (val) => {
     const num = parseFloat(val || 0);
     return `RD$ ${num.toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -558,27 +568,41 @@ export default function BillingOrderDetailView({ ordenId, onBack }) {
               </div>
             )}
 
-            {/* Print Action when ENTREGADA & FACTURADA */}
+            {/* Print Actions when ENTREGADA & FACTURADA */}
             {puedeImprimirFactura && (
-              <button
-                type="button"
-                onClick={handlePrintInvoice}
-                disabled={isGeneratingPdf}
-                className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-slate-200 hover:text-white bg-slate-800/80 hover:bg-slate-800 border border-slate-700 hover:border-slate-600 rounded-xl transition-all cursor-pointer shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Generar y descargar Factura en PDF (Formato A4)"
-              >
-                {isGeneratingPdf ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
-                    <span>Generando PDF...</span>
-                  </>
-                ) : (
-                  <>
-                    <Printer className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Imprimir</span>
-                  </>
-                )}
-              </button>
+              <div className="flex items-center gap-2">
+                {/* Botón 1: Imprimir A4 (PDF) */}
+                <button
+                  type="button"
+                  onClick={handlePrintInvoice}
+                  disabled={isGeneratingPdf}
+                  className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-200 hover:text-white bg-slate-800/80 hover:bg-slate-800 border border-slate-700 hover:border-slate-600 rounded-xl transition-all cursor-pointer shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Generar y descargar Factura en PDF (Formato A4)"
+                >
+                  {isGeneratingPdf ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                      <span>Generando A4...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Printer className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Imprimir A4</span>
+                    </>
+                  )}
+                </button>
+
+                {/* Botón 2: Ticket POS (80 mm) */}
+                <button
+                  type="button"
+                  onClick={handleOpenPosTicket}
+                  className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-slate-950 bg-amber-400 hover:bg-amber-300 active:scale-95 border border-amber-300 rounded-xl transition-all cursor-pointer shadow-sm shadow-amber-400/20"
+                  title="Abrir e imprimir Ticket en formato para impresora térmica POS (80 mm)"
+                >
+                  <Receipt className="w-3.5 h-3.5 text-slate-950" />
+                  <span>Ticket</span>
+                </button>
+              </div>
             )}
           </div>
         </div>

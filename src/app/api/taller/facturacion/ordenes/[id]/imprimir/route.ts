@@ -166,14 +166,22 @@ export async function GET(
     }
 
     // 2. Fetch Company Info from admin.empresa
-    let empresaInfo = {
+    let empresaInfo: {
+      nombre_comercial: string;
+      subtitulo?: string;
+      direccion?: string;
+      telefono?: string;
+      email?: string;
+      rnc?: string;
+      logotipo_url?: string | null;
+    } = {
       nombre_comercial: "RIDE LAB",
       subtitulo: "Tienda y Taller de Bicicletas",
-      direccion: "Av. Los Próceres #123, Santo Domingo, RD 10107",
-      telefono: "809-123-4567",
-      email: "info@ridelab.com",
-      rnc: "1-31-12345-6",
-      logotipo_url: null as string | null
+      direccion: undefined,
+      telefono: undefined,
+      email: undefined,
+      rnc: undefined,
+      logotipo_url: null
     };
 
     try {
@@ -186,12 +194,12 @@ export async function GET(
       if (empresaRes && empresaRes.length > 0) {
         const emp = empresaRes[0];
         empresaInfo = {
-          nombre_comercial: emp.nombre_comercial || emp.alias || empresaInfo.nombre_comercial,
+          nombre_comercial: emp.nombre_comercial || emp.alias || "RIDE LAB",
           subtitulo: "Tienda y Taller de Bicicletas",
-          direccion: emp.direccion || empresaInfo.direccion,
-          telefono: emp.telefono || empresaInfo.telefono,
-          email: emp.email || empresaInfo.email,
-          rnc: emp.rnc ? (emp.rnc.length === 9 ? `${emp.rnc.slice(0, 1)}-${emp.rnc.slice(1, 3)}-${emp.rnc.slice(3)}` : emp.rnc) : empresaInfo.rnc,
+          direccion: emp.direccion || undefined,
+          telefono: emp.telefono || undefined,
+          email: emp.email || undefined,
+          rnc: emp.rnc ? (emp.rnc.length === 9 ? `${emp.rnc.slice(0, 1)}-${emp.rnc.slice(1, 3)}-${emp.rnc.slice(3)}` : emp.rnc) : undefined,
           logotipo_url: emp.logotipo_url || null
         };
       }
