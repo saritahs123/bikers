@@ -422,7 +422,7 @@ export default function ServiceTypesView() {
           </div>
           <h1 className="font-mono text-2xl md:text-3xl font-black text-foreground tracking-tight flex items-center gap-3">
             <Wrench className="text-primary" size={28} />
-            <span>Tipos de Servicio</span>
+            <span>Servicios</span>
           </h1>
           <p className="text-foreground-muted font-mono text-xs md:text-sm mt-1">
             Catálogo oficial de servicios técnicos, mantenimientos y calibraciones para el taller.
@@ -435,7 +435,7 @@ export default function ServiceTypesView() {
             className="bg-primary hover:opacity-90 text-primary-foreground font-mono text-xs font-bold px-5 py-3 rounded-xl shadow-lg flex items-center gap-2 transition-all cursor-pointer self-start md:self-auto"
           >
             <Plus size={18} />
-            <span>Nuevo Tipo de Servicio</span>
+            <span>Nuevo Servicio</span>
           </button>
         )}
       </div>
@@ -562,16 +562,16 @@ export default function ServiceTypesView() {
         {loading ? (
           <div className="p-12 text-center text-foreground-muted flex flex-col items-center justify-center gap-3">
             <RefreshCw className="animate-spin text-primary" size={28} />
-            <p>Cargando catálogo de tipos de servicio...</p>
+            <p>Cargando catálogo de servicios...</p>
           </div>
         ) : paginatedData.length === 0 ? (
           <div className="p-12 text-center text-foreground-muted space-y-3">
             <AlertCircle size={32} className="mx-auto text-foreground-muted opacity-50" />
-            <p className="text-sm font-bold text-foreground">No hay tipos de servicio registrados.</p>
+            <p className="text-sm font-bold text-foreground">No hay servicios registrados.</p>
             <p className="text-xs max-w-md mx-auto">
               {search || statusFilter !== "Todos" || categoryFilter !== "TODAS"
                 ? "No se encontraron registros con los filtros seleccionados."
-                : "Comienza registrando los tipos de servicio técnico para el taller."}
+                : "Comienza registrando los servicios técnicos para el taller."}
             </p>
             {permissions.puede_crear && (
               <button
@@ -579,7 +579,7 @@ export default function ServiceTypesView() {
                 className="mt-3 px-4 py-2 bg-primary text-primary-foreground rounded-xl font-bold inline-flex items-center gap-2 cursor-pointer shadow"
               >
                 <Plus size={16} />
-                <span>Crear Tipo de Servicio</span>
+                <span>Crear Servicio</span>
               </button>
             )}
           </div>
@@ -611,7 +611,7 @@ export default function ServiceTypesView() {
                     className="p-4 cursor-pointer hover:text-foreground select-none"
                   >
                     <div className="flex items-center gap-1.5">
-                      <span>Tipo de Servicio</span>
+                      <span>Servicio</span>
                       <ArrowUpDown size={12} />
                     </div>
                   </th>
@@ -765,7 +765,7 @@ export default function ServiceTypesView() {
         {!loading && sortedData.length > 0 && (
           <div className="p-4 bg-surface border-t border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs text-foreground-muted">
             <span>
-              Mostrando {paginatedData.length} de {sortedData.length} tipos de servicio filtrados
+              Mostrando {paginatedData.length} de {sortedData.length} servicios filtrados
             </span>
 
             <div className="flex items-center gap-1.5 self-end sm:self-auto">
@@ -813,7 +813,7 @@ export default function ServiceTypesView() {
                   </div>
                   <div>
                     <h2 className="font-mono text-base font-bold text-foreground">
-                      {editingItem ? "Editar Tipo de Servicio" : "Nuevo Tipo de Servicio"}
+                      {editingItem ? "Editar Servicio" : "Nuevo Servicio"}
                     </h2>
                     <p className="font-mono text-xs text-foreground-muted">
                       {editingItem ? `ID: ${editingItem.id}` : "Catálogo operativo del taller"}
@@ -902,7 +902,7 @@ export default function ServiceTypesView() {
                     rows={3}
                     value={formData.descripcion}
                     onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
-                    placeholder="Detalles de las tareas incluidas en este tipo de servicio..."
+                    placeholder="Detalles de las tareas incluidas en este servicio..."
                     maxLength={500}
                     className={`w-full bg-background border rounded-xl p-3 text-foreground placeholder-foreground-muted focus:outline-none resize-none ${
                       errors.descripcion ? "border-rose-500 focus:border-rose-500" : "border-border focus:border-primary"
@@ -1065,7 +1065,7 @@ export default function ServiceTypesView() {
             </div>
 
             <p className="text-xs text-foreground-secondary font-mono leading-relaxed">
-              ¿Estás seguro de que deseas eliminar permanentemente el tipo de servicio{" "}
+              ¿Estás seguro de que deseas eliminar permanentemente el servicio{" "}
               <strong className="text-foreground">{itemToDelete.nombre}</strong> (Código: {itemToDelete.codigo})?
             </p>
 

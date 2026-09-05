@@ -34,7 +34,7 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
 
     const cliente = clienteRows[0];
 
-    // Fetch client's bicycles along with their main photo
+    // Fetch client's bicycles along with their main photo and service stats
     const bicicletas = await query(`
       SELECT 
         b.bicicleta_id AS id,
@@ -51,7 +51,26 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
         b.numero_serie_cuadro,
         b.descripcion,
         b.kilometraje_actual,
-        b.fecha_ultima_revision,
+        COALESCE(
+          (
+            SELECT MAX(COALESCE(ot.fecha_entrega_real, ot.fecha_finalizacion, ot.fecha_recepcion, ot.fecha_registro))
+            FROM admin.ordenes_trabajo ot
+            WHERE ot.bicicleta_id = b.bicicleta_id AND (ot.activo = true OR ot.activo IS NULL)
+          ),
+          b.fecha_ultima_revision
+        ) AS fecha_ultima_revision,
+        (
+          SELECT COUNT(*)::int
+          FROM admin.ordenes_trabajo ot
+          WHERE ot.bicicleta_id = b.bicicleta_id AND (ot.activo = true OR ot.activo IS NULL)
+        ) AS total_servicios,
+        (
+          SELECT ot.salud_global_porcentaje
+          FROM admin.ordenes_trabajo ot
+          WHERE ot.bicicleta_id = b.bicicleta_id AND (ot.activo = true OR ot.activo IS NULL) AND ot.salud_global_porcentaje IS NOT NULL
+          ORDER BY ot.orden_trabajo_id DESC
+          LIMIT 1
+        ) AS salud,
         b.notas_tecnicas,
         b.activo,
         f.url_archivo AS foto_url
@@ -70,7 +89,11 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
     const mappedBikes = (bicicletas || []).map((b: any) => ({
       ...b,
       foto_url: (b.foto_url && !b.foto_url.includes("default.png")) ? b.foto_url : null,
-      salud: null
+      fecha_ultima_revision: b.fecha_ultima_revision
+        ? (b.fecha_ultima_revision instanceof Date ? b.fecha_ultima_revision.toISOString() : new Date(b.fecha_ultima_revision).toISOString())
+        : null,
+      total_servicios: Number(b.total_servicios || 0),
+      salud: b.salud !== null && b.salud !== undefined ? Number(b.salud) : null
     }));
 
     // Fetch work orders (Historial de Mantenimientos) for this client

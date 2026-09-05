@@ -153,6 +153,14 @@ export async function GET(req: NextRequest) {
         b.ano AS bicicleta_ano,
         b.numero_serie_cuadro AS bicicleta_serie,
         COALESCE(ot.total_orden, ot.subtotal_general, 0) AS total_estimado,
+        (
+          SELECT COALESCE(ts.nombre, os.observacion_tecnica)
+          FROM admin.orden_servicios os
+          LEFT JOIN admin.tipo_servicio ts ON os.tipo_servicio_id = ts.tipo_servicio_id
+          WHERE os.orden_trabajo_id = ot.orden_trabajo_id AND (os.activo IS DISTINCT FROM false)
+          ORDER BY os.orden_servicio_id ASC
+          LIMIT 1
+        ) AS primer_servicio,
         (SELECT COUNT(*) FROM admin.orden_servicios WHERE orden_trabajo_id = ot.orden_trabajo_id AND (activo IS DISTINCT FROM false)) AS total_servicios,
         (
           SELECT COALESCE(NULLIF(TRIM(CONCAT_WS(' ', ui.nombre, ui.apellido)), ''), ui.correo_electronico, ('Mecánico #' || u.usuario_id::text))
@@ -177,7 +185,10 @@ export async function GET(req: NextRequest) {
       LEFT JOIN admin.estado_orden_trabajo eot ON ot.estado_orden_id = eot.estado_orden_id
       LEFT JOIN admin.prioridad_orden_trabajo pot ON ot.prioridad_orden_id = pot.prioridad_orden_trabajo_id
       ${whereClause}
-      ORDER BY ot.orden_trabajo_id DESC
+      ORDER BY
+        DATE_TRUNC('day', ot.fecha_registro AT TIME ZONE 'America/Santo_Domingo') ASC,
+        ot.prioridad_orden_id DESC,
+        ot.orden_trabajo_id ASC
       LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}
     `;
 
