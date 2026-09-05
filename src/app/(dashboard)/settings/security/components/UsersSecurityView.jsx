@@ -113,6 +113,11 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
   // Custom Toast Notification State ({ type: 'success' | 'error', title: string, description: string })
   const [toastNotification, setToastNotification] = useState(null);
+  const [resetToast, setResetToast] = useState(null);
+
+  const showToastNotification = (title, description, type = 'success') => {
+    setToastNotification({ title, description, type });
+  };
 
   useEffect(() => {
     if (!toastNotification) return;
@@ -209,6 +214,8 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     setResetPasswordUser(null);
     setResetNewPassword('');
     setResetConfirmPassword('');
+    setShowResetNewPassword(false);
+    setShowResetConfirmPassword(false);
     setResetPasswordError('');
   };
 
@@ -218,6 +225,11 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
     if (!resetNewPassword) {
       setResetPasswordError('Debe ingresar una nueva contraseña.');
+      return;
+    }
+
+    if (!resetConfirmPassword) {
+      setResetPasswordError('Debe confirmar la nueva contraseña.');
       return;
     }
 
@@ -235,9 +247,8 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     setIsManualResetting(true);
     try {
       await usersService.resetPassword(resetPasswordUser.id, {
-        mode: 'manual',
-        newPassword: resetNewPassword,
-        confirmPassword: resetConfirmPassword,
+        password: resetNewPassword,
+        confirm_password: resetConfirmPassword,
         forceChangeOnNextLogin: resetForceChange
       });
 
@@ -554,12 +565,10 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
   const [formErrors360, setFormErrors360] = useState({});
   const [matrixFilter, setMatrixFilter] = useState('all');
 
-  // Reset Password 360 States & Handlers
-  const [isResettingPassword, setIsResettingPassword] = useState(false);
-  const [showConfirmResetModal, setShowConfirmResetModal] = useState(false);
-  const [resetMaskedEmail, setResetMaskedEmail] = useState('');
-  const [resetModalError, setResetModalError] = useState('');
-  const [resetToast, setResetToast] = useState(null);
+  // Password Visibility States for User Creation Wizard
+  const [showCreatePassword, setShowCreatePassword] = useState(false);
+  const [showCreateConfirmPassword, setShowCreateConfirmPassword] = useState(false);
+
   const [genericConfirmModal, setGenericConfirmModal] = useState({
     isOpen: false,
     title: '',
@@ -569,92 +578,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     details: null,
     onConfirm: null,
   });
-
-  const maskEmailLocal = (email) => {
-    if (!email || !email.includes('@')) return '***@***.com';
-    const [local, domain] = email.split('@');
-    if (local.length <= 2) return `${local[0]}***@${domain}`;
-    return `${local[0]}***${local[local.length - 1]}@${domain}`;
-  };
-
-  const handleStartResetPassword = () => {
-    setResetModalError('');
-    if (!detailUser) return;
-
-    // 1. Check recovery email
-    const recoveryEmail = detailUser.correo_acceso;
-    if (!recoveryEmail || !recoveryEmail.trim()) {
-      setResetToast({
-        type: 'error',
-        message: 'El usuario no tiene un correo de recuperación configurado.'
-      });
-      setTimeout(() => setResetToast(null), 6000);
-      return;
-    }
-
-    // 2. Check recovery email format
-    const emailVal = validateEmail(recoveryEmail.trim(), true);
-    if (!emailVal.isValid) {
-      setResetToast({
-        type: 'error',
-        message: 'El correo de recuperación no tiene un formato válido.'
-      });
-      setTimeout(() => setResetToast(null), 6000);
-      return;
-    }
-
-    // 3. Check invitation email enabled
-    if (detailUser.enviar_invitacion_correo === false) {
-      setResetToast({
-        type: 'error',
-        message: 'El envío de invitaciones por correo no está habilitado para este usuario.'
-      });
-      setTimeout(() => setResetToast(null), 6000);
-      return;
-    }
-
-    const masked = maskEmailLocal(recoveryEmail.trim());
-    setResetMaskedEmail(masked);
-    setShowConfirmResetModal(true);
-  };
-
-  const handleExecuteResetPassword = async () => {
-    if (!detailUser) return;
-    try {
-      setIsResettingPassword(true);
-      setResetModalError('');
-
-      const res = await usersService.resetPassword(detailUser.id || detailUser.usuario_id);
-      
-      setShowConfirmResetModal(false);
-      
-      const successMsg = `Contraseña temporal generada y enviada correctamente a ${res.maskedEmail || resetMaskedEmail}.`;
-      setResetToast({
-        type: 'success',
-        message: successMsg
-      });
-      setTimeout(() => setResetToast(null), 7000);
-
-      setDetailUser(prev => prev ? {
-        ...prev,
-        forzar_cambio_clave: true,
-        must_change_password: true,
-        fecha_expiracion_invitacion: res.expiresAt || prev.fecha_expiracion_invitacion
-      } : null);
-
-      fetchUsers();
-    } catch (err) {
-      console.error('Error resetPassword:', err);
-      setResetModalError(err.message || 'No fue posible restablecer la contraseña.');
-      setResetToast({
-        type: 'error',
-        message: err.message || 'No fue posible restablecer la contraseña.'
-      });
-      setTimeout(() => setResetToast(null), 7000);
-    } finally {
-      setIsResettingPassword(false);
-    }
-  };
 
   const handleExecuteSave360 = async () => {
     setShowConfirmSaveModal(false);
@@ -777,8 +700,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
   const [wizardData, setWizardData] = useState(null);
   const [formError, setFormError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
-  const [tempPassword, setTempPassword] = useState('');
-  const [showPassModal, setShowPassModal] = useState(false);
   const [showJobDropdown, setShowJobDropdown] = useState(false);
   const [showUserTypeDropdown, setShowUserTypeDropdown] = useState(false);
   const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
@@ -1141,34 +1062,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     return sortedData.slice(startIndex, startIndex + pageSize);
   }, [sortedData, currentPage, pageSize]);
 
-  // Helper for generating passwords
-  const generateRandomPassword = (isPin = false) => {
-    if (isPin) {
-      const digits = '0123456789';
-      let pin = '';
-      for (let i = 0; i < 6; i++) {
-        pin += digits.charAt(Math.floor(Math.random() * digits.length));
-      }
-      return pin;
-    }
-    const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    const lowercase = 'abcdefghijklmnopqrstuvwxyz';
-    const numbers = '0123456789';
-    const symbols = '!@#$%&*';
-    const all = uppercase + lowercase + numbers + symbols;
-    
-    let pass = '';
-    pass += uppercase.charAt(Math.floor(Math.random() * uppercase.length));
-    pass += lowercase.charAt(Math.floor(Math.random() * lowercase.length));
-    pass += numbers.charAt(Math.floor(Math.random() * numbers.length));
-    pass += symbols.charAt(Math.floor(Math.random() * symbols.length));
-    
-    for (let i = 0; i < 8; i++) {
-      pass += all.charAt(Math.floor(Math.random() * all.length));
-    }
-    return pass;
-  };
-
   const handleChange = (field, value) => {
     setFieldErrors(prev => ({ ...prev, [field]: undefined }));
     setWizardData(prev => {
@@ -1199,6 +1092,8 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     setCurrentStep(1);
     setFormError('');
     setShowPermissionsMatrix(false);
+    setShowCreatePassword(false);
+    setShowCreateConfirmPassword(false);
   };
 
   const handleExport = () => {
@@ -1313,8 +1208,9 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     setIsCreating(true);
     setIsEditing(false);
     setCurrentStep(1);
+    setShowCreatePassword(false);
+    setShowCreateConfirmPassword(false);
 
-    const generatedPass = generateRandomPassword();
     setWizardData({
       id: `USR-${Date.now().toString().slice(-6)}`,
       first_name: '',
@@ -1332,10 +1228,8 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       // Access Info
       access_email: '',
       primary_access_type: 'EMAIL',
-      password: generatedPass,
-      confirm_password: generatedPass,
-      auto_generate_password: true,
-      send_invitation: true,
+      password: '',
+      confirm_password: '',
       must_change_password: true,
       web_access_enabled: true,
       mobile_access_enabled: false,
@@ -1745,14 +1639,22 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         }
       }
 
-      if (!wizardData.auto_generate_password && isCreating) {
-        const minLength = wizardData.primary_access_type === 'DOCUMENT' ? 4 : 6;
-        if (!wizardData.password || wizardData.password.length < minLength) {
-          setFormError(`La contraseña/PIN temporal debe tener al menos ${minLength} caracteres.`);
+      if (isCreating) {
+        if (!wizardData.password || !wizardData.password.trim()) {
+          setFormError('La contraseña inicial es requerida.');
+          return;
+        }
+        if (!wizardData.confirm_password || !wizardData.confirm_password.trim()) {
+          setFormError('Debe confirmar la contraseña.');
           return;
         }
         if (wizardData.password !== wizardData.confirm_password) {
           setFormError('Las contraseñas no coinciden.');
+          return;
+        }
+        const policyCheck = validatePasswordPolicy(wizardData.password);
+        if (!policyCheck.isValid) {
+          setFormError(policyCheck.message || 'La contraseña no cumple con los requisitos de seguridad.');
           return;
         }
       }
@@ -1766,7 +1668,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     setCurrentStep(prev => Math.max(prev - 1, 1));
   };
 
-  const handleSaveUser = (sendInvite = false) => {
+  const handleSaveUser = () => {
     const timestamp = new Date().toISOString();
     const cleanUser = { ...wizardData };
     
@@ -1818,14 +1720,14 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
     cleanUser.login_identifiers = loginIdentifiers;
 
-    // Store password for local display but do not delete it from payload
-    const savedPassword = cleanUser.password;
-    delete cleanUser.confirm_password;
+    // Preserve password and confirm_password for canonical backend contract
+    cleanUser.password = wizardData.password;
+    cleanUser.confirm_password = wizardData.confirm_password;
     delete cleanUser.username;
     delete cleanUser.primary_access_type;
 
     if (isCreating) {
-      cleanUser.status = sendInvite ? 'Pendiente de activación' : 'Invitado';
+      cleanUser.status = 'Activo';
       cleanUser.createdAt = timestamp;
       cleanUser.createdBy = 'Admin';
       cleanUser.updatedAt = timestamp;
@@ -1836,24 +1738,20 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       const activationObj = {
         id: `ACT-S-${Date.now()}`,
         access_method: primaryAccess,
-        activation_status: primaryAccess === 'EMAIL' 
-          ? (sendInvite ? 'INVITATION_SENT' : 'INVITATION_PENDING')
-          : (savedPassword ? 'PENDING_FIRST_LOGIN' : 'CREDENTIALS_GENERATED'),
-        invitation_sent_at: primaryAccess === 'EMAIL' && sendInvite ? timestamp : null,
+        activation_status: 'CREDENTIALS_GENERATED',
+        invitation_sent_at: null,
         invitation_opened_at: null,
         registration_completed_at: null,
         first_login_at: null,
-        invitation_expires_at: primaryAccess === 'EMAIL' && sendInvite ? new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString() : null,
+        invitation_expires_at: null,
         invitation_bounced_at: null,
-        resend_count: primaryAccess === 'EMAIL' && sendInvite ? 1 : 0,
-        last_resend_at: primaryAccess === 'EMAIL' && sendInvite ? timestamp : null,
-        temporary_credentials_generated_at: primaryAccess === 'DOCUMENT' ? timestamp : null,
-        temporary_credentials_delivered_at: primaryAccess === 'DOCUMENT' && savedPassword ? timestamp : null,
+        resend_count: 0,
+        last_resend_at: null,
+        temporary_credentials_generated_at: null,
+        temporary_credentials_delivered_at: null,
         initial_password_changed_at: null,
         channel: primaryAccess === 'EMAIL' ? 'EMAIL' : 'PHYSICAL_SHEET',
-        status_detail: primaryAccess === 'EMAIL'
-          ? (sendInvite ? 'Invitación enviada por correo electrónico' : 'Usuario creado en borrador')
-          : (savedPassword ? 'Credenciales entregadas físicamente' : 'Credenciales temporales generadas'),
+        status_detail: 'Contraseña asignada por administrador',
         created_at: timestamp,
         updated_at: timestamp
       };
@@ -1868,7 +1766,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         handleCancel();
         setSuccessWizardMessage(res.message || 'El usuario ha sido creado correctamente en la base de datos.');
         setShowSuccessWizardModal(true);
-        showToast(res.emailSent ? 'Usuario creado y correo enviado con éxito.' : 'Usuario creado con éxito.');
+        showToast('Usuario creado con éxito.');
       }).catch(err => {
         setIsSaving(false);
         setFormError('Error creando usuario: ' + (err.message || 'Error de conexión con el servidor.'));
@@ -1979,29 +1877,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       console.error(err);
       setReasonError('Hubo un error al guardar el cambio en el servidor.');
     }
-  };
-
-  const handleResetPasswordDirect = (user) => {
-    const isDocAccess = user.login_identifiers?.find(id => id.is_primary)?.identifier_type === 'DOCUMENT';
-    const labelType = isDocAccess ? 'PIN' : 'contraseña';
-    setGenericConfirmModal({
-      isOpen: true,
-      title: `Resetear ${labelType}`,
-      description: `¿Está seguro de que desea restablecer el/la ${labelType} del usuario ${user.full_name || (user.first_name + ' ' + user.last_name)}?`,
-      variant: 'warning',
-      confirmLabel: 'Resetear',
-      details: [
-        { label: 'Usuario', value: user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim() },
-        { label: 'Tipo de acceso', value: isDocAccess ? 'Documento / PIN' : 'Correo electrónico' }
-      ],
-      onConfirm: () => {
-        setGenericConfirmModal(prev => ({ ...prev, isOpen: false }));
-        const tempPass = generateRandomPassword(isDocAccess);
-        setTempPassword(tempPass);
-        setShowPassModal(true);
-        showToast(isDocAccess ? 'PIN temporal restablecido.' : 'Contraseña temporal restablecida.');
-      }
-    });
   };
 
   const handleCopyActivationLink = (user) => {
@@ -2136,43 +2011,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     });
     syncData(updated);
     showToast('Recordatorio de onboarding enviado.');
-  };
-
-  const handleRegeneratePinDirect = (user) => {
-    setGenericConfirmModal({
-      isOpen: true,
-      title: 'Regenerar PIN',
-      description: `¿Está seguro de regenerar el PIN para ${user.full_name}?`,
-      variant: 'warning',
-      confirmLabel: 'Regenerar PIN',
-      details: [
-        { label: 'Usuario', value: user.full_name },
-        { label: 'Tipo', value: 'PIN de Acceso' }
-      ],
-      onConfirm: () => {
-        setGenericConfirmModal(prev => ({ ...prev, isOpen: false }));
-        const isPin = user.activation?.access_method === 'DOCUMENT' || user.user_type === 'Vendedora';
-        const newCred = generateRandomPassword(isPin);
-        
-        const updated = data.map(u => {
-          if (u.id === user.id) {
-            return {
-              ...u,
-              activation: {
-                ...u.activation,
-                activation_status: 'CREDENTIALS_GENERATED',
-                updated_at: new Date().toISOString()
-              }
-            };
-          }
-          return u;
-        });
-        syncData(updated);
-        setTempPassword(newCred);
-        setShowPassModal(true);
-        showToast('PIN regenerado exitosamente.');
-      }
-    });
   };
 
   const handleMarkInstructionsDelivered = (user) => {
@@ -3055,7 +2893,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
           <button 
             key="reset-pw"
             className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5" 
-            onClick={() => handleResetPasswordDirect(item)}
+            onClick={() => handleOpenResetPasswordModal(item)}
           >
             <Key size={13} className="text-[var(--text-muted)]" /> Restablecer clave
           </button>,
@@ -3086,7 +2924,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
           <button 
             key="reset-pw"
             className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5" 
-            onClick={() => handleResetPasswordDirect(item)}
+            onClick={() => handleOpenResetPasswordModal(item)}
           >
             <Key size={13} className="text-[var(--text-muted)]" /> Restablecer clave
           </button>,
@@ -3103,11 +2941,11 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       if (actStatus === 'CREDENTIALS_GENERATED' || actStatus === 'PENDING_FIRST_LOGIN') {
         items.push(
           <button 
-            key="regen-pin"
+            key="reset-pw-doc"
             className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5" 
-            onClick={() => handleRegeneratePinDirect(item)}
+            onClick={() => handleOpenResetPasswordModal(item)}
           >
-            <Key size={13} className="text-[var(--text-muted)]" /> Regenerar PIN temporal
+            <Key size={13} className="text-[var(--text-muted)]" /> Restablecer clave
           </button>,
           <button 
             key="mark-delivered"
@@ -3143,7 +2981,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
           <button 
             key="reset-pw"
             className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5" 
-            onClick={() => handleResetPasswordDirect(item)}
+            onClick={() => handleOpenResetPasswordModal(item)}
           >
             <Key size={13} className="text-[var(--text-muted)]" /> Restablecer clave
           </button>,
@@ -3165,11 +3003,11 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
             <ShieldCheck size={13} /> Desbloquear acceso
           </button>,
           <button 
-            key="regen-pin"
+            key="reset-pw-blocked"
             className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5" 
-            onClick={() => handleRegeneratePinDirect(item)}
+            onClick={() => handleOpenResetPasswordModal(item)}
           >
-            <Key size={13} className="text-[var(--text-muted)]" /> Regenerar PIN temporal
+            <Key size={13} className="text-[var(--text-muted)]" /> Restablecer clave
           </button>,
           <button 
             key="view-history"
@@ -3420,15 +3258,13 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               </>
             ) : (
               <>
-                <button 
+                <button
                   type="button"
-                  onClick={handleStartResetPassword}
-                  disabled={isResettingPassword}
-                  title="Generar y enviar una contraseña temporal"
-                  className="px-4 py-2 rounded-xl border border-primary/40 hover:bg-primary/20 text-xs font-bold transition-all text-primary bg-primary/10 flex items-center gap-2 cursor-pointer shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={() => handleOpenResetPasswordModal(detailUser)}
+                  className="px-4 py-2 rounded-xl border border-primary/40 hover:bg-primary/20 text-xs font-bold transition-all text-primary bg-primary/10 flex items-center gap-2 cursor-pointer shadow-lg"
                 >
-                  <RotateCw size={13} className={isResettingPassword ? "animate-spin" : ""} />
-                  <span>{isResettingPassword ? "Reseteando..." : "Resetear Password"}</span>
+                  <KeyRound size={13} />
+                  <span>Restablecer contraseña</span>
                 </button>
                 <button 
                   type="button"
@@ -5967,7 +5803,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                     <label className="block font-bold text-[var(--text-muted)] uppercase tracking-wide mb-1.5">Rol Principal</label>
                     <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className="w-full bg-[var(--bg-color)] border border-[var(--border-color)] rounded-lg px-3 py-2 text-[13px] font-semibold text-[var(--text-primary)] focus:outline-none focus:border-primary shadow-sm">
                       <option value="Todos">Todos los roles</option>
-                      {USER_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                      {roles.map(r => <option key={r.id || r.name} value={r.name}>{r.name}</option>)}
                     </select>
                   </div>
                 </div>
@@ -6689,55 +6525,62 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                         </div>
                       )}
 
-                      {!wizardData.auto_generate_password && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 animate-in fade-in duration-200">
+                      {isCreating && (
+                        <div className="border-t border-border pt-4 mt-2 space-y-4">
                           <div>
-                            <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Contraseña temporal *</label>
-                            <input 
-                              type="password" 
-                              value={wizardData.password || ''} 
-                              onChange={(e) => handleChange('password', e.target.value)} 
-                              className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none transition-colors ${fieldErrors.password ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`} 
-                            />
-                            {fieldErrors.password && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{fieldErrors.password}</span>}
+                            <h5 className="font-semibold text-xs text-foreground mb-1">Definir Contraseña Inicial *</h5>
+                            <p className="text-[11px] text-foreground-muted mb-3">La contraseña debe tener mínimo 8 caracteres, mayúscula, minúscula, número y carácter especial.</p>
                           </div>
-                          <div>
-                            <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Confirmar contraseña *</label>
-                            <input 
-                              type="password" 
-                              value={wizardData.confirm_password || ''} 
-                              onChange={(e) => handleChange('confirm_password', e.target.value)} 
-                              className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none transition-colors ${fieldErrors.confirm_password ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`} 
-                            />
-                            {fieldErrors.confirm_password && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{fieldErrors.confirm_password}</span>}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Contraseña *</label>
+                              <div className="relative">
+                                <input
+                                  type={showCreatePassword ? "text" : "password"}
+                                  autoComplete="new-password"
+                                  value={wizardData.password || ''}
+                                  onChange={(e) => handleChange('password', e.target.value)}
+                                  className={`w-full bg-input border rounded-xl px-3.5 py-2.5 pr-10 text-xs font-normal text-foreground focus:outline-none transition-colors ${fieldErrors.password ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
+                                  placeholder="Introduce la contraseña"
+                                />
+                                <button
+                                  type="button"
+                                  aria-label={showCreatePassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                                  onClick={() => setShowCreatePassword(!showCreatePassword)}
+                                  className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground-muted hover:text-foreground p-1 transition-colors cursor-pointer"
+                                >
+                                  {showCreatePassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                                </button>
+                              </div>
+                              {fieldErrors.password && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{fieldErrors.password}</span>}
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Confirmar contraseña *</label>
+                              <div className="relative">
+                                <input
+                                  type={showCreateConfirmPassword ? "text" : "password"}
+                                  autoComplete="new-password"
+                                  value={wizardData.confirm_password || ''}
+                                  onChange={(e) => handleChange('confirm_password', e.target.value)}
+                                  className={`w-full bg-input border rounded-xl px-3.5 py-2.5 pr-10 text-xs font-normal text-foreground focus:outline-none transition-colors ${fieldErrors.confirm_password ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
+                                  placeholder="Confirma la contraseña"
+                                />
+                                <button
+                                  type="button"
+                                  aria-label={showCreateConfirmPassword ? "Ocultar confirmación de contraseña" : "Mostrar confirmación de contraseña"}
+                                  onClick={() => setShowCreateConfirmPassword(!showCreateConfirmPassword)}
+                                  className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground-muted hover:text-foreground p-1 transition-colors cursor-pointer"
+                                >
+                                  {showCreateConfirmPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                                </button>
+                              </div>
+                              {fieldErrors.confirm_password && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{fieldErrors.confirm_password}</span>}
+                            </div>
                           </div>
                         </div>
                       )}
 
                       <div className="flex flex-col gap-3.5 border-t border-border pt-4">
-                        {wizardData.primary_access_type === 'EMAIL' && (
-                          <label className="flex items-center justify-between cursor-pointer group p-2.5 rounded-xl hover:bg-surface-subtle transition-colors border border-transparent hover:border-border">
-                            <div className="flex items-center gap-2.5">
-                              <span className="font-medium text-foreground-secondary text-xs group-hover:text-foreground">Enviar invitación por correo electrónico</span>
-                              <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-primary/10 text-primary border border-primary/20">Recomendado</span>
-                            </div>
-                            <div className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors ${wizardData.send_invitation ? 'bg-primary' : 'bg-slate-700'}`}>
-                              <div className={`bg-surface-subtle w-4 h-4 rounded-full shadow-sm transform transition-transform ${wizardData.send_invitation ? 'translate-x-4' : 'translate-x-0'}`}></div>
-                            </div>
-                            <input type="checkbox" className="hidden" checked={!!wizardData.send_invitation} onChange={(e) => handleChange('send_invitation', e.target.checked)} />
-                          </label>
-                        )}
-                        
-                        <label className="flex items-center justify-between cursor-pointer group p-2.5 rounded-xl hover:bg-surface-subtle transition-colors border border-transparent hover:border-border">
-                          <div className="flex items-center gap-2.5">
-                            <span className="font-medium text-foreground-secondary text-xs group-hover:text-foreground">Generar contraseña automáticamente</span>
-                          </div>
-                          <div className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors ${wizardData.auto_generate_password ? 'bg-primary' : 'bg-slate-700'}`}>
-                            <div className={`bg-surface-subtle w-4 h-4 rounded-full shadow-sm transform transition-transform ${wizardData.auto_generate_password ? 'translate-x-4' : 'translate-x-0'}`}></div>
-                          </div>
-                          <input type="checkbox" className="hidden" checked={!!wizardData.auto_generate_password} onChange={(e) => handleChange('auto_generate_password', e.target.checked)} />
-                        </label>
-
                         <label className="flex items-center gap-2.5 cursor-pointer group p-2.5 rounded-xl hover:bg-surface-subtle transition-colors">
                           <input type="checkbox" checked={!!wizardData.must_change_password} onChange={(e) => handleChange('must_change_password', e.target.checked)} className="rounded text-primary w-4 h-4 focus:ring-primary border-border bg-surface-subtle" />
                           <span className="font-medium text-foreground-secondary text-xs group-hover:text-foreground">Forzar cambio de contraseña al primer ingreso</span>
@@ -6932,8 +6775,8 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                           <span className="font-mono font-bold text-indigo-400">
                             {wizardData.primary_access_type === 'DOCUMENT' ? wizardData.document_number : (wizardData.identificador_principal || wizardData.email)}
                           </span>
-                          <span className="text-foreground-muted font-medium">Invitación correo:</span>
-                          <span className="font-normal text-foreground-secondary">{wizardData.send_invitation ? 'Sí, enviar al crear' : 'No'}</span>
+                          <span className="text-foreground-muted font-medium">Contraseña:</span>
+                          <span className="font-semibold text-emerald-500">✓ Configurada</span>
                           <span className="text-foreground-muted font-medium">Cambio clave:</span>
                           <span className="font-normal text-foreground-secondary">{wizardData.must_change_password ? 'Exigido al primer ingreso' : 'No exigido'}</span>
                         </div>
@@ -7001,35 +6844,14 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                     Siguiente <ArrowRight size={14} />
                   </button>
                 ) : (
-                  <>
-                    <button 
-                      type="button" 
-                      disabled={isSaving}
-                      onClick={() => handleSaveUser(false)}
-                      className="px-4 py-2 rounded-xl bg-surface-subtle text-foreground-secondary border border-border hover:bg-slate-700 font-semibold text-xs shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      {isSaving ? 'Guardando...' : 'Guardar borrador'}
-                    </button>
-                    {wizardData.primary_access_type === 'EMAIL' && wizardData.send_invitation ? (
-                      <button 
-                        type="button" 
-                        disabled={isSaving}
-                        onClick={() => handleSaveUser(true)}
-                        className="px-5 py-2 rounded-xl bg-primary hover:bg-primary text-slate-950 font-bold flex items-center gap-1.5 shadow-sm text-xs disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      >
-                        {isSaving ? 'Guardando...' : 'Crear y enviar invitación'}
-                      </button>
-                    ) : (
-                      <button 
-                        type="button" 
-                        disabled={isSaving}
-                        onClick={() => handleSaveUser(false)}
-                        className="px-5 py-2 rounded-xl bg-primary hover:bg-primary text-slate-950 font-bold flex items-center gap-1.5 shadow-sm text-xs disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      >
-                        {isSaving ? 'Guardando...' : 'Crear usuario'}
-                      </button>
-                    )}
-                  </>
+                  <button
+                    type="button"
+                    disabled={isSaving}
+                    onClick={() => handleSaveUser()}
+                    className="px-5 py-2 rounded-xl bg-primary hover:bg-primary text-slate-950 font-bold flex items-center gap-1.5 shadow-sm text-xs disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {isSaving ? 'Guardando...' : 'Crear usuario'}
+                  </button>
                 )}
               </div>
             </div>
@@ -7091,40 +6913,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         document.body
       )}
 
-      {/* PASSWORD COPY MODAL (React Portal) */}
-      {showPassModal && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-surface-subtle/70 backdrop-blur-md"></div>
-          
-          <div className="relative w-full max-w-sm bg-[var(--bg-elevated)] rounded-2xl shadow-2xl border border-[var(--border-color)] p-6 animate-in zoom-in-95 duration-200 text-center">
-            <div className="w-14 h-14 bg-primary/10 text-primary border border-primary/30 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Key size={26} />
-            </div>
-            
-            <h4 className="text-base font-black text-[var(--text-primary)]">Contraseña Temporal Generada</h4>
-            <p className="text-[11px] text-[var(--text-muted)] mt-1.5 leading-relaxed">
-              Copia la clave y compártela de forma segura. El usuario deberá renovarla en su primer acceso.
-            </p>
 
-            <div className="my-5 p-3.5 bg-slate-100 dark:bg-surface-subtle rounded-xl border border-[var(--border-color)] select-all font-mono font-black text-primary text-[15px] tracking-widest">
-              {tempPassword}
-            </div>
-
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(tempPassword);
-                showToast('Contraseña copiada.');
-                setShowPassModal(false);
-                setTempPassword('');
-              }}
-              className="w-full py-2.5 bg-primary text-on-primary hover:bg-primary-fixed text-on-primary text-xs font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5"
-            >
-              <Check size={14} /> Copiar y Cerrar
-            </button>
-          </div>
-        </div>,
-        document.body
-      )}
 
       {/* AGENCY SELECTOR SUBMODAL (React Portal) */}
       {isAgencyModalOpen && typeof document !== 'undefined' && wizardData && createPortal(
@@ -7358,7 +7147,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
           setShowConfirmEditModal(false);
           setShowConfirmSaveModal(false);
         }}
-        onConfirm={showConfirmSaveModal ? handleSave360 : handleSaveEdit360}
+        onConfirm={showConfirmSaveModal ? handleExecuteSave360 : handleSaveEdit360}
         variant="default"
         title="¿Confirmar guardado?"
         description="¿Desea guardar los cambios realizados en el perfil del usuario?"
@@ -7429,22 +7218,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         ] : null}
       />
 
-      {/* CONFIRM RESET PASSWORD MODAL */}
-      <SecurityConfirmDialog
-        isOpen={showConfirmResetModal}
-        onClose={() => !isResettingPassword && setShowConfirmResetModal(false)}
-        onConfirm={handleExecuteResetPassword}
-        variant="warning"
-        title="Resetear password"
-        description="Se generará una nueva contraseña temporal y será enviada al correo de recuperación del usuario."
-        confirmLabel="Resetear password"
-        isLoading={isResettingPassword}
-        loadingLabel="Reseteando..."
-        details={detailUser ? [
-          { label: 'Usuario', value: detailUser.full_name },
-          { label: 'Correo de recuperación', value: detailUser.email || resetMaskedEmail }
-        ] : null}
-      />
+
 
       {/* GENERIC ACTION CONFIRMATION MODAL */}
       <SecurityConfirmDialog
@@ -8246,6 +8020,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                 <div className="relative">
                   <input
                     type={showResetNewPassword ? "text" : "password"}
+                    autoComplete="new-password"
                     value={resetNewPassword}
                     onChange={(e) => setResetNewPassword(e.target.value)}
                     placeholder="Mínimo 8 caracteres, mayúscula, minúscula, número y símbolo"
@@ -8255,9 +8030,10 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                   />
                   <button
                     type="button"
+                    aria-label={showResetNewPassword ? "Ocultar nueva contraseña" : "Mostrar nueva contraseña"}
                     onClick={() => setShowResetNewPassword(!showResetNewPassword)}
-                    tabIndex={-1}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground-muted hover:text-foreground cursor-pointer"
+                    tabIndex={0}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground-muted hover:text-foreground cursor-pointer p-1 transition-colors"
                   >
                     {showResetNewPassword ? <EyeOff size={15} /> : <Eye size={15} />}
                   </button>
@@ -8272,6 +8048,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                 <div className="relative">
                   <input
                     type={showResetConfirmPassword ? "text" : "password"}
+                    autoComplete="new-password"
                     value={resetConfirmPassword}
                     onChange={(e) => setResetConfirmPassword(e.target.value)}
                     placeholder="Repita la nueva contraseña"
@@ -8280,9 +8057,10 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                   />
                   <button
                     type="button"
+                    aria-label={showResetConfirmPassword ? "Ocultar confirmación de contraseña" : "Mostrar confirmación de contraseña"}
                     onClick={() => setShowResetConfirmPassword(!showResetConfirmPassword)}
-                    tabIndex={-1}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground-muted hover:text-foreground cursor-pointer"
+                    tabIndex={0}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground-muted hover:text-foreground cursor-pointer p-1 transition-colors"
                   >
                     {showResetConfirmPassword ? <EyeOff size={15} /> : <Eye size={15} />}
                   </button>
