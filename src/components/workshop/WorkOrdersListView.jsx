@@ -16,7 +16,6 @@ import {
   Loader2,
   Clock,
   CheckCircle2,
-  Download,
   AlertTriangle,
   Inbox,
   ClipboardList,
@@ -253,13 +252,6 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <button
-            onClick={() => alert("Exportando listado de órdenes de trabajo...")}
-            className="flex items-center gap-2 px-4 py-2 border border-[#2d3748] rounded-xl text-slate-300 hover:text-white bg-[#161a21] hover:border-slate-600 transition-colors font-mono text-xs font-semibold tracking-wider uppercase"
-          >
-            <Download className="w-4 h-4 text-slate-400" />
-            EXPORTAR
-          </button>
           <button
             onClick={onOpenNewModal}
             className="flex items-center gap-2 px-4 py-2 bg-[#84924a] text-white rounded-xl hover:brightness-110 transition-all font-mono text-xs font-bold tracking-wider uppercase border-t border-[#a5b467] shadow-lg shadow-[#84924a]/20 cursor-pointer"
