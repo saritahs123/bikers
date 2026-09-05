@@ -271,3 +271,96 @@ export async function authorizeUserUpdate(paramId: string): Promise<AuthUpdateRe
     authUserCompanyId
   };
 }
+
+export type AuthCreateResult =
+  | { success: true; authUserId: number; authUserCompanyId: number | null }
+  | { success: false; status: 400 | 401 | 403; error: string; message: string; field?: string };
+
+/**
+ * Centralized User Creation Authorization
+ * - Checks active session_token in admin.usuario_sesion (HTTP 401 if missing/expired)
+ * - Strict Creation Permission Check: SEGURIDAD module requiring puede_crear = true across effective roles
+ * - Company Scope Check: HTTP 403 if trying to create a user for another company
+ */
+export async function authorizeUserCreate(targetCompanyId?: number | null): Promise<AuthCreateResult> {
+  const cookieStore = await cookies();
+  const sessionToken = cookieStore.get("session_token")?.value;
+
+  if (!sessionToken) {
+    return {
+      success: false,
+      status: 401,
+      error: "UNAUTHORIZED",
+      message: "No autenticado. Token de sesión no proporcionado."
+    };
+  }
+
+  const validation = await validateAndTouchSession(sessionToken);
+  if (!validation.valid) {
+    const errorMap: Record<string, string> = {
+      REVOKED: "Su sesión fue revocada. Por favor, vuelva a iniciar sesión.",
+      CLOSED: "La sesión ha sido cerrada.",
+      EXPIRED: "La sesión ha expirado por límite de tiempo.",
+      NOT_FOUND: "Sesión inválida o expirada."
+    };
+    return {
+      success: false,
+      status: 401,
+      error: validation.reason === "REVOKED" ? "SESSION_REVOKED" : (validation.reason === "EXPIRED" ? "SESSION_EXPIRED" : "UNAUTHORIZED"),
+      message: errorMap[validation.reason] || "Sesión inválida o expirada."
+    };
+  }
+
+  const authUserId = validation.userId;
+
+  const authUserRows = await query<{ empresa_id: number | null }>(
+    `SELECT empresa_id FROM admin.usuario WHERE usuario_id = $1 LIMIT 1`,
+    [authUserId]
+  );
+  const authUserCompanyId = authUserRows?.[0]?.empresa_id ?? null;
+
+  // Strict check: ONLY puede_crear = true on module 'SEGURIDAD'
+  const createPermission = await query(
+    `SELECT 1
+     FROM admin.matriz_acceso_rol m
+     JOIN admin.modulo_sistema mod ON m.modulo_sistema_id = mod.modulo_sistema_id
+     WHERE m.rol_funcional_id IN (
+       SELECT u.rol_principal_id FROM admin.usuario u WHERE u.usuario_id = $1 AND u.rol_principal_id IS NOT NULL
+       UNION
+       SELECT ura.rol_funcional_id FROM admin.usuario_rol_adicional ura WHERE ura.usuario_id = $1
+     )
+     AND mod.nombre = 'SEGURIDAD'
+     AND m.puede_crear = true
+     LIMIT 1`,
+    [authUserId]
+  );
+
+  const canCreate = createPermission && createPermission.length > 0;
+  if (!canCreate) {
+    return {
+      success: false,
+      status: 403,
+      error: "FORBIDDEN",
+      message: "Acceso denegado. Se requiere permiso de creación en el módulo SEGURIDAD para crear nuevos usuarios."
+    };
+  }
+
+  if (
+    authUserCompanyId != null &&
+    targetCompanyId != null &&
+    Number(authUserCompanyId) !== Number(targetCompanyId)
+  ) {
+    return {
+      success: false,
+      status: 403,
+      error: "FORBIDDEN",
+      message: "Acceso denegado. No posee permisos para crear usuarios en otra empresa."
+    };
+  }
+
+  return {
+    success: true,
+    authUserId,
+    authUserCompanyId
+  };
+}
