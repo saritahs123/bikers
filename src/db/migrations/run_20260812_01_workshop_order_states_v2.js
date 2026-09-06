@@ -3,7 +3,7 @@ const path = require("path");
 const crypto = require("crypto");
 const { Pool } = require("pg");
 
-// Read DATABASE_URL from .env.local
+// Read DATABASE_URL from environment or local config
 let connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
   const envPath = path.join(__dirname, "../../../.env.local");
@@ -13,8 +13,11 @@ if (!connectionString) {
     if (match) connectionString = match[1];
   }
 }
+
 if (!connectionString) {
-  connectionString = "postgresql://biker:Sarita4171995@127.0.0.1:15432/bikers";
+  throw new Error(
+    "DATABASE_URL no está configurada. Define la variable de entorno antes de ejecutar este script."
+  );
 }
 
 async function runMigration(options = {}) {
