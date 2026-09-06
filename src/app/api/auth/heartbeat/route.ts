@@ -50,6 +50,6 @@ export async function POST() {
     });
   } catch (error: any) {
     console.error("Heartbeat API error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al verificar la sesión." }, { status: 500 });
   }
 }

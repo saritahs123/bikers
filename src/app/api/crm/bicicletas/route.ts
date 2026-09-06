@@ -133,7 +133,7 @@ export async function GET(req: Request) {
     return res;
   } catch (error: any) {
     console.error("Error in GET /api/crm/bicicletas:", error);
-    return NextResponse.json({ error: error?.message || "Error al obtener bicicletas" }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al obtener bicicletas" }, { status: 500 });
   }
 }
 
@@ -295,6 +295,6 @@ export async function POST(req: Request) {
     return NextResponse.json(bikeData);
   } catch (error: any) {
     console.error("Error in POST /api/crm/bicicletas:", error);
-    return NextResponse.json({ error: error?.message || "Error al crear la bicicleta" }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al crear la bicicleta" }, { status: 500 });
   }
 }

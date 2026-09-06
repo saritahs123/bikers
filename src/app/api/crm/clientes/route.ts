@@ -94,7 +94,7 @@ export async function GET() {
     });
   } catch (error: any) {
     console.error("Error in GET /api/crm/clientes:", error);
-    return NextResponse.json({ error: error.message || "Error al obtener clientes" }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al obtener clientes" }, { status: 500 });
   }
 }
 
@@ -288,6 +288,6 @@ export async function POST(req: Request) {
     if (msg.includes("uk_clientes_correo") || msg.includes("correo")) {
       return NextResponse.json({ success: false, message: "Ya existe un cliente registrado con este correo electrónico", field: "correo_electronico" }, { status: 409 });
     }
-    return NextResponse.json({ success: false, message: error.message || "No fue posible registrar el cliente" }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "No fue posible registrar el cliente" }, { status: 500 });
   }
 }

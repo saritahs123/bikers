@@ -116,7 +116,7 @@ export async function GET(
     return NextResponse.json(mapped);
   } catch (error: any) {
     console.error("Error fetching usuario_sesion:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al consultar las sesiones del usuario." }, { status: 500 });
   }
 }
 
@@ -224,6 +224,6 @@ export async function DELETE(
     return NextResponse.json({ success: false, error: "Parámetros insuficientes." }, { status: 400 });
   } catch (error: any) {
     console.error("Error revoking usuario_sesion:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al revocar la sesión del usuario." }, { status: 500 });
   }
 }

@@ -60,7 +60,7 @@ export async function GET() {
     return response;
   } catch (error: any) {
     console.error("Error in GET /api/crm/component-categories:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al obtener las categorías de componentes." }, { status: 500 });
   }
 }
 
@@ -174,6 +174,6 @@ export async function POST(req: Request) {
 
   } catch (error: any) {
     console.error("Error in POST /api/crm/component-categories:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al crear la categoría de componentes." }, { status: 500 });
   }
 }

@@ -79,7 +79,7 @@ export async function GET() {
     return NextResponse.json(mapped);
   } catch (error: any) {
     console.error("Error in GET /api/empresas:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al obtener la lista de empresas." }, { status: 500 });
   }
 }
 
@@ -220,11 +220,11 @@ export async function POST(req: Request) {
         return NextResponse.json({ success: true, item: res2[0] || {} });
       } catch (err2: any) {
         console.error("POST Try 2 failed:", err2);
-        return NextResponse.json({ error: "Error al guardar la empresa en PostgreSQL: " + (err2?.message || err1?.message) }, { status: 500 });
+        return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al registrar la empresa." }, { status: 500 });
       }
     }
   } catch (error: any) {
     console.error("Error in POST /api/empresas:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al procesar la creación de la empresa." }, { status: 500 });
   }
 }

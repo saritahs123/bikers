@@ -51,8 +51,8 @@ export async function GET() {
       rawMatrix: matrizRes
     });
   } catch (error: any) {
-    console.error(error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("Error in GET /api/matriz-acceso-rol:", error);
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al obtener la matriz de acceso por rol." }, { status: 500 });
   }
 }
 
@@ -118,8 +118,8 @@ export async function PUT(req: Request) {
     }
     return NextResponse.json({ success: true });
   } catch (error: any) {
-    console.error(error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("Error in PUT /api/matriz-acceso-rol:", error);
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al actualizar la matriz de acceso." }, { status: 500 });
   }
 }
 
@@ -141,6 +141,7 @@ export async function POST(req: Request) {
     await query("INSERT INTO admin.modulo_sistema (modulo_sistema_id, nombre, orden, estado) VALUES ($1, $2, $3, 'ACTIVO')", [nextId, nombre, nextId]);
     return NextResponse.json({ success: true });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("Error in POST /api/matriz-acceso-rol:", error);
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al crear el módulo del sistema." }, { status: 500 });
   }
 }

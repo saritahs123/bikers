@@ -54,7 +54,7 @@ export async function GET() {
     return NextResponse.json(mapped);
   } catch (error: any) {
     console.error("Error in GET /api/tipos-usuario:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al obtener los tipos de usuario." }, { status: 500 });
   }
 }
 
@@ -150,11 +150,11 @@ export async function POST(req: Request) {
         });
       } catch (err2: any) {
         console.error("POST Try 2 failed:", err2);
-        return NextResponse.json({ error: "Error al registrar tipo de usuario en PostgreSQL: " + (err2?.message || err1?.message) }, { status: 500 });
+        return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al registrar el tipo de usuario." }, { status: 500 });
       }
     }
   } catch (error: any) {
     console.error("Error in POST /api/tipos-usuario:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al procesar la creación del tipo de usuario." }, { status: 500 });
   }
 }

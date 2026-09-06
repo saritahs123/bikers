@@ -125,6 +125,6 @@ export async function POST(req: Request) {
 
   } catch (error: any) {
     console.error("Error in POST /api/taller/evidencias/cleanup:", error);
-    return NextResponse.json({ error: error.message || "Error al encolar evidencias para limpieza." }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al encolar evidencias para limpieza." }, { status: 500 });
   }
 }

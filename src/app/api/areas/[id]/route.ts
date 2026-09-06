@@ -45,7 +45,7 @@ export async function GET(
     });
   } catch (error: any) {
     console.error("Error in GET /api/areas/[id]:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al obtener el área." }, { status: 500 });
   }
 }
 
@@ -118,12 +118,12 @@ export async function PUT(
         return NextResponse.json({ success: true });
       } catch (err2: any) {
         console.error("PUT Try 2 failed:", err2);
-        return NextResponse.json({ error: "Error al actualizar área en PostgreSQL: " + (err2?.message || err1?.message) }, { status: 500 });
+        return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al actualizar el área." }, { status: 500 });
       }
     }
   } catch (error: any) {
     console.error("Error in PUT /api/areas/[id]:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al procesar la actualización del área." }, { status: 500 });
   }
 }
 
@@ -153,6 +153,6 @@ export async function DELETE(
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error("Error in DELETE /api/areas/[id]:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al eliminar el área." }, { status: 500 });
   }
 }

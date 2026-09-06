@@ -343,7 +343,7 @@ export async function GET(
     });
   } catch (error: any) {
     console.error("Error in GET /api/taller/facturacion/ordenes/[id]:", error);
-    return NextResponse.json({ error: "SERVER_ERROR", message: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al consultar los detalles de facturación de la orden." }, { status: 500 });
   }
 }
 

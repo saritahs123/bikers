@@ -39,7 +39,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     return NextResponse.json(rows[0]);
   } catch (error: any) {
     console.error("Error in GET /api/empresas/[id]:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al obtener la empresa." }, { status: 500 });
   }
 }
 
@@ -197,13 +197,13 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
           return NextResponse.json({ success: true, message: "Empresa actualizada correctamente." });
         } catch (err3: any) {
           console.error("PUT Try 3 failed:", err3);
-          return NextResponse.json({ error: "Error al actualizar en base de datos: " + (err3?.message || err1?.message) }, { status: 500 });
+          return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al actualizar la empresa." }, { status: 500 });
         }
       }
     }
   } catch (error: any) {
     console.error("Error in PUT /api/empresas/[id]:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al procesar la actualización de la empresa." }, { status: 500 });
   }
 }
 
@@ -230,12 +230,12 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       await query(`DELETE FROM admin.empresa WHERE empresa_id = $1`, [empresaId]);
     } catch (e: any) {
       console.error("Error deleting from admin.empresa:", e);
-      return NextResponse.json({ error: "Error al eliminar la empresa de la base de datos: " + e.message }, { status: 500 });
+      return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al eliminar la empresa de la base de datos." }, { status: 500 });
     }
 
     return NextResponse.json({ success: true, message: "Empresa eliminada correctamente." });
   } catch (error: any) {
     console.error("Error in DELETE /api/empresas/[id]:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al procesar la eliminación de la empresa." }, { status: 500 });
   }
 }

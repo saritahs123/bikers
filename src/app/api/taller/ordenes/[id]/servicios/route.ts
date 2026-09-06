@@ -648,7 +648,7 @@ export async function POST(
     return NextResponse.json({
       success: false,
       error: "SERVICE_ADD_FAILED",
-      message: err.message || "Error al agregar servicio."
+      message: "Error al agregar el servicio a la orden."
     }, { status: 500 });
   } finally {
     if (client) {

@@ -104,7 +104,7 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
     return NextResponse.json(mapped);
   } catch (error: any) {
     console.error("Error in GET /api/crm/bicicletas/[id]/photos:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al obtener fotografías de la bicicleta." }, { status: 500 });
   }
 }
 
@@ -275,7 +275,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
       await deleteS3Object(objectKeyToRollback);
     }
     console.error("Error in POST /api/crm/bicicletas/[id]/photos:", error);
-    return NextResponse.json({ error: "Error al guardar fotografía: " + error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al guardar fotografía de la bicicleta." }, { status: 500 });
   }
 }
 
@@ -385,7 +385,7 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
 
   } catch (error: any) {
     console.error("Error in PUT /api/crm/bicicletas/[id]/photos:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al actualizar fotografía de la bicicleta." }, { status: 500 });
   }
 }
 
@@ -495,6 +495,6 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
 
   } catch (error: any) {
     console.error("Error in DELETE /api/crm/bicicletas/[id]/photos:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al eliminar fotografía de la bicicleta." }, { status: 500 });
   }
 }

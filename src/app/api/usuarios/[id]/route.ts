@@ -166,7 +166,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     return NextResponse.json(mappedUser);
   } catch (error: any) {
     console.error("Error in GET /api/usuarios/[id]:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al obtener el usuario." }, { status: 500 });
   }
 }
 

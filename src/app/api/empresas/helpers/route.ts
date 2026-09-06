@@ -68,6 +68,6 @@ export async function GET() {
     });
   } catch (error: any) {
     console.error("Error in GET /api/empresas/helpers:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al obtener los datos auxiliares de empresas." }, { status: 500 });
   }
 }

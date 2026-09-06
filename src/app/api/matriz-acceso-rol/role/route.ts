@@ -20,6 +20,7 @@ export async function POST(req: Request) {
     await query("INSERT INTO admin.rol_funcional (rol_funcional_id, nombre, estado) VALUES ($1, $2, 'ACTIVO')", [nextId, nombre]);
     return NextResponse.json({ success: true });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("Error in POST /api/matriz-acceso-rol/role:", error);
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al crear el rol funcional." }, { status: 500 });
   }
 }

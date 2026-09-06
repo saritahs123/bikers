@@ -785,9 +785,10 @@ export async function PUT(
     await client.query("ROLLBACK").catch(() => {});
     console.error("PUT /api/taller/ordenes/[id]/servicios/[servicioId] failed:", error);
     return NextResponse.json({
-      error: error?.code || "INTERNAL_ERROR",
-      message: error?.message || "Error al actualizar servicio."
-    }, { status: 400 });
+      success: false,
+      error: "SERVER_ERROR",
+      message: "Error al actualizar el servicio."
+    }, { status: 500 });
   } finally {
     client.release();
   }
@@ -920,8 +921,9 @@ export async function DELETE(
     await client.query("ROLLBACK").catch(() => {});
     console.error("DELETE /api/taller/ordenes/[id]/servicios/[servicioId] failed:", error);
     return NextResponse.json({
-      error: error?.code || "INTERNAL_ERROR",
-      message: error?.message || "Error al eliminar servicio."
+      success: false,
+      error: "SERVER_ERROR",
+      message: "Error al eliminar el servicio de la orden."
     }, { status: 500 });
   } finally {
     client.release();

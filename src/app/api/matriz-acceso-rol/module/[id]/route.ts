@@ -20,7 +20,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       [body.nombre, body.orden || null, body.estado || 'ACTIVO', id]);
     return NextResponse.json({ success: true });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("Error in PUT /api/matriz-acceso-rol/module/[id]:", error);
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al actualizar el módulo del sistema." }, { status: 500 });
   }
 }
 
@@ -40,6 +41,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     await query("UPDATE admin.modulo_sistema SET estado = 'INACTIVO' WHERE modulo_sistema_id = $1", [id]);
     return NextResponse.json({ success: true });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("Error in DELETE /api/matriz-acceso-rol/module/[id]:", error);
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al inactivar el módulo del sistema." }, { status: 500 });
   }
 }

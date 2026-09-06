@@ -37,6 +37,6 @@ export async function POST() {
     return NextResponse.json({ success: true, message: "Sesión cerrada correctamente." });
   } catch (error: any) {
     console.error("Logout API error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al cerrar la sesión." }, { status: 500 });
   }
 }

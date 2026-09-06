@@ -1198,7 +1198,7 @@ export async function PUT(
       {
         success: false,
         error: "SERVER_ERROR",
-        message: err.message || "Error al actualizar el estado de la orden."
+        message: "Error al actualizar el estado de la orden."
       },
       { status: 500 }
     );

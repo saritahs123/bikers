@@ -48,7 +48,7 @@ export async function GET() {
     return NextResponse.json(mapped);
   } catch (error: any) {
     console.error("Error in GET /api/tipos-empresa:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al obtener los tipos de empresa." }, { status: 500 });
   }
 }
 
@@ -157,6 +157,6 @@ export async function POST(req: Request) {
     }
   } catch (error: any) {
     console.error("Error in POST /api/tipos-empresa:", error);
-    return NextResponse.json({ error: error.message || "Error al registrar tipo de empresa" }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al registrar el tipo de empresa." }, { status: 500 });
   }
 }

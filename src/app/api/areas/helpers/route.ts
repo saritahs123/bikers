@@ -41,6 +41,6 @@ export async function GET() {
     return NextResponse.json({ departamentos: mappedDepartamentos });
   } catch (error: any) {
     console.error("Error in GET /api/areas/helpers:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al obtener los departamentos auxiliares." }, { status: 500 });
   }
 }

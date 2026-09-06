@@ -48,7 +48,7 @@ export async function GET() {
     return NextResponse.json(mapped);
   } catch (error: any) {
     console.error("Error in GET /api/cargos:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al obtener la lista de cargos." }, { status: 500 });
   }
 }
 
@@ -120,11 +120,11 @@ export async function POST(req: Request) {
         });
       } catch (err2: any) {
         console.error("POST Try 2 failed:", err2);
-        return NextResponse.json({ error: "Error al registrar cargo en PostgreSQL: " + (err2?.message || err1?.message) }, { status: 500 });
+        return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al registrar el cargo." }, { status: 500 });
       }
     }
   } catch (error: any) {
     console.error("Error in POST /api/cargos:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al procesar la creación del cargo." }, { status: 500 });
   }
 }

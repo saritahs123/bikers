@@ -212,7 +212,7 @@ export async function GET(req: NextRequest) {
     });
   } catch (error: any) {
     console.error("Error in GET /api/taller/facturacion/ordenes:", error);
-    return NextResponse.json({ error: "SERVER_ERROR", message: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al consultar las órdenes para facturación." }, { status: 500 });
   }
 }
 

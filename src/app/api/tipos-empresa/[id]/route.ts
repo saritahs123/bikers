@@ -76,7 +76,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     }
   } catch (error: any) {
     console.error("Error in PUT /api/tipos-empresa/[id]:", error);
-    return NextResponse.json({ error: error.message || "Error al actualizar en base de datos" }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al actualizar el tipo de empresa." }, { status: 500 });
   }
 }
 
@@ -113,6 +113,6 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     return NextResponse.json({ success: true, message: "Tipo de empresa eliminado correctamente" });
   } catch (error: any) {
     console.error("Error in DELETE /api/tipos-empresa/[id]:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al eliminar el tipo de empresa." }, { status: 500 });
   }
 }
