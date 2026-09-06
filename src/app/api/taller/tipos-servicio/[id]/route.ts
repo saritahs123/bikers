@@ -58,7 +58,7 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
     });
   } catch (error: any) {
     console.error("Error in GET /api/taller/tipos-servicio/[id]:", error);
-    return NextResponse.json({ error: error.message || "Error al obtener tipo de servicio" }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al obtener tipo de servicio." }, { status: 500 });
   }
 }
 
@@ -236,7 +236,10 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
 
   } catch (error: any) {
     console.error("Error in PUT /api/taller/tipos-servicio/[id]:", error);
-    return NextResponse.json({ error: error.message || "No fue posible actualizar el tipo de servicio" }, { status: 500 });
+    if (error?.code === "23505" || error?.message?.includes("23505")) {
+      return NextResponse.json({ success: false, error: "SERVICE_TYPE_ALREADY_EXISTS", message: "Ya existe un tipo de servicio con estos datos únicos." }, { status: 409 });
+    }
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "No fue posible actualizar el tipo de servicio." }, { status: 500 });
   }
 }
 
@@ -354,6 +357,9 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
 
   } catch (error: any) {
     console.error("Error in DELETE /api/taller/tipos-servicio/[id]:", error);
-    return NextResponse.json({ error: error.message || "No fue posible eliminar el tipo de servicio" }, { status: 500 });
+    if (error?.code === "23503" || error?.message?.includes("23503")) {
+      return NextResponse.json({ success: false, error: "SERVICE_TYPE_IN_USE", message: "Este tipo de servicio posee registros asociados y no puede eliminarse." }, { status: 409 });
+    }
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "No fue posible eliminar el tipo de servicio." }, { status: 500 });
   }
 }

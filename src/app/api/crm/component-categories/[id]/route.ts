@@ -42,7 +42,7 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
 
   } catch (error: any) {
     console.error("Error in GET /api/crm/component-categories/[id]:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al obtener la categoría de componentes." }, { status: 500 });
   }
 }
 
@@ -166,7 +166,7 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
 
   } catch (error: any) {
     console.error("Error in PUT /api/crm/component-categories/[id]:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al actualizar la categoría de componentes." }, { status: 500 });
   }
 }
 
@@ -273,6 +273,6 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
 
   } catch (error: any) {
     console.error("Error in DELETE /api/crm/component-categories/[id]:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al eliminar la categoría de componentes." }, { status: 500 });
   }
 }

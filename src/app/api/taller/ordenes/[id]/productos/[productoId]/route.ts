@@ -155,7 +155,7 @@ export async function PUT(
     await client.query("ROLLBACK").catch(() => {});
     console.error("PUT /api/taller/ordenes/[id]/productos/[productoId] error:", err);
     return NextResponse.json(
-      { success: false, error: "SERVER_ERROR", message: err.message || "Error al actualizar el producto." },
+      { success: false, error: "SERVER_ERROR", message: "Error al actualizar el producto de la orden." },
       { status: 500 }
     );
   } finally {
@@ -279,7 +279,7 @@ export async function DELETE(
     await client.query("ROLLBACK").catch(() => {});
     console.error("DELETE /api/taller/ordenes/[id]/productos/[productoId] error:", err);
     return NextResponse.json(
-      { success: false, error: "SERVER_ERROR", message: err.message || "Error al eliminar el producto." },
+      { success: false, error: "SERVER_ERROR", message: "Error al eliminar el producto de la orden." },
       { status: 500 }
     );
   } finally {

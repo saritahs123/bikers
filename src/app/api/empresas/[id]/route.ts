@@ -1,8 +1,19 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const session = await getWorkshopSession();
+    if (!session) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("SEGURIDAD", session.usuario_id);
+    if (!perms.puede_ver) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para realizar esta acción." }, { status: 403 });
+    }
+
     const { id } = await params;
     const empresaId = parseInt(id, 10);
 
@@ -28,12 +39,22 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     return NextResponse.json(rows[0]);
   } catch (error: any) {
     console.error("Error in GET /api/empresas/[id]:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al obtener la empresa." }, { status: 500 });
   }
 }
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const session = await getWorkshopSession();
+    if (!session) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("SEGURIDAD", session.usuario_id);
+    if (!perms.puede_editar) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para realizar esta acción." }, { status: 403 });
+    }
+
     const { id } = await params;
     const empresaId = parseInt(id, 10);
 
@@ -176,18 +197,28 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
           return NextResponse.json({ success: true, message: "Empresa actualizada correctamente." });
         } catch (err3: any) {
           console.error("PUT Try 3 failed:", err3);
-          return NextResponse.json({ error: "Error al actualizar en base de datos: " + (err3?.message || err1?.message) }, { status: 500 });
+          return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al actualizar la empresa." }, { status: 500 });
         }
       }
     }
   } catch (error: any) {
     console.error("Error in PUT /api/empresas/[id]:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al procesar la actualización de la empresa." }, { status: 500 });
   }
 }
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const session = await getWorkshopSession();
+    if (!session) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("SEGURIDAD", session.usuario_id);
+    if (!perms.puede_eliminar) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para realizar esta acción." }, { status: 403 });
+    }
+
     const { id } = await params;
     const empresaId = parseInt(id, 10);
 
@@ -199,12 +230,12 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       await query(`DELETE FROM admin.empresa WHERE empresa_id = $1`, [empresaId]);
     } catch (e: any) {
       console.error("Error deleting from admin.empresa:", e);
-      return NextResponse.json({ error: "Error al eliminar la empresa de la base de datos: " + e.message }, { status: 500 });
+      return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al eliminar la empresa de la base de datos." }, { status: 500 });
     }
 
     return NextResponse.json({ success: true, message: "Empresa eliminada correctamente." });
   } catch (error: any) {
     console.error("Error in DELETE /api/empresas/[id]:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al procesar la eliminación de la empresa." }, { status: 500 });
   }
 }

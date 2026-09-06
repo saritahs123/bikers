@@ -110,7 +110,7 @@ export async function GET() {
     return NextResponse.json(mappedUsers);
   } catch (error: any) {
     console.error("Error in GET /api/usuarios:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al obtener la lista de usuarios." }, { status: 500 });
   }
 }
 
@@ -342,7 +342,7 @@ export async function POST(req: Request) {
     });
   } catch (error: any) {
     console.error("Error in POST /api/usuarios:", error);
-    return NextResponse.json({ error: error.message || 'Error al crear el usuario en la base de datos.' }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al crear el usuario en la base de datos." }, { status: 500 });
   }
 }
 

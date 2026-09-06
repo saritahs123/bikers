@@ -198,7 +198,7 @@ export async function POST(
     await client.query("ROLLBACK").catch(() => {});
     console.error("POST /api/taller/ordenes/[id]/productos error:", err);
     return NextResponse.json(
-      { success: false, error: "SERVER_ERROR", message: err.message || "Error al agregar el producto." },
+      { success: false, error: "SERVER_ERROR", message: "Error al agregar el producto a la orden." },
       { status: 500 }
     );
   } finally {

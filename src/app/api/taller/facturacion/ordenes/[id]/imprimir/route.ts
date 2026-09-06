@@ -350,7 +350,7 @@ export async function GET(
   } catch (error: any) {
     console.error("Error in GET /api/taller/facturacion/ordenes/[id]/imprimir:", error);
     return NextResponse.json(
-      { error: "SERVER_ERROR", message: error.message || "Error interno del servidor." },
+      { success: false, error: "SERVER_ERROR", message: "Error al generar los datos de impresión de la orden." },
       { status: 500 }
     );
   }

@@ -72,7 +72,7 @@ export async function GET(
     });
   } catch (err: any) {
     console.error("GET /api/taller/ordenes/[id]/servicios/[servicioId]/mano-obra Error:", err);
-    return NextResponse.json({ error: "Error al consultar mano de obra.", details: err.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al consultar mano de obra." }, { status: 500 });
   }
 }
 
@@ -265,7 +265,7 @@ export async function POST(
   } catch (err: any) {
     await client.query("ROLLBACK").catch(() => {});
     console.error("POST /api/taller/ordenes/[id]/servicios/[servicioId]/mano-obra Error:", err);
-    return NextResponse.json({ error: "Error al registrar mano de obra.", details: err.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al registrar mano de obra." }, { status: 500 });
   } finally {
     client.release();
   }
@@ -419,7 +419,7 @@ export async function PUT(
   } catch (err: any) {
     await client.query("ROLLBACK").catch(() => {});
     console.error("PUT /api/taller/ordenes/[id]/servicios/[servicioId]/mano-obra Error:", err);
-    return NextResponse.json({ error: "Error al actualizar mano de obra.", details: err.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al actualizar mano de obra." }, { status: 500 });
   } finally {
     client.release();
   }
@@ -525,7 +525,7 @@ export async function DELETE(
   } catch (err: any) {
     await client.query("ROLLBACK").catch(() => {});
     console.error("DELETE /api/taller/ordenes/[id]/servicios/[servicioId]/mano-obra Error:", err);
-    return NextResponse.json({ error: "Error al eliminar mano de obra.", details: err.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al eliminar mano de obra." }, { status: 500 });
   } finally {
     client.release();
   }

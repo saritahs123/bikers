@@ -1,11 +1,22 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
 
 export async function GET(
   req: Request,
   context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = await getWorkshopSession();
+    if (!session) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("SEGURIDAD", session.usuario_id);
+    if (!perms.puede_ver) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para realizar esta acción." }, { status: 403 });
+    }
+
     const { id } = await context.params;
     const depId = parseInt(id, 10);
 
@@ -29,7 +40,7 @@ export async function GET(
     });
   } catch (error: any) {
     console.error("Error in GET /api/departamentos/[id]:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al consultar el departamento." }, { status: 500 });
   }
 }
 
@@ -38,6 +49,16 @@ export async function PUT(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = await getWorkshopSession();
+    if (!session) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("SEGURIDAD", session.usuario_id);
+    if (!perms.puede_editar) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para realizar esta acción." }, { status: 403 });
+    }
+
     const { id } = await context.params;
     const depId = parseInt(id, 10);
     const body = await req.json();
@@ -86,12 +107,12 @@ export async function PUT(
         return NextResponse.json({ success: true });
       } catch (err2: any) {
         console.error("PUT Try 2 failed:", err2);
-        return NextResponse.json({ error: "Error al actualizar departamento en PostgreSQL: " + (err2?.message || err1?.message) }, { status: 500 });
+        return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al actualizar el departamento." }, { status: 500 });
       }
     }
   } catch (error: any) {
     console.error("Error in PUT /api/departamentos/[id]:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al procesar la actualización del departamento." }, { status: 500 });
   }
 }
 
@@ -100,6 +121,16 @@ export async function DELETE(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = await getWorkshopSession();
+    if (!session) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("SEGURIDAD", session.usuario_id);
+    if (!perms.puede_eliminar) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para realizar esta acción." }, { status: 403 });
+    }
+
     const { id } = await context.params;
     const depId = parseInt(id, 10);
 
@@ -111,6 +142,6 @@ export async function DELETE(
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error("Error in DELETE /api/departamentos/[id]:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al eliminar el departamento." }, { status: 500 });
   }
 }

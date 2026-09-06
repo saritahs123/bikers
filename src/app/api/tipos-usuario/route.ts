@@ -1,8 +1,19 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
 
 export async function GET() {
   try {
+    const session = await getWorkshopSession();
+    if (!session) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("SEGURIDAD", session.usuario_id);
+    if (!perms.puede_ver) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para realizar esta acción." }, { status: 403 });
+    }
+
     let rows: any[] = [];
     try {
       rows = await query(`
@@ -43,12 +54,22 @@ export async function GET() {
     return NextResponse.json(mapped);
   } catch (error: any) {
     console.error("Error in GET /api/tipos-usuario:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al obtener los tipos de usuario." }, { status: 500 });
   }
 }
 
 export async function POST(req: Request) {
   try {
+    const session = await getWorkshopSession();
+    if (!session) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("SEGURIDAD", session.usuario_id);
+    if (!perms.puede_crear) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para realizar esta acción." }, { status: 403 });
+    }
+
     const body = await req.json();
     const codigo = (body.codigo || '').trim();
     const nombre = (body.nombre || '').trim();
@@ -129,11 +150,11 @@ export async function POST(req: Request) {
         });
       } catch (err2: any) {
         console.error("POST Try 2 failed:", err2);
-        return NextResponse.json({ error: "Error al registrar tipo de usuario en PostgreSQL: " + (err2?.message || err1?.message) }, { status: 500 });
+        return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al registrar el tipo de usuario." }, { status: 500 });
       }
     }
   } catch (error: any) {
     console.error("Error in POST /api/tipos-usuario:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al procesar la creación del tipo de usuario." }, { status: 500 });
   }
 }

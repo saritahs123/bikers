@@ -16,8 +16,11 @@ if (!connectionString) {
     if (match) connectionString = match[1];
   }
 }
+
 if (!connectionString) {
-  connectionString = "postgresql://biker:Sarita4171995@127.0.0.1:15432/bikers";
+  throw new Error(
+    "DATABASE_URL no está configurada. Define la variable de entorno antes de ejecutar este script."
+  );
 }
 
 const testResults = [];

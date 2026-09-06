@@ -125,7 +125,7 @@ export async function GET() {
 
   } catch (error: any) {
     console.error("Error in GET /api/taller/productos:", error);
-    return NextResponse.json({ error: error.message || "Error al obtener catálogo de productos" }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al obtener catálogo de productos." }, { status: 500 });
   }
 }
 
@@ -303,12 +303,12 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error("Error in POST /api/taller/productos:", error);
     const msg = error?.message || error?.toString() || "";
-    if (msg.includes("productos_codigo_uk") || msg.includes("23505")) {
+    if (msg.includes("productos_codigo_uk") || error?.code === "23505" || msg.includes("23505")) {
       return NextResponse.json({ error: "PRODUCT_ALREADY_EXISTS", message: "Ya existe un producto con este Código.", field: "codigo_producto" }, { status: 409 });
     }
     if (msg.includes("productos_barra_uk")) {
       return NextResponse.json({ error: "PRODUCT_ALREADY_EXISTS", message: "Ya existe un producto con este Código de Barra.", field: "codigo_barra" }, { status: 409 });
     }
-    return NextResponse.json({ error: error.message || "No fue posible crear el producto" }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "No fue posible crear el producto." }, { status: 500 });
   }
 }

@@ -71,7 +71,7 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
 
   } catch (error: any) {
     console.error("Error in GET /api/taller/productos/[id]:", error);
-    return NextResponse.json({ error: error.message || "Error al obtener producto" }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al obtener el producto." }, { status: 500 });
   }
 }
 
@@ -278,7 +278,10 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
 
   } catch (error: any) {
     console.error("Error in PUT /api/taller/productos/[id]:", error);
-    return NextResponse.json({ error: error.message || "No fue posible actualizar el producto" }, { status: 500 });
+    if (error?.code === "23505" || error?.message?.includes("23505")) {
+      return NextResponse.json({ success: false, error: "PRODUCT_ALREADY_EXISTS", message: "Ya existe un producto con estos datos únicos." }, { status: 409 });
+    }
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "No fue posible actualizar el producto." }, { status: 500 });
   }
 }
 
@@ -403,6 +406,9 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
 
   } catch (error: any) {
     console.error("Error in DELETE /api/taller/productos/[id]:", error);
-    return NextResponse.json({ error: error.message || "No fue posible eliminar el producto" }, { status: 500 });
+    if (error?.code === "23503" || error?.message?.includes("23503")) {
+      return NextResponse.json({ success: false, error: "PRODUCT_IN_USE", message: "Este producto posee registros asociados y no puede eliminarse." }, { status: 409 });
+    }
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "No fue posible eliminar el producto." }, { status: 500 });
   }
 }

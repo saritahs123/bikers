@@ -166,7 +166,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     return NextResponse.json(mappedUser);
   } catch (error: any) {
     console.error("Error in GET /api/usuarios/[id]:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al obtener el usuario." }, { status: 500 });
   }
 }
 
@@ -861,16 +861,18 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
 
       if (!hasOps) {
         await query(`DELETE FROM admin.usuario_alcance_detalle WHERE usuario_alcance_id IN (SELECT usuario_alcance_id FROM admin.usuario_alcance WHERE usuario_id = $1)`, [targetUserId]);
+        await query(`DELETE FROM admin.usuario_alcance_accion WHERE usuario_alcance_id IN (SELECT usuario_alcance_id FROM admin.usuario_alcance WHERE usuario_id = $1)`, [targetUserId]);
         await query(`DELETE FROM admin.usuario_alcance WHERE usuario_id = $1`, [targetUserId]);
         await query(`DELETE FROM admin.usuario_rol_adicional WHERE usuario_id = $1`, [targetUserId]);
         await query(`DELETE FROM admin.usuario_configuracion_acceso WHERE usuario_id = $1`, [targetUserId]);
-        await query(`DELETE FROM admin.usuario_sesion WHERE usuario_id = $1`, [targetUserId]);
+        await query(`DELETE FROM admin.usuario_sesion WHERE usuario_id = $1 OR revocado_por = $1`, [targetUserId]);
         await query(`DELETE FROM admin.usuario_actividad WHERE usuario_id = $1`, [targetUserId]);
         await query(`DELETE FROM admin.usuario_auditoria WHERE usuario_id = $1 OR admin_id = $1`, [targetUserId]);
         await query(`DELETE FROM admin.usuario_creacion_log WHERE usuario_id = $1`, [targetUserId]);
         await query(`DELETE FROM admin.usuario_onboarding_log WHERE usuario_id = $1`, [targetUserId]);
         await query(`DELETE FROM admin.usuario_seguridad WHERE usuario_id = $1`, [targetUserId]);
         await query(`DELETE FROM admin.usuario_identidad WHERE usuario_id = $1`, [targetUserId]);
+        await query(`DELETE FROM admin.s3_staging_registry WHERE usuario_id = $1`, [targetUserId]);
         await query(`DELETE FROM admin.usuario WHERE usuario_id = $1`, [targetUserId]);
         deletedHard = true;
       }
@@ -890,11 +892,14 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       );
       await query(
         `UPDATE admin.usuario_sesion
-         SET estado = 'REVOCADO',
+         SET estado = 'REVOCADA',
              fecha_revocacion = NOW(),
-             motivo_revocacion = 'Usuario eliminado/desactivado'
-         WHERE usuario_id = $1 AND estado = 'ACTIVO'`,
-        [targetUserId]
+             fecha_cierre = NOW(),
+             tipo_cierre = 'REVOCACION',
+             motivo_cierre = 'Usuario eliminado/desactivado',
+             revocado_por = $2
+         WHERE usuario_id = $1 AND estado IN ('ACTIVA', 'ACTIVO')`,
+        [targetUserId, authUserId]
       );
     }
 
