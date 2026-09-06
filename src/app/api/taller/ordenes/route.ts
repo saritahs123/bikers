@@ -138,10 +138,13 @@ export async function GET(req: NextRequest) {
         ot.prioridad_orden_id AS prioridad_id,
         pot.nombre AS prioridad_nombre,
         pot.color_estado AS prioridad_color,
+        ot.fecha_registro,
         ot.fecha_recepcion AS fecha_ingreso,
         ot.fecha_entrega_estimada AS fecha_prometida,
         ot.fecha_inicio_trabajo AS fecha_inicio,
+        ot.fecha_finalizacion,
         ot.fecha_finalizacion AS fecha_termino,
+        ot.fecha_entrega_real,
         ot.diagnostico_inicial,
         ot.observacion_interna AS observaciones,
         COALESCE(c.cliente_id, r.cliente_id) AS cliente_id,
@@ -263,11 +266,8 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST /api/taller/ordenes (Direct Work Order Creation)
+// POST /api/taller/ordenes (Work Order Creation)
 export async function POST(req: NextRequest) {
-  const pool = getPool();
-  const client = await pool.connect();
-
   try {
     const session = await getWorkshopSession();
     if (!session || !session.usuario_id) {
@@ -279,21 +279,73 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "FORBIDDEN", message: "No posee permiso de creación para Órdenes de Trabajo." }, { status: 403 });
     }
 
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
+
+    // If no prior recepcion_id is provided or is_direct_work_order is requested, use shared transactional engine
+    if (!body.recepcion_id || body.is_direct_work_order || body.is_direct) {
+      const { executeReceptionWithWorkOrder } = await import("@/lib/workshop/receptionOrderService");
+      const idempotency_key = (
+        body.idempotency_key ||
+        body.request_id ||
+        req.headers.get("x-idempotency-key") ||
+        ""
+      ).trim() || null;
+
+      const userAgent = req.headers.get("user-agent") || "Navegador Web";
+      const ipFirma = req.headers.get("x-forwarded-for")?.split(",")[0] || "127.0.0.1";
+
+      const payload = {
+        cliente_id: body.cliente_id,
+        bicicleta_id: body.bicicleta_id,
+        prioridad_id: body.prioridad_id,
+        observaciones_cliente: body.observaciones_cliente,
+        observaciones_recepcion: body.observaciones_recepcion,
+        observacion_interna_ot: body.observacion_interna_ot,
+        presupuesto_estimado: body.presupuesto_estimado,
+        servicios: body.servicios,
+        mecanico_id: null,
+        fecha_prometida: null,
+        is_direct_work_order: true,
+        generar_orden_trabajo: true,
+        idempotency_key,
+        userAgent,
+        ipFirma
+      };
+
+      const result = await executeReceptionWithWorkOrder(payload, session, req);
+
+      return NextResponse.json(
+        {
+          success: true,
+          message: result.mensaje || "Orden de trabajo creada correctamente.",
+          is_replay: result.is_replay,
+          data: {
+            orden_id: result.orden_trabajo_id,
+            orden_trabajo_id: result.orden_trabajo_id,
+            codigo_orden: result.codigo_orden,
+            recepcion_id: result.recepcion_id,
+            codigo_recepcion: result.codigo_recepcion
+          }
+        },
+        { status: result.is_replay ? 200 : 201 }
+      );
+    }
+
+    // Legacy / manual reception linkage fallback
     const clienteId = parseInt(body.cliente_id, 10);
     if (isNaN(clienteId) || clienteId <= 0) {
       return NextResponse.json({ error: "INVALID_CLIENT", message: "Debe especificar un cliente_id válido." }, { status: 400 });
     }
 
     const bicicletaId = body.bicicleta_id ? parseInt(body.bicicleta_id, 10) : null;
-    const recepcionId = body.recepcion_id ? parseInt(body.recepcion_id, 10) : null;
-    const prioridadId = body.prioridad_orden_id ? parseInt(body.prioridad_orden_id, 10) : 1;
+    const recepcionId = parseInt(body.recepcion_id, 10);
+    const prioridadId = body.prioridad_orden_id ? parseInt(body.prioridad_orden_id, 10) : 2;
     const mecanicoId = body.mecanico_id ? parseInt(body.mecanico_id, 10) : null;
     const diagnosticoInicial = body.diagnostico_inicial ? String(body.diagnostico_inicial).trim() : null;
     const observacionInterna = body.observacion_interna ? String(body.observacion_interna).trim() : null;
     const fechaPrometida = body.fecha_entrega_estimada || body.fecha_prometida || null;
 
-    // Multitenant Check: Client must belong to session empresa_id
+    // Multitenant Check
     const clientCheck = await query(
       `SELECT cliente_id, nombre_completo, empresa_id FROM admin.clientes WHERE cliente_id = $1 AND empresa_id = $2 AND (activo = true OR activo IS NULL)`,
       [clienteId, session.empresa_id]
@@ -303,7 +355,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "NOT_FOUND", message: "El cliente no existe o no pertenece a su empresa." }, { status: 404 });
     }
 
-    // Optional bicycle verification
     if (bicicletaId) {
       const bCheck = await query(
         `SELECT b.bicicleta_id FROM admin.bicicletas b JOIN admin.clientes c ON b.cliente_id = c.cliente_id WHERE b.bicicleta_id = $1 AND c.empresa_id = $2`,
@@ -314,112 +365,120 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    await client.query("BEGIN");
+    const pool = getPool();
+    const client = await pool.connect();
 
-    // Acquire business code advisory lock for OT sequence
-    await client.query("SELECT pg_advisory_xact_lock(7003)");
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock(7003)");
 
-    const now = new Date();
-    const yearMonth = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`;
-    const codeRes = await client.query(`
-      SELECT COALESCE(MAX(SUBSTRING(codigo_orden FROM '[0-9]+$')::integer), 0) + 1 AS next_seq
-      FROM admin.ordenes_trabajo
-    `);
-    const nextSeq = codeRes.rows[0]?.next_seq || 1;
-    const codigoOrden = `OT-${yearMonth}-${nextSeq}`;
+      const now = new Date();
+      const yearMonth = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`;
+      const codeRes = await client.query(`
+        SELECT COALESCE(MAX(SUBSTRING(codigo_orden FROM '[0-9]+$')::integer), 0) + 1 AS next_seq
+        FROM admin.ordenes_trabajo
+      `);
+      const nextSeq = codeRes.rows[0]?.next_seq || 1;
+      const codigoOrden = `OT-${yearMonth}-${nextSeq}`;
 
-    const insertSql = `
-      INSERT INTO admin.ordenes_trabajo (
-        codigo_orden, recepcion_id, cliente_id, bicicleta_id,
-        estado_orden_id, prioridad_orden_id, mecanico_id,
-        diagnostico_inicial, observacion_interna,
-        fecha_recepcion, fecha_entrega_estimada,
-        subtotal_general, total_descuento, total_impuesto, total_orden,
-        activo, fecha_registro, usuario_registro
-      ) VALUES (
-        $1, $2, $3, $4,
-        1, $5, $6,
-        $7, $8,
-        NOW(), $9,
-        0, 0, 0, 0,
-        true, NOW(), $10
-      )
-      RETURNING orden_trabajo_id, codigo_orden, fecha_registro
-    `;
+      const insertSql = `
+        INSERT INTO admin.ordenes_trabajo (
+          codigo_orden, recepcion_id, cliente_id, bicicleta_id,
+          estado_orden_id, prioridad_orden_id, mecanico_id,
+          diagnostico_inicial, observacion_interna,
+          fecha_recepcion, fecha_entrega_estimada,
+          subtotal_general, total_descuento, total_impuesto, total_orden,
+          activo, fecha_registro, usuario_registro
+        ) VALUES (
+          $1, $2, $3, $4,
+          1, $5, $6,
+          $7, $8,
+          NOW(), $9,
+          0, 0, 0, 0,
+          true, NOW(), $10
+        )
+        RETURNING orden_trabajo_id, codigo_orden, fecha_registro
+      `;
 
-    const insertRes = await client.query(insertSql, [
-      codigoOrden,
-      recepcionId,
-      clienteId,
-      bicicletaId,
-      prioridadId,
-      mecanicoId,
-      diagnosticoInicial,
-      observacionInterna,
-      fechaPrometida,
-      session.usuario_id
-    ]);
+      const insertRes = await client.query(insertSql, [
+        codigoOrden,
+        recepcionId,
+        clienteId,
+        bicicletaId,
+        prioridadId,
+        mecanicoId,
+        diagnosticoInicial,
+        observacionInterna,
+        fechaPrometida,
+        session.usuario_id
+      ]);
 
-    const newOrder = insertRes.rows[0];
-    const ordenTrabajoId = newOrder.orden_trabajo_id;
+      const newOrder = insertRes.rows[0];
+      const ordenTrabajoId = newOrder.orden_trabajo_id;
 
-    // Insert Initial History Record
-    await client.query(`
-      INSERT INTO admin.orden_historial_estado (
-        orden_trabajo_id, estado_anterior_id, estado_nuevo_id,
-        usuario_cambio, comentario, fecha_cambio, activo, fecha_registro
-      ) VALUES (
-        $1, NULL, 1,
-        $2, 'Orden de trabajo creada directamente', NOW(), true, NOW()
-      )
-    `, [ordenTrabajoId, session.usuario_id]);
+      await client.query(
+        `UPDATE admin.recepciones SET convertido_orden_id = $1 WHERE recepcion_id = $2`,
+        [ordenTrabajoId, recepcionId]
+      );
 
-    // Atomic Audit Mutation
-    await recordUserAudit({
-      userId: session.usuario_id,
-      accion: "CREAR_ORDEN_TRABAJO",
-      valorNuevo: {
-        orden_trabajo_id: ordenTrabajoId,
-        codigo_orden: codigoOrden,
-        cliente_id: clienteId,
-        bicicleta_id: bicicletaId,
-        recepcion_id: recepcionId,
-        prioridad_orden_id: prioridadId,
-        mecanico_id: mecanicoId
-      },
-      motivo: "Creación directa de orden de trabajo",
-      resultado: "COMPLETADO",
-      client,
-      throwOnError: true
-    });
+      await client.query(`
+        INSERT INTO admin.orden_historial_estado (
+          orden_trabajo_id, estado_anterior_id, estado_nuevo_id,
+          usuario_cambio, comentario, fecha_cambio, activo, fecha_registro, usuario_registro
+        ) VALUES (
+          $1, NULL, 1,
+          $2, 'Orden de trabajo creada a partir de recepción existente', NOW(), true, NOW(), $2
+        )
+      `, [ordenTrabajoId, session.usuario_id]);
 
-    await client.query("COMMIT");
+      await recordUserAudit({
+        userId: session.usuario_id,
+        accion: "CREAR_ORDEN_TRABAJO",
+        valorNuevo: {
+          orden_trabajo_id: ordenTrabajoId,
+          codigo_orden: codigoOrden,
+          cliente_id: clienteId,
+          bicicleta_id: bicicletaId,
+          recepcion_id: recepcionId,
+          prioridad_orden_id: prioridadId,
+          mecanico_id: mecanicoId
+        },
+        motivo: "Creación de orden de trabajo vinculada a recepción",
+        resultado: "COMPLETADO",
+        client,
+        throwOnError: true
+      });
 
-    await recordUserActivity({
-      userId: session.usuario_id,
-      modulo: "TALLER_ORDENES",
-      evento: "WORK_ORDER_CREATED",
-      descripcion: `Orden de trabajo ${codigoOrden} creada exitosamente (Cliente #${clienteId})`,
-      resultado: "Exitoso",
-      req
-    });
+      await client.query("COMMIT");
 
-    return NextResponse.json({
-      success: true,
-      message: "Orden de trabajo creada exitosamente.",
-      data: {
-        orden_id: ordenTrabajoId,
-        orden_trabajo_id: ordenTrabajoId,
-        codigo_orden: codigoOrden,
-        fecha_registro: newOrder.fecha_registro
-      }
-    }, { status: 201 });
+      await recordUserActivity({
+        userId: session.usuario_id,
+        modulo: "TALLER_ORDENES",
+        evento: "WORK_ORDER_CREATED",
+        descripcion: `Orden de trabajo ${codigoOrden} creada exitosamente (Cliente #${clienteId})`,
+        resultado: "Exitoso",
+        req
+      });
 
+      return NextResponse.json({
+        success: true,
+        message: "Orden de trabajo creada exitosamente.",
+        data: {
+          orden_id: ordenTrabajoId,
+          orden_trabajo_id: ordenTrabajoId,
+          codigo_orden: codigoOrden,
+          fecha_registro: newOrder.fecha_registro
+        }
+      }, { status: 201 });
+    } catch (innerErr) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw innerErr;
+    } finally {
+      client.release();
+    }
   } catch (error: any) {
-    await client.query("ROLLBACK").catch(() => {});
     console.error("Error in POST /api/taller/ordenes:", error);
-    return NextResponse.json({ error: "SERVER_ERROR", message: error.message || "Error al crear la orden de trabajo." }, { status: 500 });
-  } finally {
-    client.release();
+    const status = error.status || 500;
+    return NextResponse.json({ error: error.code || "SERVER_ERROR", message: error.message || "Error al crear la orden de trabajo." }, { status });
   }
 }

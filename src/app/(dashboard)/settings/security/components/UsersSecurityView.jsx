@@ -889,7 +889,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       fetchUsers();
     } catch (error) {
       console.error('Error al eliminar usuario:', error);
-      showToast('Error al intentar eliminar el usuario.', 'error');
+      showToast(error.message || 'Error al intentar eliminar el usuario.', 'error');
     } finally {
       setIsDeleting(false);
       setShowDeleteModal(false);
@@ -2785,23 +2785,26 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     const isBlocked = estadoActual === 'BLOQUEADO' || estadoActual === 'Bloqueado';
     const isInactive = estadoActual === 'INACTIVO' || estadoActual === 'Inactivo';
 
+    const btnClass = "w-full text-left px-3.5 py-2 text-xs text-foreground font-semibold hover:bg-surface-subtle hover:text-primary rounded-lg flex items-center gap-2.5 transition-colors cursor-pointer";
+    const btnClassDanger = "w-full text-left px-3.5 py-2 text-xs text-rose-400 font-semibold hover:bg-rose-500/10 rounded-lg flex items-center gap-2.5 transition-colors cursor-pointer";
+
     const items = [];
 
     // Most accounts can edit profile
     items.push(
       <button 
         key="edit-profile"
-        className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5 cursor-pointer" 
-        onClick={() => handleStartEdit360(item, 'resumen')}
+        className={btnClass}
+        onClick={() => { setActiveDropdown(null); handleStartEdit360(item, 'resumen'); }}
       >
-        <Edit2 size={13} className="text-[var(--text-muted)]" /> Editar perfil
+        <Edit2 size={13} className="text-foreground-muted shrink-0" /> Editar perfil
       </button>,
       <button 
         key="reset-password-manual"
-        className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5 cursor-pointer" 
-        onClick={() => handleOpenResetPasswordModal(item)}
+        className={btnClass}
+        onClick={() => { setActiveDropdown(null); handleOpenResetPasswordModal(item); }}
       >
-        <KeyRound size={13} className="text-primary" /> Restablecer contraseña
+        <KeyRound size={13} className="text-primary shrink-0" /> Restablecer contraseña
       </button>
     );
 
@@ -2811,129 +2814,96 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         items.push(
           <button 
             key="resend-inv"
-            className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5" 
-            onClick={() => handleResendInvitationDirect(item)}
+            className={btnClass}
+            onClick={() => { setActiveDropdown(null); handleResendInvitationDirect(item); }}
           >
-            <RotateCw size={13} className="text-[var(--text-muted)]" /> Reenviar invitación
+            <RotateCw size={13} className="text-foreground-muted shrink-0" /> Reenviar invitación
           </button>,
           <button 
             key="copy-link"
-            className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5" 
-            onClick={() => handleCopyActivationLink(item)}
+            className={btnClass}
+            onClick={() => { setActiveDropdown(null); handleCopyActivationLink(item); }}
           >
-            <CheckSquare size={13} className="text-[var(--text-muted)]" /> Copiar link de activación
+            <CheckSquare size={13} className="text-foreground-muted shrink-0" /> Copiar link de activación
           </button>,
           <button 
             key="revoke-inv"
-            className="w-full text-left px-4 py-1.5 text-[13px] text-primary font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5" 
-            onClick={() => handleRevokeInvitationDirect(item)}
+            className={btnClassDanger}
+            onClick={() => { setActiveDropdown(null); handleRevokeInvitationDirect(item); }}
           >
-            <ShieldX size={13} /> Revocar invitación
+            <ShieldX size={13} className="shrink-0" /> Revocar invitación
           </button>,
           <button 
             key="view-history"
-            className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5" 
-            onClick={() => handleViewDetail(item, 'resumen')}
+            className={btnClass}
+            onClick={() => { setActiveDropdown(null); handleViewDetail(item, 'resumen'); }}
           >
-            <Clock size={13} className="text-[var(--text-muted)]" /> Ver detalle
+            <Clock size={13} className="text-foreground-muted shrink-0" /> Ver detalle
           </button>
         );
-      } else if (actStatus === 'INVITATION_PENDING' || actStatus === 'DRAFT') {
-        // No extra actions needed for draft in simplified dropdown
-      } else if (actStatus === 'INVITATION_EXPIRED') {
+      } else if (actStatus === 'INVITATION_EXPIRED' || actStatus === 'INVITATION_BOUNCED') {
         items.push(
           <button 
             key="regen-inv"
-            className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5" 
-            onClick={() => handleRegenerateInvitationDirect(item)}
+            className={btnClass}
+            onClick={() => { setActiveDropdown(null); handleRegenerateInvitationDirect(item); }}
           >
-            <RotateCw size={13} className="text-[var(--text-muted)]" /> Regenerar invitación
+            <RotateCw size={13} className="text-foreground-muted shrink-0" /> Regenerar invitación
           </button>,
           <button 
             key="resend-inv-exp"
-            className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5" 
-            onClick={() => handleResendInvitationDirect(item)}
+            className={btnClass}
+            onClick={() => { setActiveDropdown(null); handleResendInvitationDirect(item); }}
           >
-            <Mail size={13} className="text-[var(--text-muted)]" /> Reenviar invitación
+            <Mail size={13} className="text-foreground-muted shrink-0" /> Reenviar invitación
           </button>,
           <button 
             key="view-history"
-            className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5" 
-            onClick={() => handleViewDetail(item, 'resumen')}
+            className={btnClass}
+            onClick={() => { setActiveDropdown(null); handleViewDetail(item, 'resumen'); }}
           >
-            <Clock size={13} className="text-[var(--text-muted)]" /> Ver detalle
-          </button>
-        );
-      } else if (actStatus === 'INVITATION_BOUNCED') {
-        items.push(
-          <button 
-            key="regen-inv"
-            className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5" 
-            onClick={() => handleRegenerateInvitationDirect(item)}
-          >
-            <RotateCw size={13} className="text-[var(--text-muted)]" /> Regenerar invitación
-          </button>,
-          <button 
-            key="view-history"
-            className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5" 
-            onClick={() => handleViewDetail(item, 'resumen')}
-          >
-            <Clock size={13} className="text-[var(--text-muted)]" /> Ver detalle
+            <Clock size={13} className="text-foreground-muted shrink-0" /> Ver detalle
           </button>
         );
       } else if (actStatus === 'REGISTRATION_COMPLETED') {
         items.push(
           <button 
             key="send-reminder"
-            className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5" 
-            onClick={() => handleSendReminderDirect(item)}
+            className={btnClass}
+            onClick={() => { setActiveDropdown(null); handleSendReminderDirect(item); }}
           >
-            <Mail size={13} className="text-[var(--text-muted)]" /> Enviar recordatorio
-          </button>,
-          <button 
-            key="reset-pw"
-            className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5" 
-            onClick={() => handleOpenResetPasswordModal(item)}
-          >
-            <Key size={13} className="text-[var(--text-muted)]" /> Restablecer clave
+            <Mail size={13} className="text-foreground-muted shrink-0" /> Enviar recordatorio
           </button>,
           <button 
             key="view-history"
-            className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5" 
-            onClick={() => handleViewDetail(item, 'resumen')}
+            className={btnClass}
+            onClick={() => { setActiveDropdown(null); handleViewDetail(item, 'resumen'); }}
           >
-            <Clock size={13} className="text-[var(--text-muted)]" /> Ver detalle
+            <Clock size={13} className="text-foreground-muted shrink-0" /> Ver detalle
           </button>
         );
       } else if (actStatus === 'FIRST_LOGIN_COMPLETED') {
         items.push(
           <button 
             key="view-history"
-            className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5" 
-            onClick={() => handleViewDetail(item, 'resumen')}
+            className={btnClass}
+            onClick={() => { setActiveDropdown(null); handleViewDetail(item, 'resumen'); }}
           >
-            <Clock size={13} className="text-[var(--text-muted)]" /> Ver detalle
+            <Clock size={13} className="text-foreground-muted shrink-0" /> Ver detalle
           </button>,
           <button 
             key="revoke-sessions"
-            className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5" 
-            onClick={() => handleRevokeAllSessions(item.id)}
+            className={btnClass}
+            onClick={() => { setActiveDropdown(null); handleRevokeAllSessions(item.id); }}
           >
-            <Laptop size={13} className="text-[var(--text-muted)]" /> Revocar sesiones
-          </button>,
-          <button 
-            key="reset-pw"
-            className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5" 
-            onClick={() => handleOpenResetPasswordModal(item)}
-          >
-            <Key size={13} className="text-[var(--text-muted)]" /> Restablecer clave
+            <Laptop size={13} className="text-foreground-muted shrink-0" /> Revocar sesiones
           </button>,
           <button 
             key="view-audit"
-            className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5 border-t border-[var(--border-color)] pt-1.5" 
-            onClick={() => handleViewDetail(item, 'auditoria')}
+            className={btnClass}
+            onClick={() => { setActiveDropdown(null); handleViewDetail(item, 'auditoria'); }}
           >
-            <FileText size={13} className="text-[var(--text-muted)]" /> Ver auditoría
+            <FileText size={13} className="text-foreground-muted shrink-0" /> Ver auditoría
           </button>
         );
       }
@@ -2941,114 +2911,99 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       if (actStatus === 'CREDENTIALS_GENERATED' || actStatus === 'PENDING_FIRST_LOGIN') {
         items.push(
           <button 
-            key="reset-pw-doc"
-            className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5" 
-            onClick={() => handleOpenResetPasswordModal(item)}
-          >
-            <Key size={13} className="text-[var(--text-muted)]" /> Restablecer clave
-          </button>,
-          <button 
             key="mark-delivered"
-            className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5" 
-            onClick={() => handleMarkInstructionsDelivered(item)}
+            className={btnClass}
+            onClick={() => { setActiveDropdown(null); handleMarkInstructionsDelivered(item); }}
           >
-            <Check size={13} className="text-[var(--text-muted)]" /> Inst. entregadas
+            <Check size={13} className="text-foreground-muted shrink-0" /> Inst. entregadas
           </button>,
           <button 
             key="view-history"
-            className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5" 
-            onClick={() => handleViewDetail(item, 'resumen')}
+            className={btnClass}
+            onClick={() => { setActiveDropdown(null); handleViewDetail(item, 'resumen'); }}
           >
-            <Clock size={13} className="text-[var(--text-muted)]" /> Ver detalle
+            <Clock size={13} className="text-foreground-muted shrink-0" /> Ver detalle
           </button>
         );
       } else if (actStatus === 'INITIAL_PASSWORD_CHANGED') {
         items.push(
           <button 
             key="view-history"
-            className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5" 
-            onClick={() => handleViewDetail(item, 'resumen')}
+            className={btnClass}
+            onClick={() => { setActiveDropdown(null); handleViewDetail(item, 'resumen'); }}
           >
-            <Clock size={13} className="text-[var(--text-muted)]" /> Ver detalle
+            <Clock size={13} className="text-foreground-muted shrink-0" /> Ver detalle
           </button>,
           <button 
             key="revoke-sessions"
-            className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5" 
-            onClick={() => handleRevokeAllSessions(item.id)}
+            className={btnClass}
+            onClick={() => { setActiveDropdown(null); handleRevokeAllSessions(item.id); }}
           >
-            <Laptop size={13} className="text-[var(--text-muted)]" /> Revocar sesiones
-          </button>,
-          <button 
-            key="reset-pw"
-            className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5" 
-            onClick={() => handleOpenResetPasswordModal(item)}
-          >
-            <Key size={13} className="text-[var(--text-muted)]" /> Restablecer clave
+            <Laptop size={13} className="text-foreground-muted shrink-0" /> Revocar sesiones
           </button>,
           <button 
             key="view-audit"
-            className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5 border-t border-[var(--border-color)] pt-1.5" 
-            onClick={() => handleViewDetail(item, 'auditoria')}
+            className={btnClass}
+            onClick={() => { setActiveDropdown(null); handleViewDetail(item, 'auditoria'); }}
           >
-            <FileText size={13} className="text-[var(--text-muted)]" /> Ver auditoría
+            <FileText size={13} className="text-foreground-muted shrink-0" /> Ver auditoría
           </button>
         );
       } else if (actStatus === 'ACCESS_BLOCKED') {
         items.push(
           <button 
             key="unblock-act"
-            className="w-full text-left px-4 py-1.5 text-[13px] text-emerald-600 font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5" 
-            onClick={() => handleToggleBlock(item)}
+            className="w-full text-left px-3.5 py-2 text-xs text-emerald-400 font-semibold hover:bg-emerald-500/10 rounded-lg flex items-center gap-2.5 transition-colors cursor-pointer"
+            onClick={() => { setActiveDropdown(null); handleToggleBlock(item); }}
           >
-            <ShieldCheck size={13} /> Desbloquear acceso
-          </button>,
-          <button 
-            key="reset-pw-blocked"
-            className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5" 
-            onClick={() => handleOpenResetPasswordModal(item)}
-          >
-            <Key size={13} className="text-[var(--text-muted)]" /> Restablecer clave
+            <ShieldCheck size={13} className="shrink-0" /> Desbloquear acceso
           </button>,
           <button 
             key="view-history"
-            className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5" 
-            onClick={() => handleViewDetail(item, 'resumen')}
+            className={btnClass}
+            onClick={() => { setActiveDropdown(null); handleViewDetail(item, 'resumen'); }}
           >
-            <Clock size={13} className="text-[var(--text-muted)]" /> Ver detalle
+            <Clock size={13} className="text-foreground-muted shrink-0" /> Ver detalle
           </button>
         );
       }
     }
 
+    // Divider
+    items.push(<div key="divider-1" className="border-t border-border my-1" />);
+
     // Actions based on estado
     items.push(
       <button 
         key="toggle-block"
-        className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5 border-t border-[var(--border-color)] pt-1" 
-        onClick={() => handleToggleBlock(item)}
+        className={btnClass}
+        onClick={() => { setActiveDropdown(null); handleToggleBlock(item); }}
       >
-        <ShieldAlert size={13} className="text-[var(--text-muted)]" /> {isBlocked ? 'Desbloquear cuenta' : 'Bloquear cuenta'}
+        <ShieldAlert size={13} className="text-foreground-muted shrink-0" /> {isBlocked ? 'Desbloquear cuenta' : 'Bloquear cuenta'}
       </button>
     );
     
     items.push(
       <button 
         key="toggle-inactive"
-        className="w-full text-left px-4 py-1.5 text-[13px] text-[var(--text-primary)] font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5" 
-        onClick={() => handleToggleInactive(item)}
+        className={btnClass}
+        onClick={() => { setActiveDropdown(null); handleToggleInactive(item); }}
       >
-        <ToggleLeft size={13} className="text-[var(--text-muted)]" /> {isInactive ? 'Activar cuenta' : 'Inactivar cuenta'}
+        <ToggleLeft size={13} className="text-foreground-muted shrink-0" /> {isInactive ? 'Activar cuenta' : 'Inactivar cuenta'}
       </button>
     );
+
+    // Divider before delete
+    items.push(<div key="divider-2" className="border-t border-border my-1" />);
 
     // Delete Action
     items.push(
       <button 
         key="delete-user"
-        className="w-full text-left px-4 py-1.5 text-[13px] text-primary-fixed font-semibold hover:bg-[var(--bg-color)] flex items-center gap-1.5 border-t border-[var(--border-color)] pt-1.5 mt-1" 
-        onClick={() => handleDeleteUserClick(item)}
+        className={btnClassDanger}
+        onClick={() => { setActiveDropdown(null); handleDeleteUserClick(item); }}
       >
-        <Trash2 size={13} className="text-primary" /> Eliminar cuenta
+        <Trash2 size={13} className="shrink-0 text-rose-400" /> Eliminar cuenta
       </button>
     );
 
@@ -5436,30 +5391,29 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                     />
                   </th>
                   <th className="py-3.5 px-4">Usuario / Identidad</th>
-                  <th className="py-3.5 px-4">Empresa / Consorcio</th>
+                  <th className="py-3.5 px-4">Empresa</th>
                   <th className="py-3.5 px-4">Rol</th>
                   <th className="py-3.5 px-4">Tipo de Usuario</th>
                   <th className="py-3.5 px-4">Último Acceso</th>
-                  <th className="py-3.5 px-4 text-center">MFA</th>
                   <th className="py-3.5 px-4 text-center">Estado</th>
-                  <th className="py-3.5 px-4 text-center">Estado de activación</th>
                   <th className="py-3.5 px-4 text-right pr-6">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#2d3748]">
                 {sortedData.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="py-12 text-center text-foreground-muted font-mono">
+                    <td colSpan={8} className="py-12 text-center text-foreground-muted font-mono">
                       <Users size={40} className="mx-auto text-foreground-disabled opacity-40 mb-3" />
                       <h3 className="text-sm font-bold text-foreground">Sin registros encontrados</h3>
                       <p className="text-xs text-foreground-muted mt-1">Prueba limpiando los filtros o realizando otra búsqueda.</p>
                     </td>
                   </tr>
                 ) : (
-                  paginatedData.map(item => {
+                  paginatedData.map((item, index) => {
                     const isChecked = selectedIds.includes(item.id);
                     const isDropdownOpen = activeDropdown === item.id;
                     const company = companies.find(c => c.id == item.companyId);
+                    const isDropup = (paginatedData.length <= 4 && index >= 1) || (paginatedData.length > 4 && index >= paginatedData.length - 3);
                     
                     return (
                       <tr 
@@ -5527,16 +5481,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                         </td>
 
                         <td className="py-3.5 px-4 text-center">
-                          <div className="flex justify-center">
-                            {item.mfaEnabled ? (
-                              <ShieldCheck className="text-emerald-400" size={18} title={`MFA: ${item.mfa_method}`} />
-                            ) : (
-                              <ShieldX className="text-foreground-disabled" size={18} title="MFA Deshabilitado" />
-                            )}
-                          </div>
-                        </td>
-
-                        <td className="py-3.5 px-4 text-center">
                           <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
                             (String(item.status || item.estado || '').toUpperCase() === 'ACTIVO' || String(item.status || item.estado || '').toUpperCase() === 'ACTIVE')
                               ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' 
@@ -5548,10 +5492,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                           </span>
                         </td>
 
-                        <td className="py-3.5 px-4 text-center">
-                          {renderActivationBadge(item.estado_activacion, item.primary_access_type, item)}
-                        </td>
-
                         <td className="py-3.5 px-4 text-right pr-6 relative" onClick={e => e.stopPropagation()}>
                           <button 
                             className="p-1.5 text-foreground-muted hover:text-foreground hover:bg-surface-subtle rounded-lg transition-colors cursor-pointer inline-block"
@@ -5561,7 +5501,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                           </button>
                           
                           {isDropdownOpen && (
-                            <div className="absolute right-6 top-8 w-52 bg-card rounded-xl shadow-2xl border border-border py-1.5 z-50 text-left font-mono">
+                            <div className={`absolute right-6 ${isDropup ? 'bottom-full mb-1' : 'top-full mt-1'} w-56 bg-card rounded-xl shadow-2xl border border-border p-1.5 z-50 text-left font-mono max-h-[320px] overflow-y-auto custom-scrollbar`}>
                               {renderDropdownItems(item)}
                             </div>
                           )}
@@ -5628,10 +5568,11 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               <p className="text-xs text-foreground-muted mt-1">Prueba limpiando los filtros o realizando otra búsqueda.</p>
             </div>
           ) : (
-            paginatedData.map(item => {
+            paginatedData.map((item, index) => {
               const isChecked = selectedIds.includes(item.id);
               const isDropdownOpen = activeDropdown === item.id;
               const company = companies.find(c => c.id == item.companyId);
+              const isDropup = (paginatedData.length > 4 && index >= paginatedData.length - 2);
               
               return (
                 <div 
@@ -5670,7 +5611,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                       </button>
                       
                       {isDropdownOpen && (
-                        <div className="absolute right-0 top-6 w-52 bg-card rounded-xl shadow-2xl border border-border py-1.5 z-50 text-left font-mono">
+                        <div className={`absolute right-0 ${isDropup ? 'bottom-full mb-1' : 'top-8'} w-56 bg-card rounded-xl shadow-2xl border border-border p-1.5 z-50 text-left font-mono max-h-[320px] overflow-y-auto custom-scrollbar`}>
                           {renderDropdownItems(item)}
                         </div>
                       )}
