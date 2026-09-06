@@ -1,8 +1,19 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
 
 export async function GET(req: Request) {
   try {
+    const session = await getWorkshopSession();
+    if (!session) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("SEGURIDAD", session.usuario_id);
+    if (!perms.puede_ver) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para realizar esta acción." }, { status: 403 });
+    }
+
     const { searchParams } = new URL(req.url);
     const departamento_id = searchParams.get('departamento_id') || searchParams.get('departamentoId');
 
@@ -59,6 +70,16 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
+    const session = await getWorkshopSession();
+    if (!session) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("SEGURIDAD", session.usuario_id);
+    if (!perms.puede_crear) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para realizar esta acción." }, { status: 403 });
+    }
+
     const body = await req.json();
     const departamento_id = body.departamento_id ? parseInt(body.departamento_id, 10) : null;
     const nombre = (body.nombre || '').trim();

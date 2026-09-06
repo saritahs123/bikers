@@ -1,8 +1,19 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
+import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
 
 export async function GET() {
   try {
+    const session = await getWorkshopSession();
+    if (!session) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("SEGURIDAD", session.usuario_id);
+    if (!perms.puede_ver) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para realizar esta acción." }, { status: 403 });
+    }
+
     const rolesRes = await query("SELECT rol_funcional_id as \"numericId\", nombre as nombre, descripcion, estado FROM admin.rol_funcional ORDER BY rol_funcional_id ASC");
     const modulosRes = await query("SELECT modulo_sistema_id as id, nombre as label, orden FROM admin.modulo_sistema WHERE estado = 'ACTIVO' ORDER BY orden ASC");
     const matrizRes = await query("SELECT * FROM admin.matriz_acceso_rol");
@@ -47,6 +58,16 @@ export async function GET() {
 
 export async function PUT(req: Request) {
   try {
+    const session = await getWorkshopSession();
+    if (!session) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("SEGURIDAD", session.usuario_id);
+    if (!perms.puede_editar) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para realizar esta acción." }, { status: 403 });
+    }
+
     const body = await req.json();
     const rolesRes = await query("SELECT rol_funcional_id, nombre FROM admin.rol_funcional");
     
@@ -104,6 +125,16 @@ export async function PUT(req: Request) {
 
 export async function POST(req: Request) {
   try {
+    const session = await getWorkshopSession();
+    if (!session) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("SEGURIDAD", session.usuario_id);
+    if (!perms.puede_crear) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para realizar esta acción." }, { status: 403 });
+    }
+
     const { nombre } = await req.json();
     const maxRes = await query("SELECT COALESCE(MAX(modulo_sistema_id), 0) + 1 AS next_id FROM admin.modulo_sistema");
     const nextId = (maxRes as any[])[0].next_id;

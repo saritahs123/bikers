@@ -1,9 +1,20 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { validateRNC, validatePhoneDR, validateEmail, validateURL, validateRequiredText } from "@/lib/validations";
+import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
 
 export async function GET() {
   try {
+    const session = await getWorkshopSession();
+    if (!session) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("SEGURIDAD", session.usuario_id);
+    if (!perms.puede_ver) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para realizar esta acción." }, { status: 403 });
+    }
+
     const sql = `
       SELECT 
         e.empresa_id AS id,
@@ -74,6 +85,16 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
+    const session = await getWorkshopSession();
+    if (!session) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getModulePermissions("SEGURIDAD", session.usuario_id);
+    if (!perms.puede_crear) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para realizar esta acción." }, { status: 403 });
+    }
+
     const body = await req.json();
     const rncRaw = (body.rnc || '').trim();
     const codigo = (body.codigo || '').trim();
