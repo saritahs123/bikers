@@ -658,6 +658,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
   const [selectedIds, setSelectedIds] = useState([]);
   const [activeDropdown, setActiveDropdown] = useState(null);
+  const [dropdownAnchor, setDropdownAnchor] = useState(null);
 
   // Filters
   const [search, setSearch] = useState('');
@@ -878,6 +879,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     setUserToDelete(user);
     setShowDeleteModal(true);
     setActiveDropdown(null);
+    setDropdownAnchor(null);
   };
 
   const handleConfirmDeleteUser = async () => {
@@ -897,6 +899,28 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     }
   };
 
+  const handleToggleDropdown = (e, item) => {
+    e.stopPropagation();
+    if (activeDropdown === item.id) {
+      setActiveDropdown(null);
+      setDropdownAnchor(null);
+    } else {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const dropdownEstimatedHeight = 280;
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const isDropup = spaceBelow < dropdownEstimatedHeight && rect.top > dropdownEstimatedHeight;
+      
+      setDropdownAnchor({
+        id: item.id,
+        item: item,
+        top: isDropup ? rect.top : rect.bottom + 4,
+        right: window.innerWidth - rect.right,
+        isDropup
+      });
+      setActiveDropdown(item.id);
+    }
+  };
+
   // Toast
   const [toast, setToast] = useState(null);
 
@@ -905,9 +929,20 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
   }, [search, roleFilter, companyFilter, statusFilter, mfaFilter, typeFilter, lastAccessFilter]);
 
   useEffect(() => {
-    const handleGlobalClick = () => { if (activeDropdown) setActiveDropdown(null); };
-    window.addEventListener('click', handleGlobalClick);
-    return () => window.removeEventListener('click', handleGlobalClick);
+    const handleCloseDropdown = () => {
+      if (activeDropdown) {
+        setActiveDropdown(null);
+        setDropdownAnchor(null);
+      }
+    };
+    window.addEventListener('click', handleCloseDropdown);
+    window.addEventListener('scroll', handleCloseDropdown, true);
+    window.addEventListener('resize', handleCloseDropdown);
+    return () => {
+      window.removeEventListener('click', handleCloseDropdown);
+      window.removeEventListener('scroll', handleCloseDropdown, true);
+      window.removeEventListener('resize', handleCloseDropdown);
+    };
   }, [activeDropdown]);
 
   useEffect(() => {
@@ -2788,6 +2823,11 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     const btnClass = "w-full text-left px-3.5 py-2 text-xs text-foreground font-semibold hover:bg-surface-subtle hover:text-primary rounded-lg flex items-center gap-2.5 transition-colors cursor-pointer";
     const btnClassDanger = "w-full text-left px-3.5 py-2 text-xs text-rose-400 font-semibold hover:bg-rose-500/10 rounded-lg flex items-center gap-2.5 transition-colors cursor-pointer";
 
+    const closeMenu = () => {
+      setActiveDropdown(null);
+      setDropdownAnchor(null);
+    };
+
     const items = [];
 
     // Most accounts can edit profile
@@ -2795,14 +2835,14 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       <button 
         key="edit-profile"
         className={btnClass}
-        onClick={() => { setActiveDropdown(null); handleStartEdit360(item, 'resumen'); }}
+        onClick={() => { closeMenu(); handleStartEdit360(item, 'resumen'); }}
       >
         <Edit2 size={13} className="text-foreground-muted shrink-0" /> Editar perfil
       </button>,
       <button 
         key="reset-password-manual"
         className={btnClass}
-        onClick={() => { setActiveDropdown(null); handleOpenResetPasswordModal(item); }}
+        onClick={() => { closeMenu(); handleOpenResetPasswordModal(item); }}
       >
         <KeyRound size={13} className="text-primary shrink-0" /> Restablecer contraseña
       </button>
@@ -2815,28 +2855,28 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
           <button 
             key="resend-inv"
             className={btnClass}
-            onClick={() => { setActiveDropdown(null); handleResendInvitationDirect(item); }}
+            onClick={() => { closeMenu(); handleResendInvitationDirect(item); }}
           >
             <RotateCw size={13} className="text-foreground-muted shrink-0" /> Reenviar invitación
           </button>,
           <button 
             key="copy-link"
             className={btnClass}
-            onClick={() => { setActiveDropdown(null); handleCopyActivationLink(item); }}
+            onClick={() => { closeMenu(); handleCopyActivationLink(item); }}
           >
             <CheckSquare size={13} className="text-foreground-muted shrink-0" /> Copiar link de activación
           </button>,
           <button 
             key="revoke-inv"
             className={btnClassDanger}
-            onClick={() => { setActiveDropdown(null); handleRevokeInvitationDirect(item); }}
+            onClick={() => { closeMenu(); handleRevokeInvitationDirect(item); }}
           >
             <ShieldX size={13} className="shrink-0" /> Revocar invitación
           </button>,
           <button 
             key="view-history"
             className={btnClass}
-            onClick={() => { setActiveDropdown(null); handleViewDetail(item, 'resumen'); }}
+            onClick={() => { closeMenu(); handleViewDetail(item, 'resumen'); }}
           >
             <Clock size={13} className="text-foreground-muted shrink-0" /> Ver detalle
           </button>
@@ -2846,21 +2886,21 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
           <button 
             key="regen-inv"
             className={btnClass}
-            onClick={() => { setActiveDropdown(null); handleRegenerateInvitationDirect(item); }}
+            onClick={() => { closeMenu(); handleRegenerateInvitationDirect(item); }}
           >
             <RotateCw size={13} className="text-foreground-muted shrink-0" /> Regenerar invitación
           </button>,
           <button 
             key="resend-inv-exp"
             className={btnClass}
-            onClick={() => { setActiveDropdown(null); handleResendInvitationDirect(item); }}
+            onClick={() => { closeMenu(); handleResendInvitationDirect(item); }}
           >
             <Mail size={13} className="text-foreground-muted shrink-0" /> Reenviar invitación
           </button>,
           <button 
             key="view-history"
             className={btnClass}
-            onClick={() => { setActiveDropdown(null); handleViewDetail(item, 'resumen'); }}
+            onClick={() => { closeMenu(); handleViewDetail(item, 'resumen'); }}
           >
             <Clock size={13} className="text-foreground-muted shrink-0" /> Ver detalle
           </button>
@@ -2870,14 +2910,14 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
           <button 
             key="send-reminder"
             className={btnClass}
-            onClick={() => { setActiveDropdown(null); handleSendReminderDirect(item); }}
+            onClick={() => { closeMenu(); handleSendReminderDirect(item); }}
           >
             <Mail size={13} className="text-foreground-muted shrink-0" /> Enviar recordatorio
           </button>,
           <button 
             key="view-history"
             className={btnClass}
-            onClick={() => { setActiveDropdown(null); handleViewDetail(item, 'resumen'); }}
+            onClick={() => { closeMenu(); handleViewDetail(item, 'resumen'); }}
           >
             <Clock size={13} className="text-foreground-muted shrink-0" /> Ver detalle
           </button>
@@ -2887,21 +2927,21 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
           <button 
             key="view-history"
             className={btnClass}
-            onClick={() => { setActiveDropdown(null); handleViewDetail(item, 'resumen'); }}
+            onClick={() => { closeMenu(); handleViewDetail(item, 'resumen'); }}
           >
             <Clock size={13} className="text-foreground-muted shrink-0" /> Ver detalle
           </button>,
           <button 
             key="revoke-sessions"
             className={btnClass}
-            onClick={() => { setActiveDropdown(null); handleRevokeAllSessions(item.id); }}
+            onClick={() => { closeMenu(); handleRevokeAllSessions(item.id); }}
           >
             <Laptop size={13} className="text-foreground-muted shrink-0" /> Revocar sesiones
           </button>,
           <button 
             key="view-audit"
             className={btnClass}
-            onClick={() => { setActiveDropdown(null); handleViewDetail(item, 'auditoria'); }}
+            onClick={() => { closeMenu(); handleViewDetail(item, 'auditoria'); }}
           >
             <FileText size={13} className="text-foreground-muted shrink-0" /> Ver auditoría
           </button>
@@ -2913,14 +2953,14 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
           <button 
             key="mark-delivered"
             className={btnClass}
-            onClick={() => { setActiveDropdown(null); handleMarkInstructionsDelivered(item); }}
+            onClick={() => { closeMenu(); handleMarkInstructionsDelivered(item); }}
           >
             <Check size={13} className="text-foreground-muted shrink-0" /> Inst. entregadas
           </button>,
           <button 
             key="view-history"
             className={btnClass}
-            onClick={() => { setActiveDropdown(null); handleViewDetail(item, 'resumen'); }}
+            onClick={() => { closeMenu(); handleViewDetail(item, 'resumen'); }}
           >
             <Clock size={13} className="text-foreground-muted shrink-0" /> Ver detalle
           </button>
@@ -2930,21 +2970,21 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
           <button 
             key="view-history"
             className={btnClass}
-            onClick={() => { setActiveDropdown(null); handleViewDetail(item, 'resumen'); }}
+            onClick={() => { closeMenu(); handleViewDetail(item, 'resumen'); }}
           >
             <Clock size={13} className="text-foreground-muted shrink-0" /> Ver detalle
           </button>,
           <button 
             key="revoke-sessions"
             className={btnClass}
-            onClick={() => { setActiveDropdown(null); handleRevokeAllSessions(item.id); }}
+            onClick={() => { closeMenu(); handleRevokeAllSessions(item.id); }}
           >
             <Laptop size={13} className="text-foreground-muted shrink-0" /> Revocar sesiones
           </button>,
           <button 
             key="view-audit"
             className={btnClass}
-            onClick={() => { setActiveDropdown(null); handleViewDetail(item, 'auditoria'); }}
+            onClick={() => { closeMenu(); handleViewDetail(item, 'auditoria'); }}
           >
             <FileText size={13} className="text-foreground-muted shrink-0" /> Ver auditoría
           </button>
@@ -2954,14 +2994,14 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
           <button 
             key="unblock-act"
             className="w-full text-left px-3.5 py-2 text-xs text-emerald-400 font-semibold hover:bg-emerald-500/10 rounded-lg flex items-center gap-2.5 transition-colors cursor-pointer"
-            onClick={() => { setActiveDropdown(null); handleToggleBlock(item); }}
+            onClick={() => { closeMenu(); handleToggleBlock(item); }}
           >
             <ShieldCheck size={13} className="shrink-0" /> Desbloquear acceso
           </button>,
           <button 
             key="view-history"
             className={btnClass}
-            onClick={() => { setActiveDropdown(null); handleViewDetail(item, 'resumen'); }}
+            onClick={() => { closeMenu(); handleViewDetail(item, 'resumen'); }}
           >
             <Clock size={13} className="text-foreground-muted shrink-0" /> Ver detalle
           </button>
@@ -2977,7 +3017,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       <button 
         key="toggle-block"
         className={btnClass}
-        onClick={() => { setActiveDropdown(null); handleToggleBlock(item); }}
+        onClick={() => { closeMenu(); handleToggleBlock(item); }}
       >
         <ShieldAlert size={13} className="text-foreground-muted shrink-0" /> {isBlocked ? 'Desbloquear cuenta' : 'Bloquear cuenta'}
       </button>
@@ -2987,7 +3027,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       <button 
         key="toggle-inactive"
         className={btnClass}
-        onClick={() => { setActiveDropdown(null); handleToggleInactive(item); }}
+        onClick={() => { closeMenu(); handleToggleInactive(item); }}
       >
         <ToggleLeft size={13} className="text-foreground-muted shrink-0" /> {isInactive ? 'Activar cuenta' : 'Inactivar cuenta'}
       </button>
@@ -3001,7 +3041,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       <button 
         key="delete-user"
         className={btnClassDanger}
-        onClick={() => { setActiveDropdown(null); handleDeleteUserClick(item); }}
+        onClick={() => { closeMenu(); handleDeleteUserClick(item); }}
       >
         <Trash2 size={13} className="shrink-0 text-rose-400" /> Eliminar cuenta
       </button>
@@ -5492,19 +5532,15 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                           </span>
                         </td>
 
-                        <td className="py-3.5 px-4 text-right pr-6 relative" onClick={e => e.stopPropagation()}>
+                        <td className="py-3.5 px-4 text-right pr-6" onClick={e => e.stopPropagation()}>
                           <button 
-                            className="p-1.5 text-foreground-muted hover:text-foreground hover:bg-surface-subtle rounded-lg transition-colors cursor-pointer inline-block"
-                            onClick={(e) => { e.stopPropagation(); setActiveDropdown(isDropdownOpen ? null : item.id); }}
+                            className={`p-1.5 rounded-lg transition-colors cursor-pointer inline-block ${isDropdownOpen ? 'bg-primary/20 text-primary' : 'text-foreground-muted hover:text-foreground hover:bg-surface-subtle'}`}
+                            onClick={(e) => handleToggleDropdown(e, item)}
+                            title="Acciones"
+                            aria-label={`Acciones para ${item.full_name || 'usuario'}`}
                           >
                             <MoreVertical size={16} />
                           </button>
-                          
-                          {isDropdownOpen && (
-                            <div className={`absolute right-6 ${isDropup ? 'bottom-full mb-1' : 'top-full mt-1'} w-56 bg-card rounded-xl shadow-2xl border border-border p-1.5 z-50 text-left font-mono max-h-[320px] overflow-y-auto custom-scrollbar`}>
-                              {renderDropdownItems(item)}
-                            </div>
-                          )}
                         </td>
                       </tr>
                     );
@@ -5602,19 +5638,15 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                       </span>
                     </div>
                     
-                    <div className="relative">
+                    <div>
                       <button 
-                        className="p-1.5 text-foreground-muted hover:text-foreground hover:bg-surface-subtle rounded-lg transition-colors cursor-pointer"
-                        onClick={(e) => { e.stopPropagation(); setActiveDropdown(isDropdownOpen ? null : item.id); }}
+                        className={`p-1.5 rounded-lg transition-colors cursor-pointer ${isDropdownOpen ? 'bg-primary/20 text-primary' : 'text-foreground-muted hover:text-foreground hover:bg-surface-subtle'}`}
+                        onClick={(e) => handleToggleDropdown(e, item)}
+                        title="Acciones"
+                        aria-label={`Acciones para ${item.full_name || 'usuario'}`}
                       >
                         <MoreVertical size={16} />
                       </button>
-                      
-                      {isDropdownOpen && (
-                        <div className={`absolute right-0 ${isDropup ? 'bottom-full mb-1' : 'top-8'} w-56 bg-card rounded-xl shadow-2xl border border-border p-1.5 z-50 text-left font-mono max-h-[320px] overflow-y-auto custom-scrollbar`}>
-                          {renderDropdownItems(item)}
-                        </div>
-                      )}
                     </div>
                   </div>
 
@@ -7141,6 +7173,24 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
           </div>
         }
       />
+
+      {/* ACTION DROPDOWN PORTAL (Eliminates clipping inside scroll and overflow containers) */}
+      {activeDropdown && dropdownAnchor && typeof document !== 'undefined' && createPortal(
+        <div 
+          style={{
+            position: 'fixed',
+            top: dropdownAnchor.isDropup ? 'auto' : `${dropdownAnchor.top}px`,
+            bottom: dropdownAnchor.isDropup ? `${window.innerHeight - dropdownAnchor.top + 4}px` : 'auto',
+            right: `${Math.max(16, dropdownAnchor.right)}px`,
+            zIndex: 999999
+          }}
+          className="w-56 bg-card rounded-xl shadow-2xl border border-border p-1.5 text-left font-mono max-h-[340px] overflow-y-auto custom-scrollbar animate-in fade-in zoom-in-95 duration-150"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {renderDropdownItems(dropdownAnchor.item || data.find(u => u.id === activeDropdown))}
+        </div>,
+        document.body
+      )}
 
       {/* CONFIRM DELETE USER MODAL */}
       <SecurityConfirmDialog
