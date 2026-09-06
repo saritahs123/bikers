@@ -11,7 +11,6 @@ import {
   Minimize,
   Bike,
   User,
-  Phone,
   AlertCircle,
   Loader2,
   Calendar,
@@ -212,6 +211,18 @@ export default function WorkOrdersKanbanView({ onViewDetail, onOpenNewModal, onT
       minute: "2-digit",
       second: "2-digit",
       hour12: true
+    });
+  };
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return "—";
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return "—";
+    return d.toLocaleDateString("es-DO", {
+      timeZone: "America/Santo_Domingo",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric"
     });
   };
 
@@ -454,11 +465,45 @@ export default function WorkOrdersKanbanView({ onViewDetail, onOpenNewModal, onT
                           key={ord.orden_id || ord.orden_trabajo_id}
                           className={`bg-surface border border-border border-l-4 ${col.cardAccent} rounded-xl p-4 space-y-2.5 shadow-sm select-none transition-all cursor-default`}
                         >
-                          {/* 1. NÚMERO DE ORDEN */}
+                          {/* 1. NÚMERO DE ORDEN Y FECHA(S) */}
                           <div className="flex items-center justify-between gap-2 border-b border-border/50 pb-2 min-w-0">
                             <span className="font-mono text-base sm:text-lg xl:text-lg 2xl:text-xl font-black text-foreground tracking-tight whitespace-nowrap shrink-0">
                               {ord.codigo_orden}
                             </span>
+
+                            {/* Fechas según columna */}
+                            {(col.key === "RECIBIDAS" || col.key === "REPARACION") && (
+                              <div className="flex items-center gap-1.5 font-mono text-[11px] sm:text-xs text-foreground-muted shrink-0 text-right">
+                                <Calendar className="w-3.5 h-3.5 text-foreground-muted shrink-0" />
+                                <span>{formatDate(ord.fecha_registro || ord.fecha_ingreso)}</span>
+                              </div>
+                            )}
+
+                            {col.key === "LISTA_ENTREGA" && (
+                              <div className="flex flex-col items-end font-mono text-[10px] sm:text-[11px] text-foreground-muted shrink-0 leading-tight gap-0.5 text-right">
+                                <span>
+                                  <span className="text-foreground-muted">Creación: </span>
+                                  <span className="text-foreground-secondary font-semibold">{formatDate(ord.fecha_registro || ord.fecha_ingreso)}</span>
+                                </span>
+                                <span>
+                                  <span className="text-emerald-500 font-medium">Completada: </span>
+                                  <span className="text-emerald-400 font-bold">{formatDate(ord.fecha_finalizacion || ord.fecha_termino)}</span>
+                                </span>
+                              </div>
+                            )}
+
+                            {col.key === "ENTREGADAS" && (
+                              <div className="flex flex-col items-end font-mono text-[10px] sm:text-[11px] text-foreground-muted shrink-0 leading-tight gap-0.5 text-right">
+                                <span>
+                                  <span className="text-foreground-muted">Creación: </span>
+                                  <span className="text-foreground-secondary font-semibold">{formatDate(ord.fecha_registro || ord.fecha_ingreso)}</span>
+                                </span>
+                                <span>
+                                  <span className="text-slate-400 font-medium">Entregada: </span>
+                                  <span className="text-slate-300 font-bold">{formatDate(ord.fecha_entrega_real)}</span>
+                                </span>
+                              </div>
+                            )}
                           </div>
 
                           {/* 2. BICICLETA + CLIENTE EN LA MISMA LÍNEA */}
@@ -477,9 +522,9 @@ export default function WorkOrdersKanbanView({ onViewDetail, onOpenNewModal, onT
                             </div>
                           </div>
 
-                          {/* 3. PRIMER SERVICIO (CONSERVA ICONO DE TELÉFONO) */}
+                          {/* 3. PRIMER SERVICIO */}
                           <div className="flex items-start gap-2 min-w-0 pt-0.5">
-                            <Phone className="w-3.5 h-3.5 text-foreground-muted shrink-0 mt-0.5" />
+                            <Wrench className="w-3.5 h-3.5 text-foreground-muted shrink-0 mt-0.5" />
                             <span className="text-xs sm:text-sm font-sans font-medium text-foreground-muted leading-snug break-words whitespace-normal flex-1 min-w-0">
                               {ord.primer_servicio || "Sin servicio asignado"}
                             </span>

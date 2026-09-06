@@ -13,7 +13,7 @@ export function parseAndValidateUserId(paramId: string): number | null {
   if (typeof paramId !== 'string') return null;
   const trimmed = paramId.trim();
   if (!/^\d+$/.test(trimmed)) return null;
-  
+
   const num = Number(trimmed);
   if (!Number.isInteger(num) || num <= 0 || num > 2147483647) return null;
   return num;
@@ -125,14 +125,32 @@ export async function authorizeUserAccess(paramId: string): Promise<AuthResult> 
     };
   }
 
-  // 4. Company Scope Check (Must belong to same company if both companies are specified)
-  if (authUserCompanyId && targetUserCompanyId && authUserCompanyId !== targetUserCompanyId) {
-    return {
-      success: false,
-      status: 403,
-      error: "FORBIDDEN",
-      message: "Acceso denegado. El usuario solicitado pertenece a otra empresa."
-    };
+  // 4. Company Scope Check (Must belong to same company if both companies are specified and caller is not global admin)
+  const isGlobalAdmin = await query(
+    `SELECT 1
+     FROM admin.usuario u
+     LEFT JOIN admin.rol_funcional r ON u.rol_principal_id = r.rol_funcional_id
+     LEFT JOIN admin.usuario_alcance alc ON u.usuario_id = alc.usuario_id
+     WHERE u.usuario_id = $1
+       AND (
+         UPPER(COALESCE(r.nombre, '')) = 'ADMINISTRADOR GENERAL'
+         OR UPPER(COALESCE(r.nombre, '')) LIKE '%SUPER%'
+         OR alc.nivel_alcance = 'TODA_EMPRESA'
+       )
+     LIMIT 1`,
+    [authUserId]
+  );
+  const hasGlobalScope = Boolean(isGlobalAdmin && isGlobalAdmin.length > 0);
+
+  if (!hasGlobalScope) {
+    if (authUserCompanyId && targetUserCompanyId && authUserCompanyId !== targetUserCompanyId) {
+      return {
+        success: false,
+        status: 403,
+        error: "FORBIDDEN",
+        message: "Acceso denegado. El usuario solicitado pertenece a otra empresa."
+      };
+    }
   }
 
   return { success: true, authUserId, targetUserId, isSelf: false };
@@ -149,7 +167,7 @@ export type AuthUpdateResult =
  * - Self-profile access (targetUserId === authUserId) -> isSelf: true (Allowed with whitelist)
  * - Target user existence check (HTTP 404 if target does not exist)
  * - Edit Permission Matrix Check (SEGURIDAD module requiring puede_editar = true) across effective roles
- * - Company Scope Check (HTTP 403 if users belong to different non-null companies)
+ * - Company Scope Check (HTTP 403 if non-global users belong to different companies)
  */
 export async function authorizeUserUpdate(paramId: string): Promise<AuthUpdateResult> {
   const targetUserId = parseAndValidateUserId(paramId);
@@ -250,17 +268,35 @@ export async function authorizeUserUpdate(paramId: string): Promise<AuthUpdateRe
     };
   }
 
-  if (
-    authUserCompanyId == null ||
-    targetUserCompanyId == null ||
-    authUserCompanyId !== targetUserCompanyId
-  ) {
-    return {
-      success: false,
-      status: 403,
-      error: "FORBIDDEN",
-      message: "Acceso denegado. El usuario a modificar pertenece a otra empresa o la empresa es nula."
-    };
+  const isGlobalAdmin = await query(
+    `SELECT 1
+     FROM admin.usuario u
+     LEFT JOIN admin.rol_funcional r ON u.rol_principal_id = r.rol_funcional_id
+     LEFT JOIN admin.usuario_alcance alc ON u.usuario_id = alc.usuario_id
+     WHERE u.usuario_id = $1
+       AND (
+         UPPER(COALESCE(r.nombre, '')) = 'ADMINISTRADOR GENERAL'
+         OR UPPER(COALESCE(r.nombre, '')) LIKE '%SUPER%'
+         OR alc.nivel_alcance = 'TODA_EMPRESA'
+       )
+     LIMIT 1`,
+    [authUserId]
+  );
+  const hasGlobalScope = Boolean(isGlobalAdmin && isGlobalAdmin.length > 0);
+
+  if (!hasGlobalScope) {
+    if (
+      authUserCompanyId &&
+      targetUserCompanyId &&
+      authUserCompanyId !== targetUserCompanyId
+    ) {
+      return {
+        success: false,
+        status: 403,
+        error: "FORBIDDEN",
+        message: "Acceso denegado. El usuario a modificar pertenece a otra empresa."
+      };
+    }
   }
 
   return {
@@ -280,7 +316,7 @@ export type AuthCreateResult =
  * Centralized User Creation Authorization
  * - Checks active session_token in admin.usuario_sesion (HTTP 401 if missing/expired)
  * - Strict Creation Permission Check: SEGURIDAD module requiring puede_crear = true across effective roles
- * - Company Scope Check: HTTP 403 if trying to create a user for another company
+ * - Company Scope Check: HTTP 403 if non-global user tries to create a user for another company
  */
 export async function authorizeUserCreate(targetCompanyId?: number | null): Promise<AuthCreateResult> {
   const cookieStore = await cookies();
@@ -345,17 +381,35 @@ export async function authorizeUserCreate(targetCompanyId?: number | null): Prom
     };
   }
 
-  if (
-    authUserCompanyId != null &&
-    targetCompanyId != null &&
-    Number(authUserCompanyId) !== Number(targetCompanyId)
-  ) {
-    return {
-      success: false,
-      status: 403,
-      error: "FORBIDDEN",
-      message: "Acceso denegado. No posee permisos para crear usuarios en otra empresa."
-    };
+  const isGlobalAdmin = await query(
+    `SELECT 1
+     FROM admin.usuario u
+     LEFT JOIN admin.rol_funcional r ON u.rol_principal_id = r.rol_funcional_id
+     LEFT JOIN admin.usuario_alcance alc ON u.usuario_id = alc.usuario_id
+     WHERE u.usuario_id = $1
+       AND (
+         UPPER(COALESCE(r.nombre, '')) = 'ADMINISTRADOR GENERAL'
+         OR UPPER(COALESCE(r.nombre, '')) LIKE '%SUPER%'
+         OR alc.nivel_alcance = 'TODA_EMPRESA'
+       )
+     LIMIT 1`,
+    [authUserId]
+  );
+  const hasGlobalScope = Boolean(isGlobalAdmin && isGlobalAdmin.length > 0);
+
+  if (!hasGlobalScope) {
+    if (
+      authUserCompanyId != null &&
+      targetCompanyId != null &&
+      Number(authUserCompanyId) !== Number(targetCompanyId)
+    ) {
+      return {
+        success: false,
+        status: 403,
+        error: "FORBIDDEN",
+        message: "Acceso denegado. No posee permisos para crear usuarios en otra empresa."
+      };
+    }
   }
 
   return {

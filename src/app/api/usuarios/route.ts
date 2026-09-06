@@ -35,7 +35,10 @@ export async function GET() {
         us.metodo_acceso_principal AS primary_access_type,
         us.identificador_principal,
         us.identificador_principal AS login_identifiers,
-        us.fecha_ultimo_acceso AS last_login_at,
+        COALESCE(
+          (SELECT MAX(COALESCE(s.ultima_actividad, s.fecha_inicio)) FROM admin.usuario_sesion s WHERE s.usuario_id = u.usuario_id),
+          us.fecha_ultimo_acceso
+        ) AS last_login_at,
         us.mfa_activo AS "mfaEnabled",
         us.mfa_tipo AS mfa_method,
         us.detalle_estado AS activation,

@@ -20,7 +20,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     // Query PostgreSQL user detail using exact real database columns
     const sql = `
-      SELECT 
+      SELECT
         u.usuario_id AS id,
         u.estado,
         u.estado_activacion,
@@ -42,7 +42,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         tu.nombre AS user_type,
         us.metodo_acceso_principal AS primary_access_type,
         us.identificador_principal,
-        us.fecha_ultimo_acceso AS last_login_at,
+        COALESCE(
+          (SELECT MAX(COALESCE(s.ultima_actividad, s.fecha_inicio)) FROM admin.usuario_sesion s WHERE s.usuario_id = u.usuario_id),
+          us.fecha_ultimo_acceso
+        ) AS last_login_at,
         us.mfa_activo AS "mfaEnabled",
         us.mfa_tipo AS mfa_method,
         us.detalle_estado AS activation,
@@ -73,9 +76,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       LEFT JOIN admin.cargo cg ON ui.cargo_id = cg.cargo_id
       WHERE u.usuario_id = $1
     `;
-    
+
     const usersRes = await query(sql, [requestedUserId]);
-    
+
     if (!usersRes || usersRes.length === 0) {
        return NextResponse.json({ error: "NOT_FOUND", message: "Usuario no encontrado." }, { status: 404 });
     }
@@ -133,8 +136,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       last_login_at: u.last_login_at ?? null,
       mfaEnabled: Boolean(u.mfaEnabled),
       mfa_method: u.mfa_method ?? null,
-      status: u.estado ?? null, 
-      estado: u.estado ?? null, 
+      status: u.estado ?? null,
+      estado: u.estado ?? null,
       estado_activacion: u.estado_activacion ?? null,
       activation: u.activation ?? null,
       fecha_creacion: u.fecha_creacion ?? null,
@@ -377,15 +380,33 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const newEstado = body.status ?? body.estado ?? current.estado;
     const newEstadoActivacion = body.estado_activacion ?? body.activation ?? current.estado_activacion;
 
-    if (authUserCompanyId && newCompanyId && Number(newCompanyId) !== Number(authUserCompanyId)) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "FORBIDDEN",
-          message: "No posee permisos para asignar el usuario a otra empresa."
-        },
-        { status: 403 }
-      );
+    const isGlobalAdmin = await query(
+      `SELECT 1
+       FROM admin.usuario u
+       LEFT JOIN admin.rol_funcional r ON u.rol_principal_id = r.rol_funcional_id
+       LEFT JOIN admin.usuario_alcance alc ON u.usuario_id = alc.usuario_id
+       WHERE u.usuario_id = $1
+         AND (
+           UPPER(COALESCE(r.nombre, '')) = 'ADMINISTRADOR GENERAL'
+           OR UPPER(COALESCE(r.nombre, '')) LIKE '%SUPER%'
+           OR alc.nivel_alcance = 'TODA_EMPRESA'
+         )
+       LIMIT 1`,
+      [authUserId]
+    );
+    const hasGlobalScope = Boolean(isGlobalAdmin && isGlobalAdmin.length > 0);
+
+    if (!hasGlobalScope) {
+      if (authUserCompanyId && newCompanyId && Number(newCompanyId) !== Number(authUserCompanyId)) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "FORBIDDEN",
+            message: "No posee permisos para asignar el usuario a otra empresa."
+          },
+          { status: 403 }
+        );
+      }
     }
 
     // Update admin.usuario
@@ -515,7 +536,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
     // Re-query updated real data and construct usuarioActualizado
     const fetchUpdatedSql = `
-      SELECT 
+      SELECT
         u.usuario_id AS id,
         u.estado,
         u.estado_activacion,
@@ -733,5 +754,183 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   } catch (error: any) {
     console.error("Error in PUT /api/usuarios/[id]:", error);
     return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error interno al actualizar usuario." }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await params;
+    const authResult = await authorizeUserUpdate(id);
+
+    if (!authResult.success) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: authResult.error,
+          message: authResult.message,
+          ...(authResult.field ? { field: authResult.field } : {})
+        },
+        { status: authResult.status }
+      );
+    }
+
+    const { authUserId, targetUserId, isSelf, authUserCompanyId } = authResult;
+
+    if (isSelf) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "FORBIDDEN",
+          message: "No puede eliminar su propia cuenta de usuario."
+        },
+        { status: 400 }
+      );
+    }
+
+    // Verify SEGURIDAD permissions
+    const segPerms = await getModulePermissions("SEGURIDAD", authUserId);
+    if (!segPerms.puede_eliminar && !segPerms.puede_editar) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "FORBIDDEN",
+          message: "Acceso denegado. No posee permisos para eliminar usuarios en el módulo SEGURIDAD."
+        },
+        { status: 403 }
+      );
+    }
+
+    // Fetch target user data
+    const userRows = await query(
+      `SELECT u.usuario_id, u.empresa_id, u.estado, ui.nombre, ui.apellido, ui.correo_electronico
+       FROM admin.usuario u
+       LEFT JOIN admin.usuario_identidad ui ON u.usuario_id = ui.usuario_id
+       WHERE u.usuario_id = $1
+       LIMIT 1`,
+      [targetUserId]
+    );
+
+    if (!userRows || userRows.length === 0) {
+      return NextResponse.json(
+        { success: false, error: "NOT_FOUND", message: "Usuario no encontrado." },
+        { status: 404 }
+      );
+    }
+
+    const targetUser = userRows[0];
+
+    const isGlobalAdmin = await query(
+      `SELECT 1
+       FROM admin.usuario u
+       LEFT JOIN admin.rol_funcional r ON u.rol_principal_id = r.rol_funcional_id
+       LEFT JOIN admin.usuario_alcance alc ON u.usuario_id = alc.usuario_id
+       WHERE u.usuario_id = $1
+         AND (
+           UPPER(COALESCE(r.nombre, '')) = 'ADMINISTRADOR GENERAL'
+           OR UPPER(COALESCE(r.nombre, '')) LIKE '%SUPER%'
+           OR alc.nivel_alcance = 'TODA_EMPRESA'
+         )
+       LIMIT 1`,
+      [authUserId]
+    );
+    const hasGlobalScope = Boolean(isGlobalAdmin && isGlobalAdmin.length > 0);
+
+    if (!hasGlobalScope) {
+      if (authUserCompanyId && targetUser.empresa_id && Number(authUserCompanyId) !== Number(targetUser.empresa_id)) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "FORBIDDEN",
+            message: "No posee permisos para eliminar un usuario de otra empresa."
+          },
+          { status: 403 }
+        );
+      }
+    }
+
+    let deletedHard = false;
+    try {
+      const opCheck = await query(
+        `SELECT
+          (SELECT COUNT(*) FROM admin.ordenes_trabajo WHERE mecanico_id = $1 OR usuario_facturacion_id = $1) +
+          (SELECT COUNT(*) FROM admin.orden_servicios WHERE usuario_id = $1) +
+          (SELECT COUNT(*) FROM admin.orden_servicio_mano_obra WHERE usuario_id = $1) AS total_ops`,
+        [targetUserId]
+      );
+      const hasOps = Number(opCheck?.[0]?.total_ops || 0) > 0;
+
+      if (!hasOps) {
+        await query(`DELETE FROM admin.usuario_alcance_detalle WHERE usuario_alcance_id IN (SELECT usuario_alcance_id FROM admin.usuario_alcance WHERE usuario_id = $1)`, [targetUserId]);
+        await query(`DELETE FROM admin.usuario_alcance WHERE usuario_id = $1`, [targetUserId]);
+        await query(`DELETE FROM admin.usuario_rol_adicional WHERE usuario_id = $1`, [targetUserId]);
+        await query(`DELETE FROM admin.usuario_configuracion_acceso WHERE usuario_id = $1`, [targetUserId]);
+        await query(`DELETE FROM admin.usuario_sesion WHERE usuario_id = $1`, [targetUserId]);
+        await query(`DELETE FROM admin.usuario_actividad WHERE usuario_id = $1`, [targetUserId]);
+        await query(`DELETE FROM admin.usuario_auditoria WHERE usuario_id = $1 OR admin_id = $1`, [targetUserId]);
+        await query(`DELETE FROM admin.usuario_creacion_log WHERE usuario_id = $1`, [targetUserId]);
+        await query(`DELETE FROM admin.usuario_onboarding_log WHERE usuario_id = $1`, [targetUserId]);
+        await query(`DELETE FROM admin.usuario_seguridad WHERE usuario_id = $1`, [targetUserId]);
+        await query(`DELETE FROM admin.usuario_identidad WHERE usuario_id = $1`, [targetUserId]);
+        await query(`DELETE FROM admin.usuario WHERE usuario_id = $1`, [targetUserId]);
+        deletedHard = true;
+      }
+    } catch (err) {
+      console.warn("Hard delete of user failed, falling back to soft delete:", err);
+      deletedHard = false;
+    }
+
+    if (!deletedHard) {
+      await query(
+        `UPDATE admin.usuario
+         SET estado = 'INACTIVO',
+             estado_activacion = 'Inactivo',
+             fecha_actualizacion = NOW()
+         WHERE usuario_id = $1`,
+        [targetUserId]
+      );
+      await query(
+        `UPDATE admin.usuario_sesion
+         SET estado = 'REVOCADO',
+             fecha_revocacion = NOW(),
+             motivo_revocacion = 'Usuario eliminado/desactivado'
+         WHERE usuario_id = $1 AND estado = 'ACTIVO'`,
+        [targetUserId]
+      );
+    }
+
+    try {
+      await recordUserAudit({
+        userId: targetUserId,
+        adminId: authUserId,
+        accion: 'USER_DELETED',
+        valorAnterior: JSON.stringify({ estado: targetUser.estado, usuario_id: targetUser.usuario_id }),
+        valorNuevo: JSON.stringify({ estado: deletedHard ? 'DELETED' : 'INACTIVO' }),
+        motivo: 'Eliminación de usuario desde módulo de Seguridad',
+        resultado: 'COMPLETADO',
+        req
+      });
+
+      await recordUserActivity({
+        userId: targetUserId,
+        modulo: 'Seguridad',
+        evento: 'ELIMINAR_USUARIO',
+        descripcion: `Usuario ${targetUser.correo_electronico || targetUser.usuario_id} eliminado`,
+        resultado: 'Exitoso',
+        req
+      });
+    } catch (auditErr) {
+      console.warn("Could not insert usuario_auditoria/actividad record on delete:", auditErr);
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: "Usuario eliminado correctamente."
+    });
+  } catch (error: any) {
+    console.error("Error in DELETE /api/usuarios/[id]:", error);
+    return NextResponse.json(
+      { success: false, error: "SERVER_ERROR", message: "Error interno al eliminar usuario." },
+      { status: 500 }
+    );
   }
 }

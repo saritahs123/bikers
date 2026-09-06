@@ -120,6 +120,14 @@ export async function validateAndTouchSession(rawToken?: string | null): Promise
          WHERE sesion_id = $1`,
         [session.sesion_id]
       ).catch(err => console.warn("Could not update session activity:", err));
+
+      await query(
+        `UPDATE admin.usuario_seguridad
+         SET fecha_ultimo_acceso = NOW()
+         WHERE usuario_id = $1`,
+        [session.usuario_id]
+      ).catch(err => console.warn("Could not update usuario_seguridad last access:", err));
+
       return { valid: true, session, userId: session.usuario_id, updatedActivity: true };
     }
 

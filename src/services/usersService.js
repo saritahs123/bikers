@@ -171,9 +171,9 @@ export const usersService = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(userData)
       });
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(data.error || `Error ${response.status} al crear usuario`);
+        throw new Error(data.message || data.error || `Error ${response.status} al crear usuario`);
       }
       return data;
     } catch (error) {
@@ -189,7 +189,7 @@ export const usersService = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(data.message || data.error || 'Error al restablecer la contraseña');
       }
@@ -206,9 +206,9 @@ export const usersService = {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' }
       });
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(data.error || `Error ${response.status} al eliminar usuario`);
+        throw new Error(data.message || data.error || `Error ${response.status} al eliminar usuario`);
       }
       return data;
     } catch (error) {
