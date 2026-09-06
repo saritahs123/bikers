@@ -103,7 +103,7 @@ export async function GET() {
     });
   } catch (error: any) {
     console.error("Error in GET /api/taller/tipos-servicio:", error);
-    return NextResponse.json({ error: error.message || "Error al obtener tipos de servicio" }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al obtener tipos de servicio." }, { status: 500 });
   }
 }
 
@@ -268,9 +268,9 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error("Error in POST /api/taller/tipos-servicio:", error);
     const msg = error?.message || error?.toString() || "";
-    if (msg.includes("uk_tipo_servicio_codigo") || msg.includes("23505")) {
+    if (msg.includes("uk_tipo_servicio_codigo") || error?.code === "23505" || msg.includes("23505")) {
       return NextResponse.json({ error: "SERVICE_TYPE_ALREADY_EXISTS", message: "Ya existe un tipo de servicio con este Código.", field: "codigo" }, { status: 409 });
     }
-    return NextResponse.json({ error: error.message || "No fue posible crear el tipo de servicio" }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "No fue posible crear el tipo de servicio." }, { status: 500 });
   }
 }

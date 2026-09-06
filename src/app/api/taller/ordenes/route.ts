@@ -262,7 +262,7 @@ export async function GET(req: NextRequest) {
 
   } catch (error: any) {
     console.error("Error in GET /api/taller/ordenes:", error);
-    return NextResponse.json({ error: "SERVER_ERROR", message: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al consultar las órdenes de trabajo." }, { status: 500 });
   }
 }
 
@@ -478,7 +478,9 @@ export async function POST(req: NextRequest) {
     }
   } catch (error: any) {
     console.error("Error in POST /api/taller/ordenes:", error);
-    const status = error.status || 500;
-    return NextResponse.json({ error: error.code || "SERVER_ERROR", message: error.message || "Error al crear la orden de trabajo." }, { status });
+    if (error?.code === "23505") {
+      return NextResponse.json({ success: false, error: "DUPLICATE_ENTRY", message: "Ya existe un registro con estos datos." }, { status: 409 });
+    }
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al crear la orden de trabajo." }, { status: 500 });
   }
 }

@@ -173,10 +173,14 @@ export async function GET(req: Request) {
     });
   } catch (error: any) {
     console.error("Error in GET /api/taller/recepciones:", error);
-    const safeMessage = (error?.message && !error.message.includes("Position:") && !error.message.includes("SQLState"))
-      ? error.message
-      : "No fue posible obtener las recepciones. Inténtalo nuevamente.";
-    return NextResponse.json({ error: safeMessage, message: safeMessage }, { status: 500 });
+    return NextResponse.json(
+      {
+        success: false,
+        error: "SERVER_ERROR",
+        message: "No fue posible obtener las recepciones. Inténtalo nuevamente."
+      },
+      { status: 500 }
+    );
   }
 }
 
@@ -297,10 +301,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const isDev = process.env.NODE_ENV !== "production";
-    let statusCode = error?.status || 400;
+    let statusCode = error?.status || 500;
     let errorCode = error?.code || "SERVER_ERROR";
-    let message = error?.message || "Ocurrió un error interno al registrar la recepción.";
+    let message = "Ocurrió un error interno al registrar la recepción.";
 
     if (error?.code === "23505" || error?.message?.includes("uk_bicicleta_componentes")) {
       statusCode = 409;
@@ -309,17 +312,18 @@ export async function POST(req: NextRequest) {
     } else if (error?.code === "BICYCLE_COMPONENT_CATEGORY_EXISTS") {
       statusCode = 409;
       errorCode = "BICYCLE_COMPONENT_CATEGORY_EXISTS";
+      message = "Esta bicicleta ya tiene un componente registrado en la categoría seleccionada.";
     } else if (error?.code === "DUPLICATE_COMPONENT_SERIAL") {
       statusCode = 409;
       errorCode = "DUPLICATE_COMPONENT_SERIAL";
+      message = "Ya existe un componente con este número de serie.";
     }
 
     return NextResponse.json(
       {
         success: false,
         error: errorCode,
-        message: message,
-        ...(isDev ? { dev_details: error?.message, dev_stack: error?.stack } : {})
+        message: message
       },
       { status: statusCode }
     );

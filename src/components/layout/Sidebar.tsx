@@ -87,7 +87,6 @@ function SidebarContent({
       submenu: [
         { href: "/settings/security/users", label: "ADMINISTRAR USUARIOS" },
         { href: "/settings/security/roles", label: "MATRIZ DE ROLES" },
-        { href: "/settings/security/catalogs", label: "PANEL DE CATÁLOGOS" },
         { href: "/settings/security/company-types", label: "TIPOS DE EMPRESA" },
         { href: "/settings/security/companies", label: "EMPRESAS" },
         { href: "/settings/security/departments", label: "DEPARTAMENTOS" },

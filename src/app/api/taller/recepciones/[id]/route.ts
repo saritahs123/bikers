@@ -170,10 +170,7 @@ export async function GET(
 
   } catch (error: any) {
     console.error("Error in GET /api/taller/recepciones/[id]:", error);
-    const safeMessage = (error?.message && !error.message.includes("Position:") && !error.message.includes("SQLState"))
-      ? error.message
-      : "No fue posible cargar el detalle de la recepción. Inténtalo nuevamente.";
-    return NextResponse.json({ error: safeMessage, message: safeMessage }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "No fue posible cargar el detalle de la recepción. Inténtalo nuevamente." }, { status: 500 });
   }
 }
 
@@ -334,7 +331,7 @@ export async function PATCH(
   } catch (error: any) {
     await client.query("ROLLBACK").catch(() => {});
     console.error("Error in PATCH /api/taller/recepciones/[id]:", error);
-    return NextResponse.json({ error: error.message || "Error al actualizar la recepción." }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al actualizar la recepción." }, { status: 500 });
   } finally {
     client.release();
   }
@@ -443,7 +440,7 @@ export async function DELETE(
   } catch (error: any) {
     await client.query("ROLLBACK").catch(() => {});
     console.error("Error in DELETE /api/taller/recepciones/[id]:", error);
-    return NextResponse.json({ error: error.message || "Error al inactivar la recepción." }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al inactivar la recepción." }, { status: 500 });
   } finally {
     client.release();
   }

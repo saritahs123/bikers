@@ -160,7 +160,7 @@ export async function GET(
     });
   } catch (error: any) {
     console.error("Error fetching usuario_actividad:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al consultar la actividad del usuario." }, { status: 500 });
   }
 }
 
@@ -198,6 +198,6 @@ export async function POST(
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error("Error inserting usuario_actividad:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al registrar la actividad del usuario." }, { status: 500 });
   }
 }

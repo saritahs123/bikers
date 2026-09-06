@@ -165,7 +165,7 @@ export async function POST(
   } catch (error: any) {
     console.error("Error in reset-password endpoint:", error);
     return NextResponse.json(
-      { success: false, error: "INTERNAL_ERROR", message: error.message || "Error interno al restablecer la contraseña." },
+      { success: false, error: "INTERNAL_ERROR", message: "Error interno al restablecer la contraseña." },
       { status: 500 }
     );
   }

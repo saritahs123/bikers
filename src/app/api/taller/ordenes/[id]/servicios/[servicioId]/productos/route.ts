@@ -157,7 +157,7 @@ export async function POST(
   } catch (err: any) {
     await client.query("ROLLBACK").catch(() => {});
     console.error("POST /api/taller/ordenes/[id]/servicios/[servicioId]/productos Error:", err);
-    return NextResponse.json({ error: "Error al agregar repuesto.", details: err.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al agregar repuesto." }, { status: 500 });
   } finally {
     client.release();
   }
@@ -288,7 +288,7 @@ export async function DELETE(
   } catch (err: any) {
     await client.query("ROLLBACK").catch(() => {});
     console.error("DELETE /api/taller/ordenes/[id]/servicios/[servicioId]/productos Error:", err);
-    return NextResponse.json({ error: "Error al desasociar repuesto.", details: err.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al desasociar repuesto." }, { status: 500 });
   } finally {
     client.release();
   }
@@ -401,7 +401,7 @@ export async function PUT(
   } catch (err: any) {
     await client.query("ROLLBACK").catch(() => {});
     console.error("PUT /api/taller/ordenes/[id]/servicios/[servicioId]/productos Error:", err);
-    return NextResponse.json({ error: "Error al actualizar repuesto.", details: err.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al actualizar repuesto." }, { status: 500 });
   } finally {
     client.release();
   }

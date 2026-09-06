@@ -200,7 +200,7 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
 
   } catch (error: any) {
     console.error("Error in GET /api/crm/bicicletas/[id]/history:", error);
-    return NextResponse.json({ error: error.message || "Error al obtener historial técnico" }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al obtener el historial técnico de la bicicleta." }, { status: 500 });
   }
 }
 
@@ -371,7 +371,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
 
   } catch (error: any) {
     console.error("Error in POST /api/crm/bicicletas/[id]/history:", error);
-    return NextResponse.json({ error: error.message || "Error al registrar orden de trabajo" }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al registrar la orden de trabajo." }, { status: 500 });
   }
 }
 
@@ -417,6 +417,6 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
 
   } catch (error: any) {
     console.error("Error in DELETE /api/crm/bicicletas/[id]/history:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al eliminar la orden de trabajo." }, { status: 500 });
   }
 }

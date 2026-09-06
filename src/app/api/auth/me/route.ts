@@ -134,6 +134,6 @@ export async function GET() {
     });
   } catch (error: any) {
     console.error("GET /api/auth/me error:", error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al validar la sesión del usuario." }, { status: 500 });
   }
 }

@@ -90,7 +90,7 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
     });
   } catch (error: any) {
     console.error("Error in GET /api/crm/bicicletas/[id]:", error);
-    return NextResponse.json({ error: error.message || "Error al obtener bicicleta" }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al obtener la bicicleta." }, { status: 500 });
   }
 }
 
@@ -262,7 +262,7 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
 
   } catch (error: any) {
     console.error("Error in PUT /api/crm/bicicletas/[id]:", error);
-    return NextResponse.json({ error: error.message || "Error al actualizar bicicleta" }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al actualizar la bicicleta." }, { status: 500 });
   }
 }
 

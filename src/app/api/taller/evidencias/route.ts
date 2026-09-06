@@ -105,6 +105,6 @@ export async function POST(req: Request) {
 
   } catch (error: any) {
     console.error("Error in POST /api/taller/evidencias:", error);
-    return NextResponse.json({ error: error.message || "Error al procesar la evidencia." }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al procesar la evidencia." }, { status: 500 });
   }
 }

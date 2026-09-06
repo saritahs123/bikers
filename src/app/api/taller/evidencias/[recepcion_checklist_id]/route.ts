@@ -105,9 +105,6 @@ export async function GET(
 
   } catch (error: any) {
     console.error("Error in GET /api/taller/evidencias/[recepcion_checklist_id]:", error);
-    const safeMessage = (error?.message && !error.message.includes("Position:") && !error.message.includes("SQLState"))
-      ? error.message
-      : "Error al recuperar evidencia.";
-    return NextResponse.json({ error: safeMessage, message: safeMessage }, { status: 500 });
+    return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al recuperar evidencia." }, { status: 500 });
   }
 }
