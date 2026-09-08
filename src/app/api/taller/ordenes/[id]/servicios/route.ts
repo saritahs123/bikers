@@ -237,8 +237,10 @@ export async function POST(
              COALESCE(
                MAX(
                  CASE
-                   WHEN codigo_servicio ~ '^SRV-[0-9]+$'
-                   THEN SUBSTRING(codigo_servicio FROM '[0-9]+$')::integer
+                   WHEN codigo_servicio ~ '^SRV-.*-([0-9]{1,8})$'
+                   THEN (SUBSTRING(codigo_servicio FROM '^SRV-.*-([0-9]{1,8})$'))::integer
+                   WHEN codigo_servicio ~ '^SRV-([0-9]{1,8})$'
+                   THEN (SUBSTRING(codigo_servicio FROM '^SRV-([0-9]{1,8})$'))::integer
                    ELSE 0
                  END
                ),

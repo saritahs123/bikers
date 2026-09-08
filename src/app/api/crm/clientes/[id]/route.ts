@@ -518,7 +518,7 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
 
     const facCheck = await query(`
       SELECT COUNT(*)::integer AS total FROM admin.facturas
-      WHERE cliente_id = $1 AND (activo = true OR activo IS NULL)
+      WHERE cliente_id = $1
     `, [clienteId]);
     const totalInvoices = Number(facCheck[0]?.total || 0);
 
