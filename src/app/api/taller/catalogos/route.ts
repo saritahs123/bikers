@@ -56,7 +56,7 @@ export async function GET() {
        FROM admin.usuario u
        LEFT JOIN admin.tipo_usuario tu ON tu.tipo_usuario_id = u.tipo_usuario_id
        LEFT JOIN admin.usuario_identidad ui ON ui.usuario_id = u.usuario_id
-       WHERE (tu.codigo = 'MECANICO' OR u.tipo_usuario_id = 2) AND (u.estado = 'ACTIVO' OR u.estado IS NULL)
+       WHERE tu.codigo = 'MECANICO' AND tu.estado = 'ACTIVO' AND (u.estado = 'ACTIVO' OR u.estado IS NULL)
        ORDER BY ui.nombre, ui.apellido, u.usuario_id`
     );
     const estadosComponente = await query(

@@ -89,9 +89,6 @@ function SidebarContent({
         { href: "/settings/security/roles", label: "MATRIZ DE ROLES" },
         { href: "/settings/security/company-types", label: "TIPOS DE EMPRESA" },
         { href: "/settings/security/companies", label: "EMPRESAS" },
-        { href: "/settings/security/departments", label: "DEPARTAMENTOS" },
-        { href: "/settings/security/areas", label: "ÁREAS" },
-        { href: "/settings/security/positions", label: "CARGOS" },
         { href: "/settings/security/user-types", label: "TIPOS DE USUARIO" }
       ]
     }
