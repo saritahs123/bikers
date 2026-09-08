@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect, Fragment } from 'react';
 import { useRouter, usePathname, useSearchParams as useNextSearchParams } from 'next/navigation';
 import { createPortal } from 'react-dom';
 import {
-  Users, UserPlus, Download, Edit2, ShieldAlert,
+  User, Users, UserPlus, Download, Edit2, ShieldAlert,
   MoreVertical, X, Save, Search, Check, CheckCircle2, AlertCircle,
   RotateCw, RefreshCw, ChevronLeft, ChevronRight, ChevronDown, Filter, SlidersHorizontal, ToggleLeft, ToggleRight,
   ShieldCheck, Shield, Key, KeyRound, Trash2, Mail, Phone, Building2, Eye, EyeOff, PanelLeftOpen, LayoutGrid, List,
@@ -587,36 +587,41 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     try {
       setIsSaving(true);
       const fullName = `${(targetData.first_name || '').trim()} ${(targetData.last_name || '').trim()}`.trim() || targetData.full_name;
-      let payload;
-      if (isSelfMode) {
-        payload = {
-          id: targetData.id,
-          first_name: targetData.first_name,
-          nombre: targetData.first_name,
-          last_name: targetData.last_name,
-          apellido: targetData.last_name,
-          phone: targetData.phone,
-          telefono: targetData.phone,
-          document_number: targetData.document_number,
-          numero_documento: targetData.document_number,
-          department_id: targetData.department_id,
-          departamento_id: targetData.department_id,
-          area_id: targetData.area_id,
-          cargo_id: targetData.cargo_id,
-          idioma_preferido: targetData.idioma_preferido,
-          zona_horaria: targetData.zona_horaria,
-          formato_fecha: targetData.formato_fecha
-        };
-      } else {
-        payload = {
-          ...targetData,
-          full_name: fullName,
-          updatedAt: new Date().toISOString(),
-          updatedBy: 'Admin'
-        };
-        if (payload.rol_id) {
-          const rObj = roles.find(r => r.id == payload.rol_id);
-          if (rObj) payload.role = rObj.name;
+
+      const payload = {
+        id: targetData.id,
+        first_name: (targetData.first_name || '').trim(),
+        nombre: (targetData.first_name || '').trim(),
+        last_name: (targetData.last_name || '').trim(),
+        apellido: (targetData.last_name || '').trim(),
+        full_name: fullName,
+        document_type: targetData.document_type || 'Cédula',
+        document_number: targetData.document_number?.trim() || null,
+        numero_documento: targetData.document_number?.trim() || null,
+        phone: targetData.phone?.trim() || null,
+        telefono: targetData.phone?.trim() || null,
+        email: (targetData.email || '').trim().toLowerCase(),
+        correo_electronico: (targetData.email || '').trim().toLowerCase(),
+        companyId: Number(targetData.companyId),
+        empresa_id: Number(targetData.companyId),
+        rol_id: Number(targetData.rol_id),
+        roleId: Number(targetData.rol_id),
+        rol_principal_id: Number(targetData.rol_id),
+        tipo_usuario_id: Number(targetData.tipo_usuario_id),
+        user_type_id: Number(targetData.tipo_usuario_id),
+        updatedAt: new Date().toISOString(),
+        updatedBy: 'Admin'
+      };
+
+      if (payload.rol_id) {
+        const rObj = roles.find(r => Number(r.numericId || r.id) === Number(payload.rol_id));
+        if (rObj) payload.role = rObj.nombre || rObj.name;
+      }
+      if (payload.tipo_usuario_id) {
+        const tuObj = userTypes.find(t => Number(t.tipo_usuario_id || t.id) === Number(payload.tipo_usuario_id));
+        if (tuObj) {
+          payload.user_type = tuObj.nombre || tuObj.name;
+          payload.tipo_usuario_nombre = tuObj.nombre || tuObj.name;
         }
       }
 
@@ -624,32 +629,38 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       const updatedUser = response?.data;
 
       if (!response?.success || !updatedUser) {
-        throw new Error('INVALID_UPDATE_RESPONSE');
+        throw new Error(response?.message || 'Error al actualizar usuario');
       }
 
-      setDetailUser(previous => previous ? ({
-        ...previous,
-        ...updatedUser
-      }) : updatedUser);
-
-      setData(prevUsers =>
-        Array.isArray(prevUsers)
-          ? prevUsers.map(u => (u.id === updatedUser.id ? { ...u, ...updatedUser } : u))
-          : prevUsers
-      );
+      await fetchUsers();
+      try {
+        const fresh = await usersService.getUserById(targetData.id);
+        if (fresh) {
+          setDetailUser(fresh);
+        } else {
+          setDetailUser(previous => previous ? ({ ...previous, ...updatedUser }) : updatedUser);
+        }
+      } catch (e) {
+        setDetailUser(previous => previous ? ({ ...previous, ...updatedUser }) : updatedUser);
+      }
 
       setIsEditing360(false);
       setWizardData(null);
+      setEdit360Error('');
+      setFormErrors360({});
       setToastNotification({
         type: 'success',
         title: 'Cambios guardados',
         description: 'La información del usuario se actualizó correctamente.'
       });
     } catch (err) {
+      console.error('Error saving user edit:', err);
+      const errorMsg = err.message || 'Inténtalo nuevamente. Si el problema continúa, recarga la página.';
+      setEdit360Error(errorMsg);
       setToastNotification({
         type: 'error',
         title: 'No pudimos guardar los cambios',
-        description: 'Inténtalo nuevamente. Si el problema continúa, recarga la página.'
+        description: errorMsg
       });
     } finally {
       setIsSaving(false);
@@ -1302,6 +1313,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
   const handleStartEdit360 = async (user, tab = 'resumen') => {
     setEdit360Error('');
+    setFormErrors360({});
 
     // Set search params so detail opens
     const sp = new URLSearchParams(searchParams);
@@ -1317,39 +1329,42 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         if (!lName) lName = parts.slice(1).join(' ') || '';
       }
 
-      const matchedRoleObj = (roles || []).find(r => (r.name || r.nombre) === (sourceUser.role || sourceUser.role_name || sourceUser.rol));
-      const rId = sourceUser.role_id || sourceUser.rol_principal_id || sourceUser.rol_id || matchedRoleObj?.id || (roles && roles[0] ? roles[0].id : 1);
-      const rName = sourceUser.role_name || sourceUser.role || sourceUser.rol || matchedRoleObj?.name || matchedRoleObj?.nombre || 'Administrador General';
+      const matchedRoleObj = (roles || []).find(r =>
+        (r.nombre && (r.nombre === sourceUser.role || r.nombre === sourceUser.role_name)) ||
+        (r.name && (r.name === sourceUser.role || r.name === sourceUser.role_name)) ||
+        Number(r.numericId || r.id) === Number(sourceUser.rol_id || sourceUser.rol_principal_id || sourceUser.role_id)
+      );
+      const rId = sourceUser.rol_id || sourceUser.rol_principal_id || sourceUser.role_id || (matchedRoleObj ? (matchedRoleObj.numericId || matchedRoleObj.id) : (roles && roles[0] ? (roles[0].numericId || roles[0].id) : ''));
+      const rName = sourceUser.role || sourceUser.role_name || (matchedRoleObj ? (matchedRoleObj.nombre || matchedRoleObj.name) : '');
 
-      const compId = sourceUser.companyId || sourceUser.empresa_id || (companies && companies.length > 0 ? (companies[0].id || companies[0].empresa_id) : 1);
-      const userTypeId = sourceUser.tipo_usuario_id || (userTypes && userTypes.length > 0 ? userTypes[0].id : 1);
+      const matchedCompObj = (companies || []).find(c =>
+        Number(c.empresa_id || c.id) === Number(sourceUser.companyId || sourceUser.empresa_id)
+      );
+      const compId = sourceUser.companyId || sourceUser.empresa_id || (matchedCompObj ? (matchedCompObj.empresa_id || matchedCompObj.id) : (companies && companies[0] ? (companies[0].empresa_id || companies[0].id) : ''));
+
+      const matchedTuObj = (userTypes || []).find(t =>
+        Number(t.tipo_usuario_id || t.id) === Number(sourceUser.tipo_usuario_id || sourceUser.userTypeId || sourceUser.user_type_id) ||
+        (t.nombre && (t.nombre === sourceUser.user_type || t.nombre === sourceUser.tipo_usuario_nombre)) ||
+        (t.name && (t.name === sourceUser.user_type || t.name === sourceUser.tipo_usuario_nombre))
+      );
+      const userTypeId = sourceUser.tipo_usuario_id || sourceUser.userTypeId || sourceUser.user_type_id || (matchedTuObj ? (matchedTuObj.tipo_usuario_id || matchedTuObj.id) : (userTypes && userTypes[0] ? (userTypes[0].tipo_usuario_id || userTypes[0].id) : ''));
+      const userTypeName = sourceUser.user_type || sourceUser.tipo_usuario_nombre || (matchedTuObj ? (matchedTuObj.nombre || matchedTuObj.name) : '');
 
       return {
         ...sourceUser,
+        id: sourceUser.id || sourceUser.usuario_id,
         first_name: fName,
         last_name: lName,
         full_name: `${fName} ${lName}`.trim() || sourceUser.full_name || 'Usuario',
-        department_id: sourceUser.departamento_id || sourceUser.department_id || '',
-        area_id: sourceUser.area_id || '',
-        cargo_id: sourceUser.cargo_id || '',
-        companyId: compId,
+        document_type: sourceUser.document_type || 'Cédula',
+        document_number: sourceUser.document_number || sourceUser.numero_documento || '',
+        phone: sourceUser.phone || sourceUser.telefono || '',
+        email: sourceUser.email || sourceUser.correo_electronico || '',
+        companyId: compId ? Number(compId) : '',
+        rol_id: rId ? Number(rId) : '',
         role: rName,
-        rol_id: rId,
-        tipo_usuario_id: userTypeId,
-        user_type: sourceUser.user_type || (userTypes || []).find(t => t.id == userTypeId)?.name || 'Interno',
-        roles_additional: sourceUser.roles_additional || [],
-        primary_access_type: sourceUser.login_identifiers?.find(id => id.is_primary)?.identifier_type || 'EMAIL',
-        correo_acceso: sourceUser.correo_acceso || '',
-        enviar_invitacion_correo: Boolean(sourceUser.enviar_invitacion_correo),
-        generar_clave_automatica: Boolean(sourceUser.generar_clave_automatica),
-        forzar_cambio_clave: Boolean(sourceUser.forzar_cambio_clave),
-        idioma_preferido: sourceUser.idioma_preferido || 'es',
-        zona_horaria: sourceUser.zona_horaria || 'America/Santo_Domingo',
-        formato_fecha: sourceUser.formato_fecha || 'DD/MM/YYYY',
-        password: '',
-        confirm_password: '',
-        auto_generate_password: false,
-        permissionsOverride: sourceUser.permissionsOverride || {}
+        tipo_usuario_id: userTypeId ? Number(userTypeId) : '',
+        user_type: userTypeName
       };
     };
 
@@ -1357,8 +1372,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       const res = await usersService.getUserById(user.id);
       const fullUser = { ...user, ...res };
       setDetailUser(fullUser);
-
-      // Populate wizardData as editing draft
       setWizardData(mapWizardData(fullUser));
     } catch (err) {
       console.error('Error fetching full user for edit:', err);
@@ -1366,10 +1379,8 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       setWizardData(mapWizardData(user));
     }
 
-    // Enable editing mode ONLY AFTER data is ready
     setIsEditing360(true);
-    setActiveTab360(tab);
-    if (tab === 'permisos') setMatrixFilter('all');
+    setActiveTab360('resumen');
   };
 
   const handleCancelEdit360 = () => {
@@ -1377,81 +1388,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     setWizardData(null);
     setEdit360Error('');
     setFormErrors360({});
-  };
-
-  const handleSaveEdit360 = () => {
-    if (!wizardData) return;
-    setEdit360Error('');
-
-    let firstName = (wizardData.first_name || '').trim();
-    let lastName = (wizardData.last_name || '').trim();
-    if ((!firstName || !lastName) && wizardData.full_name) {
-      const parts = wizardData.full_name.trim().split(' ');
-      if (!firstName) firstName = parts[0] || '';
-      if (!lastName) lastName = parts.slice(1).join(' ') || '';
-    }
-    if (!firstName) firstName = 'Usuario';
-
-    const companyId = wizardData.companyId || wizardData.empresa_id || (companies && companies[0] ? (companies[0].id || companies[0].empresa_id) : 1);
-    const roleName = wizardData.role || wizardData.role_name || 'Administrador General';
-    const roleId = wizardData.rol_id || wizardData.role_id || (roles.find(r => (r.name || r.nombre) === roleName)?.id) || 1;
-
-    // Map identifiers
-    let updatedIdentifiers = [...(wizardData.login_identifiers || [])];
-    const primIdx = updatedIdentifiers.findIndex(id => id.is_primary);
-    const identifierType = wizardData.primary_access_type || 'EMAIL';
-    const identifierValue = identifierType === 'EMAIL' ? (wizardData.email || wizardData.correo_acceso) : wizardData.document_number;
-
-    if (primIdx !== -1) {
-      updatedIdentifiers[primIdx] = {
-        ...updatedIdentifiers[primIdx],
-        identifier_type: identifierType,
-        identifier_value: identifierValue
-      };
-    } else {
-      updatedIdentifiers.push({
-        identifier_type: identifierType,
-        identifier_value: identifierValue,
-        is_primary: true,
-        is_verified: true
-      });
-    }
-
-    const computedFullName = `${firstName} ${lastName}`.trim() || wizardData.full_name || 'Usuario';
-
-    const finalUser = {
-      ...wizardData,
-      first_name: firstName,
-      last_name: lastName,
-      full_name: computedFullName,
-      companyId: companyId,
-      role: roleName,
-      rol_id: roleId,
-      login_identifiers: updatedIdentifiers
-    };
-
-    // Update backend
-    usersService.updateUser(finalUser.id, finalUser).then(async () => {
-      await fetchUsers();
-      try {
-        const fresh = await usersService.getUserById(finalUser.id);
-        if (fresh) setDetailUser(fresh);
-        else setDetailUser(finalUser);
-      } catch (e) {
-        setDetailUser(finalUser);
-      }
-      if (activeTab360 === 'auditoria') {
-        fetchUserAudits(finalUser.id);
-      }
-      setIsEditing360(false);
-      setWizardData(null);
-      setEdit360Error('');
-      setShowConfirmEditModal(false);
-      setShowSuccessEditModal(true);
-    }).catch(err => {
-      setEdit360Error('Error al actualizar usuario: ' + err.message);
-      setShowConfirmEditModal(false);
-    });
   };
 
   const handleTriggerSaveEdit360 = () => {
@@ -1463,62 +1399,64 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     const newErrors = {};
 
     if (!wizardData.first_name || !wizardData.first_name.trim()) {
-      newErrors.first_name = 'El nombre es obligatorio.';
+      newErrors.first_name = 'El nombre es requerido.';
     }
     if (!wizardData.last_name || !wizardData.last_name.trim()) {
-      newErrors.last_name = 'El apellido es obligatorio.';
+      newErrors.last_name = 'El apellido es requerido.';
     }
     if (!wizardData.companyId) {
-      newErrors.companyId = 'Debe seleccionar una empresa.';
+      newErrors.companyId = 'La empresa es requerida.';
     }
-    if (!wizardData.role && !wizardData.rol_id) {
-      newErrors.rol_id = 'Debe seleccionar un rol.';
+    if (!wizardData.rol_id) {
+      newErrors.rol_id = 'El rol principal es requerido.';
     }
-
-    const emailVal = validateEmail(wizardData.email, false);
-    if (wizardData.email && !emailVal.isValid) {
-      newErrors.email = emailVal.message;
+    if (!wizardData.tipo_usuario_id) {
+      newErrors.tipo_usuario_id = 'Selecciona un tipo de usuario.';
     }
 
-    if (wizardData.phone) {
+    const emailVal = validateEmail(wizardData.email, true);
+    if (!emailVal.isValid) {
+      newErrors.email = emailVal.message || 'El correo electrónico es requerido y debe ser válido.';
+    } else {
+      const emailTaken = (data || []).find(u =>
+        String(u.id) !== String(wizardData.id) &&
+        u.email &&
+        u.email.trim().toLowerCase() === (wizardData.email || '').trim().toLowerCase()
+      );
+      if (emailTaken) {
+        newErrors.email = 'El correo electrónico ya está registrado.';
+      }
+    }
+
+    if (wizardData.phone && wizardData.phone.trim()) {
       const phoneVal = validatePhoneDR(wizardData.phone, false);
       if (!phoneVal.isValid) {
         newErrors.phone = phoneVal.message;
       }
     }
 
-    if (wizardData.primary_access_type === 'EMAIL') {
-      if (!wizardData.email || !emailVal.isValid) {
-        newErrors.email = emailVal.message || 'Debe ingresar un correo electrónico válido.';
+    if (wizardData.document_number && wizardData.document_number.trim()) {
+      const docVal = validateRNC(wizardData.document_number, false);
+      if (!docVal.isValid) {
+        newErrors.document_number = docVal.message;
       } else {
-        const emailTaken = data.find(u => u.id !== wizardData.id && u.login_identifiers?.some(id => id.identifier_type === 'EMAIL' && id.identifier_value === wizardData.email));
-        if (emailTaken) {
-          newErrors.email = 'El correo electrónico ya se encuentra en uso.';
-        }
-      }
-    } else if (wizardData.primary_access_type === 'DOCUMENT') {
-      if (!wizardData.document_number || !wizardData.document_number.trim()) {
-        newErrors.document_number = 'Debe ingresar un número de documento válido.';
-      } else {
-        const docVal = validateRNC(wizardData.document_number, false);
-        if (!docVal.isValid) {
-          newErrors.document_number = docVal.message;
-        } else {
-          const docTaken = data.find(u => u.id !== wizardData.id && u.login_identifiers?.some(id => id.identifier_type === 'DOCUMENT' && id.identifier_value === wizardData.document_number));
-          if (docTaken) {
-            newErrors.document_number = 'El número de documento ya está registrado.';
-          }
+        const docTaken = (data || []).find(u =>
+          String(u.id) !== String(wizardData.id) &&
+          u.document_number &&
+          u.document_number.trim() === wizardData.document_number.trim()
+        );
+        if (docTaken) {
+          newErrors.document_number = 'El número de documento ya está registrado.';
         }
       }
     }
 
     if (Object.keys(newErrors).length > 0) {
       setFormErrors360(newErrors);
-      setEdit360Error('Por favor corrija los errores marcados en el formulario.');
+      setEdit360Error('Por favor complete los campos obligatorios marcados en el formulario.');
       return;
     }
 
-    // Pass validations, execute save to DB
     handleExecuteSave360();
   };
 
@@ -3230,502 +3168,244 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
           {activeTab360 === 'resumen' && (
             <div className="space-y-6 animate-in fade-in duration-200">
               {isEditing360 && wizardData ? (
-                // EDIT MODE FORM
-                <div className="space-y-6">
-                  {/* Row 1 */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Información Personal Edit */}
-                    <div className="bg-card border border-border rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
-                      <h4 className="font-bold text-foreground text-xs border-b border-border pb-3 flex items-center gap-2 uppercase tracking-wider"><Users size={16} className="text-primary" /> Información Personal</h4>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="col-span-2 flex items-center gap-2 mb-1">
-                          <label className="font-bold text-foreground-muted text-xs">Usuario ID:</label>
-                          <span className="font-mono font-bold text-foreground text-xs">{detailUser.id || detailUser.usuario_id || '—'}</span>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-y-3 gap-x-3 text-xs items-center">
-                        <span className="text-foreground-muted font-bold">Nombre: <span className="text-red-400">*</span></span>
-                        <div className="flex flex-col w-full">
-                          <input
-                            type="text"
-                            value={wizardData.first_name || ''}
-                            onChange={(e) => handleChange('first_name', e.target.value)}
-                            className={`px-3 py-2 text-xs rounded-xl border bg-input text-foreground font-mono font-bold focus:outline-none w-full ${formErrors360.first_name ? 'border-red-500 focus:border-red-500' : 'border-border focus:border-primary'}`}
-                            placeholder="Nombre"
-                          />
-                          {formErrors360.first_name && <span className="text-red-400 text-[10px] mt-0.5 font-bold">{formErrors360.first_name}</span>}
-                        </div>
-                        <span className="text-foreground-muted font-bold">Apellido: <span className="text-red-400">*</span></span>
-                        <div className="flex flex-col w-full">
-                          <input
-                            type="text"
-                            value={wizardData.last_name || ''}
-                            onChange={(e) => handleChange('last_name', e.target.value)}
-                            className={`px-3 py-2 text-xs rounded-xl border bg-input text-foreground font-mono font-bold focus:outline-none w-full ${formErrors360.last_name ? 'border-red-500 focus:border-red-500' : 'border-border focus:border-primary'}`}
-                            placeholder="Apellido"
-                          />
-                          {formErrors360.last_name && <span className="text-red-400 text-[10px] mt-0.5 font-bold">{formErrors360.last_name}</span>}
-                        </div>
-                        <span className="text-foreground-muted font-bold">Documento:</span>
-                        <div className="flex flex-col w-full">
-                          <div className="flex gap-2 w-full">
-                            <select
-                              value={wizardData.document_type || 'Cédula'}
-                              onChange={(e) => handleChange('document_type', e.target.value)}
-                              className="px-2 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary"
-                            >
-                              <option value="Cédula">Cédula</option>
-                              <option value="DNI">DNI</option>
-                              <option value="Pasaporte">Pasaporte</option>
-                              <option value="RNC">RNC</option>
-                            </select>
-                            <input
-                              type="text"
-                              value={wizardData.document_number || ''}
-                              onChange={(e) => {
-                                handleChange('document_number', e.target.value);
-                                if (wizardData.primary_access_type === 'DOCUMENT') handleChange('identificador_principal', e.target.value);
-                              }}
-                              className={`px-3 py-2 text-xs rounded-xl border bg-input text-foreground font-mono font-bold focus:outline-none flex-1 min-w-0 ${formErrors360.document_number ? 'border-red-500 focus:border-red-500' : 'border-border focus:border-primary'}`}
-                              placeholder="Número"
-                            />
-                          </div>
-                          {formErrors360.document_number && <span className="text-red-400 text-[10px] mt-0.5 font-bold">{formErrors360.document_number}</span>}
-                        </div>
-                        <span className="text-foreground-muted font-bold">Correo Electrónico:</span>
-                        <div className="flex flex-col w-full">
-                          <input
-                            type="email"
-                            value={wizardData.email || ''}
-                            onChange={(e) => handleChange('email', e.target.value)}
-                            className={`px-3 py-2 text-xs rounded-xl border bg-input text-foreground font-mono font-bold focus:outline-none w-full ${formErrors360.email ? 'border-red-500 focus:border-red-500' : 'border-border focus:border-primary'}`}
-                            placeholder="Correo electrónico"
-                          />
-                          {formErrors360.email && <span className="text-red-400 text-[10px] mt-0.5 font-bold">{formErrors360.email}</span>}
-                        </div>
-                        <span className="text-foreground-muted font-bold">Departamento:</span>
-                        <select
-                          value={wizardData.department_id || ''}
-                          onChange={(e) => {
-                            const deptId = e.target.value;
-                            const deptObj = departments.find(d => d.id == deptId);
-                            handleChange('department_id', deptId);
-                            handleChange('department', deptObj ? deptObj.name : '');
-                          }}
-                          className="px-3 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary w-full"
-                        >
-                          <option value="">Seleccione Departamento</option>
-                          {departments
-
-                            .map(d => (
-                              <option key={d.id} value={d.id}>{d.name}</option>
-                            ))
-                          }
-                        </select>
-                        <span className="text-foreground-muted font-bold">Área:</span>
-                        <select
-                          value={wizardData.area_id || ''}
-                          onChange={(e) => {
-                            const aId = e.target.value;
-                            const aObj = areas.find(a => a.id == aId);
-                            handleChange('area_id', aId);
-                            handleChange('area', aObj ? aObj.name : '');
-                          }}
-                          className="px-3 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary w-full"
-                        >
-                          <option value="">Seleccione Área</option>
-                          {areas
-                            .filter(a => a.department_id == wizardData.department_id)
-                            .map(a => (
-                              <option key={a.id} value={a.id}>{a.name}</option>
-                            ))
-                          }
-                        </select>
-                        <span className="text-foreground-muted font-bold">Cargo / Posición:</span>
-                        <select value={wizardData.cargo_id || ''} onChange={(e) => { const cId = e.target.value; handleChange('cargo_id', cId); const cargoObj = cargos.find(c => c.id == cId); handleChange('job_title', cargoObj ? cargoObj.name : ''); }}
-                          className="px-3 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary w-full"
-                        >
-                          <option value="">Seleccione Cargo</option>
-                          {cargos.map(c => ( <option key={c.id} value={c.id}>{c.name}</option> ))}
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* Parámetros de Acceso Edit */}
-                    <div className="bg-card border border-border rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
-                      <h4 className="font-bold text-foreground text-xs border-b border-border pb-3 flex items-center gap-2 uppercase tracking-wider"><Key size={16} className="text-primary" /> Parámetros de Acceso</h4>
-                      <div className="grid grid-cols-2 gap-y-3 gap-x-3 text-xs items-center">
-                        <span className="text-foreground-muted font-bold">Método de acceso principal:</span>
-                        <select
-                          value={wizardData.primary_access_type || 'EMAIL'}
-                          onChange={(e) => handleChange('primary_access_type', e.target.value)}
-                          className="px-3 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary w-full"
-                        >
-                          <option value="EMAIL">Correo electrónico</option>
-                          <option value="DOCUMENT">Documento</option>
-                        </select>
-
-                        <span className="text-foreground-muted font-bold">Identificador de acceso:</span>
-                        {wizardData.primary_access_type === 'EMAIL' ? (
-                          <div className="flex flex-col w-full">
-                            <span className="font-mono font-bold text-foreground-secondary bg-input px-3 py-2 rounded-xl border border-border truncate opacity-70 cursor-not-allowed text-xs" title={wizardData.email}>
-                              {wizardData.email || 'Se utilizará el correo indicado arriba'}
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="flex flex-col w-full">
-                            <span className="font-mono font-bold text-foreground-secondary bg-input px-3 py-2 rounded-xl border border-border truncate opacity-70 cursor-not-allowed text-xs" title={wizardData.document_number}>
-                              {wizardData.document_number || 'Se utilizará el documento indicado arriba'}
-                            </span>
-                          </div>
-                        )}
-
-                        <span className="text-foreground-muted font-bold">Canales Permitidos:</span>
-                        <div className="flex gap-4 items-center font-mono">
-                          <label className="flex items-center gap-2 font-bold cursor-pointer select-none text-foreground">
-                            <input
-                              type="checkbox"
-                              checked={!!wizardData.web_access_enabled}
-                              onChange={(e) => handleChange('web_access_enabled', e.target.checked)}
-                              className="rounded border-border bg-input text-primary focus:ring-primary cursor-pointer w-4 h-4"
-                            />
-                            Web
-                          </label>
-                          <label className="flex items-center gap-2 font-bold cursor-pointer select-none text-foreground">
-                            <input
-                              type="checkbox"
-                              checked={!!wizardData.mobile_access_enabled}
-                              onChange={(e) => handleChange('mobile_access_enabled', e.target.checked)}
-                              className="rounded border-border bg-input text-primary focus:ring-primary cursor-pointer w-4 h-4"
-                            />
-                            Móvil
-                          </label>
-                        </div>
-                      </div>
-                    </div>
+                // EDIT MODE FORM - Simplified (DATOS DEL USUARIO)
+                <div className="bg-card border border-border rounded-2xl p-6 shadow-xl space-y-6 font-mono text-xs animate-in fade-in duration-200">
+                  <div className="border-b border-border pb-3 flex items-center justify-between">
+                    <h4 className="font-bold text-foreground text-xs flex items-center gap-2 uppercase tracking-wider">
+                      <User size={16} className="text-primary" /> Datos del usuario
+                    </h4>
+                    {edit360Error && (
+                      <span className="text-rose-400 text-xs font-bold">{edit360Error}</span>
+                    )}
                   </div>
 
-                  {/* Row 2 */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Relación y Asignación Edit */}
-                    <div className="bg-card border border-border rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
-                      <h4 className="font-bold text-foreground text-xs border-b border-border pb-3 flex items-center gap-2 uppercase tracking-wider"><Building2 size={16} className="text-primary" /> Relación y Asignación</h4>
-                      <div className="grid grid-cols-2 gap-y-3 gap-x-3 text-xs items-center">
-                        <span className="text-foreground-muted font-bold">Empresa: <span className="text-red-400">*</span></span>
-                        <div className="flex flex-col w-full">
-                          <select
-                            value={wizardData.companyId || ''}
-                            onChange={(e) => handleChange('companyId', e.target.value)}
-                            className={`px-3 py-2 text-xs rounded-xl border bg-input text-foreground font-mono font-bold focus:outline-none w-full ${formErrors360.companyId ? 'border-red-500 focus:border-red-500' : 'border-border focus:border-primary'}`}
-                          >
-                            <option value="">Seleccione Empresa</option>
-                            {companies.map(c => (
-                              <option key={c.id} value={c.id}>{c.name}</option>
-                            ))}
-                          </select>
-                          {formErrors360.companyId && <span className="text-red-400 text-[10px] mt-0.5 font-bold">{formErrors360.companyId}</span>}
-                        </div>
-                        <span className="text-foreground-muted font-bold">Tipo de Usuario:</span>
+                  <div className="space-y-4">
+                    {/* Row 1: Nombre * | Apellido * */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Nombre *</label>
+                        <input
+                          type="text"
+                          value={wizardData.first_name || ''}
+                          onChange={(e) => handleChange('first_name', e.target.value)}
+                          className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground placeholder:text-foreground-disabled focus:outline-none transition-colors ${formErrors360.first_name ? 'border-rose-500 focus:border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
+                          placeholder="Ej. Juan"
+                        />
+                        {formErrors360.first_name && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{formErrors360.first_name}</span>}
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Apellido *</label>
+                        <input
+                          type="text"
+                          value={wizardData.last_name || ''}
+                          onChange={(e) => handleChange('last_name', e.target.value)}
+                          className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground placeholder:text-foreground-disabled focus:outline-none transition-colors ${formErrors360.last_name ? 'border-rose-500 focus:border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
+                          placeholder="Ej. Pérez"
+                        />
+                        {formErrors360.last_name && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{formErrors360.last_name}</span>}
+                      </div>
+                    </div>
+
+                    {/* Row 2: Tipo de documento | Número de documento (Opcional) */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Tipo de documento</label>
+                        <select
+                          value={wizardData.document_type || 'Cédula'}
+                          onChange={(e) => handleChange('document_type', e.target.value)}
+                          className="w-full bg-input border border-border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none focus:border-primary cursor-pointer"
+                        >
+                          <option value="Cédula">Cédula</option>
+                          <option value="Pasaporte">Pasaporte</option>
+                          <option value="RNC">RNC</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Número de documento (Opcional)</label>
+                        <input
+                          type="text"
+                          value={wizardData.document_number || ''}
+                          onChange={(e) => handleChange('document_number', e.target.value)}
+                          className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground placeholder:text-foreground-disabled focus:outline-none transition-colors ${formErrors360.document_number ? 'border-rose-500 focus:border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
+                          placeholder="Ej. 001-1234567-8"
+                        />
+                        {formErrors360.document_number && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{formErrors360.document_number}</span>}
+                      </div>
+                    </div>
+
+                    {/* Row 3: Teléfono | Correo electrónico * */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Teléfono</label>
+                        <input
+                          type="text"
+                          value={wizardData.phone || ''}
+                          onChange={(e) => handleChange('phone', e.target.value)}
+                          className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground placeholder:text-foreground-disabled focus:outline-none transition-colors ${formErrors360.phone ? 'border-rose-500 focus:border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
+                          placeholder="Ej. +1 (809) 555-0101"
+                        />
+                        {formErrors360.phone && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{formErrors360.phone}</span>}
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Correo electrónico *</label>
+                        <input
+                          type="email"
+                          required
+                          value={wizardData.email || ''}
+                          onChange={(e) => handleChange('email', e.target.value)}
+                          className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground placeholder:text-foreground-disabled focus:outline-none transition-colors ${formErrors360.email ? 'border-rose-500 focus:border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
+                          placeholder="Ej. juan.perez@empresa.com"
+                        />
+                        {formErrors360.email && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{formErrors360.email}</span>}
+                      </div>
+                    </div>
+
+                    {/* Row 4: Empresa / Consorcio * | Rol principal * */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Empresa / Consorcio *</label>
+                        <select
+                          value={wizardData.companyId || ''}
+                          onChange={(e) => handleChange('companyId', e.target.value ? Number(e.target.value) : '')}
+                          className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none cursor-pointer transition-colors ${formErrors360.companyId ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
+                        >
+                          <option value="">-- Selecciona Empresa --</option>
+                          {companies.map(c => (
+                            <option key={c.empresa_id || c.id} value={c.empresa_id || c.id}>
+                              {c.nombre_comercial || c.name}
+                            </option>
+                          ))}
+                        </select>
+                        {formErrors360.companyId && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{formErrors360.companyId}</span>}
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Rol principal *</label>
+                        <select
+                          value={wizardData.rol_id || ''}
+                          onChange={(e) => {
+                            const rId = e.target.value ? Number(e.target.value) : '';
+                            handleChange('rol_id', rId);
+                            const rolObj = roles.find(r => Number(r.numericId || r.id) === Number(rId));
+                            if (rolObj) handleChange('role', rolObj.nombre || rolObj.name);
+                          }}
+                          className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none cursor-pointer transition-colors ${formErrors360.rol_id ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
+                        >
+                          <option value="">-- Selecciona Rol --</option>
+                          {roles.map(r => (
+                            <option key={r.numericId || r.id} value={r.numericId || r.id}>
+                              {r.nombre || r.name}
+                            </option>
+                          ))}
+                        </select>
+                        {formErrors360.rol_id && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{formErrors360.rol_id}</span>}
+                      </div>
+                    </div>
+
+                    {/* Row 5: Tipo de usuario * */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Tipo de usuario *</label>
                         <select
                           value={wizardData.tipo_usuario_id || ''}
                           onChange={(e) => {
-                            const valId = e.target.value;
-                            const obj = userTypes.find(t => t.id == valId);
-                            handleChange('tipo_usuario_id', valId);
-                            if (obj) handleChange('user_type', obj.name);
+                            const tuId = e.target.value ? Number(e.target.value) : '';
+                            handleChange('tipo_usuario_id', tuId);
+                            const tuObj = userTypes.find(t => Number(t.tipo_usuario_id || t.id) === Number(tuId));
+                            if (tuObj) handleChange('user_type', tuObj.nombre || tuObj.name);
                           }}
-                          className="px-3 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary w-full"
+                          className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none cursor-pointer transition-colors ${formErrors360.tipo_usuario_id ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
                         >
-                          <option value="">Seleccione Tipo</option>
+                          <option value="">-- Selecciona Tipo de Usuario --</option>
                           {userTypes.map(t => (
-                            <option key={t.id} value={t.id}>{t.name}</option>
+                            <option key={t.tipo_usuario_id || t.id} value={t.tipo_usuario_id || t.id}>
+                              {t.nombre || t.name}
+                            </option>
                           ))}
                         </select>
-                        <span className="text-foreground-muted font-bold">Rol Asignado: <span className="text-red-400">*</span></span>
-                        <div className="flex flex-col w-full">
-                          <select value={wizardData.rol_id || ''} onChange={(e) => { const rId = e.target.value; handleChange('rol_id', rId); const rolObj = roles.find(r => r.id == rId); handleChange('role', rolObj ? rolObj.name : ''); }}
-                            className={`px-3 py-2 text-xs rounded-xl border bg-input text-foreground font-mono font-bold focus:outline-none w-full ${formErrors360.rol_id ? 'border-red-500 focus:border-red-500' : 'border-border focus:border-primary'}`}
-                          >
-                            <option value="">Seleccione Rol</option>
-                            {roles.map(r => ( <option key={r.id} value={r.id}>{r.name}</option> ))}
-                          </select>
-                          {formErrors360.rol_id && <span className="text-red-400 text-[10px] mt-0.5 font-bold">{formErrors360.rol_id}</span>}
-                        </div>
-                        <span className="text-foreground-muted font-bold">Roles Adicionales:</span>
-                        <div className="flex flex-wrap gap-2 max-h-28 overflow-y-auto border border-border p-2.5 rounded-xl bg-input custom-scrollbar">
-{roles.filter(r => r.id != wizardData.rol_id).map(r => (
-  <label key={r.id} className="flex items-center gap-2 font-bold cursor-pointer select-none text-xs text-foreground">
-    <input
-      type="checkbox"
-      checked={(wizardData.roles_additional || []).includes(r.id)}
-      onChange={(e) => {
-        const newRoles = e.target.checked
-          ? [...(wizardData.roles_additional || []), r.id]
-          : (wizardData.roles_additional || []).filter(roleId => roleId !== r.id);
-        handleChange('roles_additional', newRoles);
-      }}
-      className="rounded border-border bg-input text-primary focus:ring-primary cursor-pointer w-4 h-4"
-    />
-    {r.name}
-  </label>
-))}
-</div>
-                      </div>
-                    </div>
-
-                    {/* Seguridad e Inicios Edit */}
-                    <div className="bg-card border border-border rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
-                      <h4 className="font-bold text-foreground text-xs border-b border-border pb-3 flex items-center gap-2 uppercase tracking-wider"><ShieldCheck size={16} className="text-primary" /> Seguridad e Inicios</h4>
-                      <div className="grid grid-cols-2 gap-y-3 gap-x-3 text-xs items-center">
-                        <span className="text-foreground-muted font-bold">Autenticación MFA:</span>
-                        <div className="flex gap-2 items-center">
-                          <label className="flex items-center gap-2 font-bold cursor-pointer select-none text-foreground">
-                            <input
-                              type="checkbox"
-                              checked={!!wizardData.mfaEnabled}
-                              onChange={(e) => handleChange('mfaEnabled', e.target.checked)}
-                              className="rounded border-border bg-input text-primary focus:ring-primary cursor-pointer w-4 h-4"
-                            />
-                            Activo
-                          </label>
-                          {wizardData.mfaEnabled && (
-                            <select
-                              value={wizardData.mfa_method || 'App autenticadora'}
-                              onChange={(e) => handleChange('mfa_method', e.target.value)}
-                              className="px-2 py-1 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary"
-                            >
-                              <option value="App autenticadora">App autenticadora</option>
-                              <option value="SMS">SMS (Mensaje)</option>
-                              <option value="Correo electrónico">Correo electrónico</option>
-                            </select>
-                          )}
-                        </div>
-                        <span className="text-foreground-muted font-bold">Expiración de acceso:</span>
-                        <div className="flex gap-2 items-center w-full">
-                          <input
-                            type="date"
-                            value={wizardData.access_expires_at ? wizardData.access_expires_at.split('T')[0] : ''}
-                            onChange={(e) => handleChange('access_expires_at', e.target.value)}
-                            className="px-3 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary flex-1"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => handleChange('access_expires_at', '')}
-                            className="px-3 py-2 text-xs bg-input hover:bg-surface-subtle rounded-xl border border-border font-bold text-foreground-secondary transition-colors cursor-pointer"
-                          >
-                            Sin expiración
-                          </button>
-                        </div>
-                        <span className="text-foreground-muted font-bold">Horario de acceso:</span>
-                        <select
-                          value={wizardData.allowed_hours || 'Cualquier horario'}
-                          onChange={(e) => handleChange('allowed_hours', e.target.value)}
-                          className="px-3 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary w-full"
-                        >
-                          <option value="Cualquier horario">Sin restricción horaria (24/7)</option>
-                          <option value="Horario de oficina (08:00 - 18:00)">Horario comercial (08:00 - 18:00)</option>
-                          <option value="Horario diurno (06:00 - 22:00)">Horario diurno (06:00 - 22:00)</option>
-                        </select>
-                        <span className="text-foreground-muted font-bold">Restricción IP:</span>
-                        <input
-                          type="text"
-                          value={wizardData.allowed_ips || '*'}
-                          onChange={(e) => handleChange('allowed_ips', e.target.value)}
-                          className="px-3 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary w-full"
-                          placeholder="e.g. * o 192.168.1.1"
-                        />
+                        {formErrors360.tipo_usuario_id && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{formErrors360.tipo_usuario_id}</span>}
                       </div>
                     </div>
                   </div>
-                  {/* Row 3 (Configuración Avanzada Edit) */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                    <div className="bg-card border border-border rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
-                      <h4 className="font-bold text-foreground text-xs border-b border-border pb-3 flex items-center gap-2 uppercase tracking-wider"><Settings size={16} className="text-primary" /> Configuración Avanzada</h4>
-                      <div className="grid grid-cols-2 gap-y-3 gap-x-3 text-xs items-center">
-                        <span className="text-foreground-muted font-bold">Correo de Acceso:</span>
-                        <input type="email" value={wizardData.correo_acceso || ''} onChange={(e) => handleChange('correo_acceso', e.target.value)} className="px-3 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary w-full" placeholder="recovery@ejemplo.com" />
 
-                        <span className="text-foreground-muted font-bold">Enviar Invitación:</span>
-                        <label className="flex items-center gap-2 font-bold cursor-pointer select-none text-foreground">
-                          <input type="checkbox" checked={!!wizardData.enviar_invitacion_correo} onChange={(e) => handleChange('enviar_invitacion_correo', e.target.checked)} className="rounded border-border bg-input text-primary focus:ring-primary cursor-pointer w-4 h-4" /> Sí
-                        </label>
-
-                        <span className="text-foreground-muted font-bold">Generar Clave Automática:</span>
-                        <label className="flex items-center gap-2 font-bold cursor-pointer select-none text-foreground">
-                          <input type="checkbox" checked={!!wizardData.generar_clave_automatica} onChange={(e) => handleChange('generar_clave_automatica', e.target.checked)} className="rounded border-border bg-input text-primary focus:ring-primary cursor-pointer w-4 h-4" /> Sí
-                        </label>
-
-                        <span className="text-foreground-muted font-bold">Forzar Cambio de Clave:</span>
-                        <label className="flex items-center gap-2 font-bold cursor-pointer select-none text-foreground">
-                          <input type="checkbox" checked={!!wizardData.forzar_cambio_clave} onChange={(e) => handleChange('forzar_cambio_clave', e.target.checked)} className="rounded border-border bg-input text-primary focus:ring-primary cursor-pointer w-4 h-4" /> Sí
-                        </label>
-
-                        <span className="text-foreground-muted font-bold">Idioma Preferido:</span>
-                        <select value={wizardData.idioma_preferido || 'es'} onChange={(e) => handleChange('idioma_preferido', e.target.value)} className="px-3 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary w-full">
-                          <option value="es">Español</option>
-                          <option value="en">Inglés</option>
-                        </select>
-
-                        <span className="text-foreground-muted font-bold">Zona Horaria:</span>
-                        <select value={wizardData.zona_horaria || 'America/Santo_Domingo'} onChange={(e) => handleChange('zona_horaria', e.target.value)} className="px-3 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary w-full">
-                          <option value="America/Santo_Domingo">América/Santo Domingo</option>
-                          <option value="America/New_York">América/New York</option>
-                        </select>
-
-                        <span className="text-foreground-muted font-bold">Formato de Fecha:</span>
-                        <select value={wizardData.formato_fecha || 'DD/MM/YYYY'} onChange={(e) => handleChange('formato_fecha', e.target.value)} className="px-3 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary w-full">
-                          <option value="DD/MM/YYYY">DD/MM/YYYY</option>
-                          <option value="MM/DD/YYYY">MM/DD/YYYY</option>
-                          <option value="YYYY-MM-DD">YYYY-MM-DD</option>
-                        </select>
-                      </div>
-                    </div>
+                  {/* Actions Footer */}
+                  <div className="flex items-center justify-end gap-3 pt-4 border-t border-border">
+                    <button
+                      type="button"
+                      onClick={handleCancelEdit360}
+                      className="px-4 py-2.5 rounded-xl border border-border bg-input hover:bg-surface-subtle text-foreground-secondary font-bold text-xs transition-colors cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleTriggerSaveEdit360()}
+                      disabled={isSaving}
+                      className="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs transition-colors flex items-center gap-2 cursor-pointer shadow-lg disabled:opacity-50"
+                    >
+                      <Save size={14} /> {isSaving ? 'Guardando...' : 'Guardar cambios'}
+                    </button>
                   </div>
                 </div>
               ) : (
-                // VIEW MODE (Original layout)
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="bg-card border border-border rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
-                    <h4 className="font-bold text-foreground text-xs border-b border-border pb-3 flex items-center gap-2 uppercase tracking-wider"><Users size={16} className="text-primary" /> Información Personal</h4>
-                    <div className="grid grid-cols-2 gap-y-2.5 text-xs">
-                      <span className="text-foreground-muted font-bold">Usuario ID:</span>
-                      <span className="font-mono font-bold text-foreground">{detailUser.id || detailUser.usuario_id || '—'}</span>
-                      <span className="text-foreground-muted font-bold">Nombre: <span className="text-red-400">*</span></span>
-                      <span className="font-bold text-foreground">{detailUser.first_name || '—'}</span>
-                      <span className="text-foreground-muted font-bold">Apellido: <span className="text-red-400">*</span></span>
-                      <span className="font-bold text-foreground">{detailUser.last_name || '—'}</span>
-                      <span className="text-foreground-muted font-bold">Documento:</span>
-                      <span className="font-bold text-foreground">
-                        {detailUser.document_number ? `${detailUser.document_type || 'Documento'}: ${detailUser.document_number}` : 'No registrado'}
-                      </span>
-                      <span className="text-foreground-muted font-bold">Correo Electrónico:</span>
-                      <span className="font-bold text-primary hover:underline cursor-pointer">
-                        {detailUser.email || 'No registrado'}
-                      </span>
-                      <span className="text-foreground-muted font-bold">Departamento:</span>
-                      <span className="font-bold text-foreground">{detailUser.departamento_nombre || detailUser.department || 'No registrado'}</span>
-                      <span className="text-foreground-muted font-bold">Área:</span>
-                      <span className="font-bold text-foreground">{detailUser.area_nombre || detailUser.area || 'No registrada'}</span>
-                      <span className="text-foreground-muted font-bold">Cargo / Posición:</span>
-                      <span className="font-bold text-foreground">{detailUser.cargo_nombre || detailUser.job_title || 'No registrado'}</span>
+                // VIEW MODE - Simplified Resumen (DATOS DEL USUARIO)
+                <div className="bg-card border border-border rounded-2xl p-6 shadow-xl space-y-5 font-mono text-xs">
+                  <h4 className="font-bold text-foreground text-xs border-b border-border pb-3 flex items-center gap-2 uppercase tracking-wider">
+                    <User size={16} className="text-primary" /> Datos del usuario
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-3.5 text-xs">
+                    <div className="grid grid-cols-[140px_1fr] sm:grid-cols-[160px_1fr] items-center gap-2 border-b border-border/50 pb-2.5">
+                      <span className="text-foreground-muted font-bold">Nombre:</span>
+                      <span className="font-bold text-foreground">{detailUser.first_name || (detailUser.full_name ? detailUser.full_name.trim().split(' ')[0] : '') || '—'}</span>
                     </div>
-                  </div>
 
-                  <div className="bg-card border border-border rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
-                    <h4 className="font-bold text-foreground text-xs border-b border-border pb-3 flex items-center gap-2 uppercase tracking-wider"><Key size={16} className="text-primary" /> Parámetros de Acceso</h4>
-                    <div className="grid grid-cols-2 gap-y-2.5 text-xs">
-                      <span className="text-foreground-muted font-bold">Método de acceso principal:</span>
+                    <div className="grid grid-cols-[140px_1fr] sm:grid-cols-[160px_1fr] items-center gap-2 border-b border-border/50 pb-2.5">
+                      <span className="text-foreground-muted font-bold">Apellido:</span>
+                      <span className="font-bold text-foreground">{detailUser.last_name || (detailUser.full_name ? detailUser.full_name.trim().split(' ').slice(1).join(' ') : '') || '—'}</span>
+                    </div>
+
+                    <div className="grid grid-cols-[140px_1fr] sm:grid-cols-[160px_1fr] items-center gap-2 border-b border-border/50 pb-2.5">
+                      <span className="text-foreground-muted font-bold">Tipo de documento:</span>
+                      <span className="font-bold text-foreground">{detailUser.document_type || (detailUser.document_number ? 'Cédula' : '—')}</span>
+                    </div>
+
+                    <div className="grid grid-cols-[140px_1fr] sm:grid-cols-[160px_1fr] items-center gap-2 border-b border-border/50 pb-2.5">
+                      <span className="text-foreground-muted font-bold">Número de documento:</span>
+                      <span className="font-bold text-foreground font-mono">{detailUser.document_number || 'No registrado'}</span>
+                    </div>
+
+                    <div className="grid grid-cols-[140px_1fr] sm:grid-cols-[160px_1fr] items-center gap-2 border-b border-border/50 pb-2.5">
+                      <span className="text-foreground-muted font-bold">Teléfono:</span>
+                      <span className="font-bold text-foreground font-mono">{detailUser.phone || 'No registrado'}</span>
+                    </div>
+
+                    <div className="grid grid-cols-[140px_1fr] sm:grid-cols-[160px_1fr] items-center gap-2 border-b border-border/50 pb-2.5">
+                      <span className="text-foreground-muted font-bold">Correo electrónico:</span>
+                      <span className="font-bold text-primary font-mono">{detailUser.email || detailUser.correo_electronico || 'No registrado'}</span>
+                    </div>
+
+                    <div className="grid grid-cols-[140px_1fr] sm:grid-cols-[160px_1fr] items-center gap-2 border-b border-border/50 pb-2.5">
+                      <span className="text-foreground-muted font-bold">Empresa:</span>
                       <span className="font-bold text-foreground">
-                        {detailUser.login_identifiers?.find(id => id.is_primary)?.identifier_type === 'DOCUMENT' ? 'Documento' : 'Correo electrónico'}
-                      </span>
-
-                      <span className="text-foreground-muted font-bold">Identificador de acceso:</span>
-                      <span className="font-mono font-bold text-primary">
-                        {detailUser.login_identifiers?.find(id => id.is_primary)?.identifier_value || '—'}
-                      </span>
-
-                      <span className="text-foreground-muted font-bold">Estado de verificación:</span>
-                      <span className={`font-bold px-2 py-0.5 rounded text-[10px] uppercase border tracking-wider ${
-                        detailUser.estado_verificacion === 'Verificado' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                      }`}>
-                        {detailUser.estado_verificacion || 'No verificado'}
-                      </span>
-
-                      <span className="text-foreground-muted font-bold">Canales Permitidos:</span>
-                      <span className="font-bold text-foreground">
-                        {(() => {
-                          const web = !!detailUser.web_access_enabled;
-                          const mobile = !!detailUser.mobile_access_enabled;
-                          if (web && mobile) return 'Web y móvil';
-                          if (web) return 'Solo Web';
-                          if (mobile) return 'Solo móvil';
-                          return 'Sin acceso';
-                        })()}
+                        {detailUser.empresa_nombre || (companies || []).find(c => c.id == detailUser.companyId || c.empresa_id == detailUser.companyId)?.nombre_comercial || (companies || []).find(c => c.id == detailUser.companyId || c.empresa_id == detailUser.companyId)?.name || '—'}
                       </span>
                     </div>
-                  </div>
-                </div>
-              )}
 
-              {/* Row 2 (Shown only in view mode since edit mode merges it all above) */}
-              {!isEditing360 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="bg-card border border-border rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
-                    <h4 className="font-bold text-foreground text-xs border-b border-border pb-3 flex items-center gap-2 uppercase tracking-wider"><Building2 size={16} className="text-primary" /> Relación y Asignación</h4>
-                    <div className="grid grid-cols-2 gap-y-2.5 text-xs">
-                      <span className="text-foreground-muted font-bold">Empresa: <span className="text-red-400">*</span></span>
-                      <span className="font-bold text-foreground">
-                        {detailUser.empresa_nombre || companies.find(c => c.id == detailUser.companyId)?.name || 'Sin empresa asignada'}
-                      </span>
-                      <span className="text-foreground-muted font-bold">Tipo de Usuario:</span>
-                      <span className="bg-surface-subtle border border-border text-foreground-secondary font-mono text-[10px] font-bold tracking-wider px-2 py-0.5 rounded w-fit">{detailUser.user_type || userTypes.find(t => t.id == detailUser.tipo_usuario_id)?.name || '—'}</span>
-                      <span className="text-foreground-muted font-bold">Rol Asignado: <span className="text-red-400">*</span></span>
-                      <span className="bg-indigo-500/10 text-indigo-300 border border-indigo-500/30 px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider w-fit">{detailUser.role || detailUser.role_name || '—'}</span>
-                      <span className="text-foreground-muted font-bold">Permisos:</span>
-                      <span className="font-bold text-foreground">
-                        {Object.keys(detailUser.permissionsOverride || {}).length > 0 ? 'Específica (Permisos Adicionales)' : 'Heredados del rol'}
-                      </span>
-                      <span className="text-foreground-muted font-bold">Roles Adicionales:</span>
-                      <span className="font-bold text-foreground">
-                        {detailUser.roles_additional?.length > 0
-                          ? detailUser.roles_additional.map(id => roles.find(r => r.id == id)?.name || id).join(', ')
-                          : 'Ninguno'}
+                    <div className="grid grid-cols-[140px_1fr] sm:grid-cols-[160px_1fr] items-center gap-2 border-b border-border/50 pb-2.5">
+                      <span className="text-foreground-muted font-bold">Rol principal:</span>
+                      <span className="bg-indigo-500/10 text-indigo-400 dark:text-indigo-300 border border-indigo-500/30 px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider w-fit">
+                        {detailUser.role || detailUser.role_name || detailUser.rol || (roles || []).find(r => r.id == detailUser.rol_id || r.numericId == detailUser.rol_id)?.nombre || (roles || []).find(r => r.id == detailUser.rol_id || r.numericId == detailUser.rol_id)?.name || '—'}
                       </span>
                     </div>
-                  </div>
 
-                  <div className="bg-card border border-border rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
-                    <h4 className="font-bold text-foreground text-xs border-b border-border pb-3 flex items-center gap-2 uppercase tracking-wider"><ShieldCheck size={16} className="text-primary" /> Seguridad e Inicios</h4>
-                    <div className="grid grid-cols-2 gap-y-2.5 text-xs">
-                      <span className="text-foreground-muted font-bold">Autenticación MFA:</span>
-                      <span className="font-bold text-foreground">{detailUser.mfaEnabled ? `Sí (${detailUser.mfa_method || '—'})` : 'No'}</span>
-                      <span className="text-foreground-muted font-bold">Expiración de acceso:</span>
-                      <span className="font-bold text-foreground">{formatExpiracionDate(detailUser.access_expires_at)}</span>
-                      <span className="text-foreground-muted font-bold">Horario de acceso:</span>
-                      <span className="font-bold text-foreground">
-                        {!detailUser.allowed_hours || detailUser.allowed_hours === 'Cualquier horario' ? 'Sin restricción horaria' : detailUser.allowed_hours}
+                    <div className="grid grid-cols-[140px_1fr] sm:grid-cols-[160px_1fr] items-center gap-2 border-b border-border/50 pb-2.5 md:col-span-2">
+                      <span className="text-foreground-muted font-bold">Tipo de usuario:</span>
+                      <span className="bg-surface-subtle border border-border text-foreground-secondary font-mono text-[10px] font-bold tracking-wider px-2 py-0.5 rounded w-fit">
+                        {detailUser.user_type || (userTypes || []).find(t => t.id == detailUser.tipo_usuario_id || t.tipo_usuario_id == detailUser.tipo_usuario_id)?.nombre || (userTypes || []).find(t => t.id == detailUser.tipo_usuario_id || t.tipo_usuario_id == detailUser.tipo_usuario_id)?.name || '—'}
                       </span>
-                      <span className="text-foreground-muted font-bold">Restricción IP:</span>
-                      <span className="font-bold text-foreground font-mono">
-                        {!detailUser.allowed_ips || detailUser.allowed_ips === '*' ? 'Sin restricción' : detailUser.allowed_ips}
-                      </span>
-                      <span className="text-foreground-muted font-bold">Creado El:</span>
-                      <span className="font-bold text-foreground">{formatSafeDate(detailUser.createdAt)}</span>
-                      <span className="text-foreground-muted font-bold">Último Acceso:</span>
-                      <span className="font-bold text-foreground">{detailUser.last_login_at ? formatSafeDateTime(detailUser.last_login_at) : 'Nunca'}</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Row 3 (Configuración Avanzada) */}
-              {!isEditing360 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                  <div className="bg-card border border-border rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
-                    <h4 className="font-bold text-foreground text-xs border-b border-border pb-3 flex items-center gap-2 uppercase tracking-wider"><Settings size={16} className="text-primary" /> Configuración Avanzada</h4>
-                    <div className="grid grid-cols-2 gap-y-2.5 text-xs">
-                      <span className="text-foreground-muted font-bold">Correo de Acceso (Recovery):</span>
-                      <span className="font-bold text-primary font-mono">{detailUser.correo_acceso || 'No registrado'}</span>
-
-                      <span className="text-foreground-muted font-bold">Enviar Invitación (Email):</span>
-                      <span className="font-bold text-foreground">{detailUser.enviar_invitacion_correo ? 'Sí' : 'No'}</span>
-
-                      <span className="text-foreground-muted font-bold">Generar Clave Automática:</span>
-                      <span className="font-bold text-foreground">{detailUser.generar_clave_automatica ? 'Sí' : 'No'}</span>
-
-                      <span className="text-foreground-muted font-bold">Forzar Cambio de Clave:</span>
-                      <span className="font-bold text-foreground">{detailUser.forzar_cambio_clave ? 'Sí' : 'No'}</span>
-
-                      <span className="text-foreground-muted font-bold">Idioma Preferido:</span>
-                      <span className="font-bold text-foreground">
-                        {detailUser.idioma_preferido === 'en' ? 'Inglés' : detailUser.idioma_preferido === 'es' ? 'Español' : (detailUser.idioma_preferido || 'es')}
-                      </span>
-
-                      <span className="text-foreground-muted font-bold">Zona Horaria:</span>
-                      <span className="font-bold text-foreground">{detailUser.zona_horaria || 'America/Santo_Domingo'}</span>
-
-                      <span className="text-foreground-muted font-bold">Formato de Fecha:</span>
-                      <span className="font-bold text-foreground">{detailUser.formato_fecha || 'DD/MM/YYYY'}</span>
                     </div>
                   </div>
                 </div>
@@ -3787,65 +3467,15 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
                     <div className="p-4 bg-card border border-border rounded-2xl space-y-1 shadow-xl font-mono text-xs">
                       <span className="text-[10px] text-foreground-muted font-bold uppercase tracking-wider block mb-1">Rol Principal</span>
-                      {isEditing360 && wizardData ? (
-                        <select
-                          value={wizardData.rol_id || ''}
-                          onChange={(e) => {
-                            const rId = e.target.value;
-                            handleChange('rol_id', rId);
-                            const rolObj = roles.find(r => r.id == rId);
-                            handleChange('role', rolObj ? rolObj.name : '');
-                          }}
-                          className="w-full bg-input border border-border rounded-xl px-2.5 py-1.5 text-xs font-bold text-primary focus:outline-none focus:border-primary"
-                        >
-                          <option value="">Seleccione un rol...</option>
-                          {roles.map(r => (
-                            <option key={r.id} value={r.id}>{r.name}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span className="text-sm font-black text-primary block mt-1">{userRole}</span>
-                      )}
+                      <span className="text-sm font-black text-primary block mt-1">{userRole}</span>
                     </div>
                     <div className="p-4 bg-card border border-border rounded-2xl space-y-1 shadow-xl font-mono text-xs">
                       <span className="text-[10px] text-foreground-muted font-bold uppercase tracking-wider block mb-1">Roles adicionales</span>
-                      {isEditing360 && wizardData ? (
-                        <div className="relative group">
-                          <div className="w-full bg-input border border-border rounded-xl px-2.5 py-1.5 text-xs font-bold text-foreground cursor-pointer flex justify-between items-center shadow-sm">
-                             <span className="truncate">
-                               {(wizardData.roles_additional?.length || 0)} roles seleccionados
-                             </span>
-                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-foreground-muted"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                          </div>
-                          <div className="absolute top-full left-0 w-full mt-1 bg-card border border-border rounded-xl shadow-2xl z-50 hidden group-hover:block max-h-[160px] overflow-y-auto custom-scrollbar">
-                            {roles.filter(r => r.id != wizardData.rol_id).map(r => (
-                               <label key={r.id} className="flex items-center gap-2 px-3 py-2 hover:bg-input cursor-pointer border-b border-border/50 last:border-0 transition-colors">
-                                  <input
-                                    type="checkbox"
-                                    className="rounded text-primary focus:ring-primary bg-input border-border cursor-pointer"
-                                    checked={(wizardData.roles_additional || []).includes(r.id)}
-                                    onChange={() => {
-                                      const newRoles = (wizardData.roles_additional || []).includes(r.id)
-                                        ? (wizardData.roles_additional || []).filter(roleId => roleId !== r.id)
-                                        : [...(wizardData.roles_additional || []), r.id];
-                                      handleChange('roles_additional', newRoles);
-                                    }}
-                                  />
-                                  <span className="text-xs font-semibold text-foreground">{r.name}</span>
-                               </label>
-                            ))}
-                            {roles.filter(r => r.id != wizardData.rol_id).length === 0 && (
-                              <div className="px-3 py-2 text-[10px] text-foreground-muted italic">No hay más roles disponibles.</div>
-                            )}
-                          </div>
-                        </div>
-                      ) : (
-                        <span className="text-xs font-bold text-foreground block mt-1 truncate" title={detailUser.roles_additional?.length > 0 ? detailUser.roles_additional.map(id => roles.find(r => r.id == id)?.name || id).join(', ') : 'Ninguno'}>
-                          {detailUser.roles_additional?.length > 0
-                            ? detailUser.roles_additional.map(id => roles.find(r => r.id == id)?.name || id).join(', ')
-                            : 'Ninguno'}
-                        </span>
-                      )}
+                      <span className="text-xs font-bold text-foreground block mt-1 truncate" title={activeUser.roles_additional?.length > 0 ? activeUser.roles_additional.map(id => roles.find(r => r.id == id)?.name || id).join(', ') : 'Ninguno'}>
+                        {activeUser.roles_additional?.length > 0
+                          ? activeUser.roles_additional.map(id => roles.find(r => r.id == id)?.name || id).join(', ')
+                          : 'Ninguno'}
+                      </span>
                     </div>
                     <div className="p-4 bg-card border border-border rounded-2xl space-y-1 shadow-xl font-mono text-xs">
                       <span className="text-[10px] text-foreground-muted font-bold uppercase tracking-wider block">Permisos adicionales creados</span>
@@ -6595,12 +6225,9 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
       {/* CONFIRM EDIT / SAVE MODAL */}
       <SecurityConfirmDialog
-        isOpen={showConfirmEditModal || showConfirmSaveModal}
-        onClose={() => {
-          setShowConfirmEditModal(false);
-          setShowConfirmSaveModal(false);
-        }}
-        onConfirm={showConfirmSaveModal ? handleExecuteSave360 : handleSaveEdit360}
+        isOpen={showConfirmSaveModal}
+        onClose={() => setShowConfirmSaveModal(false)}
+        onConfirm={handleExecuteSave360}
         variant="default"
         title="¿Confirmar guardado?"
         description="¿Desea guardar los cambios realizados en el perfil del usuario?"
