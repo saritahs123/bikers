@@ -273,7 +273,18 @@ export async function executeReceptionWithWorkOrder(
     const now = new Date();
     const yearMonth = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}`;
     const recCodeSeqRes = await client.query(
-      `SELECT COALESCE(MAX(SUBSTRING(codigo_recepcion FROM '[0-9]+$')::integer), 0) + 1 AS next_seq
+      `SELECT COALESCE(
+         MAX(
+           CASE
+             WHEN codigo_recepcion ~ '^REC-.*-([0-9]{1,8})$'
+             THEN (SUBSTRING(codigo_recepcion FROM '^REC-.*-([0-9]{1,8})$'))::integer
+             WHEN codigo_recepcion ~ '^REC-([0-9]{1,8})$'
+             THEN (SUBSTRING(codigo_recepcion FROM '^REC-([0-9]{1,8})$'))::integer
+             ELSE 0
+           END
+         ),
+         0
+       ) + 1 AS next_seq
        FROM admin.recepciones`
     );
     const nextRecSeq = recCodeSeqRes.rows[0].next_seq;
@@ -581,7 +592,18 @@ export async function executeReceptionWithWorkOrder(
       // 4. Auto-Generate Work Order
       await client.query(`SELECT pg_advisory_xact_lock(7003)`);
       const woCodeSeqRes = await client.query(
-        `SELECT COALESCE(MAX(SUBSTRING(codigo_orden FROM '[0-9]+$')::integer), 0) + 1 AS next_seq
+        `SELECT COALESCE(
+           MAX(
+             CASE
+               WHEN codigo_orden ~ '^OT-.*-([0-9]{1,8})$'
+               THEN (SUBSTRING(codigo_orden FROM '^OT-.*-([0-9]{1,8})$'))::integer
+               WHEN codigo_orden ~ '^OT-([0-9]{1,8})$'
+               THEN (SUBSTRING(codigo_orden FROM '^OT-([0-9]{1,8})$'))::integer
+               ELSE 0
+             END
+           ),
+           0
+         ) + 1 AS next_seq
          FROM admin.ordenes_trabajo`
       );
       const nextWoSeq = woCodeSeqRes.rows[0].next_seq;
