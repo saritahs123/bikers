@@ -16,6 +16,13 @@ export interface ServiceItemInput {
   } | null;
 }
 
+export interface ProductItemInput {
+  producto_id: number | string;
+  cantidad: number | string;
+  precio_unitario?: number | string | null;
+  observacion?: string | null;
+}
+
 export interface ReceptionWorkOrderPayload {
   cliente_id: number;
   bicicleta_id: number;
@@ -30,6 +37,7 @@ export interface ReceptionWorkOrderPayload {
   mecanico_id?: number | null;
   fecha_prometida?: string | null;
   servicios?: ServiceItemInput[];
+  productos?: ProductItemInput[];
   checklist?: any[];
   firma?: any;
   replaced_staging_keys?: string[];
@@ -175,6 +183,7 @@ export async function executeReceptionWithWorkOrder(
   const idempotency_key = (payload.idempotency_key || "").trim() || null;
 
   let servicios: ServiceItemInput[] = Array.isArray(payload.servicios) ? payload.servicios : [];
+  let productos: ProductItemInput[] = Array.isArray(payload.productos) ? payload.productos : [];
 
   if (generarOrdenTrabajo && servicios.length === 0) {
     const err: any = new Error("Debe agregar al menos un servicio para generar la Orden de Trabajo.");
@@ -456,6 +465,8 @@ export async function executeReceptionWithWorkOrder(
     // 3. Process Initial Services and Dynamic Component Linkage
     let subtotal_servicios = 0;
     const preparedServicesData: any[] = [];
+    let subtotal_productos = 0;
+    const preparedProductsData: any[] = [];
 
     if (generarOrdenTrabajo) {
       for (let sIdx = 0; sIdx < servicios.length; sIdx++) {
@@ -589,6 +600,97 @@ export async function executeReceptionWithWorkOrder(
         ...preparedServicesData.map((s: any) => s.diagnostico).filter(Boolean)
       ].filter(Boolean).join(" | ");
 
+      // 3.1 Process Initial Products (Repuestos)
+      if (productos.length > 0) {
+        // Resolve default active warehouse for the workshop
+        let defaultAlmacenId: number | null = null;
+        const almRes = await client.query(
+          `SELECT a.almacen_id
+           FROM admin.almacenes a
+           WHERE (a.estado = 'ACTIVO' OR a.estado IS NULL)
+           ORDER BY a.almacen_id ASC
+           LIMIT 1`
+        );
+        if (almRes.rows.length > 0) {
+          defaultAlmacenId = almRes.rows[0].almacen_id;
+        }
+
+        if (!defaultAlmacenId) {
+          const anyAlm = await client.query(
+            `SELECT a.almacen_id FROM admin.almacenes a ORDER BY a.almacen_id ASC LIMIT 1`
+          );
+          defaultAlmacenId = anyAlm.rows[0]?.almacen_id || 1;
+        }
+
+        for (let pIdx = 0; pIdx < productos.length; pIdx++) {
+          const p = productos[pIdx];
+          const p_id = parseInt(String(p.producto_id), 10);
+          const p_qty = parseFloat(String(p.cantidad));
+
+          if (isNaN(p_id) || p_id <= 0) {
+            const err: any = new Error(`El producto en la posición ${pIdx + 1} no es válido.`);
+            err.status = 400;
+            err.code = "INVALID_PRODUCT";
+            throw err;
+          }
+
+          if (isNaN(p_qty) || p_qty <= 0) {
+            const err: any = new Error("La cantidad de producto debe ser mayor a 0.");
+            err.status = 400;
+            err.code = "INVALID_QUANTITY";
+            throw err;
+          }
+
+          // Multitenancy and active status check in PostgreSQL
+          const prodCheck = await client.query(
+            `SELECT p.producto_id, p.codigo_producto, p.nombre, p.precio_venta, p.estado,
+                    COALESCE(um.permite_decimales, false) AS permite_decimales
+             FROM admin.productos p
+             LEFT JOIN admin.unidad_medida um ON p.unidad_medida_id = um.unidad_medida_id
+             WHERE p.producto_id = $1
+               AND (p.estado = 'ACTIVO' OR p.estado IS NULL)
+             LIMIT 1`,
+            [p_id]
+          );
+
+          if (!prodCheck.rows || prodCheck.rows.length === 0) {
+            const err: any = new Error(`El producto #${p_id} no existe o está inactivo.`);
+            err.status = 400;
+            err.code = "INVALID_PRODUCT";
+            throw err;
+          }
+
+          const prodRow = prodCheck.rows[0];
+
+          // Decimal quantity validation
+          if (!prodRow.permite_decimales && !Number.isInteger(p_qty)) {
+            const err: any = new Error(`El producto "${prodRow.nombre}" no permite cantidades decimales.`);
+            err.status = 400;
+            err.code = "DECIMALS_NOT_ALLOWED";
+            throw err;
+          }
+
+          const unitPrice = p.precio_unitario !== undefined && p.precio_unitario !== null && p.precio_unitario !== "" && !isNaN(Number(p.precio_unitario)) && Number(p.precio_unitario) >= 0
+            ? Number(p.precio_unitario)
+            : Number(prodRow.precio_venta || 0);
+
+          const lineSubtotal = Math.round(p_qty * unitPrice * 100) / 100;
+          subtotal_productos += lineSubtotal;
+
+          preparedProductsData.push({
+            producto_id: p_id,
+            almacen_id: defaultAlmacenId,
+            cantidad: p_qty,
+            precio_unitario: unitPrice,
+            subtotal: lineSubtotal,
+            observacion: (p.observacion || "").trim() || null
+          });
+        }
+      }
+
+      const subtotal_general = Math.round((subtotal_servicios + subtotal_productos) * 100) / 100;
+      const total_orden = subtotal_general;
+
       // 4. Auto-Generate Work Order
       await client.query(`SELECT pg_advisory_xact_lock(7003)`);
       const woCodeSeqRes = await client.query(
@@ -634,20 +736,20 @@ export async function executeReceptionWithWorkOrder(
           codigo_orden, recepcion_id, cliente_id, bicicleta_id,
           estado_orden_id, prioridad_orden_id, descripcion_cliente, diagnostico_inicial,
           observacion_interna, fecha_recepcion, fecha_entrega_estimada,
-          subtotal_servicios, subtotal_general, total_orden,
+          subtotal_servicios, subtotal_productos, subtotal_general, total_orden,
           mecanico_id, usuario_registro, activo, fecha_registro
         ) VALUES (
           $1, $2, $3, $4,
           $5, $6, $7, $8,
           $9, NOW(), $10,
-          $11, $11, $11,
-          $12, $13, true, NOW()
+          $11, $12, $13, $14,
+          $15, $16, true, NOW()
         ) RETURNING orden_trabajo_id`,
         [
           codigo_orden, recepcion_id, cliente_id, bicicleta_id,
           estado_orden_id, prioridad_orden_id, observaciones_cliente || null, consolidated_diagnostico || null,
           obs_interna_ot || null, fechaPrometida || null,
-          subtotal_servicios,
+          subtotal_servicios, subtotal_productos, subtotal_general, total_orden,
           mecanico_id || null,
           session.usuario_id
         ]
@@ -696,6 +798,34 @@ export async function executeReceptionWithWorkOrder(
         );
       }
 
+      // Insert Products for the Work Order
+      for (let pIdx = 0; pIdx < preparedProductsData.length; pIdx++) {
+        const pData = preparedProductsData[pIdx];
+        await client.query(
+          `INSERT INTO admin.orden_productos (
+            orden_trabajo_id, orden_servicio_id, producto_id, almacen_id,
+            cantidad, precio_unitario, porcentaje_descuento, valor_descuento,
+            subtotal, estado_aprobacion_id, utilizado, observacion,
+            fecha_registro, usuario_registro
+          ) VALUES (
+            $1, NULL, $2, $3,
+            $4, $5, 0, 0,
+            $6, 1, false, $7,
+            NOW(), $8
+          )`,
+          [
+            orden_trabajo_id,
+            pData.producto_id,
+            pData.almacen_id,
+            pData.cantidad,
+            pData.precio_unitario,
+            pData.subtotal,
+            pData.observacion,
+            session.usuario_id
+          ]
+        );
+      }
+
       // Mandatory Initial History Record in admin.orden_historial_estado
       const historyComment = isDirectWorkOrder
         ? "Orden de trabajo creada directamente con recepción automática"
@@ -734,6 +864,11 @@ export async function executeReceptionWithWorkOrder(
         mecanico_id: mecanico_id || null,
         fecha_prometida: fechaPrometida || null,
         checklist_count: checklist.length,
+        services_count: preparedServicesData.length,
+        products_count: preparedProductsData.length,
+        subtotal_servicios,
+        subtotal_productos,
+        total_orden: (subtotal_servicios + subtotal_productos),
         has_signature: hasValidSignature,
         is_direct_work_order: isDirectWorkOrder
       },

@@ -31,14 +31,15 @@ export async function GET() {
       `SELECT p.producto_id,
               p.codigo_producto AS codigo,
               p.nombre,
-              p.precio_venta,
+              COALESCE(p.precio_venta, 0)::numeric AS precio_venta,
               um.codigo AS unidad_medida,
+              COALESCE(um.permite_decimales, false) AS permite_decimales,
               COALESCE(SUM(ep.cantidad_actual), 0)::numeric AS stock_disponible
        FROM admin.productos p
        LEFT JOIN admin.unidad_medida um ON p.unidad_medida_id = um.unidad_medida_id
        LEFT JOIN admin.existencias_producto ep ON p.producto_id = ep.producto_id
        WHERE (p.estado = 'ACTIVO' OR p.estado IS NULL)
-       GROUP BY p.producto_id, p.codigo_producto, p.nombre, p.precio_venta, um.codigo
+       GROUP BY p.producto_id, p.codigo_producto, p.nombre, p.precio_venta, um.codigo, um.permite_decimales
        ORDER BY p.nombre ASC`
     );
     const estadosServicio = await query(
