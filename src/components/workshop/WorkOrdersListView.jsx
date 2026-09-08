@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import {
   Search,
@@ -23,7 +23,10 @@ import {
   ChevronRight,
   MoreVertical,
   X,
-  Tag
+  Tag,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown
 } from "lucide-react";
 
 const STATUS_FILTERS = {
@@ -56,12 +59,15 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
   const urlEstado = getNormalizedStatus(searchParams.get("estado") || searchParams.get("estado_id") || "");
   const urlPrioridad = searchParams.get("prioridad_id") || "";
   const urlMecanico = searchParams.get("mecanico_id") || "";
+  const urlSortBy = searchParams.get("sort_by") || "";
+  const urlSortOrder = searchParams.get("sort_order") || "asc";
   const urlPage = parseInt(searchParams.get("page") || "1", 10);
 
   const [orders, setOrders] = useState([]);
   const [catalogs, setCatalogs] = useState({ estados: [], prioridades: [], mecanicos: [] });
   const [metrics, setMetrics] = useState({ total: 0, abiertas: 0, recibidas: 0, en_proceso: 0, listas_entrega: 0, entregadas: 0 });
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [isFetching, setIsFetching] = useState(false);
   const [error, setError] = useState(null);
 
   // Synchronized state
@@ -71,8 +77,13 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
   const [selectedMecanico, setSelectedMecanico] = useState(urlMecanico);
   const [dateFrom, setDateFrom] = useState(urlFrom);
   const [dateTo, setDateTo] = useState(urlTo);
+  const [sortBy, setSortBy] = useState(urlSortBy);
+  const [sortOrder, setSortOrder] = useState(urlSortOrder);
   const [page, setPage] = useState(urlPage);
   const [meta, setMeta] = useState({ total: 0, total_pages: 1 });
+
+  const fetchSequenceRef = useRef(0);
+  const abortControllerRef = useRef(null);
 
   // Sync state with URL search params on mount & when URL params change
   useEffect(() => {
@@ -82,12 +93,30 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
     setSelectedEstado(urlEstado);
     setSelectedPrioridad(urlPrioridad);
     setSelectedMecanico(urlMecanico);
+    setSortBy(urlSortBy);
+    setSortOrder(urlSortOrder);
     setPage(urlPage);
-  }, [searchParams, urlFrom, urlTo, urlSearch, urlEstado, urlPrioridad, urlMecanico, urlPage]);
+  }, [searchParams, urlFrom, urlTo, urlSearch, urlEstado, urlPrioridad, urlMecanico, urlPage, urlSortBy, urlSortOrder]);
 
-  // Fetch orders using active URL / State filters
+  // Clean up in-flight requests on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
+
+  // Fetch orders using active URL / State filters (preserves existing rows without flickering)
   const fetchOrders = useCallback(async () => {
-    setLoading(true);
+    const currentSeq = ++fetchSequenceRef.current;
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    setIsFetching(true);
     setError(null);
     try {
       const activeFrom = dateFrom !== undefined ? dateFrom : urlFrom;
@@ -96,6 +125,8 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
       const activeEstado = selectedEstado !== undefined ? selectedEstado : urlEstado;
       const activePrioridad = selectedPrioridad !== undefined ? selectedPrioridad : urlPrioridad;
       const activeMecanico = selectedMecanico !== undefined ? selectedMecanico : urlMecanico;
+      const activeSortBy = sortBy !== undefined ? sortBy : urlSortBy;
+      const activeSortOrder = sortOrder !== undefined ? sortOrder : urlSortOrder;
 
       const queryParams = new URLSearchParams();
       if (activeSearch) queryParams.set("search", activeSearch);
@@ -104,11 +135,15 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
       if (activeMecanico) queryParams.set("mecanico_id", activeMecanico);
       if (activeFrom) queryParams.set("from", activeFrom);
       if (activeTo) queryParams.set("to", activeTo);
+      if (activeSortBy) {
+        queryParams.set("sort_by", activeSortBy);
+        queryParams.set("sort_order", activeSortOrder || "asc");
+      }
       queryParams.set("page", String(page));
       queryParams.set("limit", "25");
 
       const apiUrl = `/api/taller/ordenes?${queryParams.toString()}`;
-      const res = await fetch(apiUrl);
+      const res = await fetch(apiUrl, { signal: controller.signal });
       if (res.status === 401) {
         if (typeof window !== "undefined" && window.location.pathname !== "/login") {
           window.location.replace("/login");
@@ -121,6 +156,8 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
       } catch {
         throw new Error(res.ok ? "Respuesta inválida del servidor." : `Error del servidor (${res.status})`);
       }
+
+      if (currentSeq !== fetchSequenceRef.current) return;
 
       if (!res.ok) {
         throw new Error(data?.message || data?.error || "Error al cargar las órdenes de trabajo.");
@@ -142,12 +179,18 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
         });
       }
     } catch (err) {
-      console.error("fetchOrders Error:", err);
-      setError(err.message);
+      if (err.name === "AbortError") return;
+      if (currentSeq === fetchSequenceRef.current) {
+        console.error("fetchOrders Error:", err);
+        setError(err.message);
+      }
     } finally {
-      setLoading(false);
+      if (currentSeq === fetchSequenceRef.current) {
+        setInitialLoading(false);
+        setIsFetching(false);
+      }
     }
-  }, [dateFrom, dateTo, search, selectedEstado, selectedPrioridad, selectedMecanico, page, urlFrom, urlTo, urlSearch, urlEstado, urlPrioridad, urlMecanico]);
+  }, [dateFrom, dateTo, search, selectedEstado, selectedPrioridad, selectedMecanico, sortBy, sortOrder, page, urlFrom, urlTo, urlSearch, urlEstado, urlPrioridad, urlMecanico, urlSortBy, urlSortOrder]);
 
   useEffect(() => {
     fetchOrders();
@@ -185,6 +228,8 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
     setDateFrom("");
     setDateTo("");
     setPage(1);
+    setSortBy("");
+    setSortOrder("asc");
 
     const currentParams = new URLSearchParams(searchParams.toString());
     const viewParam = currentParams.get("view");
@@ -196,6 +241,32 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
     const newQuery = newParams.toString();
     const targetUrl = newQuery ? `${pathname}?${newQuery}` : pathname;
     router.push(targetUrl);
+  };
+
+  const handleSort = (columnKey) => {
+    let nextOrder = "asc";
+    if (sortBy === columnKey) {
+      nextOrder = sortOrder === "asc" ? "desc" : "asc";
+    }
+    setSortBy(columnKey);
+    setSortOrder(nextOrder);
+    updateUrlParams({ sort_by: columnKey, sort_order: nextOrder });
+  };
+
+  const renderSortIcon = (columnKey) => {
+    if (sortBy !== columnKey) {
+      return (
+        <ArrowUpDown
+          size={12}
+          className="text-slate-600 opacity-60 group-hover:opacity-100 group-hover:text-slate-400 transition-opacity shrink-0"
+        />
+      );
+    }
+    return sortOrder === "asc" ? (
+      <ArrowUp size={12} className="text-[#bfce7f] shrink-0" />
+    ) : (
+      <ArrowDown size={12} className="text-[#bfce7f] shrink-0" />
+    );
   };
 
   const removeFilter = (filterKey) => {
@@ -387,11 +458,11 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
             </select>
 
             <button
-              onClick={handleClearFilters}
+              onClick={() => fetchOrders()}
               className="p-2.5 bg-[#0a0c10] border border-[#2d3748] text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
-              title="Limpiar Filtros"
+              title="Refrescar órdenes"
             >
-              <RotateCcw className="w-4 h-4" />
+              <RotateCcw className={`w-4 h-4 ${isFetching ? "animate-spin text-[#bfce7f]" : ""}`} />
             </button>
           </div>
         </div>
@@ -463,12 +534,12 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
       </div>
 
       {/* Data Table Container */}
-      {loading ? (
+      {initialLoading && orders.length === 0 ? (
         <div className="p-12 flex flex-col items-center justify-center bg-[#161a21] border border-[#2d3748] rounded-xl text-slate-400 gap-3">
           <Loader2 className="w-7 h-7 animate-spin text-[#bfce7f]" />
           <span className="text-xs font-mono">Cargando órdenes de trabajo...</span>
         </div>
-      ) : error ? (
+      ) : error && orders.length === 0 ? (
         <div className="p-8 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs font-mono text-center space-y-3">
           <AlertCircle className="w-6 h-6 mx-auto" />
           <p>{error}</p>
@@ -479,7 +550,7 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
             Reintentar
           </button>
         </div>
-      ) : orders.length === 0 ? (
+      ) : !initialLoading && orders.length === 0 ? (
         <div className="p-12 text-center bg-[#161a21] border border-[#2d3748] rounded-xl text-slate-400 space-y-3 font-mono">
           <Inbox className="w-8 h-8 mx-auto text-slate-500" />
           <p className="text-sm font-bold text-slate-300">No se encontraron órdenes de trabajo</p>
@@ -496,15 +567,62 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
       ) : (
         <div className="border border-[#2d3748] rounded-xl overflow-hidden bg-[#161a21]">
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
+            <table className="w-full text-left border-collapse text-xs" aria-busy={isFetching}>
               <thead>
                 <tr className="border-b border-[#2d3748] bg-[#12151b] font-mono text-[10px] text-slate-400 font-bold uppercase tracking-wider select-none">
-                  <th className="py-3 px-4">CÓDIGO</th>
-                  <th className="py-3 px-4">CLIENTE / VEHÍCULO</th>
-                  <th className="py-3 px-4 text-center">ESTADO</th>
-                  <th className="py-3 px-4">MECÁNICO ASIGNADO</th>
-                  <th className="py-3 px-4 text-right">TOTAL</th>
-                  <th className="py-3 px-4 text-center">ACCIONES</th>
+                  <th
+                    onClick={() => handleSort("codigo")}
+                    aria-sort={sortBy === "codigo" ? (sortOrder === "asc" ? "ascending" : "descending") : "none"}
+                    className="py-3 px-4 cursor-pointer hover:text-white transition-colors group"
+                  >
+                    <div className="inline-flex items-center gap-1.5">
+                      <span>CÓDIGO</span>
+                      {renderSortIcon("codigo")}
+                    </div>
+                  </th>
+                  <th
+                    onClick={() => handleSort("cliente")}
+                    aria-sort={sortBy === "cliente" ? (sortOrder === "asc" ? "ascending" : "descending") : "none"}
+                    className="py-3 px-4 cursor-pointer hover:text-white transition-colors group"
+                  >
+                    <div className="inline-flex items-center gap-1.5">
+                      <span>CLIENTE / VEHÍCULO</span>
+                      {renderSortIcon("cliente")}
+                    </div>
+                  </th>
+                  <th
+                    onClick={() => handleSort("estado")}
+                    aria-sort={sortBy === "estado" ? (sortOrder === "asc" ? "ascending" : "descending") : "none"}
+                    className="py-3 px-4 text-center cursor-pointer hover:text-white transition-colors group"
+                  >
+                    <div className="inline-flex items-center justify-center gap-1.5">
+                      <span>ESTADO</span>
+                      {renderSortIcon("estado")}
+                    </div>
+                  </th>
+                  <th
+                    onClick={() => handleSort("mecanico")}
+                    aria-sort={sortBy === "mecanico" ? (sortOrder === "asc" ? "ascending" : "descending") : "none"}
+                    className="py-3 px-4 cursor-pointer hover:text-white transition-colors group"
+                  >
+                    <div className="inline-flex items-center gap-1.5">
+                      <span>MECÁNICO ASIGNADO</span>
+                      {renderSortIcon("mecanico")}
+                    </div>
+                  </th>
+                  <th
+                    onClick={() => handleSort("total")}
+                    aria-sort={sortBy === "total" ? (sortOrder === "asc" ? "ascending" : "descending") : "none"}
+                    className="py-3 px-4 text-right cursor-pointer hover:text-white transition-colors group"
+                  >
+                    <div className="inline-flex items-center justify-end gap-1.5 w-full">
+                      <span>TOTAL</span>
+                      {renderSortIcon("total")}
+                    </div>
+                  </th>
+                  <th className="py-3 px-4 text-center select-none">
+                    ACCIONES
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#2d3748]">

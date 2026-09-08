@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPool, query } from "@/lib/db";
 import { recalculateWorkOrderTotals } from "@/lib/workshop/recalculateWorkOrderTotals";
+import { syncWorkOrderInvoice } from "@/lib/workshop/syncWorkOrderInvoice";
 import { getCronometroStatus } from "@/lib/workshop/getCronometroStatus";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
 import { queryIncompleteServicesAndTimers } from "@/lib/workshop/validateOrderState";
@@ -551,6 +552,9 @@ export async function PUT(
       SELECT 
         ot.orden_trabajo_id, 
         ot.codigo_orden,
+        ot.recepcion_id,
+        ot.cliente_id,
+        ot.bicicleta_id,
         ot.estado_orden_id, 
         ot.prioridad_orden_id, 
         ot.fecha_entrega_estimada, 
@@ -675,6 +679,272 @@ export async function PUT(
         }
       }
 
+      // Handle Reception Change and sync Cliente & Bicicleta
+      let validatedRecepcionId = currentOrder.recepcion_id;
+      let validatedClienteId = currentOrder.cliente_id;
+      let validatedBicicletaId = currentOrder.bicicleta_id;
+
+      if (body.recepcion_id !== undefined && body.recepcion_id !== null && Number(body.recepcion_id) !== Number(currentOrder.recepcion_id)) {
+        const targetRecId = parseInt(String(body.recepcion_id), 10);
+        const recRes = await client.query(`
+          SELECT r.recepcion_id, r.cliente_id, r.bicicleta_id, r.convertido_orden_id, c.empresa_id
+          FROM admin.recepciones r
+          JOIN admin.clientes c ON r.cliente_id = c.cliente_id
+          WHERE r.recepcion_id = $1 AND (r.activo = true OR r.activo IS NULL) AND r.fecha_eliminacion IS NULL
+          FOR UPDATE OF r
+        `, [targetRecId]);
+
+        if (recRes.rows.length === 0 || Number(recRes.rows[0].empresa_id) !== Number(session.empresa_id)) {
+          await client.query("ROLLBACK");
+          return NextResponse.json({
+            error: "RECEPTION_NOT_FOUND",
+            message: "La recepción seleccionada no existe o no pertenece a su empresa."
+          }, { status: 404 });
+        }
+
+        const targetRec = recRes.rows[0];
+        if (targetRec.convertido_orden_id && Number(targetRec.convertido_orden_id) !== ordenId) {
+          await client.query("ROLLBACK");
+          return NextResponse.json({
+            error: "RECEPTION_ALREADY_LINKED",
+            message: "Esta recepción ya está asociada a otra orden de trabajo."
+          }, { status: 409 });
+        }
+
+        // Unlink previous reception if it was linked to this OT
+        if (currentOrder.recepcion_id) {
+          await client.query(`
+            UPDATE admin.recepciones
+            SET convertido_orden_id = NULL, fecha_modificacion = NOW(), usuario_modificacion = $1
+            WHERE recepcion_id = $2 AND convertido_orden_id = $3
+          `, [session.usuario_id, currentOrder.recepcion_id, ordenId]);
+        }
+
+        // Link new reception
+        await client.query(`
+          UPDATE admin.recepciones
+          SET convertido_orden_id = $1, fecha_modificacion = NOW(), usuario_modificacion = $2
+          WHERE recepcion_id = $3
+        `, [ordenId, session.usuario_id, targetRec.recepcion_id]);
+
+        validatedRecepcionId = targetRec.recepcion_id;
+        validatedClienteId = targetRec.cliente_id;
+        validatedBicicletaId = targetRec.bicicleta_id;
+      }
+
+      // Handle Manual Cliente modification if provided
+      if (body.cliente_id !== undefined && body.cliente_id !== null) {
+        const targetCliId = parseInt(String(body.cliente_id), 10);
+        if (targetCliId && targetCliId !== validatedClienteId) {
+          const cliCheck = await client.query(`
+            SELECT cliente_id, empresa_id
+            FROM admin.clientes
+            WHERE cliente_id = $1 AND (activo = true OR activo IS NULL) AND fecha_eliminacion IS NULL
+          `, [targetCliId]);
+
+          if (cliCheck.rows.length === 0 || Number(cliCheck.rows[0].empresa_id) !== Number(session.empresa_id)) {
+            await client.query("ROLLBACK");
+            return NextResponse.json({
+              error: "CLIENT_NOT_FOUND",
+              message: "El cliente seleccionado no existe o no pertenece a su empresa."
+            }, { status: 404 });
+          }
+          validatedClienteId = targetCliId;
+        }
+      }
+
+      // Handle Manual Bicicleta modification if provided
+      if (body.bicicleta_id !== undefined && body.bicicleta_id !== null) {
+        const targetBikeId = parseInt(String(body.bicicleta_id), 10);
+        if (targetBikeId) {
+          const bikeCheck = await client.query(`
+            SELECT bicicleta_id, cliente_id
+            FROM admin.bicicletas
+            WHERE bicicleta_id = $1 AND (activo = true OR activo IS NULL) AND fecha_eliminacion IS NULL
+          `, [targetBikeId]);
+
+          if (bikeCheck.rows.length === 0) {
+            await client.query("ROLLBACK");
+            return NextResponse.json({
+              error: "BIKE_NOT_FOUND",
+              message: "La bicicleta seleccionada no existe o está inactiva."
+            }, { status: 404 });
+          }
+
+          if (Number(bikeCheck.rows[0].cliente_id) !== Number(validatedClienteId)) {
+            await client.query("ROLLBACK");
+            return NextResponse.json({
+              error: "BIKE_NOT_BELONGING_TO_CLIENT",
+              message: "La bicicleta seleccionada no pertenece al cliente seleccionado."
+            }, { status: 400 });
+          }
+
+          validatedBicicletaId = targetBikeId;
+        }
+      }
+
+      // Handle Services Sync
+      if (Array.isArray(body.servicios)) {
+        const existingServRes = await client.query(`
+          SELECT orden_servicio_id, tipo_servicio_id, codigo_servicio, secuencia
+          FROM admin.orden_servicios
+          WHERE orden_trabajo_id = $1 AND (activo IS DISTINCT FROM false)
+        `, [ordenId]);
+
+        const existingServMap = new Map<number, any>();
+        existingServRes.rows.forEach(r => existingServMap.set(Number(r.orden_servicio_id), r));
+        const incomingServIds = new Set<number>();
+
+        for (const s of body.servicios) {
+          const sId = s.orden_servicio_id ? Number(s.orden_servicio_id) : null;
+          if (sId && existingServMap.has(sId)) {
+            incomingServIds.add(sId);
+            if (s.observacion_tecnica !== undefined) {
+              await client.query(`
+                UPDATE admin.orden_servicios
+                SET observacion_tecnica = $1, fecha_actualizacion = NOW(), usuario_actualizacion = $2
+                WHERE orden_servicio_id = $3 AND orden_trabajo_id = $4
+              `, [s.observacion_tecnica, session.usuario_id, sId, ordenId]);
+            }
+          } else {
+            const tipoServId = Number(s.tipo_servicio_id || s.servicio_id);
+            if (!tipoServId) continue;
+
+            const tsCheck = await client.query(`
+              SELECT tipo_servicio_id, nombre, precio_base
+              FROM admin.tipo_servicio
+              WHERE tipo_servicio_id = $1 AND activo = true
+            `, [tipoServId]);
+
+            if (!tsCheck.rows.length) {
+              await client.query("ROLLBACK");
+              return NextResponse.json({
+                error: "INVALID_SERVICE_TYPE",
+                message: `El tipo de servicio #${tipoServId} no existe o no está activo.`
+              }, { status: 400 });
+            }
+
+            const ts = tsCheck.rows[0];
+            const precioUnit = s.precio_unitario !== undefined && !isNaN(Number(s.precio_unitario))
+              ? Number(s.precio_unitario)
+              : Number(ts.precio_base || 0);
+
+            const seqRes = await client.query(`
+              SELECT COALESCE(MAX(secuencia), 0) + 1 AS next_seq
+              FROM admin.orden_servicios
+              WHERE orden_trabajo_id = $1
+            `, [ordenId]);
+            const nextSeq = parseInt(seqRes.rows[0].next_seq, 10);
+            const codServ = `SRV-${String(nextSeq).padStart(2, "0")}`;
+
+            const insRes = await client.query(`
+              INSERT INTO admin.orden_servicios (
+                orden_trabajo_id, codigo_servicio, tipo_servicio_id, estado_orden_servicio_id,
+                estado_aprobacion_id, secuencia, usuario_id, cantidad, precio_unitario,
+                porcentaje_descuento, valor_descuento, subtotal, observacion_tecnica,
+                activo, fecha_registro, usuario_registro
+              ) VALUES (
+                $1, $2, $3, 1, 1, $4, $5, 1, $6, 0, 0, $6, $7, true, NOW(), $5
+              ) RETURNING orden_servicio_id
+            `, [
+              ordenId, codServ, tipoServId, nextSeq, session.usuario_id,
+              precioUnit, s.observacion_tecnica || s.motivo || null
+            ]);
+
+            incomingServIds.add(Number(insRes.rows[0].orden_servicio_id));
+          }
+        }
+
+        // Soft delete removed services
+        for (const [existingId] of existingServMap.entries()) {
+          if (!incomingServIds.has(existingId)) {
+            await client.query(`
+              UPDATE admin.orden_servicios
+              SET activo = false, fecha_actualizacion = NOW(), usuario_actualizacion = $1
+              WHERE orden_servicio_id = $2 AND orden_trabajo_id = $3
+            `, [session.usuario_id, existingId, ordenId]);
+          }
+        }
+      }
+
+      // Handle Products Sync (NO touching Inventory stock / NO Kardex)
+      if (Array.isArray(body.productos)) {
+        const existingProdRes = await client.query(`
+          SELECT orden_producto_id, producto_id, cantidad, precio_unitario
+          FROM admin.orden_productos
+          WHERE orden_trabajo_id = $1
+        `, [ordenId]);
+
+        const existingProdMap = new Map<number, any>();
+        existingProdRes.rows.forEach(r => existingProdMap.set(Number(r.orden_producto_id), r));
+        const incomingProdIds = new Set<number>();
+
+        for (const p of body.productos) {
+          const pId = p.orden_producto_id ? Number(p.orden_producto_id) : null;
+          const cant = Math.max(1, Number(p.cantidad || 1));
+
+          if (pId && existingProdMap.has(pId)) {
+            incomingProdIds.add(pId);
+            const pu = p.precio_unitario !== undefined && !isNaN(Number(p.precio_unitario))
+              ? Number(p.precio_unitario)
+              : Number(existingProdMap.get(pId).precio_unitario || 0);
+            const sub = Math.round(cant * pu * 100) / 100;
+
+            await client.query(`
+              UPDATE admin.orden_productos
+              SET cantidad = $1, precio_unitario = $2, subtotal = $3, observacion = $4,
+                  fecha_actualizacion = NOW(), usuario_actualizacion = $5
+              WHERE orden_producto_id = $6 AND orden_trabajo_id = $7
+            `, [cant, pu, sub, p.observacion || null, session.usuario_id, pId, ordenId]);
+          } else {
+            const prodId = Number(p.producto_id);
+            if (!prodId) continue;
+
+            const prodCheck = await client.query(`
+              SELECT producto_id, nombre, precio_venta, estado
+              FROM admin.productos
+              WHERE producto_id = $1
+            `, [prodId]);
+
+            if (!prodCheck.rows.length || prodCheck.rows[0].estado === false || prodCheck.rows[0].estado === 0) {
+              await client.query("ROLLBACK");
+              return NextResponse.json({
+                error: "INVALID_PRODUCT",
+                message: `El producto #${prodId} no existe o está inactivo.`
+              }, { status: 400 });
+            }
+
+            const prod = prodCheck.rows[0];
+            const pu = p.precio_unitario !== undefined && !isNaN(Number(p.precio_unitario))
+              ? Number(p.precio_unitario)
+              : Number(prod.precio_venta || 0);
+            const sub = Math.round(cant * pu * 100) / 100;
+
+            const insPRes = await client.query(`
+              INSERT INTO admin.orden_productos (
+                orden_trabajo_id, orden_servicio_id, producto_id, almacen_id, cantidad,
+                precio_unitario, porcentaje_descuento, valor_descuento, subtotal,
+                estado_aprobacion_id, utilizado, observacion, fecha_registro, usuario_registro
+              ) VALUES (
+                $1, NULL, $2, 1, $3, $4, 0, 0, $5, 1, false, $6, NOW(), $7
+              ) RETURNING orden_producto_id
+            `, [ordenId, prodId, cant, pu, sub, p.observacion || null, session.usuario_id]);
+
+            incomingProdIds.add(Number(insPRes.rows[0].orden_producto_id));
+          }
+        }
+
+        // Delete removed products
+        for (const [existingId] of existingProdMap.entries()) {
+          if (!incomingProdIds.has(existingId)) {
+            await client.query(`
+              DELETE FROM admin.orden_productos
+              WHERE orden_producto_id = $1 AND orden_trabajo_id = $2
+            `, [existingId, ordenId]);
+          }
+        }
+      }
+
       const updateRes = await client.query(`
         UPDATE admin.ordenes_trabajo
         SET 
@@ -683,9 +953,12 @@ export async function PUT(
           diagnostico_inicial = COALESCE($3, diagnostico_inicial),
           fecha_entrega_estimada = COALESCE($4, fecha_entrega_estimada),
           mecanico_id = $5,
+          recepcion_id = COALESCE($6, recepcion_id),
+          cliente_id = COALESCE($7, cliente_id),
+          bicicleta_id = COALESCE($8, bicicleta_id),
           fecha_actualizacion = NOW(),
-          usuario_actualizacion = $6
-        WHERE orden_trabajo_id = $7
+          usuario_actualizacion = $9
+        WHERE orden_trabajo_id = $10
         RETURNING *
       `, [
         targetPrioridadId ? parseInt(targetPrioridadId, 10) : null,
@@ -693,9 +966,16 @@ export async function PUT(
         diagnostico_inicial !== undefined ? diagnostico_inicial : null,
         cleanFecha(fecha_entrega_estimada),
         validatedMecanicoId,
+        validatedRecepcionId,
+        validatedClienteId,
+        validatedBicicletaId,
         session.usuario_id,
         ordenId
       ]);
+
+      // Recalculate totals and synchronize invoice
+      await recalculateWorkOrderTotals(client, ordenId, session.usuario_id);
+      await syncWorkOrderInvoice(client, ordenId, session.usuario_id);
 
       const afterOrder = updateRes.rows[0];
       const diff = computeDiff(currentOrder, afterOrder);
@@ -720,6 +1000,45 @@ export async function PUT(
             descripcion: `Mecánico #${validatedMecanicoId || 'Ninguno'} asignado a la orden #${ordenId}`,
             resultado: "Exitoso",
             req
+          });
+        }
+
+        if (currentOrder.recepcion_id !== validatedRecepcionId) {
+          await recordUserAudit({
+            userId: session.usuario_id,
+            accion: "CAMBIAR_RECEPCION_ORDEN",
+            valorAnterior: { recepcion_id: currentOrder.recepcion_id },
+            valorNuevo: { recepcion_id: validatedRecepcionId },
+            motivo: "Cambio de recepción asociada a orden de trabajo",
+            resultado: "COMPLETADO",
+            client,
+            throwOnError: true
+          });
+        }
+
+        if (currentOrder.cliente_id !== validatedClienteId) {
+          await recordUserAudit({
+            userId: session.usuario_id,
+            accion: "CAMBIAR_CLIENTE_ORDEN",
+            valorAnterior: { cliente_id: currentOrder.cliente_id },
+            valorNuevo: { cliente_id: validatedClienteId },
+            motivo: "Cambio de cliente asociado a orden de trabajo",
+            resultado: "COMPLETADO",
+            client,
+            throwOnError: true
+          });
+        }
+
+        if (currentOrder.bicicleta_id !== validatedBicicletaId) {
+          await recordUserAudit({
+            userId: session.usuario_id,
+            accion: "CAMBIAR_BICICLETA_ORDEN",
+            valorAnterior: { bicicleta_id: currentOrder.bicicleta_id },
+            valorNuevo: { bicicleta_id: validatedBicicletaId },
+            motivo: "Cambio de bicicleta asociada a orden de trabajo",
+            resultado: "COMPLETADO",
+            client,
+            throwOnError: true
           });
         }
 

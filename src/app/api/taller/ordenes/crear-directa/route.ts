@@ -43,6 +43,7 @@ export async function POST(req: NextRequest) {
       observacion_interna_ot: body.observacion_interna_ot,
       presupuesto_estimado: body.presupuesto_estimado,
       servicios: body.servicios,
+      productos: body.productos,
       mecanico_id: null,
       fecha_prometida: null,
       is_direct_work_order: true,
@@ -73,8 +74,13 @@ export async function POST(req: NextRequest) {
     console.error("Error in POST /api/taller/ordenes/crear-directa:", error);
 
     const status = error.status || 500;
-    const errorKey = error.code || "SERVER_ERROR";
-    const message = error.message || "Error al procesar la creación directa de la orden de trabajo.";
+    let errorKey = error.code || "SERVER_ERROR";
+    let message = error.message || "Error al procesar la creación directa de la orden de trabajo.";
+
+    if (status === 500 && (typeof error?.code === "string" && (error.code.startsWith("42") || error.code.startsWith("28") || error.code.startsWith("XX")) || error?.message?.includes("column") || error?.message?.includes("syntax error") || error?.message?.includes("relation"))) {
+      errorKey = "INTERNAL_ERROR";
+      message = "Ocurrió un error interno en el servidor al procesar la orden de trabajo. Por favor, intente nuevamente.";
+    }
 
     return NextResponse.json(
       {

@@ -31,6 +31,9 @@ export async function GET(req: NextRequest) {
     const period = searchParams.get("period") || "";
     const from = searchParams.get("from") || "";
     const to = searchParams.get("to") || "";
+    const sortBy = (searchParams.get("sort_by") || searchParams.get("sortBy") || "").trim().toLowerCase();
+    const sortOrderRaw = (searchParams.get("sort_order") || searchParams.get("sortOrder") || "ASC").trim().toUpperCase();
+    const sortDirection = sortOrderRaw === "DESC" ? "DESC" : "ASC";
     const page = parseInt(searchParams.get("page") || "1", 10);
     const limit = parseInt(searchParams.get("limit") || "20", 10);
     const offset = (page - 1) * limit;
@@ -124,6 +127,33 @@ export async function GET(req: NextRequest) {
     const countRes = await query(countSql, queryParams);
     const total = parseInt(countRes[0]?.total || "0", 10);
 
+    // Whitelist Order By construction
+    let orderBySql = `
+      DATE_TRUNC('day', ot.fecha_registro AT TIME ZONE 'America/Santo_Domingo') ASC,
+      ot.prioridad_orden_id DESC,
+      ot.orden_trabajo_id ASC
+    `;
+
+    if (sortBy === "codigo") {
+      orderBySql = `ot.orden_trabajo_id ${sortDirection}, ot.codigo_orden ${sortDirection}`;
+    } else if (sortBy === "cliente") {
+      orderBySql = `LOWER(COALESCE(c.nombre_completo, 'Cliente General')) ${sortDirection}, LOWER(COALESCE(b.marca, '')) ${sortDirection}, LOWER(COALESCE(b.modelo, '')) ${sortDirection}, ot.orden_trabajo_id ${sortDirection}`;
+    } else if (sortBy === "estado") {
+      orderBySql = `COALESCE(eot.orden_visual, ot.estado_orden_id) ${sortDirection}, ot.orden_trabajo_id ${sortDirection}`;
+    } else if (sortBy === "mecanico") {
+      orderBySql = `(
+        SELECT LOWER(COALESCE(NULLIF(TRIM(CONCAT_WS(' ', ui.nombre, ui.apellido)), ''), ui.correo_electronico, ('Mecánico #' || u.usuario_id::text)))
+        FROM admin.orden_servicios os
+        JOIN admin.usuario u ON os.usuario_id = u.usuario_id
+        LEFT JOIN admin.usuario_identidad ui ON u.usuario_id = ui.usuario_id
+        WHERE os.orden_trabajo_id = ot.orden_trabajo_id AND os.usuario_id IS NOT NULL AND (os.activo IS DISTINCT FROM false)
+        ORDER BY os.orden_servicio_id ASC
+        LIMIT 1
+      ) ${sortDirection} NULLS LAST, ot.orden_trabajo_id ${sortDirection}`;
+    } else if (sortBy === "total") {
+      orderBySql = `COALESCE(ot.total_orden, ot.subtotal_general, 0) ${sortDirection}, ot.orden_trabajo_id ${sortDirection}`;
+    }
+
     // Fetch Items
     const sql = `
       SELECT 
@@ -188,10 +218,7 @@ export async function GET(req: NextRequest) {
       LEFT JOIN admin.estado_orden_trabajo eot ON ot.estado_orden_id = eot.estado_orden_id
       LEFT JOIN admin.prioridad_orden_trabajo pot ON ot.prioridad_orden_id = pot.prioridad_orden_trabajo_id
       ${whereClause}
-      ORDER BY
-        DATE_TRUNC('day', ot.fecha_registro AT TIME ZONE 'America/Santo_Domingo') ASC,
-        ot.prioridad_orden_id DESC,
-        ot.orden_trabajo_id ASC
+      ORDER BY ${orderBySql}
       LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}
     `;
 
@@ -309,6 +336,7 @@ export async function POST(req: NextRequest) {
         observacion_interna_ot: body.observacion_interna_ot,
         presupuesto_estimado: body.presupuesto_estimado,
         servicios: body.servicios,
+        productos: body.productos,
         mecanico_id: null,
         fecha_prometida: null,
         is_direct_work_order: true,
