@@ -214,89 +214,155 @@ export async function GET(
     let totalOrden = parseFloat(orderData.total_orden || 0);
     let montoPagado = totalOrden;
     let estadoFactura = "PAGADA";
+    let persistedFactura: any = null;
+    let persistedDetalles: any[] = [];
 
     try {
       const facturaRes = await query<any>(
-        `SELECT numero_factura, fecha_factura, subtotal, descuento_total, impuesto_total, total_factura, monto_pagado, balance_pendiente, estado
+        `SELECT factura_id, numero_factura, fecha_factura, subtotal, descuento_total, impuesto_total, total_factura, monto_pagado, balance_pendiente, estado
          FROM admin.facturas
          WHERE orden_trabajo_id = $1
          ORDER BY factura_id DESC LIMIT 1`,
         [ordenId]
       );
       if (facturaRes && facturaRes.length > 0) {
-        const fac = facturaRes[0];
-        if (fac.numero_factura) numeroFactura = fac.numero_factura;
-        if (fac.fecha_factura) fechaFactura = fac.fecha_factura;
-        if (fac.monto_pagado != null) montoPagado = parseFloat(fac.monto_pagado);
-        if (fac.balance_pendiente != null) balancePendiente = parseFloat(fac.balance_pendiente);
-        if (fac.estado) estadoFactura = fac.estado;
+        persistedFactura = facturaRes[0];
+        if (persistedFactura.numero_factura) numeroFactura = persistedFactura.numero_factura;
+        if (persistedFactura.fecha_factura) fechaFactura = persistedFactura.fecha_factura;
+        if (persistedFactura.monto_pagado != null) montoPagado = parseFloat(persistedFactura.monto_pagado);
+        if (persistedFactura.balance_pendiente != null) balancePendiente = parseFloat(persistedFactura.balance_pendiente);
+        if (persistedFactura.estado) estadoFactura = persistedFactura.estado;
+        totalOrden = parseFloat(persistedFactura.total_factura || 0);
+
+        // Fetch persisted line items from admin.detalle_factura
+        const detRes = await query<any>(
+          `SELECT
+             df.detalle_factura_id AS item_id,
+             df.tipo_detalle,
+             df.servicio_id,
+             df.producto_id,
+             df.descripcion,
+             df.cantidad,
+             df.precio_unitario,
+             df.descuento,
+             df.subtotal
+           FROM admin.detalle_factura df
+           WHERE df.factura_id = $1
+           ORDER BY df.detalle_factura_id ASC`,
+          [persistedFactura.factura_id]
+        );
+        persistedDetalles = detRes || [];
       }
     } catch (facErr) {
       console.warn("Could not query admin.facturas, using generated invoice data", facErr);
     }
 
-    // 4. Fetch Billable Services
-    const servSql = `
-      SELECT 
-        os.orden_servicio_id AS item_id,
-        'SERVICIO' AS tipo_concepto,
-        COALESCE(os.codigo_servicio, 'SRV-' || LPAD(os.orden_servicio_id::text, 4, '0')) AS codigo,
-        COALESCE(ts.nombre, os.descripcion_servicio, 'Servicio de Taller') AS descripcion,
-        COALESCE(os.observacion_tecnica, '') AS notas,
-        COALESCE(os.cantidad, 1.00) AS cantidad,
-        COALESCE(os.precio_unitario, 0) AS precio_unitario,
-        COALESCE(os.valor_descuento, 0) AS descuento,
-        COALESCE(os.subtotal, (COALESCE(os.cantidad, 1.00) * COALESCE(os.precio_unitario, 0) - COALESCE(os.valor_descuento, 0))) AS subtotal
-      FROM admin.orden_servicios os
-      LEFT JOIN admin.tipo_servicio ts ON os.tipo_servicio_id = ts.tipo_servicio_id
-      WHERE os.orden_trabajo_id = $1
-        AND (os.activo IS DISTINCT FROM false)
-      ORDER BY os.orden_servicio_id ASC
-    `;
-    const servRes = await query<any>(servSql, [ordenId]);
-    const services = (servRes || []).map((s: any) => ({
-      item_id: s.item_id,
-      tipo_concepto: "SERVICIO",
-      codigo: s.codigo,
-      descripcion: s.descripcion,
-      notas: s.notas || "",
-      cantidad: parseFloat(s.cantidad || 1).toFixed(2),
-      precio_unitario: parseFloat(s.precio_unitario || 0),
-      descuento: parseFloat(s.descuento || 0),
-      subtotal: parseFloat(s.subtotal || 0)
-    }));
+    let conceptos: any[] = [];
+    let subtotalServicios = 0;
+    let subtotalRepuestos = 0;
+    let descuentoTotal = 0;
+    let impuestoTotal = 0;
 
-    // 5. Fetch Billable Products
-    const prodSql = `
-      SELECT 
-        op.orden_producto_id AS item_id,
-        'REPUESTO' AS tipo_concepto,
-        COALESCE(p.codigo_producto, 'REP-' || LPAD(op.orden_producto_id::text, 4, '0')) AS codigo,
-        COALESCE(p.nombre, 'Repuesto / Componente') AS descripcion,
-        COALESCE(op.observacion, '') AS notas,
-        COALESCE(op.cantidad, 1.00) AS cantidad,
-        COALESCE(op.precio_unitario, 0) AS precio_unitario,
-        COALESCE(op.valor_descuento, 0) AS descuento,
-        COALESCE(op.subtotal, (COALESCE(op.cantidad, 1.00) * COALESCE(op.precio_unitario, 0) - COALESCE(op.valor_descuento, 0))) AS subtotal
-      FROM admin.orden_productos op
-      LEFT JOIN admin.productos p ON op.producto_id = p.producto_id
-      WHERE op.orden_trabajo_id = $1
-      ORDER BY op.orden_producto_id ASC
-    `;
-    const prodRes = await query<any>(prodSql, [ordenId]);
-    const products = (prodRes || []).map((p: any) => ({
-      item_id: p.item_id,
-      tipo_concepto: "REPUESTO",
-      codigo: p.codigo,
-      descripcion: p.descripcion,
-      notas: p.notas || "",
-      cantidad: parseFloat(p.cantidad || 1).toFixed(2),
-      precio_unitario: parseFloat(p.precio_unitario || 0),
-      descuento: parseFloat(p.descuento || 0),
-      subtotal: parseFloat(p.subtotal || 0)
-    }));
+    if (persistedFactura && persistedDetalles.length > 0) {
+      // Use purely persisted evidence from admin.detalle_factura
+      conceptos = persistedDetalles.map((d: any) => {
+        const isProduct = d.tipo_detalle === "PRODUCTO";
+        const isLabor = d.tipo_detalle === "MANO_OBRA";
+        const tipoConcepto = isProduct ? "REPUESTO" : (isLabor ? "MANO_OBRA" : "SERVICIO");
+        const codigo = isProduct
+          ? (d.producto_id ? `REP-${String(d.producto_id).padStart(4, "0")}` : `REP-${d.item_id}`)
+          : (d.servicio_id ? `SRV-${String(d.servicio_id).padStart(4, "0")}` : `SRV-${d.item_id}`);
+        const sub = parseFloat(d.subtotal || 0);
+        const desc = parseFloat(d.descuento || 0);
 
-    const conceptos = [...services, ...products];
+        if (isProduct) {
+          subtotalRepuestos += sub;
+        } else {
+          subtotalServicios += sub;
+        }
+        descuentoTotal += desc;
+
+        return {
+          item_id: d.item_id,
+          tipo_concepto: tipoConcepto,
+          codigo,
+          descripcion: d.descripcion,
+          notas: "",
+          cantidad: parseFloat(d.cantidad || 1).toFixed(2),
+          precio_unitario: parseFloat(d.precio_unitario || 0),
+          descuento: desc,
+          subtotal: sub
+        };
+      });
+      descuentoTotal = parseFloat(persistedFactura.descuento_total || descuentoTotal);
+      impuestoTotal = parseFloat(persistedFactura.impuesto_total || 0);
+    } else {
+      // Fallback: operational preview when no persisted invoice exists
+      const servSql = `
+        SELECT
+          os.orden_servicio_id AS item_id,
+          'SERVICIO' AS tipo_concepto,
+          COALESCE(os.codigo_servicio, 'SRV-' || LPAD(os.orden_servicio_id::text, 4, '0')) AS codigo,
+          COALESCE(ts.nombre, os.descripcion_servicio, 'Servicio de Taller') AS descripcion,
+          COALESCE(os.observacion_tecnica, '') AS notas,
+          COALESCE(os.cantidad, 1.00) AS cantidad,
+          COALESCE(os.precio_unitario, 0) AS precio_unitario,
+          COALESCE(os.valor_descuento, 0) AS descuento,
+          COALESCE(os.subtotal, (COALESCE(os.cantidad, 1.00) * COALESCE(os.precio_unitario, 0) - COALESCE(os.valor_descuento, 0))) AS subtotal
+        FROM admin.orden_servicios os
+        LEFT JOIN admin.tipo_servicio ts ON os.tipo_servicio_id = ts.tipo_servicio_id
+        WHERE os.orden_trabajo_id = $1
+          AND (os.activo IS DISTINCT FROM false)
+        ORDER BY os.orden_servicio_id ASC
+      `;
+      const servRes = await query<any>(servSql, [ordenId]);
+      const services = (servRes || []).map((s: any) => ({
+        item_id: s.item_id,
+        tipo_concepto: "SERVICIO",
+        codigo: s.codigo,
+        descripcion: s.descripcion,
+        notas: s.notas || "",
+        cantidad: parseFloat(s.cantidad || 1).toFixed(2),
+        precio_unitario: parseFloat(s.precio_unitario || 0),
+        descuento: parseFloat(s.descuento || 0),
+        subtotal: parseFloat(s.subtotal || 0)
+      }));
+
+      const prodSql = `
+        SELECT
+          op.orden_producto_id AS item_id,
+          'REPUESTO' AS tipo_concepto,
+          COALESCE(p.codigo_producto, 'REP-' || LPAD(op.orden_producto_id::text, 4, '0')) AS codigo,
+          COALESCE(p.nombre, 'Repuesto / Componente') AS descripcion,
+          COALESCE(op.observacion, '') AS notas,
+          COALESCE(op.cantidad, 1.00) AS cantidad,
+          COALESCE(op.precio_unitario, 0) AS precio_unitario,
+          COALESCE(op.valor_descuento, 0) AS descuento,
+          COALESCE(op.subtotal, (COALESCE(op.cantidad, 1.00) * COALESCE(op.precio_unitario, 0) - COALESCE(op.valor_descuento, 0))) AS subtotal
+        FROM admin.orden_productos op
+        LEFT JOIN admin.productos p ON op.producto_id = p.producto_id
+        WHERE op.orden_trabajo_id = $1
+        ORDER BY op.orden_producto_id ASC
+      `;
+      const prodRes = await query<any>(prodSql, [ordenId]);
+      const products = (prodRes || []).map((p: any) => ({
+        item_id: p.item_id,
+        tipo_concepto: "REPUESTO",
+        codigo: p.codigo,
+        descripcion: p.descripcion,
+        notas: p.notas || "",
+        cantidad: parseFloat(p.cantidad || 1).toFixed(2),
+        precio_unitario: parseFloat(p.precio_unitario || 0),
+        descuento: parseFloat(p.descuento || 0),
+        subtotal: parseFloat(p.subtotal || 0)
+      }));
+
+      conceptos = [...services, ...products];
+      subtotalServicios = parseFloat(orderData.subtotal_servicios || 0);
+      subtotalRepuestos = parseFloat(orderData.subtotal_repuestos || 0);
+      descuentoTotal = parseFloat(orderData.descuento_total || 0);
+      impuestoTotal = parseFloat(orderData.impuesto || 0);
+    }
 
     return NextResponse.json({
       success: true,
@@ -337,10 +403,10 @@ export async function GET(
         observaciones: orderData.observaciones || orderData.diagnostico_inicial || "Sin observaciones adicionales",
         conceptos,
         resumen_financiero: {
-          subtotal_servicios: parseFloat(orderData.subtotal_servicios || 0),
-          subtotal_repuestos: parseFloat(orderData.subtotal_repuestos || 0),
-          descuento_total: parseFloat(orderData.descuento_total || 0),
-          impuesto: parseFloat(orderData.impuesto || 0),
+          subtotal_servicios: subtotalServicios,
+          subtotal_repuestos: subtotalRepuestos,
+          descuento_total: descuentoTotal,
+          impuesto: impuestoTotal,
           total_general: totalOrden,
           monto_pagado: montoPagado,
           balance_pendiente: balancePendiente

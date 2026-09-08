@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPool, query } from "@/lib/db";
 import { recalculateWorkOrderTotals } from "@/lib/workshop/recalculateWorkOrderTotals";
+import { syncWorkOrderInvoice } from "@/lib/workshop/syncWorkOrderInvoice";
 import { getCronometroStatus } from "@/lib/workshop/getCronometroStatus";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
 import { validateOrderInRepair } from "@/lib/workshop/validateOrderState";
@@ -204,6 +205,14 @@ export async function PUT(
       ? Number(rawPrecio)
       : undefined;
     const observaciones = body.observaciones ?? body.observacion_tecnica;
+    const rawCantidad = body.cantidad;
+    const cantidad = (rawCantidad !== undefined && rawCantidad !== null && rawCantidad !== "" && !isNaN(Number(rawCantidad)) && Number(rawCantidad) > 0)
+      ? Number(rawCantidad)
+      : undefined;
+    const rawDescuentoPct = body.porcentaje_descuento;
+    const porcentaje_descuento = (rawDescuentoPct !== undefined && rawDescuentoPct !== null && rawDescuentoPct !== "" && !isNaN(Number(rawDescuentoPct)))
+      ? Number(rawDescuentoPct)
+      : undefined;
 
     const rawNuevoEstadoComponenteId = body.nuevo_estado_componente_id;
     const nuevoEstadoComponenteId = (rawNuevoEstadoComponenteId !== undefined && rawNuevoEstadoComponenteId !== null && rawNuevoEstadoComponenteId !== "" && !isNaN(parseInt(rawNuevoEstadoComponenteId, 10)))
@@ -212,14 +221,59 @@ export async function PUT(
 
     await client.query("BEGIN");
 
-    // Enforce order state machine check
-    const orderStateCheck = await validateOrderInRepair(client, ordenId, session.empresa_id, "EDITAR_SERVICIO");
-    if (!orderStateCheck.isValid) {
+    // Lock and validate order existence and company isolation
+    const orderRes = await client.query(`
+      SELECT
+        ot.orden_trabajo_id,
+        ot.estado_orden_id,
+        ot.bicicleta_id,
+        eot.codigo AS estado_codigo,
+        c.empresa_id AS empresa_id
+      FROM admin.ordenes_trabajo ot
+      JOIN admin.estado_orden_trabajo eot ON ot.estado_orden_id = eot.estado_orden_id
+      JOIN admin.clientes c ON ot.cliente_id = c.cliente_id
+      WHERE ot.orden_trabajo_id = $1
+        AND ot.activo = true
+      FOR UPDATE OF ot
+    `, [ordenId]);
+
+    if (orderRes.rows.length === 0) {
       await client.query("ROLLBACK");
-      return orderStateCheck.response;
+      return NextResponse.json({
+        success: false,
+        error: "NOT_FOUND",
+        message: "La orden de trabajo no existe o está inactiva."
+      }, { status: 404 });
     }
 
-    const currentOrder = orderStateCheck.order;
+    const currentOrder = orderRes.rows[0];
+    if (currentOrder.empresa_id == null || session.empresa_id == null || Number(currentOrder.empresa_id) !== Number(session.empresa_id)) {
+      await client.query("ROLLBACK");
+      return NextResponse.json({
+        success: false,
+        error: "NOT_FOUND",
+        message: "La orden de trabajo no existe o no pertenece a su empresa."
+      }, { status: 404 });
+    }
+
+    // Operational actions (Iniciar, Pausar, Reanudar, Finalizar) require the order to be in REPARACION
+    const isOperativeAction = ["INICIAR_SERVICIO", "PAUSAR_SERVICIO", "REANUDAR_SERVICIO", "FINALIZAR_SERVICIO"].includes(body.accion);
+    if (isOperativeAction) {
+      const estadoCodigo = String(currentOrder.estado_codigo || "").trim().toUpperCase();
+      if (estadoCodigo !== "REPARACION") {
+        await client.query("ROLLBACK");
+        return NextResponse.json({
+          success: false,
+          error: "ORDER_NOT_IN_REPAIR",
+          message: "La orden debe estar en Reparación para realizar acciones operativas sobre sus servicios.",
+          details: {
+            estado_actual: estadoCodigo,
+            accion: body.accion
+          }
+        }, { status: 409 });
+      }
+    }
+
     const estadoOrdenId = currentOrder.estado_orden_id;
     const bicicletaId = currentOrder.bicicleta_id;
 
@@ -693,18 +747,34 @@ export async function PUT(
       ]);
     }
 
-    // Handle Price / Observaciones updates
-    if (precio_acordado !== undefined || observaciones !== undefined) {
+    // Handle Item Details / Price / Observaciones updates
+    if (precio_acordado !== undefined || observaciones !== undefined || cantidad !== undefined || porcentaje_descuento !== undefined) {
       await client.query(`
         UPDATE admin.orden_servicios
         SET
           precio_unitario = COALESCE($1, precio_unitario),
-          subtotal = COALESCE($1, subtotal),
-          observacion_tecnica = COALESCE($2, observacion_tecnica),
-          usuario_actualizacion = $3
-        WHERE orden_servicio_id = $4
+          cantidad = COALESCE($2, cantidad, 1),
+          porcentaje_descuento = COALESCE($3, porcentaje_descuento, 0),
+          valor_descuento = CASE
+            WHEN $3 IS NOT NULL THEN ROUND((COALESCE($2, cantidad, 1) * COALESCE($1, precio_unitario)) * ($3 / 100.0), 2)
+            WHEN $1 IS NOT NULL OR $2 IS NOT NULL THEN ROUND((COALESCE($2, cantidad, 1) * COALESCE($1, precio_unitario)) * (COALESCE(porcentaje_descuento, 0) / 100.0), 2)
+            ELSE valor_descuento
+          END,
+          subtotal = ROUND((COALESCE($2, cantidad, 1) * COALESCE($1, precio_unitario)) - (
+            CASE
+              WHEN $3 IS NOT NULL THEN ROUND((COALESCE($2, cantidad, 1) * COALESCE($1, precio_unitario)) * ($3 / 100.0), 2)
+              WHEN $1 IS NOT NULL OR $2 IS NOT NULL THEN ROUND((COALESCE($2, cantidad, 1) * COALESCE($1, precio_unitario)) * (COALESCE(porcentaje_descuento, 0) / 100.0), 2)
+              ELSE COALESCE(valor_descuento, 0)
+            END
+          ), 2),
+          observacion_tecnica = COALESCE($4, observacion_tecnica),
+          usuario_actualizacion = $5,
+          fecha_actualizacion = NOW()
+        WHERE orden_servicio_id = $6
       `, [
         precio_acordado !== undefined ? precio_acordado : null,
+        cantidad !== undefined ? cantidad : null,
+        porcentaje_descuento !== undefined ? porcentaje_descuento : null,
         observaciones !== undefined ? observaciones : null,
         sessionUserId,
         servId
@@ -712,6 +782,7 @@ export async function PUT(
     }
 
     await recalculateWorkOrderTotals(client, ordenId, sessionUserId);
+    const invoiceSync = await syncWorkOrderInvoice(client, ordenId, sessionUserId);
 
     // Audit and Activity mapping
     let auditAction = "ACTUALIZAR_SERVICIO";
@@ -742,16 +813,27 @@ export async function PUT(
       valorAnterior: {
         estado_servicio_id: currentServStateId,
         precio_unitario: currentServ.precio_unitario,
-        observacion_tecnica: currentServ.observacion_tecnica
+        observacion_tecnica: currentServ.observacion_tecnica,
+        ...(invoiceSync.synchronized ? { factura_id: invoiceSync.factura_id, total_factura: invoiceSync.total_anterior } : {})
       },
       valorNuevo: {
         estado_servicio_id: targetServStateId || currentServStateId,
         precio_unitario: precio_acordado !== undefined ? precio_acordado : currentServ.precio_unitario,
         observacion_tecnica: observaciones !== undefined ? observaciones : currentServ.observacion_tecnica,
         tiempo_transcurrido: calculatedTiempoTranscurrido,
-        nuevo_estado_componente_id: updatedNuevoEstadoCompId
+        nuevo_estado_componente_id: updatedNuevoEstadoCompId,
+        ...(invoiceSync.synchronized ? {
+          factura_id: invoiceSync.factura_id,
+          total_factura: invoiceSync.total_nuevo,
+          monto_pagado: invoiceSync.monto_pagado,
+          balance_pendiente: invoiceSync.balance_pendiente,
+          sobrepago: invoiceSync.sobrepago,
+          estado_factura: invoiceSync.estado
+        } : {})
       },
-      motivo: eventDescription,
+      motivo: invoiceSync.synchronized
+        ? `${eventDescription} (Factura #${invoiceSync.numero_factura || invoiceSync.factura_id} sincronizada: RD$ ${invoiceSync.total_anterior} -> RD$ ${invoiceSync.total_nuevo})`
+        : eventDescription,
       resultado: "COMPLETADO",
       client,
       throwOnError: true
@@ -814,7 +896,7 @@ export async function DELETE(
   const sessionUserId = session.usuario_id;
 
   const perms = await getModulePermissions("TALLER", session.usuario_id);
-  if (!perms.puede_eliminar && !perms.puede_editar) {
+  if (!perms.puede_eliminar) {
     return NextResponse.json({ error: "FORBIDDEN", message: "No posee permiso para eliminar servicios." }, { status: 403 });
   }
 
@@ -824,21 +906,49 @@ export async function DELETE(
   try {
     await client.query("BEGIN");
 
-    // Enforce order state machine check
-    const orderStateCheck = await validateOrderInRepair(client, ordenId, session.empresa_id, "ELIMINAR_SERVICIO");
-    if (!orderStateCheck.isValid) {
+    // Lock and validate order existence and company isolation
+    const orderRes = await client.query(`
+      SELECT
+        ot.orden_trabajo_id,
+        ot.estado_orden_id,
+        eot.codigo AS estado_codigo,
+        c.empresa_id AS empresa_id
+      FROM admin.ordenes_trabajo ot
+      JOIN admin.estado_orden_trabajo eot ON ot.estado_orden_id = eot.estado_orden_id
+      JOIN admin.clientes c ON ot.cliente_id = c.cliente_id
+      WHERE ot.orden_trabajo_id = $1
+        AND ot.activo = true
+      FOR UPDATE OF ot
+    `, [ordenId]);
+
+    if (orderRes.rows.length === 0) {
       await client.query("ROLLBACK");
-      return orderStateCheck.response;
+      return NextResponse.json({
+        success: false,
+        error: "NOT_FOUND",
+        message: "La orden de trabajo no existe o está inactiva."
+      }, { status: 404 });
     }
 
-    const estadoOrdenId = orderStateCheck.order.estado_orden_id;
+    const currentOrder = orderRes.rows[0];
+    if (currentOrder.empresa_id == null || session.empresa_id == null || Number(currentOrder.empresa_id) !== Number(session.empresa_id)) {
+      await client.query("ROLLBACK");
+      return NextResponse.json({
+        success: false,
+        error: "NOT_FOUND",
+        message: "La orden de trabajo no existe o no pertenece a su empresa."
+      }, { status: 404 });
+    }
+
+    const estadoOrdenId = currentOrder.estado_orden_id;
 
     // Lock Service Row
     const servRes = await client.query(`
-      SELECT orden_servicio_id, estado_orden_servicio_id, tipo_servicio_id
-      FROM admin.orden_servicios
-      WHERE orden_servicio_id = $1 AND orden_trabajo_id = $2 AND (activo IS DISTINCT FROM false)
-      FOR UPDATE OF orden_servicios
+      SELECT os.orden_servicio_id, os.estado_orden_servicio_id, os.tipo_servicio_id, ts.nombre AS tipo_servicio_nombre
+      FROM admin.orden_servicios os
+      LEFT JOIN admin.tipo_servicio ts ON os.tipo_servicio_id = ts.tipo_servicio_id
+      WHERE os.orden_servicio_id = $1 AND os.orden_trabajo_id = $2 AND (os.activo IS DISTINCT FROM false)
+      FOR UPDATE OF os
     `, [servId, ordenId]);
 
     if (servRes.rows.length === 0) {
@@ -847,11 +957,6 @@ export async function DELETE(
     }
 
     const serviceToDel = servRes.rows[0];
-
-    if (serviceToDel.estado_orden_servicio_id === 3 && estadoOrdenId === 8) {
-      await client.query("ROLLBACK");
-      return NextResponse.json({ error: "COMPLETED_SERVICE_LOCKED", message: "No se puede eliminar un servicio completado en una orden cerrada." }, { status: 409 });
-    }
 
     // Delete associated timer sessions & products
     await client.query(`
@@ -880,18 +985,39 @@ export async function DELETE(
       ordenId,
       estadoOrdenId,
       sessionUserId,
-      `Servicio #${servId} eliminado de la orden`
+      `Servicio #${servId} (${serviceToDel.tipo_servicio_nombre || "Servicio"}) eliminado de la orden`
     ]);
 
     // Recalculate financial totals
     await recalculateWorkOrderTotals(client, ordenId, sessionUserId);
+    const invoiceSync = await syncWorkOrderInvoice(client, ordenId, sessionUserId);
 
     await recordUserAudit({
       userId: sessionUserId,
       accion: "ELIMINAR_SERVICIO_ORDEN",
-      valorAnterior: { orden_servicio_id: servId, orden_trabajo_id: ordenId, activo: true },
-      valorNuevo: { orden_servicio_id: servId, orden_trabajo_id: ordenId, activo: false },
-      motivo: `Servicio #${servId} eliminado de la orden #${ordenId}`,
+      valorAnterior: {
+        orden_servicio_id: servId,
+        orden_trabajo_id: ordenId,
+        tipo_servicio: serviceToDel.tipo_servicio_nombre,
+        activo: true,
+        ...(invoiceSync.synchronized ? { factura_id: invoiceSync.factura_id, total_factura: invoiceSync.total_anterior } : {})
+      },
+      valorNuevo: {
+        orden_servicio_id: servId,
+        orden_trabajo_id: ordenId,
+        activo: false,
+        ...(invoiceSync.synchronized ? {
+          factura_id: invoiceSync.factura_id,
+          total_factura: invoiceSync.total_nuevo,
+          monto_pagado: invoiceSync.monto_pagado,
+          balance_pendiente: invoiceSync.balance_pendiente,
+          sobrepago: invoiceSync.sobrepago,
+          estado_factura: invoiceSync.estado
+        } : {})
+      },
+      motivo: invoiceSync.synchronized
+        ? `Servicio #${servId} eliminado de la orden #${ordenId} (Factura #${invoiceSync.numero_factura || invoiceSync.factura_id} sincronizada: RD$ ${invoiceSync.total_anterior} -> RD$ ${invoiceSync.total_nuevo})`
+        : `Servicio #${servId} eliminado de la orden #${ordenId}`,
       resultado: "COMPLETADO",
       client,
       throwOnError: true
@@ -902,8 +1028,8 @@ export async function DELETE(
     await recordUserActivity({
       userId: sessionUserId,
       modulo: "TALLER_SERVICIOS",
-      evento: "SERVICE_DELETED",
-      descripcion: `Servicio #${servId} eliminado de la orden #${ordenId}`,
+      evento: "WORK_ORDER_SERVICE_DELETED",
+      descripcion: `Servicio #${servId} (${serviceToDel.tipo_servicio_nombre || "Servicio"}) eliminado de la orden #${ordenId}`,
       resultado: "Exitoso",
       req
     });
