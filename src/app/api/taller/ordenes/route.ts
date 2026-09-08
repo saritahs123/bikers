@@ -236,7 +236,7 @@ export async function GET(req: NextRequest) {
       total: 0
     };
 
-    return NextResponse.json({
+    const resPayload = NextResponse.json({
       success: true,
       data: items || [],
       meta: {
@@ -259,6 +259,12 @@ export async function GET(req: NextRequest) {
         mecanicos: mecanicos || []
       }
     });
+    resPayload.headers.set("x-perm-ver", perms.puede_ver ? "true" : "false");
+    resPayload.headers.set("x-perm-crear", perms.puede_crear ? "true" : "false");
+    resPayload.headers.set("x-perm-editar", perms.puede_editar ? "true" : "false");
+    resPayload.headers.set("x-perm-eliminar", perms.puede_eliminar ? "true" : "false");
+    resPayload.headers.set("x-perm-exportar", perms.puede_exportar ? "true" : "false");
+    return resPayload;
 
   } catch (error: any) {
     console.error("Error in GET /api/taller/ordenes:", error);

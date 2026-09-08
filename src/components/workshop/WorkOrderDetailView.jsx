@@ -25,7 +25,8 @@ import {
   AlertTriangle,
   Plus,
   X,
-  Info
+  Info,
+  Trash2
 } from "lucide-react";
 import WorkOrderServicesView from "./WorkOrderServicesView";
 import WorkOrderHistoryView from "./WorkOrderHistoryView";
@@ -57,6 +58,14 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  const [permissions, setPermissions] = useState({
+    puede_ver: true,
+    puede_crear: true,
+    puede_editar: true,
+    puede_eliminar: true,
+    puede_exportar: true
+  });
 
   const [baseVivo, setBaseVivo] = useState(0);
   const [receivedAtMonotonic, setReceivedAtMonotonic] = useState(0);
@@ -164,6 +173,12 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
   const [submittingReopen, setSubmittingReopen] = useState(false);
   const [reopenModalError, setReopenModalError] = useState(null);
 
+  // Dedicated Delete Work Order Modal State
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteReason, setDeleteReason] = useState("");
+  const [isDeletingOrder, setIsDeletingOrder] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
+
   // Next actions checklist local state
   const [nextTasks, setNextTasks] = useState([]);
   const [newTaskInput, setNewTaskInput] = useState("");
@@ -227,6 +242,20 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
         });
         return;
       }
+
+      const permVer = res.headers.get("x-perm-ver") !== "false";
+      const permCrear = res.headers.get("x-perm-crear") === "true";
+      const permEditar = res.headers.get("x-perm-editar") === "true";
+      const permEliminar = res.headers.get("x-perm-eliminar") === "true" || orderData.puede_eliminar === true || orderData.permisos?.puede_eliminar === true;
+      const permExportar = res.headers.get("x-perm-exportar") === "true";
+
+      setPermissions({
+        puede_ver: permVer,
+        puede_crear: permCrear,
+        puede_editar: permEditar,
+        puede_eliminar: permEliminar,
+        puede_exportar: permExportar
+      });
 
       setOrder(orderData);
       setBaseVivo(Number(orderData.total_tiempo_transcurrido_vivo || 0));
@@ -558,6 +587,49 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
     ]);
     setNewTaskInput("");
     setShowAddTaskInput(false);
+  };
+
+  const handleDeleteOrder = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const trimmed = (deleteReason || "").trim();
+    if (!trimmed || trimmed.length < 5) {
+      setDeleteError("El motivo de eliminación es obligatorio y debe contener al menos 5 caracteres.");
+      return;
+    }
+    if (trimmed.length > 1000) {
+      setDeleteError("El motivo de eliminación no puede exceder 1000 caracteres.");
+      return;
+    }
+
+    setIsDeletingOrder(true);
+    setDeleteError(null);
+
+    try {
+      const res = await fetch(`/api/taller/ordenes/${ordenId}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ motivo_eliminacion: trimmed })
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setDeleteError(data.message || data.error || "Error al eliminar la orden de trabajo.");
+        return;
+      }
+
+      setDeleteModalOpen(false);
+      showSuccessToast(data.message || "Orden de trabajo eliminada correctamente.");
+      if (onBack) {
+        onBack();
+      } else {
+        router.push("/workshop?view=work_orders");
+      }
+    } catch (err) {
+      console.error("handleDeleteOrder error:", err);
+      setDeleteError("Error de conexión al eliminar la orden de trabajo.");
+    } finally {
+      setIsDeletingOrder(false);
+    }
   };
 
 
@@ -897,11 +969,26 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
               setModalError(null);
               setStatusModalOpen(true);
             }}
-            className="flex items-center gap-2 px-4 py-2 bg-[#84924a] text-white rounded-xl hover:brightness-110 transition-all font-mono text-xs font-bold uppercase tracking-wider border-t border-[#a6b66b] shadow-lg shadow-[#84924a]/20"
+            className="flex items-center gap-2 px-4 py-2 bg-[#84924a] text-white rounded-xl hover:brightness-110 transition-all font-mono text-xs font-bold uppercase tracking-wider border-t border-[#a6b66b] shadow-lg shadow-[#84924a]/20 cursor-pointer"
           >
             <Edit className="w-4 h-4" />
             EDITAR OT
           </button>
+
+          {permissions.puede_eliminar && (
+            <button
+              onClick={() => {
+                setDeleteReason("");
+                setDeleteError(null);
+                setDeleteModalOpen(true);
+              }}
+              className="flex items-center gap-2 px-3.5 py-2 bg-rose-500/10 text-rose-400 hover:bg-rose-600 hover:text-white rounded-xl border border-rose-500/30 transition-all font-mono text-xs font-bold uppercase tracking-wider cursor-pointer shadow-lg shadow-rose-500/10"
+              title="Eliminar orden de trabajo permanentemente con evidencia histórica"
+            >
+              <Trash2 className="w-4 h-4" />
+              ELIMINAR ORDEN
+            </button>
+          )}
         </div>
       </div>
 
@@ -1345,7 +1432,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
 
       {/* Services Tab */}
       {activeTab === "servicios" && (
-        <WorkOrderServicesView ordenId={ordenId} services={order.servicios || []} onRefresh={refreshSilently} order={order} />
+        <WorkOrderServicesView ordenId={ordenId} services={order.servicios || []} onRefresh={refreshSilently} order={order} permissions={permissions} />
       )}
 
       {/* History Tab */}
@@ -1667,6 +1754,136 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* DEDICATED DELETE WORK ORDER MODAL */}
+      {deleteModalOpen && typeof document !== "undefined" && createPortal(
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-order-modal-title"
+          className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isDeletingOrder) {
+              setDeleteModalOpen(false);
+              setDeleteError(null);
+            }
+          }}
+        >
+          <div className="bg-[#161a21] border border-rose-500/40 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-[#2d3748] flex items-center justify-between bg-[#12151b]">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-rose-500/20 border border-rose-500/30 flex items-center justify-center text-rose-400">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 id="delete-order-modal-title" className="text-base font-bold text-slate-100 font-mono tracking-tight">
+                    Eliminar Orden de Trabajo
+                  </h3>
+                  <span className="text-xs text-slate-400 font-mono">
+                    {order.codigo_orden} {order.codigo_recepcion ? `• Rec: ${order.codigo_recepcion}` : ""}
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  if (!isDeletingOrder) {
+                    setDeleteModalOpen(false);
+                    setDeleteError(null);
+                  }
+                }}
+                disabled={isDeletingOrder}
+                className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-[#1f242d] rounded-lg transition-colors disabled:opacity-40 cursor-pointer"
+                title="Cerrar modal"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 space-y-4 overflow-y-auto custom-scrollbar text-xs font-mono">
+              {/* Warning Banner */}
+              <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                <div className="space-y-1 text-slate-300 leading-relaxed font-sans text-xs">
+                  <p className="font-bold text-rose-300 font-mono text-xs">¡Acción Irreversible!</p>
+                  <p className="text-[11px] text-slate-300">
+                    Se eliminará permanentemente la orden de trabajo, la recepción asociada, los servicios, repuestos, mano de obra y facturación dependiente.
+                  </p>
+                  <p className="text-[11px] text-emerald-400 font-semibold font-mono">
+                    ✓ Se conservará una copia histórica completa e independiente como evidencia permanente en el sistema.
+                  </p>
+                </div>
+              </div>
+
+              {/* Error Display */}
+              {deleteError && (
+                <div className="p-3 bg-rose-500/15 border border-rose-500/40 rounded-xl flex items-center gap-2 text-rose-300 font-sans text-xs">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                  <span>{deleteError}</span>
+                </div>
+              )}
+
+              {/* Reason Form */}
+              <div className="space-y-2">
+                <label htmlFor="motivo_eliminacion" className="block text-slate-300 font-bold uppercase tracking-wider text-[11px]">
+                  Motivo de Eliminación <span className="text-rose-400">*</span>
+                </label>
+                <textarea
+                  id="motivo_eliminacion"
+                  rows={3}
+                  value={deleteReason}
+                  onChange={(e) => {
+                    setDeleteReason(e.target.value);
+                    if (deleteError) setDeleteError(null);
+                  }}
+                  disabled={isDeletingOrder}
+                  placeholder="Ej: Orden creada por error, Registro duplicado, Prueba interna, Cliente canceló proceso..."
+                  className="w-full bg-[#0a0c10] border border-[#2d3748] focus:border-rose-500 rounded-xl px-3.5 py-2.5 text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-rose-500/50 resize-none text-xs transition-colors font-sans"
+                />
+                <div className="flex justify-between items-center text-[10px] text-slate-500">
+                  <span>Mínimo 5 caracteres</span>
+                  <span>{deleteReason.trim().length} / 1000</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-[#2d3748] bg-[#12151b] flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteModalOpen(false);
+                  setDeleteError(null);
+                }}
+                disabled={isDeletingOrder}
+                className="px-4 py-2 bg-[#1c2129] border border-[#2d3748] text-slate-300 hover:text-white hover:bg-[#252b36] rounded-xl font-mono text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-40 cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteOrder}
+                disabled={isDeletingOrder || deleteReason.trim().length < 5}
+                className="flex items-center gap-2 px-5 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-mono text-xs font-bold uppercase tracking-wider shadow-lg shadow-rose-600/30 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              >
+                {isDeletingOrder ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Eliminando...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>Eliminar Orden</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>,
         document.body
