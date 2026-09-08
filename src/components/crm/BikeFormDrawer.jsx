@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import {
   Bike,
@@ -15,7 +15,10 @@ import {
   Camera,
   CheckCircle2,
   AlertCircle,
-  RotateCcw
+  RotateCcw,
+  Search,
+  ChevronDown,
+  Check
 } from "lucide-react";
 import { validateRequiredText } from "@/lib/validations";
 import { normalizeBicycleComponentPayload } from "@/lib/bicycleComponentUtils";
@@ -52,6 +55,14 @@ export default function BikeFormDrawer({
     notas_tecnicas: ""
   });
 
+  // Client search & combobox state
+  const [localClients, setLocalClients] = useState([]);
+  const [clientSearch, setClientSearch] = useState("");
+  const [isClientDropdownOpen, setIsClientDropdownOpen] = useState(false);
+  const [activeClientIndex, setActiveClientIndex] = useState(-1);
+  const clientSearchInputRef = useRef(null);
+  const comboboxRef = useRef(null);
+
   // Draft lists for creation mode
   const [draftComponents, setDraftComponents] = useState([]);
   const [draftPhotos, setDraftPhotos] = useState([]);
@@ -71,12 +82,15 @@ export default function BikeFormDrawer({
     setMounted(true);
   }, []);
 
-  // Fetch categories and states when drawer opens
+  // Fetch categories, states and clients when drawer opens
   useEffect(() => {
     if (isOpen) {
       fetchAuxiliaryCatalogs();
+      if (!clientes || clientes.length === 0) {
+        fetchClients();
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, clientes]);
 
   const fetchAuxiliaryCatalogs = async () => {
     try {
@@ -94,6 +108,88 @@ export default function BikeFormDrawer({
       }
     } catch (err) {
       console.error("Error fetching auxiliary catalogs for drawer:", err);
+    }
+  };
+
+  const fetchClients = async () => {
+    try {
+      const res = await fetch("/api/crm/clientes");
+      if (res.ok) {
+        const data = await res.json();
+        const arr = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+        setLocalClients(arr);
+      }
+    } catch (err) {
+      console.error("Error fetching clients for BikeFormDrawer:", err);
+    }
+  };
+
+  // Close client dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (comboboxRef.current && !comboboxRef.current.contains(e.target)) {
+        setIsClientDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Available client list and filtering
+  const availableClients = useMemo(() => {
+    return (clientes && clientes.length > 0) ? clientes : localClients;
+  }, [clientes, localClients]);
+
+  const filteredClients = useMemo(() => {
+    if (!clientSearch || !clientSearch.trim()) {
+      return availableClients.slice(0, 30);
+    }
+    const q = clientSearch.toLowerCase().trim();
+    return availableClients.filter((c) => {
+      const name = (c.nombre_completo || `${c.nombre || ""} ${c.apellido || ""}`).toLowerCase();
+      const doc = (c.identificacion || "").toLowerCase();
+      const phone = (c.telefono_principal || c.telefono_secundario || "").toLowerCase();
+      const email = (c.correo || "").toLowerCase();
+      return name.includes(q) || doc.includes(q) || phone.includes(q) || email.includes(q);
+    }).slice(0, 30);
+  }, [availableClients, clientSearch]);
+
+  const selectedClientObj = useMemo(() => {
+    const cId = lockCliente ? preselectedClienteId : formData.cliente_id;
+    if (!cId) return null;
+    return availableClients.find((c) => String(c.id || c.cliente_id) === String(cId)) || null;
+  }, [availableClients, formData.cliente_id, lockCliente, preselectedClienteId]);
+
+  const handleSelectClientItem = (client) => {
+    if (!client) return;
+    const cId = client.id || client.cliente_id;
+    setFormData((prev) => ({ ...prev, cliente_id: String(cId) }));
+    setClientSearch("");
+    setIsClientDropdownOpen(false);
+    setActiveClientIndex(-1);
+    if (errors.cliente_id) setErrors((prev) => ({ ...prev, cliente_id: null }));
+  };
+
+  const handleClientKeyDown = (e) => {
+    if (!isClientDropdownOpen) {
+      if (e.key === "ArrowDown" || e.key === "Enter") {
+        setIsClientDropdownOpen(true);
+      }
+      return;
+    }
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveClientIndex((prev) => (prev < filteredClients.length - 1 ? prev + 1 : 0));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveClientIndex((prev) => (prev > 0 ? prev - 1 : filteredClients.length - 1));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (activeClientIndex >= 0 && activeClientIndex < filteredClients.length) {
+        handleSelectClientItem(filteredClients[activeClientIndex]);
+      }
+    } else if (e.key === "Escape") {
+      setIsClientDropdownOpen(false);
     }
   };
 
@@ -120,6 +216,9 @@ export default function BikeFormDrawer({
       setIsSaving(false);
       setSavePhaseText("");
       setCreatedBikeId(null);
+      setClientSearch("");
+      setIsClientDropdownOpen(false);
+      setActiveClientIndex(-1);
 
       if (editingItem) {
         setFormData({
@@ -157,7 +256,7 @@ export default function BikeFormDrawer({
         setDraftPhotos([]);
       }
     }
-  }, [isOpen, editingItem, preselectedClienteId, clientes]);
+  }, [isOpen, editingItem, preselectedClienteId]);
 
   if (!isOpen || !mounted || typeof document === "undefined") {
     return null;
@@ -624,13 +723,13 @@ export default function BikeFormDrawer({
           {activeTab === "general" && (
             <form onSubmit={handleSaveFlow} className="space-y-5">
               {/* 1. Cliente Propietario */}
-              <div className="space-y-2 bg-[#0e1117]/60 border border-[#2d3748] rounded-2xl p-5">
+              <div className="space-y-3 bg-[#0e1117]/60 border border-[#2d3748] rounded-2xl p-5">
                 <h3 className="text-[#bfce7f] font-bold uppercase tracking-wider text-[11px] flex items-center gap-2 border-b border-[#2d3748] pb-2">
                   <User size={14} /> 1. Cliente Propietario <span className="text-rose-400">*</span>
                 </h3>
 
                 {lockCliente || preselectedClienteId ? (
-                  <div className="w-full bg-[#0e1117] border border-[#bfce7f]/40 rounded-xl px-3.5 py-2.5 text-white font-bold flex items-center justify-between mt-2">
+                  <div className="w-full bg-[#0e1117] border border-[#bfce7f]/40 rounded-xl px-3.5 py-2.5 text-white font-bold flex items-center justify-between">
                     <span className="flex items-center gap-2">
                       <User size={14} className="text-[#bfce7f]" />
                       {clientDisplayName}
@@ -639,28 +738,107 @@ export default function BikeFormDrawer({
                       BLOQUEADO
                     </span>
                   </div>
-                ) : (
-                  <div>
-                    <label className="block text-slate-300 mb-1">Seleccionar Cliente <span className="text-rose-400">*</span></label>
-                    <select
-                      data-invalid={errors.cliente_id ? "true" : undefined}
-                      value={formData.cliente_id}
-                      onChange={(e) => {
-                        setFormData({ ...formData, cliente_id: e.target.value });
-                        if (errors.cliente_id) setErrors((prev) => ({ ...prev, cliente_id: null }));
+                ) : selectedClientObj ? (
+                  <div className="bg-[#0e1117] border border-[#bfce7f]/40 rounded-xl p-3 flex items-center justify-between animate-in fade-in duration-150">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-[#bfce7f]/10 border border-[#bfce7f]/30 flex items-center justify-center font-bold text-xs text-[#bfce7f] shrink-0 font-mono">
+                        {(selectedClientObj.nombre_completo || selectedClientObj.nombre || "C").slice(0, 2).toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold text-white">
+                            {selectedClientObj.nombre_completo || `${selectedClientObj.nombre || ""} ${selectedClientObj.apellido || ""}`}
+                          </span>
+                          {selectedClientObj.tipo_cliente && (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 font-mono uppercase">
+                              {selectedClientObj.tipo_cliente}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+                          {selectedClientObj.identificacion ? `${selectedClientObj.identificacion} • ` : ""}
+                          {selectedClientObj.telefono_principal ? `Tel: ${selectedClientObj.telefono_principal}` : (selectedClientObj.correo || "Sin contacto")}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData((prev) => ({ ...prev, cliente_id: "" }));
+                        setClientSearch("");
+                        setIsClientDropdownOpen(false);
                       }}
-                      className={`w-full bg-[#0e1117] border rounded-xl px-3.5 py-2.5 text-white focus:outline-none ${
-                        errors.cliente_id ? "border-rose-500" : "border-[#2d3748] focus:border-[#bfce7f]"
-                      }`}
+                      className="p-1.5 hover:bg-rose-950/40 text-slate-400 hover:text-rose-400 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-rose-500/30"
+                      title="Cambiar de cliente"
                     >
-                      <option value="">-- Seleccionar Propietario --</option>
-                      {clientes.map((c) => (
-                        <option key={c.id || c.cliente_id} value={c.id || c.cliente_id}>
-                          {c.nombre_completo || `${c.nombre || ""} ${c.apellido || ""}`} ({c.correo || c.telefono_principal || `ID: ${c.id || c.cliente_id}`})
-                        </option>
-                      ))}
-                    </select>
-                    {errors.cliente_id && <p className="text-rose-400 text-[10px] mt-1">{errors.cliente_id}</p>}
+                      <X size={16} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    <label className="block text-slate-300 text-xs mb-1">Buscar y Seleccionar Cliente <span className="text-rose-400">*</span></label>
+                    <div className="relative" ref={comboboxRef}>
+                      <div className="relative">
+                        <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                        <input
+                          ref={clientSearchInputRef}
+                          type="text"
+                          value={clientSearch}
+                          onChange={(e) => {
+                            setClientSearch(e.target.value);
+                            setIsClientDropdownOpen(true);
+                            setActiveClientIndex(-1);
+                          }}
+                          onFocus={() => setIsClientDropdownOpen(true)}
+                          onKeyDown={handleClientKeyDown}
+                          placeholder="Buscar por nombre, cédula, RNC o teléfono..."
+                          className={`w-full pl-9.5 pr-9 py-2.5 bg-[#0e1117] border rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none transition-all ${
+                            errors.cliente_id ? "border-rose-500" : "border-[#2d3748] focus:border-[#bfce7f]"
+                          }`}
+                        />
+                        <ChevronDown className="w-4 h-4 absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                      </div>
+
+                      {isClientDropdownOpen && (
+                        <div className="absolute left-0 right-0 top-full mt-1 bg-[#161b22] border border-[#2d3748] rounded-xl shadow-2xl z-50 overflow-hidden text-xs max-h-56 overflow-y-auto custom-scrollbar animate-in fade-in duration-100 font-mono">
+                          {filteredClients.length === 0 ? (
+                            <div className="p-4 text-center text-slate-400">
+                              <p className="font-semibold text-white text-xs">Sin coincidencias encontradas</p>
+                              <p className="text-[11px] text-slate-500 mt-0.5">No se encontraron clientes que coincidan con &quot;{clientSearch}&quot;.</p>
+                            </div>
+                          ) : (
+                            filteredClients.map((client, idx) => (
+                              <div
+                                key={client.id || client.cliente_id}
+                                onClick={() => handleSelectClientItem(client)}
+                                className={`p-2.5 flex items-center justify-between cursor-pointer border-b border-[#21262d] last:border-0 transition-colors ${
+                                  activeClientIndex === idx ? "bg-[#21262d] text-white" : "hover:bg-[#1f242c] text-slate-300"
+                                }`}
+                              >
+                                <div className="flex items-center gap-2.5">
+                                  <div className="w-7 h-7 rounded-lg bg-[#bfce7f]/10 border border-[#bfce7f]/20 flex items-center justify-center font-bold text-xs text-[#bfce7f] shrink-0">
+                                    {(client.nombre_completo || client.nombre || "C").slice(0, 2).toUpperCase()}
+                                  </div>
+                                  <div>
+                                    <p className="font-bold text-white text-xs">
+                                      {client.nombre_completo || `${client.nombre || ""} ${client.apellido || ""}`}
+                                    </p>
+                                    <p className="text-[10px] text-slate-400">
+                                      {client.identificacion ? `${client.identificacion} • ` : ""}
+                                      Tel: {client.telefono_principal || client.telefono_secundario || "Sin teléfono"}
+                                    </p>
+                                  </div>
+                                </div>
+                                {String(formData.cliente_id) === String(client.id || client.cliente_id) && (
+                                  <Check size={14} className="text-[#bfce7f]" />
+                                )}
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    {errors.cliente_id && <p className="text-rose-400 text-[10px] mt-1 font-mono">{errors.cliente_id}</p>}
                   </div>
                 )}
               </div>
@@ -767,23 +945,32 @@ export default function BikeFormDrawer({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-slate-300 mb-1">N° Serie Cuadro (VIN)</label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-slate-300 text-xs font-semibold">N° Serie Cuadro (VIN)</label>
+                      <span className="text-[10px] text-slate-500 font-mono bg-[#161b22] px-1.5 py-0.5 rounded border border-[#2d3748]">Opcional</span>
+                    </div>
                     <input
                       type="text"
                       value={formData.numero_serie_cuadro}
                       onChange={(e) => setFormData({ ...formData, numero_serie_cuadro: e.target.value })}
-                      placeholder="Ej: TRK-12345"
+                      placeholder="Ej: TRK-12345 (Opcional)"
                       className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-[#bfce7f]"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-slate-300 mb-1">Kilometraje Actual (KM)</label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-slate-300 text-xs font-semibold">Kilometraje Actual (KM)</label>
+                      <span className="text-[10px] text-slate-500 font-mono bg-[#161b22] px-1.5 py-0.5 rounded border border-[#2d3748]">Opcional</span>
+                    </div>
                     <input
                       type="number"
-                      value={formData.kilometraje_actual}
-                      onChange={(e) => setFormData({ ...formData, kilometraje_actual: e.target.value })}
-                      placeholder="0"
+                      value={formData.kilometraje_actual === 0 || formData.kilometraje_actual === "" ? "" : formData.kilometraje_actual}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setFormData({ ...formData, kilometraje_actual: val === "" ? 0 : val });
+                      }}
+                      placeholder="0 (Opcional)"
                       className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-[#bfce7f]"
                     />
                   </div>
