@@ -42,6 +42,8 @@ interface UserDbRecord {
   intentos_fallidos_permitidos: number | null;
   metodo_acceso_principal: string | null;
   identificador_principal: string | null;
+  forzar_cambio_clave?: boolean | null;
+  requiere_cambio_clave?: boolean | null;
 }
 
 export type LoginState = {
@@ -90,7 +92,9 @@ export async function loginAction(
            us.bloqueado_hasta,
            us.intentos_fallidos_permitidos,
            us.metodo_acceso_principal,
-           us.identificador_principal
+           us.identificador_principal,
+           us.forzar_cambio_clave,
+           us.requiere_cambio_clave
          FROM admin.usuario u
          JOIN admin.usuario_seguridad us ON u.usuario_id = us.usuario_id
          WHERE (
@@ -236,8 +240,13 @@ export async function loginAction(
       return { success: false, type: "tech", error: GENERIC_TECH_ERROR };
     }
 
-    // 9. Redirect on successful login
-    redirect("/");
+    // 9. Redirect based on password change requirement
+    const mustChangePassword = Boolean(targetUser.forzar_cambio_clave || targetUser.requiere_cambio_clave);
+    if (mustChangePassword) {
+      redirect("/change-password");
+    } else {
+      redirect("/");
+    }
   } catch (err: any) {
     if (err && typeof err === "object" && "digest" in err && String(err.digest).startsWith("NEXT_REDIRECT")) {
       throw err;

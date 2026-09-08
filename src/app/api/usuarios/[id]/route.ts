@@ -27,6 +27,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         u.fecha_creacion,
         u.empresa_id AS "companyId",
         emp.nombre_comercial AS empresa_nombre,
+        u.rol_principal_id AS rol_id,
+        u.tipo_usuario_id,
         ui.nombre AS first_name,
         ui.apellido AS last_name,
         ui.correo_electronico AS email,
@@ -123,7 +125,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       cargo_id: u.cargo_id ?? null,
       cargo_nombre: u.cargo_nombre ?? null,
       role: u.role ?? null,
+      rol_id: u.rol_id ?? null,
       user_type: u.user_type ?? null,
+      tipo_usuario_id: u.tipo_usuario_id ?? null,
       primary_access_type: u.primary_access_type ?? 'EMAIL',
       identificador_principal: primaryAccessValue,
       login_identifiers: [
@@ -217,11 +221,15 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
          u.estado_activacion,
          ui.nombre,
          ui.apellido,
+         ui.correo_electronico,
          ui.telefono,
          ui.numero_documento,
          ui.departamento_id,
          ui.area_id,
          ui.cargo_id,
+         us.correo_acceso,
+         us.identificador_principal,
+         us.metodo_acceso_principal,
          us.idioma_preferido,
          us.zona_horaria,
          us.formato_fecha
@@ -284,6 +292,13 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const updatedLastName =
       body.last_name !== undefined ? body.last_name : (body.apellido !== undefined ? body.apellido : current.apellido);
 
+    const updatedEmail =
+      body.email !== undefined
+        ? (body.email ? String(body.email).trim().toLowerCase() : null)
+        : (body.correo_electronico !== undefined
+            ? (body.correo_electronico ? String(body.correo_electronico).trim().toLowerCase() : null)
+            : (current.correo_electronico ? String(current.correo_electronico).trim().toLowerCase() : null));
+
     const updatedPhone =
       body.phone !== undefined ? body.phone : (body.telefono !== undefined ? body.telefono : current.telefono);
 
@@ -307,6 +322,25 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
     const updatedFormato =
       body.formato_fecha !== undefined ? body.formato_fecha : (current.formato_fecha || 'DD/MM/YYYY');
+
+    // Duplicate email check (HTTP 409)
+    if (updatedEmail && updatedEmail !== (current.correo_electronico ? String(current.correo_electronico).trim().toLowerCase() : '')) {
+      const dupEmailRes = await query(
+        `SELECT usuario_id FROM admin.usuario_identidad WHERE LOWER(correo_electronico) = LOWER($1) AND usuario_id != $2 LIMIT 1`,
+        [updatedEmail, targetUserId]
+      );
+      if (dupEmailRes && dupEmailRes.length > 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "CONFLICT",
+            message: "El correo electrónico ya se encuentra registrado por otro usuario.",
+            field: "email"
+          },
+          { status: 409 }
+        );
+      }
+    }
 
     // Duplicate document check (HTTP 409)
     const normalizedDoc = updatedDocument !== null && updatedDocument !== undefined ? String(updatedDocument).trim() : '';
@@ -377,6 +411,25 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     }
     if (newTipoUsuarioId === null) newTipoUsuarioId = current.tipo_usuario_id;
 
+    if (newTipoUsuarioId) {
+      const tuCheck = await query<{ tipo_usuario_id: number; estado: string }>(
+        `SELECT tipo_usuario_id, estado FROM admin.tipo_usuario WHERE tipo_usuario_id = $1 LIMIT 1`,
+        [newTipoUsuarioId]
+      );
+      if (!tuCheck || tuCheck.length === 0) {
+        return NextResponse.json(
+          { success: false, error: "VALIDATION_ERROR", message: "El tipo de usuario seleccionado no existe." },
+          { status: 400 }
+        );
+      }
+      if (tuCheck[0].estado !== 'ACTIVO') {
+        return NextResponse.json(
+          { success: false, error: "VALIDATION_ERROR", message: "El tipo de usuario seleccionado no se encuentra activo." },
+          { status: 400 }
+        );
+      }
+    }
+
     const newEstado = body.status ?? body.estado ?? current.estado;
     const newEstadoActivacion = body.estado_activacion ?? body.activation ?? current.estado_activacion;
 
@@ -444,20 +497,21 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         `UPDATE admin.usuario_identidad
          SET nombre = $1,
              apellido = $2,
-             telefono = $3,
-             numero_documento = $4,
-             departamento_id = $5,
-             area_id = $6,
-             cargo_id = $7,
+             correo_electronico = $3,
+             telefono = $4,
+             numero_documento = $5,
+             departamento_id = $6,
+             area_id = $7,
+             cargo_id = $8,
              fecha_actualizacion = NOW()
-         WHERE usuario_id = $8`,
-        [finalFirstName, finalLastName, finalPhone, finalDoc, finalDeptId, finalAreaId, finalCargoId, targetUserId]
+         WHERE usuario_id = $9`,
+        [finalFirstName, finalLastName, updatedEmail, finalPhone, finalDoc, finalDeptId, finalAreaId, finalCargoId, targetUserId]
       );
     } else {
       await query(
-        `INSERT INTO admin.usuario_identidad (usuario_id, nombre, apellido, telefono, numero_documento, departamento_id, area_id, cargo_id, fecha_actualizacion)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
-        [targetUserId, finalFirstName, finalLastName, finalPhone, finalDoc, finalDeptId, finalAreaId, finalCargoId]
+        `INSERT INTO admin.usuario_identidad (usuario_id, nombre, apellido, correo_electronico, telefono, numero_documento, departamento_id, area_id, cargo_id, fecha_actualizacion)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())`,
+        [targetUserId, finalFirstName, finalLastName, updatedEmail, finalPhone, finalDoc, finalDeptId, finalAreaId, finalCargoId]
       );
     }
 
@@ -468,15 +522,17 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         `UPDATE admin.usuario_seguridad
          SET idioma_preferido = COALESCE($1, idioma_preferido),
              zona_horaria = COALESCE($2, zona_horaria),
-             formato_fecha = COALESCE($3, formato_fecha)
-         WHERE usuario_id = $4`,
-        [String(updatedIdioma), String(updatedZona), String(updatedFormato), targetUserId]
+             formato_fecha = COALESCE($3, formato_fecha),
+             correo_acceso = COALESCE($4, correo_acceso),
+             identificador_principal = CASE WHEN metodo_acceso_principal = 'EMAIL' AND $4 IS NOT NULL THEN $4 ELSE identificador_principal END
+         WHERE usuario_id = $5`,
+        [String(updatedIdioma), String(updatedZona), String(updatedFormato), updatedEmail, targetUserId]
       );
     } else {
       await query(
-        `INSERT INTO admin.usuario_seguridad (usuario_seguridad_id, usuario_id, idioma_preferido, zona_horaria, formato_fecha)
-         SELECT COALESCE(MAX(usuario_seguridad_id), 0) + 1, $1, $2, $3, $4 FROM admin.usuario_seguridad`,
-        [targetUserId, String(updatedIdioma), String(updatedZona), String(updatedFormato)]
+        `INSERT INTO admin.usuario_seguridad (usuario_seguridad_id, usuario_id, idioma_preferido, zona_horaria, formato_fecha, correo_acceso, identificador_principal, metodo_acceso_principal)
+         SELECT COALESCE(MAX(usuario_seguridad_id), 0) + 1, $1, $2, $3, $4, $5, $5, 'EMAIL' FROM admin.usuario_seguridad`,
+        [targetUserId, String(updatedIdioma), String(updatedZona), String(updatedFormato), updatedEmail]
       );
     }
 
@@ -563,27 +619,25 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         useg.zona_horaria,
         useg.formato_fecha,
         useg.mfa_activo,
-        useg.requiere_cambio_clave,
         useg.forzar_cambio_clave,
-        useg.fecha_ultimo_login,
-        useg.fecha_ultimo_cambio_password,
+        COALESCE(
+          (SELECT MAX(COALESCE(s.ultima_actividad, s.fecha_inicio)) FROM admin.usuario_sesion s WHERE s.usuario_id = u.usuario_id),
+          useg.fecha_ultimo_acceso
+        ) AS fecha_ultimo_login,
         useg.fecha_credenciales_generada,
         useg.fecha_expiracion_invitacion,
         useg.intentos_fallidos,
         useg.bloqueado_hasta,
-        useg.motivo_bloqueo,
         useg.detalle_estado,
         useg.canales_permitidos,
         useg.restriccion_ip,
-        useg.horario_acceso,
+        useg.restriccion_horaria AS horario_acceso,
         useg.expiracion_acceso,
-        useg.fecha_activacion,
-        useg.fecha_ultima_invitacion,
         alc.nivel_alcance,
         alc.incluir_herencia_jerarquica
       FROM admin.usuario u
       LEFT JOIN admin.empresa emp ON u.empresa_id = emp.empresa_id
-      LEFT JOIN admin.rol r ON u.rol_principal_id = r.rol_id
+      LEFT JOIN admin.rol_funcional r ON u.rol_principal_id = r.rol_funcional_id
       LEFT JOIN admin.tipo_usuario tu ON u.tipo_usuario_id = tu.tipo_usuario_id
       LEFT JOIN admin.usuario_identidad ui ON u.usuario_id = ui.usuario_id
       LEFT JOIN admin.departamento d ON ui.departamento_id = d.departamento_id
@@ -625,21 +679,16 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       zona_horaria: updatedRow.zona_horaria || 'America/Santo_Domingo',
       formato_fecha: updatedRow.formato_fecha || 'DD/MM/YYYY',
       mfa_activo: Boolean(updatedRow.mfa_activo),
-      requiere_cambio_clave: Boolean(updatedRow.requiere_cambio_clave),
       forzar_cambio_clave: Boolean(updatedRow.forzar_cambio_clave),
-      fecha_ultimo_cambio_password: updatedRow.fecha_ultimo_cambio_password ?? null,
       fecha_credenciales_generada: updatedRow.fecha_credenciales_generada ?? null,
       fecha_expiracion_invitacion: updatedRow.fecha_expiracion_invitacion ?? null,
       intentos_fallidos: updatedRow.intentos_fallidos ?? 0,
       bloqueado_hasta: updatedRow.bloqueado_hasta ?? null,
-      motivo_bloqueo: updatedRow.motivo_bloqueo ?? null,
       detalle_estado: updatedRow.detalle_estado ?? null,
       canales_permitidos: updatedRow.canales_permitidos ?? null,
       restriccion_ip: updatedRow.restriccion_ip ?? null,
       horario_acceso: updatedRow.horario_acceso ?? null,
-      expiracion_acceso: updatedRow.expiracion_acceso ?? null,
-      fecha_activacion: updatedRow.fecha_activacion ?? null,
-      fecha_ultima_invitacion: updatedRow.fecha_ultima_invitacion ?? null
+      expiracion_acceso: updatedRow.expiracion_acceso ?? null
     } : null;
 
     // Build field-level diff for forensic audit
@@ -649,6 +698,9 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     }
     if (updatedLastName !== current.apellido) {
       changedFields.push({ field: 'Apellido', oldVal: current.apellido || '—', newVal: updatedLastName || '—' });
+    }
+    if (updatedEmail && updatedEmail !== (current.correo_electronico ? String(current.correo_electronico).trim().toLowerCase() : '')) {
+      changedFields.push({ field: 'Correo Electrónico', oldVal: current.correo_electronico || '—', newVal: updatedEmail });
     }
     if (updatedPhone !== current.telefono) {
       changedFields.push({ field: 'Teléfono', oldVal: current.telefono || '—', newVal: updatedPhone || '—' });

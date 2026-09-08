@@ -207,7 +207,7 @@ export async function GET(req: NextRequest) {
       FROM admin.usuario u
       LEFT JOIN admin.usuario_identidad ui ON u.usuario_id = ui.usuario_id
       LEFT JOIN admin.tipo_usuario tu ON tu.tipo_usuario_id = u.tipo_usuario_id
-      WHERE u.empresa_id = $1 AND (tu.codigo = 'MECANICO' OR u.tipo_usuario_id = 2) AND (u.estado = 'ACTIVO' OR u.estado IS NULL)
+      WHERE u.empresa_id = $1 AND tu.codigo = 'MECANICO' AND tu.estado = 'ACTIVO' AND (u.estado = 'ACTIVO' OR u.estado IS NULL)
       ORDER BY u.usuario_id ASC
     `, [empresaId]);
 

@@ -2,9 +2,9 @@
 import React, { useState, useMemo, useEffect, Fragment } from 'react';
 import { useRouter, usePathname, useSearchParams as useNextSearchParams } from 'next/navigation';
 import { createPortal } from 'react-dom';
-import { 
-  Users, UserPlus, Download, Edit2, ShieldAlert,
-  MoreVertical, X, Save, Search, Check, CheckCircle2, AlertCircle, 
+import {
+  User, Users, UserPlus, Download, Edit2, ShieldAlert,
+  MoreVertical, X, Save, Search, Check, CheckCircle2, AlertCircle,
   RotateCw, RefreshCw, ChevronLeft, ChevronRight, ChevronDown, Filter, SlidersHorizontal, ToggleLeft, ToggleRight,
   ShieldCheck, Shield, Key, KeyRound, Trash2, Mail, Phone, Building2, Eye, EyeOff, PanelLeftOpen, LayoutGrid, List,
   FileText, Calendar, Clock, Laptop, ShieldX, CheckSquare, Square, Info, AlertTriangle, ArrowRight, Settings, Printer
@@ -485,12 +485,12 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     }
     const perms = {};
     if (!roles || !rbacMatrix) return perms;
-    
+
     roles.forEach(role => {
       const roleName = role.name || role.nombre;
       perms[roleName] = {};
       const roleRbac = Array.isArray(rbacMatrix) ? rbacMatrix.filter(r => r.rol_funcional_id === (role.id || role.numericId)) : [];
-      
+
       roleRbac.forEach(row => {
         const allowedActions = [];
         ALL_ACTIONS.forEach(action => {
@@ -587,36 +587,41 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     try {
       setIsSaving(true);
       const fullName = `${(targetData.first_name || '').trim()} ${(targetData.last_name || '').trim()}`.trim() || targetData.full_name;
-      let payload;
-      if (isSelfMode) {
-        payload = {
-          id: targetData.id,
-          first_name: targetData.first_name,
-          nombre: targetData.first_name,
-          last_name: targetData.last_name,
-          apellido: targetData.last_name,
-          phone: targetData.phone,
-          telefono: targetData.phone,
-          document_number: targetData.document_number,
-          numero_documento: targetData.document_number,
-          department_id: targetData.department_id,
-          departamento_id: targetData.department_id,
-          area_id: targetData.area_id,
-          cargo_id: targetData.cargo_id,
-          idioma_preferido: targetData.idioma_preferido,
-          zona_horaria: targetData.zona_horaria,
-          formato_fecha: targetData.formato_fecha
-        };
-      } else {
-        payload = {
-          ...targetData,
-          full_name: fullName,
-          updatedAt: new Date().toISOString(),
-          updatedBy: 'Admin'
-        };
-        if (payload.rol_id) {
-          const rObj = roles.find(r => r.id == payload.rol_id);
-          if (rObj) payload.role = rObj.name;
+
+      const payload = {
+        id: targetData.id,
+        first_name: (targetData.first_name || '').trim(),
+        nombre: (targetData.first_name || '').trim(),
+        last_name: (targetData.last_name || '').trim(),
+        apellido: (targetData.last_name || '').trim(),
+        full_name: fullName,
+        document_type: targetData.document_type || 'Cédula',
+        document_number: targetData.document_number?.trim() || null,
+        numero_documento: targetData.document_number?.trim() || null,
+        phone: targetData.phone?.trim() || null,
+        telefono: targetData.phone?.trim() || null,
+        email: (targetData.email || '').trim().toLowerCase(),
+        correo_electronico: (targetData.email || '').trim().toLowerCase(),
+        companyId: Number(targetData.companyId),
+        empresa_id: Number(targetData.companyId),
+        rol_id: Number(targetData.rol_id),
+        roleId: Number(targetData.rol_id),
+        rol_principal_id: Number(targetData.rol_id),
+        tipo_usuario_id: Number(targetData.tipo_usuario_id),
+        user_type_id: Number(targetData.tipo_usuario_id),
+        updatedAt: new Date().toISOString(),
+        updatedBy: 'Admin'
+      };
+
+      if (payload.rol_id) {
+        const rObj = roles.find(r => Number(r.numericId || r.id) === Number(payload.rol_id));
+        if (rObj) payload.role = rObj.nombre || rObj.name;
+      }
+      if (payload.tipo_usuario_id) {
+        const tuObj = userTypes.find(t => Number(t.tipo_usuario_id || t.id) === Number(payload.tipo_usuario_id));
+        if (tuObj) {
+          payload.user_type = tuObj.nombre || tuObj.name;
+          payload.tipo_usuario_nombre = tuObj.nombre || tuObj.name;
         }
       }
 
@@ -624,32 +629,38 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       const updatedUser = response?.data;
 
       if (!response?.success || !updatedUser) {
-        throw new Error('INVALID_UPDATE_RESPONSE');
+        throw new Error(response?.message || 'Error al actualizar usuario');
       }
 
-      setDetailUser(previous => previous ? ({
-        ...previous,
-        ...updatedUser
-      }) : updatedUser);
-
-      setData(prevUsers =>
-        Array.isArray(prevUsers)
-          ? prevUsers.map(u => (u.id === updatedUser.id ? { ...u, ...updatedUser } : u))
-          : prevUsers
-      );
+      await fetchUsers();
+      try {
+        const fresh = await usersService.getUserById(targetData.id);
+        if (fresh) {
+          setDetailUser(fresh);
+        } else {
+          setDetailUser(previous => previous ? ({ ...previous, ...updatedUser }) : updatedUser);
+        }
+      } catch (e) {
+        setDetailUser(previous => previous ? ({ ...previous, ...updatedUser }) : updatedUser);
+      }
 
       setIsEditing360(false);
       setWizardData(null);
+      setEdit360Error('');
+      setFormErrors360({});
       setToastNotification({
         type: 'success',
         title: 'Cambios guardados',
         description: 'La información del usuario se actualizó correctamente.'
       });
     } catch (err) {
+      console.error('Error saving user edit:', err);
+      const errorMsg = err.message || 'Inténtalo nuevamente. Si el problema continúa, recarga la página.';
+      setEdit360Error(errorMsg);
       setToastNotification({
         type: 'error',
         title: 'No pudimos guardar los cambios',
-        description: 'Inténtalo nuevamente. Si el problema continúa, recarga la página.'
+        description: errorMsg
       });
     } finally {
       setIsSaving(false);
@@ -674,7 +685,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
   const [accessMethodFilter, setAccessMethodFilter] = useState('Todos');
   const [invitationFilter, setInvitationFilter] = useState('Todos');
   const [firstLoginFilter, setFirstLoginFilter] = useState('Todos');
-  
+
   // Next.js Navigation hooks mapped to react-router-dom style API for compatibility
   const pathname = usePathname();
   const nextSearchParams = useNextSearchParams();
@@ -826,7 +837,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       sp.set('userId', item.id);
       sp.set('tab', targetTab);
       setSearchParams(sp);
-      
+
       const res = await usersService.getUserById(item.id);
       setDetailUser({ ...item, ...res });
       setActiveTab360(targetTab);
@@ -909,7 +920,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       const dropdownEstimatedHeight = 280;
       const spaceBelow = window.innerHeight - rect.bottom;
       const isDropup = spaceBelow < dropdownEstimatedHeight && rect.top > dropdownEstimatedHeight;
-      
+
       setDropdownAnchor({
         id: item.id,
         item: item,
@@ -1018,7 +1029,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
   const filteredData = useMemo(() => {
     return data.filter(item => {
       const searchLower = search.toLowerCase();
-      const matchSearch = !search || 
+      const matchSearch = !search ||
                           (item.full_name && item.full_name.toLowerCase().includes(searchLower)) ||
                           (item.email && item.email.toLowerCase().includes(searchLower)) ||
                           (item.document_number && item.document_number.toLowerCase().includes(searchLower)) ||
@@ -1028,9 +1039,9 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       const matchCompany = companyFilter === 'Todas' || item.companyId === companyFilter;
       const matchStatus = statusFilter === 'Todos' || item.status === statusFilter;
       const matchType = typeFilter === 'Todos' || item.user_type === typeFilter;
-      
-      const matchMfa = mfaFilter === 'Todos' || 
-                       (mfaFilter === 'Habilitado' && item.mfaEnabled) || 
+
+      const matchMfa = mfaFilter === 'Todos' ||
+                       (mfaFilter === 'Habilitado' && item.mfaEnabled) ||
                        (mfaFilter === 'Deshabilitado' && !item.mfaEnabled);
 
       let matchLastAccess = true;
@@ -1064,18 +1075,18 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
       // Onboarding & activation filters matching
       const matchActivation = activationFilter === 'Todos' || item.activation?.activation_status === activationFilter;
-      
+
       const userAccessMethod = item.activation?.access_method || (item.email ? 'EMAIL' : 'DOCUMENT');
       const matchAccessMethod = accessMethodFilter === 'Todos' || userAccessMethod === accessMethodFilter;
 
       const isInvited = item.activation?.invitation_sent_at !== null && item.activation?.invitation_sent_at !== undefined;
-      const matchInvitation = invitationFilter === 'Todos' || 
-                               (invitationFilter === 'Enviada' && isInvited) || 
+      const matchInvitation = invitationFilter === 'Todos' ||
+                               (invitationFilter === 'Enviada' && isInvited) ||
                                (invitationFilter === 'NoEnviada' && !isInvited);
 
       const hasLoggedIn = item.activation?.first_login_at !== null && item.activation?.first_login_at !== undefined;
-      const matchFirstLogin = firstLoginFilter === 'Todos' || 
-                               (firstLoginFilter === 'Realizado' && hasLoggedIn) || 
+      const matchFirstLogin = firstLoginFilter === 'Todos' ||
+                               (firstLoginFilter === 'Realizado' && hasLoggedIn) ||
                                (firstLoginFilter === 'NoRealizado' && !hasLoggedIn);
 
       return matchSearch && matchRole && matchCompany && matchStatus && matchType && matchMfa && matchLastAccess && matchDept && matchArea && matchActivation && matchAccessMethod && matchInvitation && matchFirstLogin;
@@ -1106,7 +1117,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         if (value === 'Vendedora' && !updated.department_id) {
           const deptsList = departments;
           const companyDepts = deptsList.filter(d => d.company_id === updated.companyId && d.status === 'Activo');
-          const comercialDept = companyDepts.find(d => d.name.toLowerCase() === 'comercial') || 
+          const comercialDept = companyDepts.find(d => d.name.toLowerCase() === 'comercial') ||
                                 companyDepts.find(d => d.name.toLowerCase() === 'operaciones') ||
                                 companyDepts[0];
           if (comercialDept) {
@@ -1203,7 +1214,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
   const toggleSelection = (id, e) => {
     e.stopPropagation();
-    setSelectedIds(prev => 
+    setSelectedIds(prev =>
       prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
     );
   };
@@ -1240,11 +1251,17 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
   const handleAddNew = () => {
     loadCatalogos();
     setFormError('');
+    setFieldErrors({});
     setIsCreating(true);
     setIsEditing(false);
     setCurrentStep(1);
     setShowCreatePassword(false);
     setShowCreateConfirmPassword(false);
+
+    const defaultCompId = (companies && companies.length > 0) ? (companies[0].empresa_id || companies[0].id) : '';
+    const defaultRol = (roles && roles.length > 0) ? roles[0] : null;
+    const defaultRolId = defaultRol ? (defaultRol.numericId || defaultRol.id) : '';
+    const defaultRolName = defaultRol ? (defaultRol.nombre || defaultRol.name) : '';
 
     setWizardData({
       id: `USR-${Date.now().toString().slice(-6)}`,
@@ -1255,49 +1272,25 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       document_number: '',
       email: '',
       phone: '',
-      job_title: '',
-      department: '',
-      avatar_url: null,
-      status: 'Invitado',
-
-      // Access Info
-      access_email: '',
-      primary_access_type: 'EMAIL',
+      companyId: defaultCompId,
+      rol_id: defaultRolId,
+      role: defaultRolName,
+      tipo_usuario_id: '',
+      user_type: '',
       password: '',
       confirm_password: '',
       must_change_password: true,
-      web_access_enabled: true,
-      mobile_access_enabled: false,
-      preferred_language: 'es',
-      timezone: 'America/Santo_Domingo',
-      date_format: 'DD/MM/YYYY',
-
-      // Company Assignment
-      companyId: companies[0]?.id || 'COMP-1',
-      user_type: '',
-      role: 'Operador',
+      forzar_cambio_clave: true,
+      primary_access_type: 'EMAIL',
       roles_additional: [],
-      permissionsOverride: {}, // Custom overrides
-
-      // Scope
-      scope_type: 'COMPANY',
-      scope_entity_ids: [],
-      include_children: true,
-      can_view: true,
-      can_edit: true,
-      can_export: false,
-      can_assign: false,
-
-      // Security Settings
-      mfaEnabled: true,
-      mfa_method: 'App autenticadora',
-      access_expires_at: '',
-      allowed_hours: 'Cualquier horario',
-      allowed_ips: '*',
-      inactivity_timeout_minutes: 0,
-      max_failed_attempts: 10,
-      require_export_approval: false,
-      require_dual_validation: false
+      department_id: null,
+      area_id: null,
+      cargo_id: null,
+      job_title: '',
+      department: '',
+      area: '',
+      avatar_url: null,
+      status: 'Activo'
     });
   };
 
@@ -1320,7 +1313,8 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
   const handleStartEdit360 = async (user, tab = 'resumen') => {
     setEdit360Error('');
-    
+    setFormErrors360({});
+
     // Set search params so detail opens
     const sp = new URLSearchParams(searchParams);
     sp.set('userId', user.id);
@@ -1335,39 +1329,42 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         if (!lName) lName = parts.slice(1).join(' ') || '';
       }
 
-      const matchedRoleObj = (roles || []).find(r => (r.name || r.nombre) === (sourceUser.role || sourceUser.role_name || sourceUser.rol));
-      const rId = sourceUser.role_id || sourceUser.rol_principal_id || sourceUser.rol_id || matchedRoleObj?.id || (roles && roles[0] ? roles[0].id : 1);
-      const rName = sourceUser.role_name || sourceUser.role || sourceUser.rol || matchedRoleObj?.name || matchedRoleObj?.nombre || 'Administrador General';
+      const matchedRoleObj = (roles || []).find(r =>
+        (r.nombre && (r.nombre === sourceUser.role || r.nombre === sourceUser.role_name)) ||
+        (r.name && (r.name === sourceUser.role || r.name === sourceUser.role_name)) ||
+        Number(r.numericId || r.id) === Number(sourceUser.rol_id || sourceUser.rol_principal_id || sourceUser.role_id)
+      );
+      const rId = sourceUser.rol_id || sourceUser.rol_principal_id || sourceUser.role_id || (matchedRoleObj ? (matchedRoleObj.numericId || matchedRoleObj.id) : (roles && roles[0] ? (roles[0].numericId || roles[0].id) : ''));
+      const rName = sourceUser.role || sourceUser.role_name || (matchedRoleObj ? (matchedRoleObj.nombre || matchedRoleObj.name) : '');
 
-      const compId = sourceUser.companyId || sourceUser.empresa_id || (companies && companies.length > 0 ? (companies[0].id || companies[0].empresa_id) : 1);
-      const userTypeId = sourceUser.tipo_usuario_id || (userTypes && userTypes.length > 0 ? userTypes[0].id : 1);
+      const matchedCompObj = (companies || []).find(c =>
+        Number(c.empresa_id || c.id) === Number(sourceUser.companyId || sourceUser.empresa_id)
+      );
+      const compId = sourceUser.companyId || sourceUser.empresa_id || (matchedCompObj ? (matchedCompObj.empresa_id || matchedCompObj.id) : (companies && companies[0] ? (companies[0].empresa_id || companies[0].id) : ''));
+
+      const matchedTuObj = (userTypes || []).find(t =>
+        Number(t.tipo_usuario_id || t.id) === Number(sourceUser.tipo_usuario_id || sourceUser.userTypeId || sourceUser.user_type_id) ||
+        (t.nombre && (t.nombre === sourceUser.user_type || t.nombre === sourceUser.tipo_usuario_nombre)) ||
+        (t.name && (t.name === sourceUser.user_type || t.name === sourceUser.tipo_usuario_nombre))
+      );
+      const userTypeId = sourceUser.tipo_usuario_id || sourceUser.userTypeId || sourceUser.user_type_id || (matchedTuObj ? (matchedTuObj.tipo_usuario_id || matchedTuObj.id) : (userTypes && userTypes[0] ? (userTypes[0].tipo_usuario_id || userTypes[0].id) : ''));
+      const userTypeName = sourceUser.user_type || sourceUser.tipo_usuario_nombre || (matchedTuObj ? (matchedTuObj.nombre || matchedTuObj.name) : '');
 
       return {
         ...sourceUser,
+        id: sourceUser.id || sourceUser.usuario_id,
         first_name: fName,
         last_name: lName,
         full_name: `${fName} ${lName}`.trim() || sourceUser.full_name || 'Usuario',
-        department_id: sourceUser.departamento_id || sourceUser.department_id || '',
-        area_id: sourceUser.area_id || '',
-        cargo_id: sourceUser.cargo_id || '',
-        companyId: compId,
+        document_type: sourceUser.document_type || 'Cédula',
+        document_number: sourceUser.document_number || sourceUser.numero_documento || '',
+        phone: sourceUser.phone || sourceUser.telefono || '',
+        email: sourceUser.email || sourceUser.correo_electronico || '',
+        companyId: compId ? Number(compId) : '',
+        rol_id: rId ? Number(rId) : '',
         role: rName,
-        rol_id: rId,
-        tipo_usuario_id: userTypeId,
-        user_type: sourceUser.user_type || (userTypes || []).find(t => t.id == userTypeId)?.name || 'Interno',
-        roles_additional: sourceUser.roles_additional || [],
-        primary_access_type: sourceUser.login_identifiers?.find(id => id.is_primary)?.identifier_type || 'EMAIL',
-        correo_acceso: sourceUser.correo_acceso || '',
-        enviar_invitacion_correo: Boolean(sourceUser.enviar_invitacion_correo),
-        generar_clave_automatica: Boolean(sourceUser.generar_clave_automatica),
-        forzar_cambio_clave: Boolean(sourceUser.forzar_cambio_clave),
-        idioma_preferido: sourceUser.idioma_preferido || 'es',
-        zona_horaria: sourceUser.zona_horaria || 'America/Santo_Domingo',
-        formato_fecha: sourceUser.formato_fecha || 'DD/MM/YYYY',
-        password: '',
-        confirm_password: '',
-        auto_generate_password: false,
-        permissionsOverride: sourceUser.permissionsOverride || {}
+        tipo_usuario_id: userTypeId ? Number(userTypeId) : '',
+        user_type: userTypeName
       };
     };
 
@@ -1375,19 +1372,15 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       const res = await usersService.getUserById(user.id);
       const fullUser = { ...user, ...res };
       setDetailUser(fullUser);
-
-      // Populate wizardData as editing draft
       setWizardData(mapWizardData(fullUser));
     } catch (err) {
       console.error('Error fetching full user for edit:', err);
       setDetailUser(user);
       setWizardData(mapWizardData(user));
     }
-    
-    // Enable editing mode ONLY AFTER data is ready
+
     setIsEditing360(true);
-    setActiveTab360(tab);
-    if (tab === 'permisos') setMatrixFilter('all');
+    setActiveTab360('resumen');
   };
 
   const handleCancelEdit360 = () => {
@@ -1397,146 +1390,73 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     setFormErrors360({});
   };
 
-  const handleSaveEdit360 = () => {
-    if (!wizardData) return;
-    setEdit360Error('');
-
-    let firstName = (wizardData.first_name || '').trim();
-    let lastName = (wizardData.last_name || '').trim();
-    if ((!firstName || !lastName) && wizardData.full_name) {
-      const parts = wizardData.full_name.trim().split(' ');
-      if (!firstName) firstName = parts[0] || '';
-      if (!lastName) lastName = parts.slice(1).join(' ') || '';
-    }
-    if (!firstName) firstName = 'Usuario';
-
-    const companyId = wizardData.companyId || wizardData.empresa_id || (companies && companies[0] ? (companies[0].id || companies[0].empresa_id) : 1);
-    const roleName = wizardData.role || wizardData.role_name || 'Administrador General';
-    const roleId = wizardData.rol_id || wizardData.role_id || (roles.find(r => (r.name || r.nombre) === roleName)?.id) || 1;
-
-    // Map identifiers
-    let updatedIdentifiers = [...(wizardData.login_identifiers || [])];
-    const primIdx = updatedIdentifiers.findIndex(id => id.is_primary);
-    const identifierType = wizardData.primary_access_type || 'EMAIL';
-    const identifierValue = identifierType === 'EMAIL' ? (wizardData.email || wizardData.correo_acceso) : wizardData.document_number;
-
-    if (primIdx !== -1) {
-      updatedIdentifiers[primIdx] = {
-        ...updatedIdentifiers[primIdx],
-        identifier_type: identifierType,
-        identifier_value: identifierValue
-      };
-    } else {
-      updatedIdentifiers.push({
-        identifier_type: identifierType,
-        identifier_value: identifierValue,
-        is_primary: true,
-        is_verified: true
-      });
-    }
-
-    const computedFullName = `${firstName} ${lastName}`.trim() || wizardData.full_name || 'Usuario';
-
-    const finalUser = {
-      ...wizardData,
-      first_name: firstName,
-      last_name: lastName,
-      full_name: computedFullName,
-      companyId: companyId,
-      role: roleName,
-      rol_id: roleId,
-      login_identifiers: updatedIdentifiers
-    };
-
-    // Update backend
-    usersService.updateUser(finalUser.id, finalUser).then(async () => {
-      await fetchUsers();
-      try {
-        const fresh = await usersService.getUserById(finalUser.id);
-        if (fresh) setDetailUser(fresh);
-        else setDetailUser(finalUser);
-      } catch (e) {
-        setDetailUser(finalUser);
-      }
-      if (activeTab360 === 'auditoria') {
-        fetchUserAudits(finalUser.id);
-      }
-      setIsEditing360(false);
-      setWizardData(null);
-      setEdit360Error('');
-      setShowConfirmEditModal(false);
-      setShowSuccessEditModal(true);
-    }).catch(err => {
-      setEdit360Error('Error al actualizar usuario: ' + err.message);
-      setShowConfirmEditModal(false);
-    });
-  };
-
   const handleTriggerSaveEdit360 = () => {
     setEdit360Error('');
     setFormErrors360({});
-    
+
     if (!wizardData) return;
 
     const newErrors = {};
 
     if (!wizardData.first_name || !wizardData.first_name.trim()) {
-      newErrors.first_name = 'El nombre es obligatorio.';
+      newErrors.first_name = 'El nombre es requerido.';
     }
     if (!wizardData.last_name || !wizardData.last_name.trim()) {
-      newErrors.last_name = 'El apellido es obligatorio.';
+      newErrors.last_name = 'El apellido es requerido.';
     }
     if (!wizardData.companyId) {
-      newErrors.companyId = 'Debe seleccionar una empresa.';
+      newErrors.companyId = 'La empresa es requerida.';
     }
-    if (!wizardData.role && !wizardData.rol_id) {
-      newErrors.rol_id = 'Debe seleccionar un rol.';
+    if (!wizardData.rol_id) {
+      newErrors.rol_id = 'El rol principal es requerido.';
     }
-
-    const emailVal = validateEmail(wizardData.email, false);
-    if (wizardData.email && !emailVal.isValid) {
-      newErrors.email = emailVal.message;
+    if (!wizardData.tipo_usuario_id) {
+      newErrors.tipo_usuario_id = 'Selecciona un tipo de usuario.';
     }
 
-    if (wizardData.phone) {
+    const emailVal = validateEmail(wizardData.email, true);
+    if (!emailVal.isValid) {
+      newErrors.email = emailVal.message || 'El correo electrónico es requerido y debe ser válido.';
+    } else {
+      const emailTaken = (data || []).find(u =>
+        String(u.id) !== String(wizardData.id) &&
+        u.email &&
+        u.email.trim().toLowerCase() === (wizardData.email || '').trim().toLowerCase()
+      );
+      if (emailTaken) {
+        newErrors.email = 'El correo electrónico ya está registrado.';
+      }
+    }
+
+    if (wizardData.phone && wizardData.phone.trim()) {
       const phoneVal = validatePhoneDR(wizardData.phone, false);
       if (!phoneVal.isValid) {
         newErrors.phone = phoneVal.message;
       }
     }
 
-    if (wizardData.primary_access_type === 'EMAIL') {
-      if (!wizardData.email || !emailVal.isValid) {
-        newErrors.email = emailVal.message || 'Debe ingresar un correo electrónico válido.';
+    if (wizardData.document_number && wizardData.document_number.trim()) {
+      const docVal = validateRNC(wizardData.document_number, false);
+      if (!docVal.isValid) {
+        newErrors.document_number = docVal.message;
       } else {
-        const emailTaken = data.find(u => u.id !== wizardData.id && u.login_identifiers?.some(id => id.identifier_type === 'EMAIL' && id.identifier_value === wizardData.email));
-        if (emailTaken) {
-          newErrors.email = 'El correo electrónico ya se encuentra en uso.';
-        }
-      }
-    } else if (wizardData.primary_access_type === 'DOCUMENT') {
-      if (!wizardData.document_number || !wizardData.document_number.trim()) {
-        newErrors.document_number = 'Debe ingresar un número de documento válido.';
-      } else {
-        const docVal = validateRNC(wizardData.document_number, false);
-        if (!docVal.isValid) {
-          newErrors.document_number = docVal.message;
-        } else {
-          const docTaken = data.find(u => u.id !== wizardData.id && u.login_identifiers?.some(id => id.identifier_type === 'DOCUMENT' && id.identifier_value === wizardData.document_number));
-          if (docTaken) {
-            newErrors.document_number = 'El número de documento ya está registrado.';
-          }
+        const docTaken = (data || []).find(u =>
+          String(u.id) !== String(wizardData.id) &&
+          u.document_number &&
+          u.document_number.trim() === wizardData.document_number.trim()
+        );
+        if (docTaken) {
+          newErrors.document_number = 'El número de documento ya está registrado.';
         }
       }
     }
 
     if (Object.keys(newErrors).length > 0) {
       setFormErrors360(newErrors);
-      setEdit360Error('Por favor corrija los errores marcados en el formulario.');
+      setEdit360Error('Por favor complete los campos obligatorios marcados en el formulario.');
       return;
     }
 
-    // Pass validations, execute save to DB
     handleExecuteSave360();
   };
 
@@ -1547,7 +1467,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
     if (currentStep === 1) {
       const errors = {};
-      
+
       if (!wizardData.first_name || !wizardData.first_name.trim()) {
         errors.first_name = 'El nombre es requerido.';
       }
@@ -1557,13 +1477,16 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       if (!wizardData.companyId) {
         errors.companyId = 'La empresa es requerida.';
       }
-      if (!wizardData.department_id) {
-        errors.department_id = 'El departamento es requerido.';
+      if (!wizardData.rol_id) {
+        errors.rol_id = 'El rol principal es requerido.';
       }
-      
+      if (!wizardData.tipo_usuario_id) {
+        errors.tipo_usuario_id = 'Selecciona un tipo de usuario.';
+      }
+
       const emailVal = validateEmail(wizardData.email, true);
       if (!emailVal.isValid) {
-        errors.email = emailVal.message;
+        errors.email = emailVal.message || 'El correo electrónico es requerido y debe ser válido.';
       } else {
         const isEmailTaken = data.some(u => u.id !== wizardData.id && u.email && u.email.trim().toLowerCase() === wizardData.email.trim().toLowerCase());
         if (isEmailTaken) {
@@ -1577,7 +1500,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
           errors.phone = phoneVal.message;
         }
       }
-      
+
       if (wizardData.document_number && wizardData.document_number.trim()) {
         const docVal = validateRNC(wizardData.document_number, false);
         if (!docVal.isValid) {
@@ -1590,10 +1513,26 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         }
       }
 
+      if (!wizardData.password || !wizardData.password.trim()) {
+        errors.password = 'La contraseña inicial es requerida.';
+      }
+      if (!wizardData.confirm_password || !wizardData.confirm_password.trim()) {
+        errors.confirm_password = 'Debe confirmar la contraseña.';
+      } else if (wizardData.password !== wizardData.confirm_password) {
+        errors.confirm_password = 'Las contraseñas no coinciden.';
+      }
+
+      if (wizardData.password && wizardData.password.trim()) {
+        const policyCheck = validatePasswordPolicy(wizardData.password);
+        if (!policyCheck.isValid) {
+          errors.password = policyCheck.message || 'La contraseña no cumple con los requisitos de seguridad.';
+        }
+      }
+
       if (Object.keys(errors).length > 0) {
         setFieldErrors(errors);
         setTimeout(() => {
-          const firstErrEl = document.querySelector('.border-red-500, .border-rose-500, select[class*="border-red"], input[class*="border-red"]');
+          const firstErrEl = document.querySelector('.border-rose-500, select[class*="border-rose"], input[class*="border-rose"]');
           if (firstErrEl) {
             firstErrEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
             if (typeof firstErrEl.focus === 'function') firstErrEl.focus();
@@ -1601,101 +1540,16 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         }, 50);
         return;
       }
-      
+
       const fullName = `${(wizardData.first_name || '').trim()} ${(wizardData.last_name || '').trim()}`;
       setWizardData(prev => ({
         ...prev,
         full_name: fullName
       }));
+
+      setCurrentStep(2);
+      return;
     }
-
-    if (currentStep === 2) {
-      const errors = {};
-      
-      if (!wizardData.companyId) {
-        errors.companyId = 'La empresa es requerida.';
-      }
-      if (!wizardData.tipo_usuario_id) {
-        errors.tipo_usuario_id = 'El tipo de usuario es requerido.';
-      }
-      if (!wizardData.rol_id) {
-        errors.rol_id = 'El rol principal es requerido.';
-      }
-      if (!wizardData.primary_access_type) {
-        errors.primary_access_type = 'El método de acceso principal es requerido.';
-      }
-
-      if (Object.keys(errors).length > 0) {
-        setFieldErrors(errors);
-        setTimeout(() => {
-          const firstErrEl = document.querySelector('.border-red-500, .border-rose-500, select[class*="border-red"], input[class*="border-red"]');
-          if (firstErrEl) {
-            firstErrEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            if (typeof firstErrEl.focus === 'function') firstErrEl.focus();
-          }
-        }, 50);
-        return;
-      }
-    }
-
-    if (currentStep === 3) {
-      if (wizardData.primary_access_type === 'EMAIL') {
-        if (!wizardData.email || !wizardData.email.trim()) {
-          setFormError('El correo electrónico es requerido.');
-          return;
-        }
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(wizardData.email.trim())) {
-          setFormError('Introduce un formato de correo electrónico válido.');
-          return;
-        }
-        const isEmailTaken = data.some(u => u.id !== wizardData.id && u.email && u.email.trim().toLowerCase() === wizardData.email.trim().toLowerCase());
-        if (isEmailTaken) {
-          setFormError('El correo electrónico ya está registrado para otra cuenta.');
-          return;
-        }
-      } else if (wizardData.primary_access_type === 'DOCUMENT') {
-        if (!wizardData.document_type || !wizardData.document_type.trim()) {
-          setFormError('El tipo de documento es requerido.');
-          return;
-        }
-        if (!wizardData.document_number || !wizardData.document_number.trim()) {
-          setFormError('El número de documento es requerido.');
-          return;
-        }
-        const isDocTaken = data.some(u => u.id !== wizardData.id && u.document_number && u.document_number.trim() === wizardData.document_number.trim());
-        if (isDocTaken) {
-          setFormError('El número de documento ya está registrado para otra cuenta.');
-          return;
-        }
-        if (!wizardData.phone || !wizardData.phone.trim()) {
-          setFormError('El teléfono de contacto es requerido.');
-          return;
-        }
-      }
-
-      if (isCreating) {
-        if (!wizardData.password || !wizardData.password.trim()) {
-          setFormError('La contraseña inicial es requerida.');
-          return;
-        }
-        if (!wizardData.confirm_password || !wizardData.confirm_password.trim()) {
-          setFormError('Debe confirmar la contraseña.');
-          return;
-        }
-        if (wizardData.password !== wizardData.confirm_password) {
-          setFormError('Las contraseñas no coinciden.');
-          return;
-        }
-        const policyCheck = validatePasswordPolicy(wizardData.password);
-        if (!policyCheck.isValid) {
-          setFormError(policyCheck.message || 'La contraseña no cumple con los requisitos de seguridad.');
-          return;
-        }
-      }
-    }
-
-    setCurrentStep(prev => prev + 1);
   };
 
   const handlePrevStep = () => {
@@ -1706,49 +1560,55 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
   const handleSaveUser = () => {
     const timestamp = new Date().toISOString();
     const cleanUser = { ...wizardData };
-    
+
     // Auto-compute full_name
-    cleanUser.full_name = `${cleanUser.first_name.trim()} ${cleanUser.last_name.trim()}`;
-    cleanUser.email = cleanUser.email.trim();
+    cleanUser.first_name = (cleanUser.first_name || '').trim();
+    cleanUser.last_name = (cleanUser.last_name || '').trim();
+    cleanUser.full_name = `${cleanUser.first_name} ${cleanUser.last_name}`.trim() || 'Usuario';
+    cleanUser.email = (cleanUser.email || '').trim().toLowerCase();
     cleanUser.access_email = cleanUser.email;
+    cleanUser.phone = cleanUser.phone ? cleanUser.phone.trim() : null;
+    cleanUser.document_number = cleanUser.document_number ? cleanUser.document_number.trim() : null;
+    cleanUser.tipo_usuario_id = wizardData.tipo_usuario_id ? Number(wizardData.tipo_usuario_id) : null;
+    cleanUser.user_type_id = cleanUser.tipo_usuario_id;
+    cleanUser.department_id = null;
+    cleanUser.area_id = null;
+    cleanUser.cargo_id = null;
+    cleanUser.roles_additional = [];
+    cleanUser.must_change_password = Boolean(cleanUser.must_change_password);
+    cleanUser.forzar_cambio_clave = Boolean(cleanUser.must_change_password);
+    cleanUser.primary_access_type = 'EMAIL';
 
     // Set access channels
-    if (cleanUser.user_type === 'Vendedora') {
-      cleanUser.web_access_enabled = false;
-      cleanUser.mobile_access_enabled = true;
-    } else {
-      cleanUser.web_access_enabled = true;
-      cleanUser.mobile_access_enabled = false;
-    }
+    cleanUser.web_access_enabled = true;
+    cleanUser.mobile_access_enabled = false;
 
     // Build login identifiers
     const loginIdentifiers = [];
-    if (cleanUser.email && cleanUser.email.trim()) {
-      const existingEmailId = cleanUser.login_identifiers?.find(id => id.identifier_type === 'EMAIL');
+    if (cleanUser.email) {
       loginIdentifiers.push({
-        id: existingEmailId?.id || `LID-${cleanUser.id.replace('USR-', '')}-1`,
+        id: `LID-${cleanUser.id.replace('USR-', '')}-1`,
         user_id: cleanUser.id,
         identifier_type: 'EMAIL',
-        identifier_value: cleanUser.email.trim(),
-        is_primary: cleanUser.primary_access_type === 'EMAIL',
-        is_verified: existingEmailId ? existingEmailId.is_verified : true,
-        status: existingEmailId ? existingEmailId.status : 'Active',
-        created_at: existingEmailId ? existingEmailId.created_at : timestamp,
+        identifier_value: cleanUser.email,
+        is_primary: true,
+        is_verified: true,
+        status: 'Active',
+        created_at: timestamp,
         updated_at: timestamp
       });
     }
 
-    if (cleanUser.document_number && cleanUser.document_number.trim()) {
-      const existingDocId = cleanUser.login_identifiers?.find(id => id.identifier_type === 'DOCUMENT');
+    if (cleanUser.document_number) {
       loginIdentifiers.push({
-        id: existingDocId?.id || `LID-${cleanUser.id.replace('USR-', '')}-2`,
+        id: `LID-${cleanUser.id.replace('USR-', '')}-2`,
         user_id: cleanUser.id,
         identifier_type: 'DOCUMENT',
-        identifier_value: cleanUser.document_number.trim(),
-        is_primary: cleanUser.primary_access_type === 'DOCUMENT',
-        is_verified: existingDocId ? existingDocId.is_verified : true,
-        status: existingDocId ? existingDocId.status : 'Active',
-        created_at: existingDocId ? existingDocId.created_at : timestamp,
+        identifier_value: cleanUser.document_number,
+        is_primary: false,
+        is_verified: true,
+        status: 'Active',
+        created_at: timestamp,
         updated_at: timestamp
       });
     }
@@ -1759,7 +1619,6 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     cleanUser.password = wizardData.password;
     cleanUser.confirm_password = wizardData.confirm_password;
     delete cleanUser.username;
-    delete cleanUser.primary_access_type;
 
     if (isCreating) {
       cleanUser.status = 'Activo';
@@ -1769,7 +1628,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       cleanUser.updatedBy = 'Admin';
       cleanUser.last_login_at = null;
 
-      const primaryAccess = wizardData.primary_access_type || (loginIdentifiers.find(id => id.is_primary)?.identifier_type) || 'EMAIL';
+      const primaryAccess = 'EMAIL';
       const activationObj = {
         id: `ACT-S-${Date.now()}`,
         access_method: primaryAccess,
@@ -1785,12 +1644,12 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         temporary_credentials_generated_at: null,
         temporary_credentials_delivered_at: null,
         initial_password_changed_at: null,
-        channel: primaryAccess === 'EMAIL' ? 'EMAIL' : 'PHYSICAL_SHEET',
+        channel: 'EMAIL',
         status_detail: 'Contraseña asignada por administrador',
         created_at: timestamp,
         updated_at: timestamp
       };
-      
+
       cleanUser.activation = activationObj;
 
       setIsSaving(true);
@@ -1801,7 +1660,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         handleCancel();
         setSuccessWizardMessage(res.message || 'El usuario ha sido creado correctamente en la base de datos.');
         setShowSuccessWizardModal(true);
-        showToast('Usuario creado con éxito.');
+        showToastNotification('Usuario creado', 'El usuario ha sido creado correctamente.', 'success');
       }).catch(err => {
         setIsSaving(false);
         setFormError('Error creando usuario: ' + (err.message || 'Error de conexión con el servidor.'));
@@ -1818,16 +1677,16 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
           fetchUserAudits(cleanUser.id);
         }
         const originalUser = data.find(u => u.id === cleanUser.id) || {};
-        
+
         let changeDesc = [];
         if (originalUser.role !== cleanUser.role) changeDesc.push(`Rol: ${originalUser.role} -> ${cleanUser.role}`);
         if (originalUser.scope_type !== cleanUser.scope_type) changeDesc.push(`Alcance: ${originalUser.scope_type} -> ${cleanUser.scope_type}`);
         if (originalUser.status !== cleanUser.status) changeDesc.push(`Estado: ${originalUser.status} -> ${cleanUser.status}`);
-        
+
         const desc = changeDesc.length > 0 ? 'Modificaciones: ' + changeDesc.join(', ') : 'Perfil editado';
         setSuccessWizardMessage('Los cambios en el perfil del usuario han sido guardados correctamente en la base de datos.');
         setShowSuccessWizardModal(true);
-        showToast('Usuario actualizado con éxito.');
+        showToastNotification('Usuario actualizado', 'Los datos del usuario han sido guardados correctamente.', 'success');
       }).catch(err => {
         setIsSaving(false);
         setFormError('Error actualizando usuario: ' + err.message);
@@ -1865,14 +1724,14 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         const beforeStatus = user.estado || user.status;
         const afterStatus = payload.status;
         const afterEstado = payload.estado || payload.status;
-        
+
         await usersService.updateUser(userId, { estado: afterEstado, motivo_bloqueo: reasonText });
 
         updatedUsers = data.map(u => u.id === userId ? { ...u, status: afterStatus, estado: afterEstado, updatedAt: timestamp } : u);
         syncData(updatedUsers);
         showToast(`Estado de usuario cambiado a ${afterEstado}.`);
-      } 
-    
+      }
+
     else if (type === 'role') {
       const beforeRole = user.role;
       const afterRole = payload.role;
@@ -1888,16 +1747,16 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       const beforeScope = user.scope_type;
       const afterScope = payload.scope_type;
 
-      await usersService.updateUser(userId, { 
-        scope_type: afterScope, 
-        scope_entity_ids: payload.scope_entity_ids 
+      await usersService.updateUser(userId, {
+        scope_type: afterScope,
+        scope_entity_ids: payload.scope_entity_ids
       });
 
-      updatedUsers = data.map(u => u.id === userId ? { 
-        ...u, 
-        scope_type: afterScope, 
+      updatedUsers = data.map(u => u.id === userId ? {
+        ...u,
+        scope_type: afterScope,
         scope_entity_ids: payload.scope_entity_ids,
-        updatedAt: timestamp 
+        updatedAt: timestamp
       } : u);
       syncData(updatedUsers);
       showToast(`Alcance operativo actualizado con éxito.`);
@@ -2703,7 +2562,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
   const parseDiffValues = (beforeVal, afterVal) => {
     const sensitiveKeys = ['password', 'password_hash', 'pass', 'token', 'refresh_token', 'secret', 'otp', 'cookie', 'credential'];
-    
+
     let beforeObj = null;
     let afterObj = null;
 
@@ -2797,9 +2656,9 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     setSearchParams({});
   };
 
-  const activeFiltersCount = 
-    (roleFilter !== 'Todos' ? 1 : 0) + 
-    (companyFilter !== 'Todas' ? 1 : 0) + 
+  const activeFiltersCount =
+    (roleFilter !== 'Todos' ? 1 : 0) +
+    (companyFilter !== 'Todas' ? 1 : 0) +
     (statusFilter !== 'Todos' ? 1 : 0) +
     (mfaFilter !== 'Todos' ? 1 : 0) +
     (typeFilter !== 'Todos' ? 1 : 0) +
@@ -2832,14 +2691,14 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
     // Most accounts can edit profile
     items.push(
-      <button 
+      <button
         key="edit-profile"
         className={btnClass}
         onClick={() => { closeMenu(); handleStartEdit360(item, 'resumen'); }}
       >
         <Edit2 size={13} className="text-foreground-muted shrink-0" /> Editar perfil
       </button>,
-      <button 
+      <button
         key="reset-password-manual"
         className={btnClass}
         onClick={() => { closeMenu(); handleOpenResetPasswordModal(item); }}
@@ -2852,28 +2711,28 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     if (accessMethod === 'EMAIL') {
       if (actStatus === 'INVITATION_SENT' || actStatus === 'INVITATION_OPENED') {
         items.push(
-          <button 
+          <button
             key="resend-inv"
             className={btnClass}
             onClick={() => { closeMenu(); handleResendInvitationDirect(item); }}
           >
             <RotateCw size={13} className="text-foreground-muted shrink-0" /> Reenviar invitación
           </button>,
-          <button 
+          <button
             key="copy-link"
             className={btnClass}
             onClick={() => { closeMenu(); handleCopyActivationLink(item); }}
           >
             <CheckSquare size={13} className="text-foreground-muted shrink-0" /> Copiar link de activación
           </button>,
-          <button 
+          <button
             key="revoke-inv"
             className={btnClassDanger}
             onClick={() => { closeMenu(); handleRevokeInvitationDirect(item); }}
           >
             <ShieldX size={13} className="shrink-0" /> Revocar invitación
           </button>,
-          <button 
+          <button
             key="view-history"
             className={btnClass}
             onClick={() => { closeMenu(); handleViewDetail(item, 'resumen'); }}
@@ -2883,21 +2742,21 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         );
       } else if (actStatus === 'INVITATION_EXPIRED' || actStatus === 'INVITATION_BOUNCED') {
         items.push(
-          <button 
+          <button
             key="regen-inv"
             className={btnClass}
             onClick={() => { closeMenu(); handleRegenerateInvitationDirect(item); }}
           >
             <RotateCw size={13} className="text-foreground-muted shrink-0" /> Regenerar invitación
           </button>,
-          <button 
+          <button
             key="resend-inv-exp"
             className={btnClass}
             onClick={() => { closeMenu(); handleResendInvitationDirect(item); }}
           >
             <Mail size={13} className="text-foreground-muted shrink-0" /> Reenviar invitación
           </button>,
-          <button 
+          <button
             key="view-history"
             className={btnClass}
             onClick={() => { closeMenu(); handleViewDetail(item, 'resumen'); }}
@@ -2907,14 +2766,14 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         );
       } else if (actStatus === 'REGISTRATION_COMPLETED') {
         items.push(
-          <button 
+          <button
             key="send-reminder"
             className={btnClass}
             onClick={() => { closeMenu(); handleSendReminderDirect(item); }}
           >
             <Mail size={13} className="text-foreground-muted shrink-0" /> Enviar recordatorio
           </button>,
-          <button 
+          <button
             key="view-history"
             className={btnClass}
             onClick={() => { closeMenu(); handleViewDetail(item, 'resumen'); }}
@@ -2924,21 +2783,21 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         );
       } else if (actStatus === 'FIRST_LOGIN_COMPLETED') {
         items.push(
-          <button 
+          <button
             key="view-history"
             className={btnClass}
             onClick={() => { closeMenu(); handleViewDetail(item, 'resumen'); }}
           >
             <Clock size={13} className="text-foreground-muted shrink-0" /> Ver detalle
           </button>,
-          <button 
+          <button
             key="revoke-sessions"
             className={btnClass}
             onClick={() => { closeMenu(); handleRevokeAllSessions(item.id); }}
           >
             <Laptop size={13} className="text-foreground-muted shrink-0" /> Revocar sesiones
           </button>,
-          <button 
+          <button
             key="view-audit"
             className={btnClass}
             onClick={() => { closeMenu(); handleViewDetail(item, 'auditoria'); }}
@@ -2950,14 +2809,14 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     } else if (accessMethod === 'DOCUMENT') {
       if (actStatus === 'CREDENTIALS_GENERATED' || actStatus === 'PENDING_FIRST_LOGIN') {
         items.push(
-          <button 
+          <button
             key="mark-delivered"
             className={btnClass}
             onClick={() => { closeMenu(); handleMarkInstructionsDelivered(item); }}
           >
             <Check size={13} className="text-foreground-muted shrink-0" /> Inst. entregadas
           </button>,
-          <button 
+          <button
             key="view-history"
             className={btnClass}
             onClick={() => { closeMenu(); handleViewDetail(item, 'resumen'); }}
@@ -2967,21 +2826,21 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         );
       } else if (actStatus === 'INITIAL_PASSWORD_CHANGED') {
         items.push(
-          <button 
+          <button
             key="view-history"
             className={btnClass}
             onClick={() => { closeMenu(); handleViewDetail(item, 'resumen'); }}
           >
             <Clock size={13} className="text-foreground-muted shrink-0" /> Ver detalle
           </button>,
-          <button 
+          <button
             key="revoke-sessions"
             className={btnClass}
             onClick={() => { closeMenu(); handleRevokeAllSessions(item.id); }}
           >
             <Laptop size={13} className="text-foreground-muted shrink-0" /> Revocar sesiones
           </button>,
-          <button 
+          <button
             key="view-audit"
             className={btnClass}
             onClick={() => { closeMenu(); handleViewDetail(item, 'auditoria'); }}
@@ -2991,14 +2850,14 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         );
       } else if (actStatus === 'ACCESS_BLOCKED') {
         items.push(
-          <button 
+          <button
             key="unblock-act"
             className="w-full text-left px-3.5 py-2 text-xs text-emerald-400 font-semibold hover:bg-emerald-500/10 rounded-lg flex items-center gap-2.5 transition-colors cursor-pointer"
             onClick={() => { closeMenu(); handleToggleBlock(item); }}
           >
             <ShieldCheck size={13} className="shrink-0" /> Desbloquear acceso
           </button>,
-          <button 
+          <button
             key="view-history"
             className={btnClass}
             onClick={() => { closeMenu(); handleViewDetail(item, 'resumen'); }}
@@ -3014,7 +2873,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
     // Actions based on estado
     items.push(
-      <button 
+      <button
         key="toggle-block"
         className={btnClass}
         onClick={() => { closeMenu(); handleToggleBlock(item); }}
@@ -3022,9 +2881,9 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         <ShieldAlert size={13} className="text-foreground-muted shrink-0" /> {isBlocked ? 'Desbloquear cuenta' : 'Bloquear cuenta'}
       </button>
     );
-    
+
     items.push(
-      <button 
+      <button
         key="toggle-inactive"
         className={btnClass}
         onClick={() => { closeMenu(); handleToggleInactive(item); }}
@@ -3038,7 +2897,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
     // Delete Action
     items.push(
-      <button 
+      <button
         key="delete-user"
         className={btnClassDanger}
         onClick={() => { closeMenu(); handleDeleteUserClick(item); }}
@@ -3058,7 +2917,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     if (status === 'Acceso confirmado') finalStatus = 'FIRST_LOGIN_COMPLETED';
     else if (status === 'Pendiente de registro') finalStatus = 'REGISTRATION_COMPLETED';
     else if (status === 'Invitación enviada') finalStatus = 'INVITATION_SENT';
-    
+
     // If the user has a first login or last login date, it's ALWAYS "Acceso confirmado"
     if (item) {
       const hasLogin = !!item.activation?.first_login_at || !!item.last_login_at;
@@ -3106,7 +2965,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     }
 
     const isEmail = method === 'EMAIL';
-    
+
     if (isEmail) {
       switch (finalStatus) {
         case 'DRAFT':
@@ -3179,7 +3038,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     if (!detailUser) return null;
     return (
       <div className="max-w-[1550px] mx-auto space-y-6 animate-in fade-in duration-300 p-6 font-mono text-xs w-full">
-        
+
         {/* Toast Notification Banner */}
         {resetToast && (
           <div className={`p-4 rounded-2xl border flex items-center justify-between font-mono text-xs shadow-xl animate-in slide-in-from-top duration-300 ${
@@ -3199,10 +3058,10 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
         {/* 360 Header Banner */}
         <div className="bg-card border border-border rounded-2xl p-6 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 font-mono">
-          
+
           <div className="flex items-center gap-4">
             {!isSelfMode && (
-              <button 
+              <button
                 type="button"
                 onClick={handleGoBack}
                 className="p-2 rounded-xl bg-input border border-border text-foreground-muted hover:text-foreground hover:border-primary transition-all shadow-lg shrink-0 cursor-pointer"
@@ -3218,8 +3077,8 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               <div className="flex items-center gap-2.5 flex-wrap">
                 <h2 className="text-xl md:text-2xl font-black text-foreground font-mono">{detailUser.full_name}</h2>
                 <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
-                  (String(detailUser.status || detailUser.estado || '').toUpperCase() === 'ACTIVO' || String(detailUser.status || detailUser.estado || '').toUpperCase() === 'ACTIVE') 
-                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' 
+                  (String(detailUser.status || detailUser.estado || '').toUpperCase() === 'ACTIVO' || String(detailUser.status || detailUser.estado || '').toUpperCase() === 'ACTIVE')
+                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                     : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
                 }`}>{detailUser.status || detailUser.estado}</span>
                 <span className="px-2.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/10 text-indigo-300 border border-indigo-500/30 uppercase tracking-wider">{detailUser.role}</span>
@@ -3233,7 +3092,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
           <div className="flex items-center gap-2">
             {isEditing360 ? (
               <>
-                <button 
+                <button
                   type="button"
                   onClick={() => {
                     setIsEditing360(false);
@@ -3243,7 +3102,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                 >
                   Cancelar
                 </button>
-                <button 
+                <button
                   type="button"
                   onClick={() => handleTriggerSaveEdit360()}
                   className="px-5 py-2 rounded-xl border border-primary bg-primary hover:bg-primary text-primary-foreground text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-lg"
@@ -3261,7 +3120,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                   <KeyRound size={13} />
                   <span>Restablecer contraseña</span>
                 </button>
-                <button 
+                <button
                   type="button"
                   onClick={() => {
                     handleStartEdit360(detailUser, 'resumen');
@@ -3287,15 +3146,15 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
             { id: 'actividad', label: 'Actividad' },
             { id: 'auditoria', label: 'Auditoría' }
           ].map(t => (
-            <button 
-              key={t.id} 
+            <button
+              key={t.id}
               onClick={() => {
                 setActiveTab360(t.id);
                 if (t.id === 'permisos') setMatrixFilter('all');
               }}
               className={`px-4 py-2.5 rounded-xl font-bold transition-all cursor-pointer text-xs ${
-                activeTab360 === t.id 
-                  ? 'bg-primary/10 border border-primary/40 text-primary' 
+                activeTab360 === t.id
+                  ? 'bg-primary/10 border border-primary/40 text-primary'
                   : 'bg-transparent border border-transparent text-foreground-muted hover:text-foreground hover:bg-input'
               }`}
             >
@@ -3304,507 +3163,249 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
           ))}
         </div>
         <div className="space-y-6 font-mono text-xs">
-          
+
           {/* TAB RESUMEN */}
           {activeTab360 === 'resumen' && (
             <div className="space-y-6 animate-in fade-in duration-200">
               {isEditing360 && wizardData ? (
-                // EDIT MODE FORM
-                <div className="space-y-6">
-                  {/* Row 1 */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Información Personal Edit */}
-                    <div className="bg-card border border-border rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
-                      <h4 className="font-bold text-foreground text-xs border-b border-border pb-3 flex items-center gap-2 uppercase tracking-wider"><Users size={16} className="text-primary" /> Información Personal</h4>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="col-span-2 flex items-center gap-2 mb-1">
-                          <label className="font-bold text-foreground-muted text-xs">Usuario ID:</label>
-                          <span className="font-mono font-bold text-foreground text-xs">{detailUser.id || detailUser.usuario_id || '—'}</span>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-y-3 gap-x-3 text-xs items-center">
-                        <span className="text-foreground-muted font-bold">Nombre: <span className="text-red-400">*</span></span>
-                        <div className="flex flex-col w-full">
-                          <input
-                            type="text"
-                            value={wizardData.first_name || ''}
-                            onChange={(e) => handleChange('first_name', e.target.value)}
-                            className={`px-3 py-2 text-xs rounded-xl border bg-input text-foreground font-mono font-bold focus:outline-none w-full ${formErrors360.first_name ? 'border-red-500 focus:border-red-500' : 'border-border focus:border-primary'}`}
-                            placeholder="Nombre"
-                          />
-                          {formErrors360.first_name && <span className="text-red-400 text-[10px] mt-0.5 font-bold">{formErrors360.first_name}</span>}
-                        </div>
-                        <span className="text-foreground-muted font-bold">Apellido: <span className="text-red-400">*</span></span>
-                        <div className="flex flex-col w-full">
-                          <input
-                            type="text"
-                            value={wizardData.last_name || ''}
-                            onChange={(e) => handleChange('last_name', e.target.value)}
-                            className={`px-3 py-2 text-xs rounded-xl border bg-input text-foreground font-mono font-bold focus:outline-none w-full ${formErrors360.last_name ? 'border-red-500 focus:border-red-500' : 'border-border focus:border-primary'}`}
-                            placeholder="Apellido"
-                          />
-                          {formErrors360.last_name && <span className="text-red-400 text-[10px] mt-0.5 font-bold">{formErrors360.last_name}</span>}
-                        </div>
-                        <span className="text-foreground-muted font-bold">Documento:</span>
-                        <div className="flex flex-col w-full">
-                          <div className="flex gap-2 w-full">
-                            <select
-                              value={wizardData.document_type || 'Cédula'}
-                              onChange={(e) => handleChange('document_type', e.target.value)}
-                              className="px-2 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary"
-                            >
-                              <option value="Cédula">Cédula</option>
-                              <option value="DNI">DNI</option>
-                              <option value="Pasaporte">Pasaporte</option>
-                              <option value="RNC">RNC</option>
-                            </select>
-                            <input
-                              type="text"
-                              value={wizardData.document_number || ''}
-                              onChange={(e) => {
-                                handleChange('document_number', e.target.value);
-                                if (wizardData.primary_access_type === 'DOCUMENT') handleChange('identificador_principal', e.target.value);
-                              }}
-                              className={`px-3 py-2 text-xs rounded-xl border bg-input text-foreground font-mono font-bold focus:outline-none flex-1 min-w-0 ${formErrors360.document_number ? 'border-red-500 focus:border-red-500' : 'border-border focus:border-primary'}`}
-                              placeholder="Número"
-                            />
-                          </div>
-                          {formErrors360.document_number && <span className="text-red-400 text-[10px] mt-0.5 font-bold">{formErrors360.document_number}</span>}
-                        </div>
-                        <span className="text-foreground-muted font-bold">Correo Electrónico:</span>
-                        <div className="flex flex-col w-full">
-                          <input
-                            type="email"
-                            value={wizardData.email || ''}
-                            onChange={(e) => handleChange('email', e.target.value)}
-                            className={`px-3 py-2 text-xs rounded-xl border bg-input text-foreground font-mono font-bold focus:outline-none w-full ${formErrors360.email ? 'border-red-500 focus:border-red-500' : 'border-border focus:border-primary'}`}
-                            placeholder="Correo electrónico"
-                          />
-                          {formErrors360.email && <span className="text-red-400 text-[10px] mt-0.5 font-bold">{formErrors360.email}</span>}
-                        </div>
-                        <span className="text-foreground-muted font-bold">Departamento:</span>
-                        <select
-                          value={wizardData.department_id || ''}
-                          onChange={(e) => {
-                            const deptId = e.target.value;
-                            const deptObj = departments.find(d => d.id == deptId);
-                            handleChange('department_id', deptId);
-                            handleChange('department', deptObj ? deptObj.name : '');
-                          }}
-                          className="px-3 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary w-full"
-                        >
-                          <option value="">Seleccione Departamento</option>
-                          {departments
-                            
-                            .map(d => (
-                              <option key={d.id} value={d.id}>{d.name}</option>
-                            ))
-                          }
-                        </select>
-                        <span className="text-foreground-muted font-bold">Área:</span>
-                        <select
-                          value={wizardData.area_id || ''}
-                          onChange={(e) => {
-                            const aId = e.target.value;
-                            const aObj = areas.find(a => a.id == aId);
-                            handleChange('area_id', aId);
-                            handleChange('area', aObj ? aObj.name : '');
-                          }}
-                          className="px-3 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary w-full"
-                        >
-                          <option value="">Seleccione Área</option>
-                          {areas
-                            .filter(a => a.department_id == wizardData.department_id)
-                            .map(a => (
-                              <option key={a.id} value={a.id}>{a.name}</option>
-                            ))
-                          }
-                        </select>
-                        <span className="text-foreground-muted font-bold">Cargo / Posición:</span>
-                        <select value={wizardData.cargo_id || ''} onChange={(e) => { const cId = e.target.value; handleChange('cargo_id', cId); const cargoObj = cargos.find(c => c.id == cId); handleChange('job_title', cargoObj ? cargoObj.name : ''); }}
-                          className="px-3 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary w-full"
-                        >
-                          <option value="">Seleccione Cargo</option>
-                          {cargos.map(c => ( <option key={c.id} value={c.id}>{c.name}</option> ))}
-                        </select>
-                      </div>
-                    </div>
- 
-                    {/* Parámetros de Acceso Edit */}
-                    <div className="bg-card border border-border rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
-                      <h4 className="font-bold text-foreground text-xs border-b border-border pb-3 flex items-center gap-2 uppercase tracking-wider"><Key size={16} className="text-primary" /> Parámetros de Acceso</h4>
-                      <div className="grid grid-cols-2 gap-y-3 gap-x-3 text-xs items-center">
-                        <span className="text-foreground-muted font-bold">Método de acceso principal:</span>
-                        <select
-                          value={wizardData.primary_access_type || 'EMAIL'}
-                          onChange={(e) => handleChange('primary_access_type', e.target.value)}
-                          className="px-3 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary w-full"
-                        >
-                          <option value="EMAIL">Correo electrónico</option>
-                          <option value="DOCUMENT">Documento</option>
-                        </select>
-                        
-                        <span className="text-foreground-muted font-bold">Identificador de acceso:</span>
-                        {wizardData.primary_access_type === 'EMAIL' ? (
-                          <div className="flex flex-col w-full">
-                            <span className="font-mono font-bold text-foreground-secondary bg-input px-3 py-2 rounded-xl border border-border truncate opacity-70 cursor-not-allowed text-xs" title={wizardData.email}>
-                              {wizardData.email || 'Se utilizará el correo indicado arriba'}
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="flex flex-col w-full">
-                            <span className="font-mono font-bold text-foreground-secondary bg-input px-3 py-2 rounded-xl border border-border truncate opacity-70 cursor-not-allowed text-xs" title={wizardData.document_number}>
-                              {wizardData.document_number || 'Se utilizará el documento indicado arriba'}
-                            </span>
-                          </div>
-                        )}
-                        
-                        <span className="text-foreground-muted font-bold">Canales Permitidos:</span>
-                        <div className="flex gap-4 items-center font-mono">
-                          <label className="flex items-center gap-2 font-bold cursor-pointer select-none text-foreground">
-                            <input
-                              type="checkbox"
-                              checked={!!wizardData.web_access_enabled}
-                              onChange={(e) => handleChange('web_access_enabled', e.target.checked)}
-                              className="rounded border-border bg-input text-primary focus:ring-primary cursor-pointer w-4 h-4"
-                            />
-                            Web
-                          </label>
-                          <label className="flex items-center gap-2 font-bold cursor-pointer select-none text-foreground">
-                            <input
-                              type="checkbox"
-                              checked={!!wizardData.mobile_access_enabled}
-                              onChange={(e) => handleChange('mobile_access_enabled', e.target.checked)}
-                              className="rounded border-border bg-input text-primary focus:ring-primary cursor-pointer w-4 h-4"
-                            />
-                            Móvil
-                          </label>
-                        </div>
-                      </div>
-                    </div>
+                // EDIT MODE FORM - Simplified (DATOS DEL USUARIO)
+                <div className="bg-card border border-border rounded-2xl p-6 shadow-xl space-y-6 font-mono text-xs animate-in fade-in duration-200">
+                  <div className="border-b border-border pb-3 flex items-center justify-between">
+                    <h4 className="font-bold text-foreground text-xs flex items-center gap-2 uppercase tracking-wider">
+                      <User size={16} className="text-primary" /> Datos del usuario
+                    </h4>
+                    {edit360Error && (
+                      <span className="text-rose-400 text-xs font-bold">{edit360Error}</span>
+                    )}
                   </div>
- 
-                  {/* Row 2 */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Relación y Asignación Edit */}
-                    <div className="bg-card border border-border rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
-                      <h4 className="font-bold text-foreground text-xs border-b border-border pb-3 flex items-center gap-2 uppercase tracking-wider"><Building2 size={16} className="text-primary" /> Relación y Asignación</h4>
-                      <div className="grid grid-cols-2 gap-y-3 gap-x-3 text-xs items-center">
-                        <span className="text-foreground-muted font-bold">Empresa: <span className="text-red-400">*</span></span>
-                        <div className="flex flex-col w-full">
-                          <select
-                            value={wizardData.companyId || ''}
-                            onChange={(e) => handleChange('companyId', e.target.value)}
-                            className={`px-3 py-2 text-xs rounded-xl border bg-input text-foreground font-mono font-bold focus:outline-none w-full ${formErrors360.companyId ? 'border-red-500 focus:border-red-500' : 'border-border focus:border-primary'}`}
-                          >
-                            <option value="">Seleccione Empresa</option>
-                            {companies.map(c => (
-                              <option key={c.id} value={c.id}>{c.name}</option>
-                            ))}
-                          </select>
-                          {formErrors360.companyId && <span className="text-red-400 text-[10px] mt-0.5 font-bold">{formErrors360.companyId}</span>}
-                        </div>
-                        <span className="text-foreground-muted font-bold">Tipo de Usuario:</span>
+
+                  <div className="space-y-4">
+                    {/* Row 1: Nombre * | Apellido * */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Nombre *</label>
+                        <input
+                          type="text"
+                          value={wizardData.first_name || ''}
+                          onChange={(e) => handleChange('first_name', e.target.value)}
+                          className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground placeholder:text-foreground-disabled focus:outline-none transition-colors ${formErrors360.first_name ? 'border-rose-500 focus:border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
+                          placeholder="Ej. Juan"
+                        />
+                        {formErrors360.first_name && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{formErrors360.first_name}</span>}
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Apellido *</label>
+                        <input
+                          type="text"
+                          value={wizardData.last_name || ''}
+                          onChange={(e) => handleChange('last_name', e.target.value)}
+                          className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground placeholder:text-foreground-disabled focus:outline-none transition-colors ${formErrors360.last_name ? 'border-rose-500 focus:border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
+                          placeholder="Ej. Pérez"
+                        />
+                        {formErrors360.last_name && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{formErrors360.last_name}</span>}
+                      </div>
+                    </div>
+
+                    {/* Row 2: Tipo de documento | Número de documento (Opcional) */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Tipo de documento</label>
+                        <select
+                          value={wizardData.document_type || 'Cédula'}
+                          onChange={(e) => handleChange('document_type', e.target.value)}
+                          className="w-full bg-input border border-border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none focus:border-primary cursor-pointer"
+                        >
+                          <option value="Cédula">Cédula</option>
+                          <option value="Pasaporte">Pasaporte</option>
+                          <option value="RNC">RNC</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Número de documento (Opcional)</label>
+                        <input
+                          type="text"
+                          value={wizardData.document_number || ''}
+                          onChange={(e) => handleChange('document_number', e.target.value)}
+                          className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground placeholder:text-foreground-disabled focus:outline-none transition-colors ${formErrors360.document_number ? 'border-rose-500 focus:border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
+                          placeholder="Ej. 001-1234567-8"
+                        />
+                        {formErrors360.document_number && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{formErrors360.document_number}</span>}
+                      </div>
+                    </div>
+
+                    {/* Row 3: Teléfono | Correo electrónico * */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Teléfono</label>
+                        <input
+                          type="text"
+                          value={wizardData.phone || ''}
+                          onChange={(e) => handleChange('phone', e.target.value)}
+                          className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground placeholder:text-foreground-disabled focus:outline-none transition-colors ${formErrors360.phone ? 'border-rose-500 focus:border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
+                          placeholder="Ej. +1 (809) 555-0101"
+                        />
+                        {formErrors360.phone && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{formErrors360.phone}</span>}
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Correo electrónico *</label>
+                        <input
+                          type="email"
+                          required
+                          value={wizardData.email || ''}
+                          onChange={(e) => handleChange('email', e.target.value)}
+                          className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground placeholder:text-foreground-disabled focus:outline-none transition-colors ${formErrors360.email ? 'border-rose-500 focus:border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
+                          placeholder="Ej. juan.perez@empresa.com"
+                        />
+                        {formErrors360.email && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{formErrors360.email}</span>}
+                      </div>
+                    </div>
+
+                    {/* Row 4: Empresa / Consorcio * | Rol principal * */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Empresa / Consorcio *</label>
+                        <select
+                          value={wizardData.companyId || ''}
+                          onChange={(e) => handleChange('companyId', e.target.value ? Number(e.target.value) : '')}
+                          className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none cursor-pointer transition-colors ${formErrors360.companyId ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
+                        >
+                          <option value="">-- Selecciona Empresa --</option>
+                          {companies.map(c => (
+                            <option key={c.empresa_id || c.id} value={c.empresa_id || c.id}>
+                              {c.nombre_comercial || c.name}
+                            </option>
+                          ))}
+                        </select>
+                        {formErrors360.companyId && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{formErrors360.companyId}</span>}
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Rol principal *</label>
+                        <select
+                          value={wizardData.rol_id || ''}
+                          onChange={(e) => {
+                            const rId = e.target.value ? Number(e.target.value) : '';
+                            handleChange('rol_id', rId);
+                            const rolObj = roles.find(r => Number(r.numericId || r.id) === Number(rId));
+                            if (rolObj) handleChange('role', rolObj.nombre || rolObj.name);
+                          }}
+                          className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none cursor-pointer transition-colors ${formErrors360.rol_id ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
+                        >
+                          <option value="">-- Selecciona Rol --</option>
+                          {roles.map(r => (
+                            <option key={r.numericId || r.id} value={r.numericId || r.id}>
+                              {r.nombre || r.name}
+                            </option>
+                          ))}
+                        </select>
+                        {formErrors360.rol_id && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{formErrors360.rol_id}</span>}
+                      </div>
+                    </div>
+
+                    {/* Row 5: Tipo de usuario * */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Tipo de usuario *</label>
                         <select
                           value={wizardData.tipo_usuario_id || ''}
                           onChange={(e) => {
-                            const valId = e.target.value;
-                            const obj = userTypes.find(t => t.id == valId);
-                            handleChange('tipo_usuario_id', valId);
-                            if (obj) handleChange('user_type', obj.name);
+                            const tuId = e.target.value ? Number(e.target.value) : '';
+                            handleChange('tipo_usuario_id', tuId);
+                            const tuObj = userTypes.find(t => Number(t.tipo_usuario_id || t.id) === Number(tuId));
+                            if (tuObj) handleChange('user_type', tuObj.nombre || tuObj.name);
                           }}
-                          className="px-3 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary w-full"
+                          className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none cursor-pointer transition-colors ${formErrors360.tipo_usuario_id ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
                         >
-                          <option value="">Seleccione Tipo</option>
+                          <option value="">-- Selecciona Tipo de Usuario --</option>
                           {userTypes.map(t => (
-                            <option key={t.id} value={t.id}>{t.name}</option>
+                            <option key={t.tipo_usuario_id || t.id} value={t.tipo_usuario_id || t.id}>
+                              {t.nombre || t.name}
+                            </option>
                           ))}
                         </select>
-                        <span className="text-foreground-muted font-bold">Rol Asignado: <span className="text-red-400">*</span></span>
-                        <div className="flex flex-col w-full">
-                          <select value={wizardData.rol_id || ''} onChange={(e) => { const rId = e.target.value; handleChange('rol_id', rId); const rolObj = roles.find(r => r.id == rId); handleChange('role', rolObj ? rolObj.name : ''); }}
-                            className={`px-3 py-2 text-xs rounded-xl border bg-input text-foreground font-mono font-bold focus:outline-none w-full ${formErrors360.rol_id ? 'border-red-500 focus:border-red-500' : 'border-border focus:border-primary'}`}
-                          >
-                            <option value="">Seleccione Rol</option>
-                            {roles.map(r => ( <option key={r.id} value={r.id}>{r.name}</option> ))}
-                          </select>
-                          {formErrors360.rol_id && <span className="text-red-400 text-[10px] mt-0.5 font-bold">{formErrors360.rol_id}</span>}
-                        </div>
-                        <span className="text-foreground-muted font-bold">Roles Adicionales:</span>
-                        <div className="flex flex-wrap gap-2 max-h-28 overflow-y-auto border border-border p-2.5 rounded-xl bg-input custom-scrollbar">
-{roles.filter(r => r.id != wizardData.rol_id).map(r => (
-  <label key={r.id} className="flex items-center gap-2 font-bold cursor-pointer select-none text-xs text-foreground">
-    <input
-      type="checkbox"
-      checked={(wizardData.roles_additional || []).includes(r.id)}
-      onChange={(e) => {
-        const newRoles = e.target.checked 
-          ? [...(wizardData.roles_additional || []), r.id] 
-          : (wizardData.roles_additional || []).filter(roleId => roleId !== r.id);
-        handleChange('roles_additional', newRoles);
-      }}
-      className="rounded border-border bg-input text-primary focus:ring-primary cursor-pointer w-4 h-4"
-    />
-    {r.name}
-  </label>
-))}
-</div>
-                      </div>
-                    </div>
- 
-                    {/* Seguridad e Inicios Edit */}
-                    <div className="bg-card border border-border rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
-                      <h4 className="font-bold text-foreground text-xs border-b border-border pb-3 flex items-center gap-2 uppercase tracking-wider"><ShieldCheck size={16} className="text-primary" /> Seguridad e Inicios</h4>
-                      <div className="grid grid-cols-2 gap-y-3 gap-x-3 text-xs items-center">
-                        <span className="text-foreground-muted font-bold">Autenticación MFA:</span>
-                        <div className="flex gap-2 items-center">
-                          <label className="flex items-center gap-2 font-bold cursor-pointer select-none text-foreground">
-                            <input
-                              type="checkbox"
-                              checked={!!wizardData.mfaEnabled}
-                              onChange={(e) => handleChange('mfaEnabled', e.target.checked)}
-                              className="rounded border-border bg-input text-primary focus:ring-primary cursor-pointer w-4 h-4"
-                            />
-                            Activo
-                          </label>
-                          {wizardData.mfaEnabled && (
-                            <select
-                              value={wizardData.mfa_method || 'App autenticadora'}
-                              onChange={(e) => handleChange('mfa_method', e.target.value)}
-                              className="px-2 py-1 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary"
-                            >
-                              <option value="App autenticadora">App autenticadora</option>
-                              <option value="SMS">SMS (Mensaje)</option>
-                              <option value="Correo electrónico">Correo electrónico</option>
-                            </select>
-                          )}
-                        </div>
-                        <span className="text-foreground-muted font-bold">Expiración de acceso:</span>
-                        <div className="flex gap-2 items-center w-full">
-                          <input
-                            type="date"
-                            value={wizardData.access_expires_at ? wizardData.access_expires_at.split('T')[0] : ''}
-                            onChange={(e) => handleChange('access_expires_at', e.target.value)}
-                            className="px-3 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary flex-1"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => handleChange('access_expires_at', '')}
-                            className="px-3 py-2 text-xs bg-input hover:bg-surface-subtle rounded-xl border border-border font-bold text-foreground-secondary transition-colors cursor-pointer"
-                          >
-                            Sin expiración
-                          </button>
-                        </div>
-                        <span className="text-foreground-muted font-bold">Horario de acceso:</span>
-                        <select
-                          value={wizardData.allowed_hours || 'Cualquier horario'}
-                          onChange={(e) => handleChange('allowed_hours', e.target.value)}
-                          className="px-3 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary w-full"
-                        >
-                          <option value="Cualquier horario">Sin restricción horaria (24/7)</option>
-                          <option value="Horario de oficina (08:00 - 18:00)">Horario comercial (08:00 - 18:00)</option>
-                          <option value="Horario diurno (06:00 - 22:00)">Horario diurno (06:00 - 22:00)</option>
-                        </select>
-                        <span className="text-foreground-muted font-bold">Restricción IP:</span>
-                        <input
-                          type="text"
-                          value={wizardData.allowed_ips || '*'}
-                          onChange={(e) => handleChange('allowed_ips', e.target.value)}
-                          className="px-3 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary w-full"
-                          placeholder="e.g. * o 192.168.1.1"
-                        />
+                        {formErrors360.tipo_usuario_id && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{formErrors360.tipo_usuario_id}</span>}
                       </div>
                     </div>
                   </div>
-                  {/* Row 3 (Configuración Avanzada Edit) */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                    <div className="bg-card border border-border rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
-                      <h4 className="font-bold text-foreground text-xs border-b border-border pb-3 flex items-center gap-2 uppercase tracking-wider"><Settings size={16} className="text-primary" /> Configuración Avanzada</h4>
-                      <div className="grid grid-cols-2 gap-y-3 gap-x-3 text-xs items-center">
-                        <span className="text-foreground-muted font-bold">Correo de Acceso:</span>
-                        <input type="email" value={wizardData.correo_acceso || ''} onChange={(e) => handleChange('correo_acceso', e.target.value)} className="px-3 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary w-full" placeholder="recovery@ejemplo.com" />
-                        
-                        <span className="text-foreground-muted font-bold">Enviar Invitación:</span>
-                        <label className="flex items-center gap-2 font-bold cursor-pointer select-none text-foreground">
-                          <input type="checkbox" checked={!!wizardData.enviar_invitacion_correo} onChange={(e) => handleChange('enviar_invitacion_correo', e.target.checked)} className="rounded border-border bg-input text-primary focus:ring-primary cursor-pointer w-4 h-4" /> Sí
-                        </label>
 
-                        <span className="text-foreground-muted font-bold">Generar Clave Automática:</span>
-                        <label className="flex items-center gap-2 font-bold cursor-pointer select-none text-foreground">
-                          <input type="checkbox" checked={!!wizardData.generar_clave_automatica} onChange={(e) => handleChange('generar_clave_automatica', e.target.checked)} className="rounded border-border bg-input text-primary focus:ring-primary cursor-pointer w-4 h-4" /> Sí
-                        </label>
-
-                        <span className="text-foreground-muted font-bold">Forzar Cambio de Clave:</span>
-                        <label className="flex items-center gap-2 font-bold cursor-pointer select-none text-foreground">
-                          <input type="checkbox" checked={!!wizardData.forzar_cambio_clave} onChange={(e) => handleChange('forzar_cambio_clave', e.target.checked)} className="rounded border-border bg-input text-primary focus:ring-primary cursor-pointer w-4 h-4" /> Sí
-                        </label>
-
-                        <span className="text-foreground-muted font-bold">Idioma Preferido:</span>
-                        <select value={wizardData.idioma_preferido || 'es'} onChange={(e) => handleChange('idioma_preferido', e.target.value)} className="px-3 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary w-full">
-                          <option value="es">Español</option>
-                          <option value="en">Inglés</option>
-                        </select>
-
-                        <span className="text-foreground-muted font-bold">Zona Horaria:</span>
-                        <select value={wizardData.zona_horaria || 'America/Santo_Domingo'} onChange={(e) => handleChange('zona_horaria', e.target.value)} className="px-3 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary w-full">
-                          <option value="America/Santo_Domingo">América/Santo Domingo</option>
-                          <option value="America/New_York">América/New York</option>
-                        </select>
-
-                        <span className="text-foreground-muted font-bold">Formato de Fecha:</span>
-                        <select value={wizardData.formato_fecha || 'DD/MM/YYYY'} onChange={(e) => handleChange('formato_fecha', e.target.value)} className="px-3 py-2 text-xs rounded-xl border border-border bg-input text-foreground font-mono font-bold focus:outline-none focus:border-primary w-full">
-                          <option value="DD/MM/YYYY">DD/MM/YYYY</option>
-                          <option value="MM/DD/YYYY">MM/DD/YYYY</option>
-                          <option value="YYYY-MM-DD">YYYY-MM-DD</option>
-                        </select>
-                      </div>
-                    </div>
+                  {/* Actions Footer */}
+                  <div className="flex items-center justify-end gap-3 pt-4 border-t border-border">
+                    <button
+                      type="button"
+                      onClick={handleCancelEdit360}
+                      className="px-4 py-2.5 rounded-xl border border-border bg-input hover:bg-surface-subtle text-foreground-secondary font-bold text-xs transition-colors cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleTriggerSaveEdit360()}
+                      disabled={isSaving}
+                      className="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs transition-colors flex items-center gap-2 cursor-pointer shadow-lg disabled:opacity-50"
+                    >
+                      <Save size={14} /> {isSaving ? 'Guardando...' : 'Guardar cambios'}
+                    </button>
                   </div>
                 </div>
               ) : (
-                // VIEW MODE (Original layout)
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="bg-card border border-border rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
-                    <h4 className="font-bold text-foreground text-xs border-b border-border pb-3 flex items-center gap-2 uppercase tracking-wider"><Users size={16} className="text-primary" /> Información Personal</h4>
-                    <div className="grid grid-cols-2 gap-y-2.5 text-xs">
-                      <span className="text-foreground-muted font-bold">Usuario ID:</span>
-                      <span className="font-mono font-bold text-foreground">{detailUser.id || detailUser.usuario_id || '—'}</span>
-                      <span className="text-foreground-muted font-bold">Nombre: <span className="text-red-400">*</span></span>
-                      <span className="font-bold text-foreground">{detailUser.first_name || '—'}</span>
-                      <span className="text-foreground-muted font-bold">Apellido: <span className="text-red-400">*</span></span>
-                      <span className="font-bold text-foreground">{detailUser.last_name || '—'}</span>
-                      <span className="text-foreground-muted font-bold">Documento:</span>
-                      <span className="font-bold text-foreground">
-                        {detailUser.document_number ? `${detailUser.document_type || 'Documento'}: ${detailUser.document_number}` : 'No registrado'}
-                      </span>
-                      <span className="text-foreground-muted font-bold">Correo Electrónico:</span>
-                      <span className="font-bold text-primary hover:underline cursor-pointer">
-                        {detailUser.email || 'No registrado'}
-                      </span>
-                      <span className="text-foreground-muted font-bold">Departamento:</span>
-                      <span className="font-bold text-foreground">{detailUser.departamento_nombre || detailUser.department || 'No registrado'}</span>
-                      <span className="text-foreground-muted font-bold">Área:</span>
-                      <span className="font-bold text-foreground">{detailUser.area_nombre || detailUser.area || 'No registrada'}</span>
-                      <span className="text-foreground-muted font-bold">Cargo / Posición:</span>
-                      <span className="font-bold text-foreground">{detailUser.cargo_nombre || detailUser.job_title || 'No registrado'}</span>
+                // VIEW MODE - Simplified Resumen (DATOS DEL USUARIO)
+                <div className="bg-card border border-border rounded-2xl p-6 shadow-xl space-y-5 font-mono text-xs">
+                  <h4 className="font-bold text-foreground text-xs border-b border-border pb-3 flex items-center gap-2 uppercase tracking-wider">
+                    <User size={16} className="text-primary" /> Datos del usuario
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-3.5 text-xs">
+                    <div className="grid grid-cols-[140px_1fr] sm:grid-cols-[160px_1fr] items-center gap-2 border-b border-border/50 pb-2.5">
+                      <span className="text-foreground-muted font-bold">Nombre:</span>
+                      <span className="font-bold text-foreground">{detailUser.first_name || (detailUser.full_name ? detailUser.full_name.trim().split(' ')[0] : '') || '—'}</span>
                     </div>
-                  </div>
 
-                  <div className="bg-card border border-border rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
-                    <h4 className="font-bold text-foreground text-xs border-b border-border pb-3 flex items-center gap-2 uppercase tracking-wider"><Key size={16} className="text-primary" /> Parámetros de Acceso</h4>
-                    <div className="grid grid-cols-2 gap-y-2.5 text-xs">
-                      <span className="text-foreground-muted font-bold">Método de acceso principal:</span>
-                      <span className="font-bold text-foreground">
-                        {detailUser.login_identifiers?.find(id => id.is_primary)?.identifier_type === 'DOCUMENT' ? 'Documento' : 'Correo electrónico'}
-                      </span>
-                      
-                      <span className="text-foreground-muted font-bold">Identificador de acceso:</span>
-                      <span className="font-mono font-bold text-primary">
-                        {detailUser.login_identifiers?.find(id => id.is_primary)?.identifier_value || '—'}
-                      </span>
-                      
-                      <span className="text-foreground-muted font-bold">Estado de verificación:</span>
-                      <span className={`font-bold px-2 py-0.5 rounded text-[10px] uppercase border tracking-wider ${
-                        detailUser.estado_verificacion === 'Verificado' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                      }`}>
-                        {detailUser.estado_verificacion || 'No verificado'}
-                      </span>
+                    <div className="grid grid-cols-[140px_1fr] sm:grid-cols-[160px_1fr] items-center gap-2 border-b border-border/50 pb-2.5">
+                      <span className="text-foreground-muted font-bold">Apellido:</span>
+                      <span className="font-bold text-foreground">{detailUser.last_name || (detailUser.full_name ? detailUser.full_name.trim().split(' ').slice(1).join(' ') : '') || '—'}</span>
+                    </div>
 
-                      <span className="text-foreground-muted font-bold">Canales Permitidos:</span>
+                    <div className="grid grid-cols-[140px_1fr] sm:grid-cols-[160px_1fr] items-center gap-2 border-b border-border/50 pb-2.5">
+                      <span className="text-foreground-muted font-bold">Tipo de documento:</span>
+                      <span className="font-bold text-foreground">{detailUser.document_type || (detailUser.document_number ? 'Cédula' : '—')}</span>
+                    </div>
+
+                    <div className="grid grid-cols-[140px_1fr] sm:grid-cols-[160px_1fr] items-center gap-2 border-b border-border/50 pb-2.5">
+                      <span className="text-foreground-muted font-bold">Número de documento:</span>
+                      <span className="font-bold text-foreground font-mono">{detailUser.document_number || 'No registrado'}</span>
+                    </div>
+
+                    <div className="grid grid-cols-[140px_1fr] sm:grid-cols-[160px_1fr] items-center gap-2 border-b border-border/50 pb-2.5">
+                      <span className="text-foreground-muted font-bold">Teléfono:</span>
+                      <span className="font-bold text-foreground font-mono">{detailUser.phone || 'No registrado'}</span>
+                    </div>
+
+                    <div className="grid grid-cols-[140px_1fr] sm:grid-cols-[160px_1fr] items-center gap-2 border-b border-border/50 pb-2.5">
+                      <span className="text-foreground-muted font-bold">Correo electrónico:</span>
+                      <span className="font-bold text-primary font-mono">{detailUser.email || detailUser.correo_electronico || 'No registrado'}</span>
+                    </div>
+
+                    <div className="grid grid-cols-[140px_1fr] sm:grid-cols-[160px_1fr] items-center gap-2 border-b border-border/50 pb-2.5">
+                      <span className="text-foreground-muted font-bold">Empresa:</span>
                       <span className="font-bold text-foreground">
-                        {(() => {
-                          const web = !!detailUser.web_access_enabled;
-                          const mobile = !!detailUser.mobile_access_enabled;
-                          if (web && mobile) return 'Web y móvil';
-                          if (web) return 'Solo Web';
-                          if (mobile) return 'Solo móvil';
-                          return 'Sin acceso';
-                        })()}
+                        {detailUser.empresa_nombre || (companies || []).find(c => c.id == detailUser.companyId || c.empresa_id == detailUser.companyId)?.nombre_comercial || (companies || []).find(c => c.id == detailUser.companyId || c.empresa_id == detailUser.companyId)?.name || '—'}
                       </span>
                     </div>
-                  </div>
-                </div>
-              )}
 
-              {/* Row 2 (Shown only in view mode since edit mode merges it all above) */}
-              {!isEditing360 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="bg-card border border-border rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
-                    <h4 className="font-bold text-foreground text-xs border-b border-border pb-3 flex items-center gap-2 uppercase tracking-wider"><Building2 size={16} className="text-primary" /> Relación y Asignación</h4>
-                    <div className="grid grid-cols-2 gap-y-2.5 text-xs">
-                      <span className="text-foreground-muted font-bold">Empresa: <span className="text-red-400">*</span></span>
-                      <span className="font-bold text-foreground">
-                        {detailUser.empresa_nombre || companies.find(c => c.id == detailUser.companyId)?.name || 'Sin empresa asignada'}
-                      </span>
-                      <span className="text-foreground-muted font-bold">Tipo de Usuario:</span>
-                      <span className="bg-surface-subtle border border-border text-foreground-secondary font-mono text-[10px] font-bold tracking-wider px-2 py-0.5 rounded w-fit">{detailUser.user_type || userTypes.find(t => t.id == detailUser.tipo_usuario_id)?.name || '—'}</span>
-                      <span className="text-foreground-muted font-bold">Rol Asignado: <span className="text-red-400">*</span></span>
-                      <span className="bg-indigo-500/10 text-indigo-300 border border-indigo-500/30 px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider w-fit">{detailUser.role || detailUser.role_name || '—'}</span>
-                      <span className="text-foreground-muted font-bold">Permisos:</span>
-                      <span className="font-bold text-foreground">
-                        {Object.keys(detailUser.permissionsOverride || {}).length > 0 ? 'Específica (Permisos Adicionales)' : 'Heredados del rol'}
-                      </span>
-                      <span className="text-foreground-muted font-bold">Roles Adicionales:</span>
-                      <span className="font-bold text-foreground">
-                        {detailUser.roles_additional?.length > 0 
-                          ? detailUser.roles_additional.map(id => roles.find(r => r.id == id)?.name || id).join(', ') 
-                          : 'Ninguno'}
+                    <div className="grid grid-cols-[140px_1fr] sm:grid-cols-[160px_1fr] items-center gap-2 border-b border-border/50 pb-2.5">
+                      <span className="text-foreground-muted font-bold">Rol principal:</span>
+                      <span className="bg-indigo-500/10 text-indigo-400 dark:text-indigo-300 border border-indigo-500/30 px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider w-fit">
+                        {detailUser.role || detailUser.role_name || detailUser.rol || (roles || []).find(r => r.id == detailUser.rol_id || r.numericId == detailUser.rol_id)?.nombre || (roles || []).find(r => r.id == detailUser.rol_id || r.numericId == detailUser.rol_id)?.name || '—'}
                       </span>
                     </div>
-                  </div>
 
-                  <div className="bg-card border border-border rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
-                    <h4 className="font-bold text-foreground text-xs border-b border-border pb-3 flex items-center gap-2 uppercase tracking-wider"><ShieldCheck size={16} className="text-primary" /> Seguridad e Inicios</h4>
-                    <div className="grid grid-cols-2 gap-y-2.5 text-xs">
-                      <span className="text-foreground-muted font-bold">Autenticación MFA:</span>
-                      <span className="font-bold text-foreground">{detailUser.mfaEnabled ? `Sí (${detailUser.mfa_method || '—'})` : 'No'}</span>
-                      <span className="text-foreground-muted font-bold">Expiración de acceso:</span>
-                      <span className="font-bold text-foreground">{formatExpiracionDate(detailUser.access_expires_at)}</span>
-                      <span className="text-foreground-muted font-bold">Horario de acceso:</span>
-                      <span className="font-bold text-foreground">
-                        {!detailUser.allowed_hours || detailUser.allowed_hours === 'Cualquier horario' ? 'Sin restricción horaria' : detailUser.allowed_hours}
+                    <div className="grid grid-cols-[140px_1fr] sm:grid-cols-[160px_1fr] items-center gap-2 border-b border-border/50 pb-2.5 md:col-span-2">
+                      <span className="text-foreground-muted font-bold">Tipo de usuario:</span>
+                      <span className="bg-surface-subtle border border-border text-foreground-secondary font-mono text-[10px] font-bold tracking-wider px-2 py-0.5 rounded w-fit">
+                        {detailUser.user_type || (userTypes || []).find(t => t.id == detailUser.tipo_usuario_id || t.tipo_usuario_id == detailUser.tipo_usuario_id)?.nombre || (userTypes || []).find(t => t.id == detailUser.tipo_usuario_id || t.tipo_usuario_id == detailUser.tipo_usuario_id)?.name || '—'}
                       </span>
-                      <span className="text-foreground-muted font-bold">Restricción IP:</span>
-                      <span className="font-bold text-foreground font-mono">
-                        {!detailUser.allowed_ips || detailUser.allowed_ips === '*' ? 'Sin restricción' : detailUser.allowed_ips}
-                      </span>
-                      <span className="text-foreground-muted font-bold">Creado El:</span>
-                      <span className="font-bold text-foreground">{formatSafeDate(detailUser.createdAt)}</span>
-                      <span className="text-foreground-muted font-bold">Último Acceso:</span>
-                      <span className="font-bold text-foreground">{detailUser.last_login_at ? formatSafeDateTime(detailUser.last_login_at) : 'Nunca'}</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Row 3 (Configuración Avanzada) */}
-              {!isEditing360 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                  <div className="bg-card border border-border rounded-2xl p-5 shadow-xl space-y-4 font-mono text-xs">
-                    <h4 className="font-bold text-foreground text-xs border-b border-border pb-3 flex items-center gap-2 uppercase tracking-wider"><Settings size={16} className="text-primary" /> Configuración Avanzada</h4>
-                    <div className="grid grid-cols-2 gap-y-2.5 text-xs">
-                      <span className="text-foreground-muted font-bold">Correo de Acceso (Recovery):</span>
-                      <span className="font-bold text-primary font-mono">{detailUser.correo_acceso || 'No registrado'}</span>
-                      
-                      <span className="text-foreground-muted font-bold">Enviar Invitación (Email):</span>
-                      <span className="font-bold text-foreground">{detailUser.enviar_invitacion_correo ? 'Sí' : 'No'}</span>
-                      
-                      <span className="text-foreground-muted font-bold">Generar Clave Automática:</span>
-                      <span className="font-bold text-foreground">{detailUser.generar_clave_automatica ? 'Sí' : 'No'}</span>
-                      
-                      <span className="text-foreground-muted font-bold">Forzar Cambio de Clave:</span>
-                      <span className="font-bold text-foreground">{detailUser.forzar_cambio_clave ? 'Sí' : 'No'}</span>
-                      
-                      <span className="text-foreground-muted font-bold">Idioma Preferido:</span>
-                      <span className="font-bold text-foreground">
-                        {detailUser.idioma_preferido === 'en' ? 'Inglés' : detailUser.idioma_preferido === 'es' ? 'Español' : (detailUser.idioma_preferido || 'es')}
-                      </span>
-                      
-                      <span className="text-foreground-muted font-bold">Zona Horaria:</span>
-                      <span className="font-bold text-foreground">{detailUser.zona_horaria || 'America/Santo_Domingo'}</span>
-                      
-                      <span className="text-foreground-muted font-bold">Formato de Fecha:</span>
-                      <span className="font-bold text-foreground">{detailUser.formato_fecha || 'DD/MM/YYYY'}</span>
                     </div>
                   </div>
                 </div>
@@ -3815,13 +3416,13 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
           {/* TAB PERMISOS */}
           {activeTab360 === 'permisos' && (
             <div className="space-y-4 animate-in fade-in duration-200">
-              
+
               {/* Summary Cards */}
               {(() => {
                 const activeUser = (isEditing360 && wizardData) ? wizardData : detailUser;
                 const userRole = activeUser.role || activeUser.role_name || '—';
                 const overridesCount = Object.keys(activeUser.permissionsOverride || {}).length;
-                
+
                 const basePermissions = {};
                 const rolesToApply = [userRole];
                 if (activeUser.roles_additional && activeUser.roles_additional.length > 0) {
@@ -3839,7 +3440,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                     });
                   });
                 });
-                
+
                 let modulesCount = 0;
                 modules.forEach(mod => {
                   const hasAny = ALL_ACTIONS.some(act => {
@@ -3866,65 +3467,15 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
                     <div className="p-4 bg-card border border-border rounded-2xl space-y-1 shadow-xl font-mono text-xs">
                       <span className="text-[10px] text-foreground-muted font-bold uppercase tracking-wider block mb-1">Rol Principal</span>
-                      {isEditing360 && wizardData ? (
-                        <select 
-                          value={wizardData.rol_id || ''} 
-                          onChange={(e) => { 
-                            const rId = e.target.value; 
-                            handleChange('rol_id', rId); 
-                            const rolObj = roles.find(r => r.id == rId); 
-                            handleChange('role', rolObj ? rolObj.name : ''); 
-                          }}
-                          className="w-full bg-input border border-border rounded-xl px-2.5 py-1.5 text-xs font-bold text-primary focus:outline-none focus:border-primary"
-                        >
-                          <option value="">Seleccione un rol...</option>
-                          {roles.map(r => (
-                            <option key={r.id} value={r.id}>{r.name}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span className="text-sm font-black text-primary block mt-1">{userRole}</span>
-                      )}
+                      <span className="text-sm font-black text-primary block mt-1">{userRole}</span>
                     </div>
                     <div className="p-4 bg-card border border-border rounded-2xl space-y-1 shadow-xl font-mono text-xs">
                       <span className="text-[10px] text-foreground-muted font-bold uppercase tracking-wider block mb-1">Roles adicionales</span>
-                      {isEditing360 && wizardData ? (
-                        <div className="relative group">
-                          <div className="w-full bg-input border border-border rounded-xl px-2.5 py-1.5 text-xs font-bold text-foreground cursor-pointer flex justify-between items-center shadow-sm">
-                             <span className="truncate">
-                               {(wizardData.roles_additional?.length || 0)} roles seleccionados
-                             </span>
-                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-foreground-muted"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                          </div>
-                          <div className="absolute top-full left-0 w-full mt-1 bg-card border border-border rounded-xl shadow-2xl z-50 hidden group-hover:block max-h-[160px] overflow-y-auto custom-scrollbar">
-                            {roles.filter(r => r.id != wizardData.rol_id).map(r => (
-                               <label key={r.id} className="flex items-center gap-2 px-3 py-2 hover:bg-input cursor-pointer border-b border-border/50 last:border-0 transition-colors">
-                                  <input 
-                                    type="checkbox" 
-                                    className="rounded text-primary focus:ring-primary bg-input border-border cursor-pointer"
-                                    checked={(wizardData.roles_additional || []).includes(r.id)}
-                                    onChange={() => {
-                                      const newRoles = (wizardData.roles_additional || []).includes(r.id)
-                                        ? (wizardData.roles_additional || []).filter(roleId => roleId !== r.id)
-                                        : [...(wizardData.roles_additional || []), r.id];
-                                      handleChange('roles_additional', newRoles);
-                                    }}
-                                  />
-                                  <span className="text-xs font-semibold text-foreground">{r.name}</span>
-                               </label>
-                            ))}
-                            {roles.filter(r => r.id != wizardData.rol_id).length === 0 && (
-                              <div className="px-3 py-2 text-[10px] text-foreground-muted italic">No hay más roles disponibles.</div>
-                            )}
-                          </div>
-                        </div>
-                      ) : (
-                        <span className="text-xs font-bold text-foreground block mt-1 truncate" title={detailUser.roles_additional?.length > 0 ? detailUser.roles_additional.map(id => roles.find(r => r.id == id)?.name || id).join(', ') : 'Ninguno'}>
-                          {detailUser.roles_additional?.length > 0 
-                            ? detailUser.roles_additional.map(id => roles.find(r => r.id == id)?.name || id).join(', ') 
-                            : 'Ninguno'}
-                        </span>
-                      )}
+                      <span className="text-xs font-bold text-foreground block mt-1 truncate" title={activeUser.roles_additional?.length > 0 ? activeUser.roles_additional.map(id => roles.find(r => r.id == id)?.name || id).join(', ') : 'Ninguno'}>
+                        {activeUser.roles_additional?.length > 0
+                          ? activeUser.roles_additional.map(id => roles.find(r => r.id == id)?.name || id).join(', ')
+                          : 'Ninguno'}
+                      </span>
                     </div>
                     <div className="p-4 bg-card border border-border rounded-2xl space-y-1 shadow-xl font-mono text-xs">
                       <span className="text-[10px] text-foreground-muted font-bold uppercase tracking-wider block">Permisos adicionales creados</span>
@@ -3955,7 +3506,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                 </div>
                 <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold select-none">
                   <span className="text-[10px] text-foreground-muted mr-1 uppercase tracking-wider">Filtrar:</span>
-                  <button 
+                  <button
                     onClick={() => setMatrixFilter('all')}
                     className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
                       matrixFilter === 'all'
@@ -3965,7 +3516,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                   >
                     Todos
                   </button>
-                  <button 
+                  <button
                     onClick={() => setMatrixFilter('base')}
                     className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                       matrixFilter === 'base'
@@ -3973,10 +3524,10 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                         : 'bg-card text-foreground-muted border-border hover:text-foreground hover:bg-input'
                     }`}
                   >
-                    <span className="w-2 h-2 rounded-full bg-primary"></span> 
+                    <span className="w-2 h-2 rounded-full bg-primary"></span>
                     Rol Principal
                   </button>
-                  <button 
+                  <button
                     onClick={() => setMatrixFilter('additional')}
                     className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                       matrixFilter === 'additional'
@@ -3984,7 +3535,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                         : 'bg-card text-foreground-muted border-border hover:text-foreground hover:bg-input'
                     }`}
                   >
-                    <span className="w-2 h-2 rounded-full bg-amber-400"></span> 
+                    <span className="w-2 h-2 rounded-full bg-amber-400"></span>
                     Roles Adicionales
                   </button>
                 </div>
@@ -4004,10 +3555,10 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                       const activeUser = (isEditing360 && wizardData) ? wizardData : detailUser;
                       const userRole = activeUser.role || activeUser.role_name || '—';
                       const userOverrides = activeUser.permissionsOverride || {};
-                      
+
                       const baseRolePermissions = defaultRolePermissions[userRole] || {};
                       const additionalRolesPermissions = {};
-                      
+
                       if (activeUser.roles_additional && activeUser.roles_additional.length > 0) {
                         const rolesToApply = [];
                         activeUser.roles_additional.forEach(id => {
@@ -4026,7 +3577,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                           });
                         });
                       }
-                      
+
                       // Calculate FULL status
                       const allChecked = ALL_ACTIONS.every(act => {
                         const overrideValue = userOverrides[`${mod.id}:${act.id}`];
@@ -4037,7 +3588,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                       return (
                         <tr key={mod.id} className="hover:bg-hover transition-colors">
                           <td className="py-3 px-4 font-bold text-foreground text-xs uppercase">{mod.name || mod.label || mod.nombre || `Módulo ${mod.id}`}</td>
-                          
+
                           {/* FULL Column (Read Only) */}
                           <td className="py-3 px-1 text-center select-none">
                             <div className="flex justify-center">
@@ -4053,22 +3604,22 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                             const overrideValue = userOverrides[`${mod.id}:${act.id}`];
                             const isManual = overrideValue !== undefined;
                             const isManualGranted = isManual && overrideValue === true;
-                            
+
                             const hasBaseRole = baseRolePermissions[mod.id]?.includes(act.id);
                             const hasAdditionalRole = additionalRolesPermissions[mod.id]?.includes(act.id);
-                            
+
                             const isGrantedByRoles = hasBaseRole || hasAdditionalRole;
-                            
+
                             const isChecked = isManual ? overrideValue : isGrantedByRoles;
-                            
+
                             let source = 'none';
                             if (isManualGranted) source = 'manual';
                             else if (!isManual && hasBaseRole) source = 'base';
                             else if (!isManual && hasAdditionalRole) source = 'additional';
-                            
+
                             // Apply filter visibility
-                            const isVisible = matrixFilter === 'all' || 
-                                              (matrixFilter === 'base' && source === 'base') || 
+                            const isVisible = matrixFilter === 'all' ||
+                                              (matrixFilter === 'base' && source === 'base') ||
                                               (matrixFilter === 'additional' && source === 'additional') ||
                                               (matrixFilter === 'manual' && source === 'manual');
 
@@ -4114,7 +3665,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
                 // Filtering & Search
                 const filtered = userSessions.filter(s => {
-                  const matchesSearch = !sessionSearchText || 
+                  const matchesSearch = !sessionSearchText ||
                     (s.device || s.dispositivo_navegador || '').toLowerCase().includes(sessionSearchText.toLowerCase()) ||
                     (s.ip || s.direccion_ip || '').toLowerCase().includes(sessionSearchText.toLowerCase()) ||
                     (s.location || s.ubicacion || '').toLowerCase().includes(sessionSearchText.toLowerCase());
@@ -4173,7 +3724,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                         >
                           <RefreshCw size={14} className={isLoadingSessions ? "animate-spin text-primary" : ""} />
                         </button>
-                        <button 
+                        <button
                           onClick={() => handleRevokeAllSessions(detailUser.id)}
                           className="px-4 py-2.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-lg flex items-center gap-1.5"
                         >
@@ -4185,7 +3736,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
                     {/* Toolbar & Filters */}
                     <div className="bg-card border border-border p-4 rounded-2xl shadow-xl flex flex-col lg:flex-row items-center justify-between gap-4 text-xs">
-                      
+
                       {/* Filter pills */}
                       <div className="flex items-center gap-1.5 flex-wrap w-full lg:w-auto">
                         {[
@@ -4263,31 +3814,31 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                         <table className="w-full text-left border-collapse text-xs">
                           <thead>
                             <tr className="border-b border-border bg-card select-none">
-                              <th 
+                              <th
                                 className="py-3.5 px-4 font-mono text-[10px] text-foreground-secondary font-bold tracking-wider uppercase cursor-pointer hover:text-foreground"
                                 onClick={() => handleSortSesiones('device')}
                               >
                                 DISPOSITIVO / NAVEGADOR {sortConfigSesiones.key === 'device' && (sortConfigSesiones.direction === 'asc' ? '↑' : '↓')}
                               </th>
-                              <th 
+                              <th
                                 className="py-3.5 px-4 font-mono text-[10px] text-foreground-secondary font-bold tracking-wider uppercase cursor-pointer hover:text-foreground"
                                 onClick={() => handleSortSesiones('ip')}
                               >
                                 DIRECCIÓN IP {sortConfigSesiones.key === 'ip' && (sortConfigSesiones.direction === 'asc' ? '↑' : '↓')}
                               </th>
-                              <th 
+                              <th
                                 className="py-3.5 px-4 font-mono text-[10px] text-foreground-secondary font-bold tracking-wider uppercase cursor-pointer hover:text-foreground"
                                 onClick={() => handleSortSesiones('location')}
                               >
                                 UBICACIÓN {sortConfigSesiones.key === 'location' && (sortConfigSesiones.direction === 'asc' ? '↑' : '↓')}
                               </th>
-                              <th 
+                              <th
                                 className="py-3.5 px-4 font-mono text-[10px] text-foreground-secondary font-bold tracking-wider uppercase cursor-pointer hover:text-foreground"
                                 onClick={() => handleSortSesiones('login_time')}
                               >
                                 INICIO DE SESIÓN {sortConfigSesiones.key === 'login_time' && (sortConfigSesiones.direction === 'asc' ? '↑' : '↓')}
                               </th>
-                              <th 
+                              <th
                                 className="py-3.5 px-4 font-mono text-[10px] text-foreground-secondary font-bold tracking-wider uppercase cursor-pointer hover:text-foreground"
                                 onClick={() => handleSortSesiones('last_activity_at')}
                               >
@@ -4296,7 +3847,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                               <th className="py-3.5 px-4 font-mono text-[10px] text-foreground-secondary font-bold tracking-wider uppercase">
                                 DURACIÓN
                               </th>
-                              <th 
+                              <th
                                 className="py-3.5 px-4 text-center font-mono text-[10px] text-foreground-secondary font-bold tracking-wider uppercase cursor-pointer hover:text-foreground"
                                 onClick={() => handleSortSesiones('estado')}
                               >
@@ -4316,8 +3867,8 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                               </tr>
                             ) : (
                               paginated.map(session => (
-                                <tr 
-                                  key={session.id} 
+                                <tr
+                                  key={session.id}
                                   onClick={() => setSelectedSessionDetail(session)}
                                   className="hover:bg-hover transition-colors cursor-pointer group"
                                 >
@@ -4350,8 +3901,8 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                                   </td>
                                   <td className="py-3.5 px-4 text-center">
                                     <span className={`px-2.5 py-1 rounded-lg font-mono text-[10px] font-bold uppercase tracking-wider inline-flex items-center gap-1 ${
-                                      session.estado === 'ACTIVA' 
-                                        ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' 
+                                      session.estado === 'ACTIVA'
+                                        ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
                                         : session.estado === 'POSIBLEMENTE COLGADA'
                                         ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
                                         : session.estado === 'REVOCADA'
@@ -4378,7 +3929,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                                         <Eye size={14} />
                                       </button>
                                       {(session.estado === 'ACTIVA' || session.estado === 'POSIBLEMENTE COLGADA') && (
-                                        <button 
+                                        <button
                                           type="button"
                                           onClick={(e) => {
                                             e.stopPropagation();
@@ -4548,7 +4099,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                     {/* Toolbar & Filters */}
                     <div className="bg-card border border-border p-4 rounded-2xl shadow-xl space-y-3 text-xs">
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
-                        
+
                         {/* Fecha Desde */}
                         <div>
                           <label className="text-[10px] text-foreground-muted font-bold uppercase tracking-wider block mb-1">Fecha Desde</label>
@@ -4690,8 +4241,8 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                                 else if (resUpper.includes('INFO')) resultBadge = 'bg-sky-500/15 text-sky-400 border-sky-500/30';
 
                                 return (
-                                  <tr 
-                                    key={act.id || act.actividad_id} 
+                                  <tr
+                                    key={act.id || act.actividad_id}
                                     onClick={() => setSelectedActivityDetail(act)}
                                     className="hover:bg-hover transition-colors cursor-pointer"
                                   >
@@ -4780,7 +4331,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                                   else if (resUpper.includes('ADVERT') || resUpper.includes('WARN')) nodeColor = 'bg-amber-400 border-amber-500/50';
 
                                   return (
-                                    <div 
+                                    <div
                                       key={act.id || act.actividad_id}
                                       onClick={() => setSelectedActivityDetail(act)}
                                       className="relative group p-4 bg-input border border-border hover:border-primary rounded-xl transition-all cursor-pointer shadow-md space-y-2"
@@ -4856,7 +4407,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
           {/* TAB AUDITORIA */}
           {activeTab360 === 'auditoria' && (
             <div className="space-y-4 animate-in fade-in duration-200">
-              
+
               {/* Header & Main Actions */}
               <div className="bg-card border border-border p-4 rounded-2xl shadow-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                 <div>
@@ -5105,7 +4656,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                           const naturalText = getNaturalSummaryText(audit);
 
                           return (
-                            <div 
+                            <div
                               key={audit.id}
                               className={`relative bg-card border ${semantic.border} rounded-2xl p-4 shadow-xl hover:border-primary/50 transition-all space-y-3`}
                             >
@@ -5234,7 +4785,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                 </button>
               </>
             ) : (
-              <button 
+              <button
                 type="button"
                 onClick={handleGoBack}
                 className="px-5 py-2.5 border border-border bg-card text-foreground hover:bg-surface-subtle transition-all font-mono text-xs font-bold rounded-xl shadow-md cursor-pointer flex items-center gap-2"
@@ -5253,7 +4804,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[var(--bg-color)] animate-in fade-in duration-200">
-      
+
       {/* Toast Alert */}
       {toast && (
         <div className="fixed top-20 right-6 z-[9999] animate-in slide-in-from-top-4 duration-300">
@@ -5301,14 +4852,14 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">
-          <button 
+          <button
             onClick={handleExport}
-            className="bg-card border border-border hover:border-primary text-foreground font-mono text-xs font-bold px-4 py-3 rounded-xl shadow-lg flex items-center gap-2 transition-all cursor-pointer" 
+            className="bg-card border border-border hover:border-primary text-foreground font-mono text-xs font-bold px-4 py-3 rounded-xl shadow-lg flex items-center gap-2 transition-all cursor-pointer"
             title="Exportar a Excel (CSV)"
           >
             <Download size={16}/> Exportar Excel
           </button>
-          <button 
+          <button
             onClick={handleAddNew}
             className="bg-primary hover:bg-primary text-primary-foreground font-mono text-xs font-bold px-5 py-3 rounded-xl shadow-lg flex items-center gap-2 transition-all cursor-pointer"
           >
@@ -5353,35 +4904,35 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       <div className="bg-card border border-border rounded-2xl p-4 shadow-xl flex flex-col md:flex-row items-center justify-between gap-4">
         <div className="relative flex-1 w-full">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-foreground-muted" size={18} />
-          <input 
-            type="text" 
-            value={search} 
-            onChange={(e) => setSearch(e.target.value)} 
-            className="w-full bg-input border border-border rounded-xl pl-10 pr-4 py-2.5 font-mono text-xs text-foreground placeholder:text-foreground-disabled focus:outline-none focus:border-primary" 
-            placeholder="Buscar por nombre, correo, usuario o documento..." 
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full bg-input border border-border rounded-xl pl-10 pr-4 py-2.5 font-mono text-xs text-foreground placeholder:text-foreground-disabled focus:outline-none focus:border-primary"
+            placeholder="Buscar por nombre, correo, usuario o documento..."
           />
         </div>
 
         {/* View Mode Toggle */}
         <div className="flex items-center gap-2">
-          <button 
+          <button
             type="button"
-            onClick={() => setViewMode('table')} 
+            onClick={() => setViewMode('table')}
             className={`p-2.5 border rounded-xl transition-colors cursor-pointer ${
-              viewMode === 'table' 
-                ? 'bg-primary/10 border-primary/40 text-primary' 
+              viewMode === 'table'
+                ? 'bg-primary/10 border-primary/40 text-primary'
                 : 'bg-input border-border text-foreground-muted hover:text-foreground'
             }`}
             title="Vista de Tabla"
           >
             <List size={16} />
           </button>
-          <button 
+          <button
             type="button"
-            onClick={() => setViewMode('grid')} 
+            onClick={() => setViewMode('grid')}
             className={`p-2.5 border rounded-xl transition-colors cursor-pointer ${
-              viewMode === 'grid' 
-                ? 'bg-primary/10 border-primary/40 text-primary' 
+              viewMode === 'grid'
+                ? 'bg-primary/10 border-primary/40 text-primary'
                 : 'bg-input border-border text-foreground-muted hover:text-foreground'
             }`}
             title="Vista de Cuadrícula (Grid)"
@@ -5402,8 +4953,8 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
             {selectedIds.length} usuarios seleccionados
           </span>
           <div className="flex items-center gap-2">
-            <button 
-              onClick={handleMassToggleStatus} 
+            <button
+              onClick={handleMassToggleStatus}
               className="px-4 py-2 bg-input border border-border text-foreground rounded-xl text-xs font-bold hover:border-primary transition-colors flex items-center gap-1.5 cursor-pointer"
             >
               <ToggleRight size={14} /> Rotar Estado
@@ -5423,10 +4974,10 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               <thead>
                 <tr className="bg-input border-b border-border select-none text-foreground-muted font-bold text-[11px] uppercase tracking-wider">
                   <th className="py-3.5 px-4 w-12 text-center">
-                    <input 
-                      type="checkbox" 
-                      checked={selectedIds.length > 0 && selectedIds.length === sortedData.length} 
-                      onChange={toggleAll} 
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.length > 0 && selectedIds.length === sortedData.length}
+                      onChange={toggleAll}
                       className="rounded border-border bg-input text-primary focus:ring-primary cursor-pointer"
                     />
                   </th>
@@ -5454,22 +5005,22 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                     const isDropdownOpen = activeDropdown === item.id;
                     const company = companies.find(c => c.id == item.companyId);
                     const isDropup = (paginatedData.length <= 4 && index >= 1) || (paginatedData.length > 4 && index >= paginatedData.length - 3);
-                    
+
                     return (
-                      <tr 
+                      <tr
                         key={item.id}
                         className={`hover:bg-hover transition-colors cursor-pointer group ${isChecked ? 'bg-primary/5' : ''}`}
                         onClick={() => handleViewDetail(item, 'resumen')}
                       >
                         <td className="py-3.5 px-4 text-center" onClick={e => e.stopPropagation()}>
-                          <input 
-                            type="checkbox" 
-                            checked={isChecked} 
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
                             onChange={(e) => toggleSelection(item.id, e)}
                             className="rounded border-border bg-input text-primary focus:ring-primary cursor-pointer"
                           />
                         </td>
-                        
+
                         <td className="py-3.5 px-4">
                           <div className="flex items-center gap-3">
                             <div className="w-9 h-9 rounded-xl bg-surface-subtle flex items-center justify-center font-bold text-primary border border-border shrink-0 font-mono text-xs">
@@ -5523,7 +5074,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                         <td className="py-3.5 px-4 text-center">
                           <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
                             (String(item.status || item.estado || '').toUpperCase() === 'ACTIVO' || String(item.status || item.estado || '').toUpperCase() === 'ACTIVE')
-                              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' 
+                              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                               : (String(item.status || item.estado || '').toUpperCase() === 'BLOQUEADO' || String(item.status || item.estado || '').toUpperCase() === 'INACTIVO')
                               ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
                               : 'bg-surface-subtle text-foreground-muted border-border'
@@ -5533,7 +5084,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                         </td>
 
                         <td className="py-3.5 px-4 text-right pr-6" onClick={e => e.stopPropagation()}>
-                          <button 
+                          <button
                             className={`p-1.5 rounded-lg transition-colors cursor-pointer inline-block ${isDropdownOpen ? 'bg-primary/20 text-primary' : 'text-foreground-muted hover:text-foreground hover:bg-surface-subtle'}`}
                             onClick={(e) => handleToggleDropdown(e, item)}
                             title="Acciones"
@@ -5554,8 +5105,8 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
           <div className="p-4 bg-input border-t border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 font-mono text-xs">
             <div className="flex items-center gap-2">
               <span className="text-foreground-muted">Filas por página:</span>
-              <select 
-                value={pageSize} 
+              <select
+                value={pageSize}
                 onChange={(e) => {
                   setPageSize(parseInt(e.target.value) || 5);
                   setCurrentPage(1);
@@ -5567,11 +5118,11 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                 <option value={20}>20</option>
               </select>
             </div>
-            
+
             <span className="text-foreground-muted">
               Mostrando <strong className="text-foreground">{(currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, sortedData.length)}</strong> de <strong className="text-foreground">{sortedData.length}</strong> registros
             </span>
-            
+
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
@@ -5609,10 +5160,10 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               const isDropdownOpen = activeDropdown === item.id;
               const company = companies.find(c => c.id == item.companyId);
               const isDropup = (paginatedData.length > 4 && index >= paginatedData.length - 2);
-              
+
               return (
-                <div 
-                  key={item.id} 
+                <div
+                  key={item.id}
                   className={`bg-card border rounded-2xl p-5 hover:border-primary/50 transition-all cursor-pointer relative flex flex-col justify-between min-h-[220px] shadow-xl group font-mono text-xs ${
                     isChecked ? 'border-primary bg-primary/5' : 'border-border'
                   }`}
@@ -5621,15 +5172,15 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                   {/* Top Row: Checkbox, Status & Action Dropdown */}
                   <div className="flex items-start justify-between" onClick={e => e.stopPropagation()}>
                     <div className="flex items-center gap-2">
-                      <input 
-                        type="checkbox" 
-                        checked={isChecked} 
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
                         onChange={(e) => toggleSelection(item.id, e)}
                         className="rounded border-border bg-input text-primary focus:ring-primary cursor-pointer w-4 h-4"
                       />
                       <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold uppercase border tracking-wider ${
                         (String(item.status || item.estado || '').toUpperCase() === 'ACTIVO' || String(item.status || item.estado || '').toUpperCase() === 'ACTIVE')
-                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' 
+                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                           : (String(item.status || item.estado || '').toUpperCase() === 'BLOQUEADO' || String(item.status || item.estado || '').toUpperCase() === 'INACTIVO')
                           ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
                           : 'bg-surface-subtle text-foreground-muted border-border'
@@ -5637,9 +5188,9 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                         {item.status || item.estado}
                       </span>
                     </div>
-                    
+
                     <div>
-                      <button 
+                      <button
                         className={`p-1.5 rounded-lg transition-colors cursor-pointer ${isDropdownOpen ? 'bg-primary/20 text-primary' : 'text-foreground-muted hover:text-foreground hover:bg-surface-subtle'}`}
                         onClick={(e) => handleToggleDropdown(e, item)}
                         title="Acciones"
@@ -5701,8 +5252,8 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         <div className="p-4 bg-card border border-border rounded-2xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 font-mono text-xs shadow-xl">
           <div className="flex items-center gap-2">
             <span className="text-foreground-muted">Filas por página:</span>
-            <select 
-              value={pageSize} 
+            <select
+              value={pageSize}
               onChange={(e) => {
                 setPageSize(parseInt(e.target.value) || 5);
                 setCurrentPage(1);
@@ -5714,11 +5265,11 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               <option value={20}>20</option>
             </select>
           </div>
-          
+
           <span className="text-foreground-muted">
             Mostrando <strong className="text-foreground">{(currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, sortedData.length)}</strong> de <strong className="text-foreground">{sortedData.length}</strong> registros
           </span>
-          
+
           <div className="flex items-center gap-1.5">
             <button
               type="button"
@@ -5755,14 +5306,14 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
           <div className="relative w-full max-w-lg bg-[var(--bg-elevated)] rounded-xl shadow-2xl flex flex-col border border-[var(--border-color)] max-h-[85vh] overflow-hidden animate-in zoom-in-95 duration-200">
              <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-color)] shrink-0 bg-[var(--bg-color)]">
                 <h3 className="text-lg font-black text-[var(--text-primary)] flex items-center gap-2">
-                  <Filter size={18} className="text-primary animate-pulse" /> 
+                  <Filter size={18} className="text-primary animate-pulse" />
                   Filtros de Búsqueda
                 </h3>
                 <button onClick={() => setIsFilterModalOpen(false)} className="p-2 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--border-color)] rounded-lg transition-colors">
                    <X size={20} />
                 </button>
              </div>
-             
+
              <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar text-xs">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -5874,12 +5425,12 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block font-bold text-[var(--text-muted)] uppercase tracking-wide mb-1.5">Departamento</label>
-                    <select 
-                      value={deptFilter} 
+                    <select
+                      value={deptFilter}
                       onChange={(e) => {
                         setDeptFilter(e.target.value);
                         setAreaFilter('Todos');
-                      }} 
+                      }}
                       className="w-full bg-[var(--bg-color)] border border-[var(--border-color)] rounded-lg px-3 py-2 text-[13px] font-semibold text-[var(--text-primary)] focus:outline-none focus:border-primary shadow-sm cursor-pointer"
                     >
                       <option value="Todos">Todos los departamentos</option>
@@ -5890,9 +5441,9 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                   </div>
                   <div>
                     <label className="block font-bold text-[var(--text-muted)] uppercase tracking-wide mb-1.5">Área</label>
-                    <select 
-                      value={areaFilter} 
-                      onChange={(e) => setAreaFilter(e.target.value)} 
+                    <select
+                      value={areaFilter}
+                      onChange={(e) => setAreaFilter(e.target.value)}
                       disabled={deptFilter === 'Todos'}
                       className="w-full bg-[var(--bg-color)] border border-[var(--border-color)] rounded-lg px-3 py-2 text-[13px] font-semibold text-[var(--text-primary)] focus:outline-none focus:border-primary shadow-sm cursor-pointer disabled:opacity-55 disabled:cursor-not-allowed"
                     >
@@ -5904,7 +5455,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                   </div>
                 </div>
              </div>
-             
+
              <div className="p-4 md:p-6 border-t border-[var(--border-color)] bg-[var(--bg-color)] shrink-0 flex justify-between gap-3">
                 <button type="button" onClick={() => { handleClearFilters(); setIsFilterModalOpen(false); }} className="px-4 py-2.5 rounded-lg border border-[var(--border-color)] text-[13px] font-bold hover:bg-[var(--border-color)] transition-colors">Limpiar Filtros</button>
                 <button onClick={() => setIsFilterModalOpen(false)} className="px-6 py-2.5 rounded-lg bg-primary text-on-primary hover:bg-primary-fixed text-on-primary text-[13px] font-bold flex items-center justify-center flex-1 shadow-md">
@@ -5920,8 +5471,8 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       {isCreating && wizardData && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 md:p-6 animate-in fade-in duration-200">
           <div className="absolute inset-0 bg-surface-subtle/80 backdrop-blur-md" onClick={handleCancel}></div>
-          <div className="relative w-full max-w-5xl md:max-w-6xl bg-surface-elevated max-h-[92vh] rounded-2xl shadow-2xl flex flex-col border border-border overflow-hidden animate-in zoom-in-95 duration-200 text-foreground-secondary font-sans">
-            
+          <div className="relative w-full max-w-4xl md:max-w-5xl bg-surface-elevated max-h-[92vh] rounded-2xl shadow-2xl flex flex-col border border-border overflow-hidden animate-in zoom-in-95 duration-200 text-foreground-secondary font-sans">
+
             {/* 1. ENCABEZADO SUPERIOR */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-surface-subtle shrink-0 z-20">
               <div className="flex items-center gap-3.5">
@@ -5931,21 +5482,21 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                 <div>
                   <div className="flex items-center gap-2.5">
                     <h3 className="text-base md:text-lg font-bold text-foreground tracking-tight">
-                      {isCreating ? 'Nuevo usuario' : `Editar usuario: ${wizardData.full_name}`}
+                      Nuevo usuario
                     </h3>
                     <span className="px-2.5 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-semibold border border-primary/20">
-                      Paso {currentStep} de 5
+                      Paso {currentStep} de 2
                     </span>
                   </div>
                   <p className="text-xs text-foreground-muted font-normal mt-0.5">
-                    {isCreating ? 'Configure la identidad, empresa, rol, acceso y políticas de seguridad.' : `ID de Cuenta: ${wizardData.id}`}
+                    Ingresa la información personal y asigna el rol del usuario.
                   </p>
                 </div>
               </div>
-              <button 
+              <button
                 type="button"
-                onClick={handleCancel} 
-                className="p-2 text-foreground-muted hover:text-foreground hover:bg-surface-subtle/70 rounded-lg transition-colors"
+                onClick={handleCancel}
+                className="p-2 text-foreground-muted hover:text-foreground hover:bg-surface-subtle/70 rounded-lg transition-colors cursor-pointer"
                 title="Cerrar"
               >
                 <X size={20} />
@@ -5954,14 +5505,11 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
             {/* 2. STEPPER HORIZONTAL */}
             <div className="bg-surface-subtle border-b border-border px-6 py-3 shrink-0 z-10">
-              <div className="max-w-5xl mx-auto space-y-2.5">
-                <div className="flex items-center justify-between gap-2 overflow-x-auto custom-scrollbar pb-1">
+              <div className="max-w-3xl mx-auto space-y-2.5">
+                <div className="flex items-center justify-between gap-4 overflow-x-auto custom-scrollbar pb-1">
                   {[
-                    { step: 1, label: 'Identidad', desc: 'Datos e identificación' },
-                    { step: 2, label: 'Empresa y Rol', desc: 'Asociación y perfil RBAC' },
-                    { step: 3, label: 'Acceso', desc: 'Credenciales y canales' },
-                    { step: 4, label: 'Seguridad', desc: 'Políticas y autenticación' },
-                    { step: 5, label: 'Confirmación', desc: 'Resumen de cuenta' }
+                    { step: 1, label: 'Datos del usuario', desc: 'Información y credenciales' },
+                    { step: 2, label: 'Confirmación', desc: 'Resumen de cuenta' }
                   ].map((s, idx, arr) => {
                     const isActive = currentStep === s.step;
                     const isCompleted = currentStep > s.step;
@@ -5975,20 +5523,20 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                             }
                           }}
                           disabled={!(isCompleted || s.step < currentStep)}
-                          className={`flex items-center gap-2.5 px-3 py-1.5 rounded-xl transition-all text-left outline-none shrink-0 ${
-                            isActive 
-                              ? 'bg-primary/10 border border-primary/40 shadow-sm' 
-                              : isCompleted 
-                              ? 'hover:bg-surface-subtle/60 cursor-pointer' 
+                          className={`flex items-center gap-2.5 px-3.5 py-2 rounded-xl transition-all text-left outline-none shrink-0 ${
+                            isActive
+                              ? 'bg-primary/10 border border-primary/40 shadow-sm'
+                              : isCompleted
+                              ? 'hover:bg-surface-subtle/60 cursor-pointer'
                               : 'opacity-50 cursor-not-allowed'
                           }`}
                         >
-                          <div 
+                          <div
                             className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-[11px] font-bold transition-all ${
-                              isActive 
-                                ? 'bg-primary text-slate-950 font-extrabold shadow-sm' 
-                                : isCompleted 
-                                ? 'bg-emerald-500 text-white' 
+                              isActive
+                                ? 'bg-primary text-slate-950 font-extrabold shadow-sm'
+                                : isCompleted
+                                ? 'bg-emerald-500 text-white'
                                 : 'bg-surface-subtle border border-border text-foreground-muted'
                             }`}
                           >
@@ -5998,10 +5546,11 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                             <span className={`text-[12px] font-semibold ${isActive ? 'text-primary font-bold' : isCompleted ? 'text-foreground-secondary' : 'text-foreground-muted'}`}>
                               {s.label}
                             </span>
+                            <span className="text-[10px] text-foreground-disabled">{s.desc}</span>
                           </div>
                         </button>
                         {idx < arr.length - 1 && (
-                          <div className={`h-[1px] flex-1 min-w-[16px] max-w-[40px] transition-colors ${isCompleted ? 'bg-emerald-500/60' : 'bg-surface-subtle'}`}></div>
+                          <div className={`h-[1px] flex-1 min-w-[24px] transition-colors ${isCompleted ? 'bg-emerald-500/60' : 'bg-border'}`}></div>
                         )}
                       </Fragment>
                     );
@@ -6010,13 +5559,13 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
                 {/* Micro Barra de Progreso */}
                 <div className="flex items-center justify-between text-[11px] font-medium text-foreground-muted">
-                  <span>Paso {currentStep} de 5</span>
-                  <span className="text-primary font-semibold">{Math.round((currentStep / 5) * 100)}% completado</span>
+                  <span>Paso {currentStep} de 2</span>
+                  <span className="text-primary font-semibold">{currentStep === 1 ? '50%' : '100%'} completado</span>
                 </div>
                 <div className="w-full h-1 bg-surface-subtle rounded-full overflow-hidden">
-                  <div 
+                  <div
                     className="h-full bg-primary transition-all duration-300 rounded-full"
-                    style={{ width: `${(currentStep / 5) * 100}%` }}
+                    style={{ width: `${(currentStep / 2) * 100}%` }}
                   ></div>
                 </div>
               </div>
@@ -6024,7 +5573,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
             {/* 3. CONTENEDOR PRINCIPAL DEL FORMULARIO */}
             <div className="flex-1 overflow-y-auto custom-scrollbar p-6 md:p-8 bg-surface-subtle">
-              <div className="max-w-5xl mx-auto space-y-6">
+              <div className="max-w-3xl mx-auto space-y-6">
                 {formError && (
                   <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 flex items-start gap-2.5 text-xs font-semibold shadow-sm animate-shake">
                     <AlertCircle size={16} className="shrink-0 mt-0.5" />
@@ -6032,55 +5581,53 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                   </div>
                 )}
 
-                {/* STEP 1: IDENTIDAD */}
+                {/* STEP 1: DATOS DEL USUARIO */}
                 {currentStep === 1 && (
                   <div className="space-y-6 animate-in fade-in duration-200">
-                    
-                    {/* Seccion 1: Identidad personal */}
                     <div className="bg-surface-subtle border border-border p-6 rounded-2xl space-y-5 shadow-sm">
                       <div className="border-b border-border pb-3">
                         <h4 className="font-bold text-sm text-foreground flex items-center gap-2">
                           <div className="w-1.5 h-4 bg-primary rounded-full"></div>
-                          Identidad personal
+                          Datos del usuario
                         </h4>
-                        <p className="text-xs text-foreground-muted mt-0.5">Ingresa los datos personales y de contacto del usuario.</p>
+                        <p className="text-xs text-foreground-muted mt-0.5">Ingresa los datos personales, asigna la empresa y el rol, y define las credenciales de acceso.</p>
                       </div>
 
                       {/* Row 1: Nombre | Apellido */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Nombre *</label>
-                          <input 
-                            type="text" 
+                          <input
+                            type="text"
                             required
-                            value={wizardData.first_name || ''} 
-                            onChange={(e) => handleChange('first_name', e.target.value)} 
-                            className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground placeholder:text-foreground-disabled focus:outline-none transition-colors ${fieldErrors.first_name ? 'border-rose-500 focus:border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`} 
+                            value={wizardData.first_name || ''}
+                            onChange={(e) => handleChange('first_name', e.target.value)}
+                            className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground placeholder:text-foreground-disabled focus:outline-none transition-colors ${fieldErrors.first_name ? 'border-rose-500 focus:border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
                             placeholder="Ej. Juan"
                           />
                           {fieldErrors.first_name && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{fieldErrors.first_name}</span>}
                         </div>
                         <div>
                           <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Apellido *</label>
-                          <input 
-                            type="text" 
+                          <input
+                            type="text"
                             required
-                            value={wizardData.last_name || ''} 
-                            onChange={(e) => handleChange('last_name', e.target.value)} 
-                            className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground placeholder:text-foreground-disabled focus:outline-none transition-colors ${fieldErrors.last_name ? 'border-rose-500 focus:border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`} 
+                            value={wizardData.last_name || ''}
+                            onChange={(e) => handleChange('last_name', e.target.value)}
+                            className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground placeholder:text-foreground-disabled focus:outline-none transition-colors ${fieldErrors.last_name ? 'border-rose-500 focus:border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
                             placeholder="Ej. Pérez"
                           />
                           {fieldErrors.last_name && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{fieldErrors.last_name}</span>}
                         </div>
                       </div>
 
-                      {/* Row 2: Tipo de documento | Número de documento | Teléfono */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {/* Row 2: Tipo de documento | Número de documento (Opcional) */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Tipo de documento (Opcional)</label>
-                          <select 
-                            value={wizardData.document_type || 'Cédula'} 
-                            onChange={(e) => handleChange('document_type', e.target.value)} 
+                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Tipo de documento</label>
+                          <select
+                            value={wizardData.document_type || 'Cédula'}
+                            onChange={(e) => handleChange('document_type', e.target.value)}
                             className="w-full bg-input border border-border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none focus:border-primary cursor-pointer"
                           >
                             <option value="Cédula">Cédula</option>
@@ -6090,52 +5637,45 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                         </div>
                         <div>
                           <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Número de documento (Opcional)</label>
-                          <input 
-                            type="text" 
-                            value={wizardData.document_number || ''} 
-                            onChange={(e) => handleChange('document_number', e.target.value)} 
-                            className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground placeholder:text-foreground-disabled focus:outline-none transition-colors ${fieldErrors.document_number ? 'border-rose-500 focus:border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`} 
+                          <input
+                            type="text"
+                            value={wizardData.document_number || ''}
+                            onChange={(e) => handleChange('document_number', e.target.value)}
+                            className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground placeholder:text-foreground-disabled focus:outline-none transition-colors ${fieldErrors.document_number ? 'border-rose-500 focus:border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
                             placeholder="Ej. 001-1234567-8"
                           />
                           {fieldErrors.document_number && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{fieldErrors.document_number}</span>}
                         </div>
+                      </div>
+
+                      {/* Row 3: Teléfono | Correo electrónico * */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Teléfono (Opcional)</label>
-                          <input 
-                            type="text" 
-                            value={wizardData.phone || ''} 
-                            onChange={(e) => handleChange('phone', e.target.value)} 
-                            className="w-full bg-input border border-border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground placeholder:text-foreground-disabled focus:outline-none focus:border-primary" 
+                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Teléfono</label>
+                          <input
+                            type="text"
+                            value={wizardData.phone || ''}
+                            onChange={(e) => handleChange('phone', e.target.value)}
+                            className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground placeholder:text-foreground-disabled focus:outline-none transition-colors ${fieldErrors.phone ? 'border-rose-500 focus:border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
                             placeholder="Ej. +1 (809) 555-0101"
                           />
+                          {fieldErrors.phone && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{fieldErrors.phone}</span>}
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Correo electrónico *</label>
+                          <input
+                            type="email"
+                            required
+                            value={wizardData.email || ''}
+                            onChange={(e) => handleChange('email', e.target.value)}
+                            className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground placeholder:text-foreground-disabled focus:outline-none transition-colors ${fieldErrors.email ? 'border-rose-500 focus:border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
+                            placeholder="Ej. juan.perez@empresa.com"
+                          />
+                          {fieldErrors.email && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{fieldErrors.email}</span>}
                         </div>
                       </div>
 
-                      {/* Row 3: Correo electrónico (ancho completo) */}
-                      <div>
-                        <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Correo electrónico *</label>
-                        <input 
-                          type="email" 
-                          value={wizardData.email || ''} 
-                          onChange={(e) => handleChange('email', e.target.value)} 
-                          className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground placeholder:text-foreground-disabled focus:outline-none transition-colors ${fieldErrors.email ? 'border-rose-500 focus:border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`} 
-                          placeholder="Ej. juan.perez@empresa.com"
-                        />
-                        {fieldErrors.email && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{fieldErrors.email}</span>}
-                      </div>
-                    </div>
-
-                    {/* Seccion 2: Asignación organizativa */}
-                    <div className="bg-surface-subtle border border-border p-6 rounded-2xl space-y-5 shadow-sm">
-                      <div className="border-b border-border pb-3">
-                        <h4 className="font-bold text-sm text-foreground flex items-center gap-2">
-                          <div className="w-1.5 h-4 bg-primary rounded-full"></div>
-                          Asignación organizativa
-                        </h4>
-                        <p className="text-xs text-foreground-muted mt-0.5">Asigna la empresa, cargo, departamento y área correspondiente.</p>
-                      </div>
-
-                      {/* Row 1: Empresa | Cargo */}
+                      {/* Row 4: Empresa / Consorcio * | Rol principal * */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Empresa / Consorcio *</label>
@@ -6165,498 +5705,119 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                         </div>
 
                         <div>
-                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Cargo / Posición</label>
-                          <select
-                            value={wizardData.cargo_id || ''}
-                            onChange={(e) => {
-                              const cId = e.target.value ? Number(e.target.value) : '';
-                              const cargoObj = cargos.find(c => Number(c.cargo_id) === Number(cId));
-                              handleChange('cargo_id', cId);
-                              handleChange('job_title', cargoObj ? cargoObj.nombre : '');
-                            }}
-                            className={`w-full bg-input border border-border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none focus:border-primary cursor-pointer ${fieldErrors.cargo_id ? 'border-rose-500 bg-rose-500/5' : ''}`}
-                            disabled={isLoadingCargos}
-                          >
-                            {isLoadingCargos && <option value="">Cargando cargos...</option>}
-                            {cargosError && <option value="">{cargosError}</option>}
-                            {!isLoadingCargos && !cargosError && cargos.length === 0 && (
-                              <option value="">No existen cargos activos en la base de datos.</option>
-                            )}
-                            {!isLoadingCargos && !cargosError && cargos.length > 0 && (
-                              <>
-                                <option value="">Buscar o seleccionar cargo...</option>
-                                {cargos.map(c => (
-                                  <option key={c.cargo_id} value={c.cargo_id}>
-                                    {c.nombre}
-                                  </option>
-                                ))}
-                              </>
-                            )}
-                          </select>
-                        </div>
-                      </div>
-
-                      {/* Row 2: Departamento | Área */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Departamento *</label>
-                          <select
-                            value={wizardData.department_id || ''}
-                            onChange={(e) => {
-                              const dId = e.target.value ? Number(e.target.value) : '';
-                              const depObj = departments.find(d => Number(d.departamento_id) === Number(dId));
-                              handleChange('department_id', dId);
-                              handleChange('department', depObj ? depObj.nombre : '');
-                              handleChange('area_id', '');
-                              handleChange('area', '');
-                              fetchAreasForDepartamento(dId);
-                            }}
-                            className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none cursor-pointer transition-colors ${fieldErrors.department_id ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
-                            disabled={isLoadingDepartamentos}
-                          >
-                            {isLoadingDepartamentos && <option value="">Cargando departamentos...</option>}
-                            {departamentosError && <option value="">{departamentosError}</option>}
-                            {!isLoadingDepartamentos && !departamentosError && departments.length === 0 && (
-                              <option value="">No existen departamentos activos en la base de datos.</option>
-                            )}
-                            {!isLoadingDepartamentos && !departamentosError && departments.length > 0 && (
-                              <>
-                                <option value="">-- Selecciona Departamento --</option>
-                                {departments.map(d => (
-                                  <option key={d.departamento_id} value={d.departamento_id}>
-                                    {d.nombre}
-                                  </option>
-                                ))}
-                              </>
-                            )}
-                          </select>
-                          {fieldErrors.department_id && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{fieldErrors.department_id}</span>}
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Área</label>
-                          <select
-                            value={wizardData.area_id || ''}
-                            onChange={(e) => {
-                              const aId = e.target.value ? Number(e.target.value) : '';
-                              const arObj = areas.find(a => Number(a.area_id) === Number(aId));
-                              handleChange('area_id', aId);
-                              handleChange('area', arObj ? arObj.nombre : '');
-                            }}
-                            className="w-full bg-input border border-border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none focus:border-primary cursor-pointer disabled:opacity-50"
-                            disabled={!wizardData.department_id || isLoadingAreas}
-                          >
-                            {!wizardData.department_id && (
-                              <option value="">Seleccione primero un departamento</option>
-                            )}
-                            {wizardData.department_id && isLoadingAreas && (
-                              <option value="">Cargando áreas...</option>
-                            )}
-                            {wizardData.department_id && !isLoadingAreas && areasError && (
-                              <option value="">{areasError}</option>
-                            )}
-                            {wizardData.department_id && !isLoadingAreas && !areasError && areas.length === 0 && (
-                              <option value="">No existen áreas activas para este departamento.</option>
-                            )}
-                            {wizardData.department_id && !isLoadingAreas && !areasError && areas.length > 0 && (
-                              <>
-                                <option value="">-- Selecciona Área --</option>
-                                {areas.map(a => (
-                                  <option key={a.area_id} value={a.area_id}>
-                                    {a.nombre}
-                                  </option>
-                                ))}
-                              </>
-                            )}
-                          </select>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Card Informativa */}
-                    <div className="p-4 rounded-xl bg-surface-subtle/60 border-l-4 border-l-[#bfce7f] border border-border text-xs text-foreground-secondary flex items-center gap-3 shadow-sm">
-                      <Info size={18} className="text-primary shrink-0" />
-                      <div>
-                        <span className="font-bold text-foreground block text-xs">Directiva de seguridad</span>
-                        <span className="text-xs text-foreground-muted">Las credenciales temporales expiran en 7 días y todas las asignaciones quedan registradas en auditoría.</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* STEP 2: EMPRESA Y ROL */}
-                {currentStep === 2 && (
-                  <div className="space-y-6 animate-in fade-in duration-200">
-                    <div className="bg-surface-subtle border border-border p-6 rounded-2xl space-y-5 shadow-sm">
-                      <div className="border-b border-border pb-3">
-                        <h4 className="font-bold text-sm text-foreground flex items-center gap-2">
-                          <div className="w-1.5 h-4 bg-primary rounded-full"></div>
-                          Configuración de Empresa y Perfil
-                        </h4>
-                        <p className="text-xs text-foreground-muted mt-0.5">Asocia la empresa y asigna el perfil de usuario correspondiente.</p>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Empresa / Consorcio *</label>
-                          <select
-                            value={wizardData.companyId || ''}
-                            onChange={(e) => handleChange('companyId', e.target.value ? Number(e.target.value) : '')}
-                            className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none cursor-pointer transition-colors ${fieldErrors.companyId ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
-                            disabled={isLoadingEmpresas}
-                          >
-                            {isLoadingEmpresas && <option value="">Cargando empresas...</option>}
-                            {empresasError && <option value="">{empresasError}</option>}
-                            {!isLoadingEmpresas && !empresasError && companies.length === 0 && (
-                              <option value="">No existen empresas activas en la base de datos.</option>
-                            )}
-                            {!isLoadingEmpresas && !empresasError && companies.length > 0 && (
-                              <>
-                                <option value="">-- Selecciona Empresa --</option>
-                                {companies.map(c => (
-                                  <option key={c.empresa_id} value={c.empresa_id}>
-                                    {c.nombre_comercial}
-                                  </option>
-                                ))}
-                              </>
-                            )}
-                          </select>
-                          {fieldErrors.companyId && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{fieldErrors.companyId}</span>}
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Tipo de Usuario *</label>
-                          <select
-                            value={wizardData.tipo_usuario_id || ''}
-                            onChange={(e) => {
-                              const valId = e.target.value ? Number(e.target.value) : '';
-                              handleChange('tipo_usuario_id', valId);
-                              const obj = userTypes.find(t => Number(t.tipo_usuario_id) === Number(valId));
-                              if (obj) handleChange('user_type', obj.nombre);
-                            }}
-                            className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none cursor-pointer transition-colors ${fieldErrors.tipo_usuario_id ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
-                          >
-                            <option value="">-- Selecciona Tipo --</option>
-                            {userTypes.map(t => (
-                              <option key={t.tipo_usuario_id} value={t.tipo_usuario_id}>
-                                {t.nombre}
-                              </option>
-                            ))}
-                          </select>
-                          {fieldErrors.tipo_usuario_id && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{fieldErrors.tipo_usuario_id}</span>}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="bg-surface-subtle border border-border p-6 rounded-2xl space-y-5 shadow-sm">
-                      <div className="border-b border-border pb-3">
-                        <h4 className="font-bold text-sm text-foreground flex items-center gap-2">
-                          <div className="w-1.5 h-4 bg-primary rounded-full"></div>
-                          Rol y Método de Acceso Principal
-                        </h4>
-                        <p className="text-xs text-foreground-muted mt-0.5">Define el rol de seguridad RBAC y la vía primaria de autenticación.</p>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Rol Principal *</label>
+                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Rol principal *</label>
                           <select
                             value={wizardData.rol_id || ''}
                             onChange={(e) => {
                               const rId = e.target.value ? Number(e.target.value) : '';
                               handleChange('rol_id', rId);
                               const rolObj = roles.find(r => Number(r.numericId || r.id) === Number(rId));
-                              if (rolObj) handleChange('role', rolObj.nombre);
+                              if (rolObj) handleChange('role', rolObj.nombre || rolObj.name);
                             }}
                             className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none cursor-pointer transition-colors ${fieldErrors.rol_id ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
                           >
                             <option value="">-- Selecciona Rol --</option>
                             {roles.map(r => (
                               <option key={r.numericId || r.id} value={r.numericId || r.id}>
-                                {r.nombre}
+                                {r.nombre || r.name}
                               </option>
                             ))}
                           </select>
                           {fieldErrors.rol_id && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{fieldErrors.rol_id}</span>}
                         </div>
+                      </div>
 
+                      {/* Row 5: Tipo de usuario * */}
+                      <div>
+                        <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Tipo de usuario *</label>
+                        <select
+                          value={wizardData.tipo_usuario_id || ''}
+                          onChange={(e) => {
+                            const tuId = e.target.value ? Number(e.target.value) : '';
+                            handleChange('tipo_usuario_id', tuId);
+                            const tuObj = userTypes.find(t => Number(t.tipo_usuario_id || t.id) === Number(tuId));
+                            if (tuObj) handleChange('user_type', tuObj.nombre || tuObj.name);
+                          }}
+                          className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none cursor-pointer transition-colors ${fieldErrors.tipo_usuario_id ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
+                        >
+                          <option value="">-- Selecciona Tipo de Usuario --</option>
+                          {userTypes.map(t => (
+                            <option key={t.tipo_usuario_id || t.id} value={t.tipo_usuario_id || t.id}>
+                              {t.nombre || t.name}
+                            </option>
+                          ))}
+                        </select>
+                        {fieldErrors.tipo_usuario_id && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{fieldErrors.tipo_usuario_id}</span>}
+                      </div>
+
+                      {/* Row 5: Contraseña * | Confirmar contraseña * */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-border pt-4">
                         <div>
-                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Método de Acceso Principal *</label>
-                          <select
-                            value={wizardData.primary_access_type || 'EMAIL'}
-                            onChange={(e) => handleChange('primary_access_type', e.target.value)}
-                            className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none cursor-pointer transition-colors ${fieldErrors.primary_access_type ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
-                          >
-                            <option value="EMAIL">Correo electrónico</option>
-                            <option value="DOCUMENT">Documento de identidad</option>
-                          </select>
-                          {fieldErrors.primary_access_type && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{fieldErrors.primary_access_type}</span>}
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2 p-3.5 bg-surface-subtle/60 border border-border text-xs text-foreground-secondary rounded-xl font-medium">
-                        <Info size={16} className="text-primary shrink-0" />
-                        <span>
-                          <strong className="text-foreground">Acceso sugerido: {wizardData.primary_access_type === 'DOCUMENT' ? 'Documento de identidad' : 'Correo electrónico'}.</strong> Recomendado para usuarios corporativos, administradores, supervisores y analistas.
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="bg-surface-subtle border border-border p-6 rounded-2xl space-y-4 shadow-sm">
-                      <h4 className="font-bold text-xs text-foreground-secondary">Roles Adicionales (Opcional)</h4>
-                      <div className="flex flex-wrap gap-2">
-                        {roles.filter(r => r.id != wizardData.rol_id).map(r => (
-                          <button
-                            key={r.id}
-                            type="button"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              const newRoles = (wizardData.roles_additional || []).includes(r.id)
-                                ? (wizardData.roles_additional || []).filter(roleId => roleId !== r.id)
-                                : [...(wizardData.roles_additional || []), r.id];
-                              handleChange('roles_additional', newRoles);
-                            }}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors ${
-                              (wizardData.roles_additional || []).includes(r.id)
-                                ? 'bg-primary/15 border-primary/40 text-primary'
-                                : 'bg-surface-subtle border-border text-foreground-muted hover:border-border hover:text-foreground-secondary'
-                            }`}
-                          >
-                            <span>{(wizardData.roles_additional || []).includes(r.id) ? '✓' : '+'}</span>
-                            {r.name}
-                          </button>
-                        ))}
-                        {roles.filter(r => r.id != wizardData.rol_id).length === 0 && (
-                          <span className="text-xs text-foreground-disabled italic">No hay más roles disponibles para asignar.</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* STEP 3: ACCESO Y CREDENCIALES */}
-                {currentStep === 3 && (
-                  <div className="space-y-6 animate-in fade-in duration-200">
-                    <div className="bg-surface-subtle border border-border p-6 rounded-2xl space-y-5 shadow-sm">
-                      <div className="border-b border-border pb-3">
-                        <h4 className="font-bold text-sm text-foreground flex items-center gap-2">
-                          <div className="w-1.5 h-4 bg-primary rounded-full"></div>
-                          Credenciales de Acceso por {wizardData.primary_access_type === 'DOCUMENT' ? 'Documento' : 'Correo'}
-                        </h4>
-                        <p className="text-xs text-foreground-muted mt-0.5">Configura la forma de ingreso y contraseñas de primer acceso.</p>
-                      </div>
-
-                      {wizardData.primary_access_type === 'EMAIL' ? (
-                        <div>
-                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Correo electrónico *</label>
-                          <input 
-                            type="email" 
-                            value={wizardData.email || ''} 
-                            onChange={(e) => handleChange('email', e.target.value)} 
-                            className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground placeholder:text-foreground-disabled focus:outline-none transition-colors ${fieldErrors.email ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`} 
-                            placeholder="Ej. juan.perez@empresa.com"
-                          />
-                          {fieldErrors.email && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{fieldErrors.email}</span>}
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <div>
-                            <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Tipo de documento *</label>
-                            <select 
-                              value={wizardData.document_type || 'Cédula'} 
-                              onChange={(e) => handleChange('document_type', e.target.value)} 
-                              className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none cursor-pointer transition-colors ${fieldErrors.document_type ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
+                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Contraseña *</label>
+                          <div className="relative">
+                            <input
+                              type={showCreatePassword ? "text" : "password"}
+                              autoComplete="new-password"
+                              value={wizardData.password || ''}
+                              onChange={(e) => handleChange('password', e.target.value)}
+                              className={`w-full bg-input border rounded-xl px-3.5 py-2.5 pr-10 text-xs font-normal text-foreground focus:outline-none transition-colors ${fieldErrors.password ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
+                              placeholder="Introduce la contraseña"
+                            />
+                            <button
+                              type="button"
+                              aria-label={showCreatePassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                              onClick={() => setShowCreatePassword(!showCreatePassword)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground-muted hover:text-foreground p-1 transition-colors cursor-pointer"
                             >
-                              <option value="Cédula">Cédula</option>
-                              <option value="Pasaporte">Pasaporte</option>
-                              <option value="RNC">RNC</option>
-                            </select>
-                            {fieldErrors.document_type && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{fieldErrors.document_type}</span>}
+                              {showCreatePassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                            </button>
                           </div>
-                          <div>
-                            <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Número de documento *</label>
-                            <input 
-                              type="text" 
-                              value={wizardData.document_number || ''} 
-                              onChange={(e) => handleChange('document_number', e.target.value)} 
-                              className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground placeholder:text-foreground-disabled focus:outline-none transition-colors ${fieldErrors.document_number ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`} 
-                              placeholder="Ej. 001-1234567-8"
-                            />
-                            {fieldErrors.document_number && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{fieldErrors.document_number}</span>}
-                          </div>
-                          <div>
-                            <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Teléfono *</label>
-                            <input 
-                              type="text" 
-                              value={wizardData.phone || ''} 
-                              onChange={(e) => handleChange('phone', e.target.value)} 
-                              className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground placeholder:text-foreground-disabled focus:outline-none transition-colors ${fieldErrors.phone ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`} 
-                              placeholder="Ej. +1 (809) 555-0101"
-                            />
-                            {fieldErrors.phone && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{fieldErrors.phone}</span>}
-                          </div>
+                          {fieldErrors.password && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{fieldErrors.password}</span>}
                         </div>
-                      )}
-
-                      {isCreating && (
-                        <div className="border-t border-border pt-4 mt-2 space-y-4">
-                          <div>
-                            <h5 className="font-semibold text-xs text-foreground mb-1">Definir Contraseña Inicial *</h5>
-                            <p className="text-[11px] text-foreground-muted mb-3">La contraseña debe tener mínimo 8 caracteres, mayúscula, minúscula, número y carácter especial.</p>
+                        <div>
+                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Confirmar contraseña *</label>
+                          <div className="relative">
+                            <input
+                              type={showCreateConfirmPassword ? "text" : "password"}
+                              autoComplete="new-password"
+                              value={wizardData.confirm_password || ''}
+                              onChange={(e) => handleChange('confirm_password', e.target.value)}
+                              className={`w-full bg-input border rounded-xl px-3.5 py-2.5 pr-10 text-xs font-normal text-foreground focus:outline-none transition-colors ${fieldErrors.confirm_password ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
+                              placeholder="Confirma la contraseña"
+                            />
+                            <button
+                              type="button"
+                              aria-label={showCreateConfirmPassword ? "Ocultar confirmación de contraseña" : "Mostrar confirmación de contraseña"}
+                              onClick={() => setShowCreateConfirmPassword(!showCreateConfirmPassword)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground-muted hover:text-foreground p-1 transition-colors cursor-pointer"
+                            >
+                              {showCreateConfirmPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                            </button>
                           </div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                              <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Contraseña *</label>
-                              <div className="relative">
-                                <input
-                                  type={showCreatePassword ? "text" : "password"}
-                                  autoComplete="new-password"
-                                  value={wizardData.password || ''}
-                                  onChange={(e) => handleChange('password', e.target.value)}
-                                  className={`w-full bg-input border rounded-xl px-3.5 py-2.5 pr-10 text-xs font-normal text-foreground focus:outline-none transition-colors ${fieldErrors.password ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
-                                  placeholder="Introduce la contraseña"
-                                />
-                                <button
-                                  type="button"
-                                  aria-label={showCreatePassword ? "Ocultar contraseña" : "Mostrar contraseña"}
-                                  onClick={() => setShowCreatePassword(!showCreatePassword)}
-                                  className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground-muted hover:text-foreground p-1 transition-colors cursor-pointer"
-                                >
-                                  {showCreatePassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                                </button>
-                              </div>
-                              {fieldErrors.password && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{fieldErrors.password}</span>}
-                            </div>
-                            <div>
-                              <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Confirmar contraseña *</label>
-                              <div className="relative">
-                                <input
-                                  type={showCreateConfirmPassword ? "text" : "password"}
-                                  autoComplete="new-password"
-                                  value={wizardData.confirm_password || ''}
-                                  onChange={(e) => handleChange('confirm_password', e.target.value)}
-                                  className={`w-full bg-input border rounded-xl px-3.5 py-2.5 pr-10 text-xs font-normal text-foreground focus:outline-none transition-colors ${fieldErrors.confirm_password ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
-                                  placeholder="Confirma la contraseña"
-                                />
-                                <button
-                                  type="button"
-                                  aria-label={showCreateConfirmPassword ? "Ocultar confirmación de contraseña" : "Mostrar confirmación de contraseña"}
-                                  onClick={() => setShowCreateConfirmPassword(!showCreateConfirmPassword)}
-                                  className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground-muted hover:text-foreground p-1 transition-colors cursor-pointer"
-                                >
-                                  {showCreateConfirmPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                                </button>
-                              </div>
-                              {fieldErrors.confirm_password && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{fieldErrors.confirm_password}</span>}
-                            </div>
-                          </div>
+                          {fieldErrors.confirm_password && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{fieldErrors.confirm_password}</span>}
                         </div>
-                      )}
+                      </div>
 
-                      <div className="flex flex-col gap-3.5 border-t border-border pt-4">
-                        <label className="flex items-center gap-2.5 cursor-pointer group p-2.5 rounded-xl hover:bg-surface-subtle transition-colors">
-                          <input type="checkbox" checked={!!wizardData.must_change_password} onChange={(e) => handleChange('must_change_password', e.target.checked)} className="rounded text-primary w-4 h-4 focus:ring-primary border-border bg-surface-subtle" />
-                          <span className="font-medium text-foreground-secondary text-xs group-hover:text-foreground">Forzar cambio de contraseña al primer ingreso</span>
+                      {/* Checkbox: Forzar cambio de contraseña */}
+                      <div className="pt-2">
+                        <label className="flex items-center gap-2.5 cursor-pointer group p-2 rounded-xl hover:bg-surface-subtle transition-colors">
+                          <input
+                            type="checkbox"
+                            checked={!!wizardData.must_change_password}
+                            onChange={(e) => handleChange('must_change_password', e.target.checked)}
+                            className="rounded text-primary w-4 h-4 focus:ring-primary border-border bg-surface-subtle cursor-pointer"
+                          />
+                          <span className="font-medium text-foreground-secondary text-xs group-hover:text-foreground">
+                            Forzar cambio de contraseña al primer ingreso
+                          </span>
                         </label>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border border-border rounded-2xl p-6 bg-surface-subtle shadow-sm">
-                      <div>
-                        <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Idioma preferido</label>
-                        <select value={wizardData.preferred_language || 'es'} onChange={(e) => handleChange('preferred_language', e.target.value)} className="w-full bg-input border border-border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none focus:border-primary">
-                          <option value="es">Español (América Latina)</option>
-                          <option value="en">Inglés (US)</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Zona horaria</label>
-                        <select value={wizardData.timezone || 'America/Santo_Domingo'} onChange={(e) => handleChange('timezone', e.target.value)} className="w-full bg-input border border-border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none focus:border-primary">
-                          <option value="America/Santo_Domingo">America/Santo_Domingo (GMT-4)</option>
-                          <option value="America/New_York">America/New_York (GMT-4)</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Formato de fecha</label>
-                        <select value={wizardData.date_format || 'DD/MM/YYYY'} onChange={(e) => handleChange('date_format', e.target.value)} className="w-full bg-input border border-border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none focus:border-primary">
-                          <option value="DD/MM/YYYY">DD/MM/YYYY</option>
-                          <option value="MM/DD/YYYY">MM/DD/YYYY</option>
-                          <option value="YYYY-MM-DD">YYYY-MM-DD</option>
-                        </select>
                       </div>
                     </div>
                   </div>
                 )}
 
-                {/* STEP 4: SEGURIDAD */}
-                {currentStep === 4 && (
-                  <div className="space-y-6 animate-in fade-in duration-200">
-                    <div className="bg-surface-subtle border border-border p-6 rounded-2xl space-y-5 shadow-sm">
-                      <div className="border-b border-border pb-3">
-                        <h4 className="font-bold text-sm text-foreground flex items-center gap-2">
-                          <div className="w-1.5 h-4 bg-primary rounded-full"></div>
-                          Políticas de Seguridad y Accesos
-                        </h4>
-                        <p className="text-xs text-foreground-muted mt-0.5">Define parámetros de inactividad e intentos de autenticación.</p>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Cerrar sesión por inactividad</label>
-                          <select value={wizardData.inactivity_timeout_minutes ?? 0} onChange={(e) => handleChange('inactivity_timeout_minutes', parseInt(e.target.value))} className="w-full bg-input border border-border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none focus:border-primary">
-                            <option value={0}>No aplicar</option>
-                            <option value={15}>15 minutos</option>
-                            <option value={30}>30 minutos</option>
-                            <option value={60}>60 minutos</option>
-                            <option value={120}>120 minutos</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Bloquear cuenta por intentos fallidos</label>
-                          <select value={wizardData.max_failed_attempts ?? 10} onChange={(e) => handleChange('max_failed_attempts', parseInt(e.target.value))} className="w-full bg-input border border-border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none focus:border-primary">
-                            <option value={3}>Bloquear al tercer intento fallido</option>
-                            <option value={5}>Bloquear al quinto intento fallido</option>
-                            <option value={10}>Bloquear al décimo intento fallido</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                        <label className="flex items-center gap-3 cursor-pointer p-3 rounded-xl bg-surface-subtle border border-border hover:border-border">
-                          <input type="checkbox" checked={wizardData.require_export_approval || false} onChange={(e) => handleChange('require_export_approval', e.target.checked)} className="rounded text-primary w-4 h-4 focus:ring-primary border-border bg-surface-subtle" />
-                          <span className="text-xs font-medium text-foreground-secondary">Exigir aprobación para exportaciones de datos sensibles</span>
-                        </label>
-                        <label className="flex items-center gap-3 cursor-pointer p-3 rounded-xl bg-surface-subtle border border-border hover:border-border">
-                          <input type="checkbox" checked={wizardData.require_dual_validation || false} onChange={(e) => handleChange('require_dual_validation', e.target.checked)} className="rounded text-primary w-4 h-4 focus:ring-primary border-border bg-surface-subtle" />
-                          <span className="text-xs font-medium text-foreground-secondary">Exigir doble validación (Dual control) para cambios críticos</span>
-                        </label>
-                      </div>
-
-                      {(wizardData.require_dual_validation || wizardData.role === 'Administrador General') && (
-                        <div className="flex items-center gap-2 text-xs font-semibold text-amber-400 bg-amber-500/10 p-3 rounded-xl border border-amber-500/20">
-                          <ShieldAlert size={16} className="shrink-0" />
-                          <span>Atención: Este perfil cuenta con permisos sensibles activados. Se forzará auditoría reforzada.</span>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="bg-surface-subtle border border-border p-6 rounded-2xl space-y-4 shadow-sm">
-                      <h4 className="font-bold text-sm text-foreground flex items-center gap-2">
-                        <Settings size={16} className="text-primary" />
-                        Configuración avanzada
-                      </h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Correo de recuperación (Opcional)</label>
-                          <input type="email" value={wizardData.correo_acceso || ''} onChange={(e) => handleChange('correo_acceso', e.target.value)} className="w-full bg-input border border-border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none focus:border-primary" placeholder="Ej. admin@miempresa.com" />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* STEP 5: CONFIRMACION */}
-                {currentStep === 5 && (
+                {/* STEP 2: CONFIRMACION */}
+                {currentStep === 2 && (
                   <div className="space-y-6 animate-in fade-in duration-200">
                     <div className="border-b border-border pb-3">
                       <h4 className="font-bold text-base text-foreground flex items-center gap-2">
@@ -6664,122 +5825,71 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                         Confirmación del usuario
                       </h4>
                       <p className="text-xs text-foreground-muted mt-1">
-                        Revisa la información de identidad, empresa, rol y seguridad antes de finalizar la creación de la cuenta.
+                        Revisa la información del nuevo usuario antes de finalizar la creación de la cuenta.
                       </p>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                      {/* Card 1: Identidad */}
-                      <div className="bg-surface-subtle p-5 rounded-2xl border border-border space-y-3.5 shadow-sm">
-                        <div className="flex items-center justify-between border-b border-border pb-2.5">
-                          <h5 className="font-bold text-xs text-foreground flex items-center gap-2">
-                            <Users size={15} className="text-primary" /> Identidad
-                          </h5>
-                          <button 
-                            type="button"
-                            onClick={() => setCurrentStep(1)}
-                            className="text-[11px] font-semibold text-primary hover:underline"
-                          >
-                            Editar
-                          </button>
+                    <div className="bg-surface-subtle p-6 rounded-2xl border border-border space-y-4 shadow-sm">
+                      <div className="flex items-center justify-between border-b border-border pb-3">
+                        <h5 className="font-bold text-xs text-foreground flex items-center gap-2">
+                          <Users size={16} className="text-primary" /> Resumen de la cuenta
+                        </h5>
+                        <button
+                          type="button"
+                          onClick={() => setCurrentStep(1)}
+                          className="text-xs font-semibold text-primary hover:underline cursor-pointer"
+                        >
+                          Editar información
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-y-3.5 gap-x-6 text-xs">
+                        <div className="flex justify-between border-b border-border/50 pb-2">
+                          <span className="text-foreground-muted font-medium">Nombre completo:</span>
+                          <span className="font-bold text-foreground">{wizardData.full_name || `${wizardData.first_name || ''} ${wizardData.last_name || ''}`.trim()}</span>
                         </div>
-                        <div className="grid grid-cols-2 gap-y-2 text-xs">
-                          <span className="text-foreground-muted font-medium">Nombre:</span>
-                          <span className="font-bold text-foreground">{wizardData.full_name}</span>
-                          <span className="text-foreground-muted font-medium">Correo:</span>
-                          <span className="font-normal text-foreground-secondary">{wizardData.email || '—'}</span>
+                        <div className="flex justify-between border-b border-border/50 pb-2">
+                          <span className="text-foreground-muted font-medium">Correo electrónico:</span>
+                          <span className="font-semibold text-foreground">{wizardData.email || '—'}</span>
+                        </div>
+                        <div className="flex justify-between border-b border-border/50 pb-2">
+                          <span className="text-foreground-muted font-medium">Teléfono:</span>
+                          <span className="font-normal text-foreground-secondary">{wizardData.phone || 'No registrado'}</span>
+                        </div>
+                        <div className="flex justify-between border-b border-border/50 pb-2">
                           <span className="text-foreground-muted font-medium">Documento:</span>
                           <span className="font-normal text-foreground-secondary">
-                            {wizardData.document_number ? `${wizardData.document_type}: ${wizardData.document_number}` : 'No registrado'}
+                            {wizardData.document_number ? `${wizardData.document_type || 'Cédula'}: ${wizardData.document_number}` : 'No registrado'}
                           </span>
-                          <span className="text-foreground-muted font-medium">Posición / Cargo:</span>
-                          <span className="font-normal text-foreground-secondary">{wizardData.job_title || '—'} ({wizardData.department || '—'}{wizardData.area ? ` / ${wizardData.area}` : ''})</span>
                         </div>
-                      </div>
-
-                      {/* Card 2: Empresa y Rol */}
-                      <div className="bg-surface-subtle p-5 rounded-2xl border border-border space-y-3.5 shadow-sm">
-                        <div className="flex items-center justify-between border-b border-border pb-2.5">
-                          <h5 className="font-bold text-xs text-foreground flex items-center gap-2">
-                            <Building2 size={15} className="text-primary" /> Empresa y Rol
-                          </h5>
-                          <button 
-                            type="button"
-                            onClick={() => setCurrentStep(2)}
-                            className="text-[11px] font-semibold text-primary hover:underline"
-                          >
-                            Editar
-                          </button>
-                        </div>
-                        <div className="grid grid-cols-2 gap-y-2 text-xs">
+                        <div className="flex justify-between border-b border-border/50 pb-2">
                           <span className="text-foreground-muted font-medium">Empresa:</span>
                           <span className="font-bold text-foreground">
                             {companies.find(c => c.empresa_id == wizardData.companyId)?.nombre_comercial || 'Empresa seleccionada'}
                           </span>
+                        </div>
+                        <div className="flex justify-between border-b border-border/50 pb-2">
                           <span className="text-foreground-muted font-medium">Rol principal:</span>
-                          <span className="font-bold text-primary">{wizardData.role}</span>
+                          <span className="font-bold text-primary">
+                            {roles.find(r => (r.numericId || r.id) == wizardData.rol_id)?.nombre || wizardData.role || 'Rol seleccionado'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between border-b border-border/50 pb-2">
                           <span className="text-foreground-muted font-medium">Tipo de usuario:</span>
-                          <span className="font-normal text-foreground-secondary">{wizardData.user_type || '—'}</span>
-                          <span className="text-foreground-muted font-medium">Permisos:</span>
-                          <span className="font-normal text-foreground-secondary">
-                            {Object.keys(wizardData.permissionsOverride || {}).length > 0 ? 'Permisos específicos' : 'Heredados del rol'}
+                          <span className="font-bold text-foreground">
+                            {userTypes.find(t => (t.tipo_usuario_id || t.id) == wizardData.tipo_usuario_id)?.nombre || wizardData.user_type || 'Tipo seleccionado'}
                           </span>
                         </div>
-                      </div>
-
-                      {/* Card 3: Acceso */}
-                      <div className="bg-surface-subtle p-5 rounded-2xl border border-border space-y-3.5 shadow-sm">
-                        <div className="flex items-center justify-between border-b border-border pb-2.5">
-                          <h5 className="font-bold text-xs text-foreground flex items-center gap-2">
-                            <Key size={15} className="text-primary" /> Acceso
-                          </h5>
-                          <button 
-                            type="button"
-                            onClick={() => setCurrentStep(3)}
-                            className="text-[11px] font-semibold text-primary hover:underline"
-                          >
-                            Editar
-                          </button>
-                        </div>
-                        <div className="grid grid-cols-2 gap-y-2 text-xs">
-                          <span className="text-foreground-muted font-medium">Tipo de acceso:</span>
-                          <span className="font-normal text-foreground-secondary">{wizardData.primary_access_type === 'DOCUMENT' ? 'Documento de identidad' : 'Correo electrónico'}</span>
-                          <span className="text-foreground-muted font-medium">Identificador:</span>
-                          <span className="font-mono font-bold text-indigo-400">
-                            {wizardData.primary_access_type === 'DOCUMENT' ? wizardData.document_number : (wizardData.identificador_principal || wizardData.email)}
-                          </span>
+                        <div className="flex justify-between border-b border-border/50 pb-2">
                           <span className="text-foreground-muted font-medium">Contraseña:</span>
-                          <span className="font-semibold text-emerald-500">✓ Configurada</span>
-                          <span className="text-foreground-muted font-medium">Cambio clave:</span>
-                          <span className="font-normal text-foreground-secondary">{wizardData.must_change_password ? 'Exigido al primer ingreso' : 'No exigido'}</span>
-                        </div>
-                      </div>
-
-                      {/* Card 4: Seguridad */}
-                      <div className="bg-surface-subtle p-5 rounded-2xl border border-border space-y-3.5 shadow-sm">
-                        <div className="flex items-center justify-between border-b border-border pb-2.5">
-                          <h5 className="font-bold text-xs text-foreground flex items-center gap-2">
-                            <ShieldCheck size={15} className="text-primary" /> Seguridad
-                          </h5>
-                          <button 
-                            type="button"
-                            onClick={() => setCurrentStep(4)}
-                            className="text-[11px] font-semibold text-primary hover:underline"
-                          >
-                            Editar
-                          </button>
-                        </div>
-                        <div className="grid grid-cols-2 gap-y-2 text-xs">
-                          <span className="text-foreground-muted font-medium">Inactividad:</span>
-                          <span className="font-semibold text-foreground">{wizardData.inactivity_timeout_minutes ? `${wizardData.inactivity_timeout_minutes} min` : 'No aplica'}</span>
-                          <span className="text-foreground-muted font-medium">Intentos fallidos:</span>
-                          <span className="font-semibold text-foreground">{wizardData.max_failed_attempts ? `${wizardData.max_failed_attempts} intentos` : 'No aplica'}</span>
-                          <span className="text-foreground-muted font-medium">Estado inicial:</span>
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 w-fit">
-                            Pendiente de activación
+                          <span className="font-semibold text-emerald-500 flex items-center gap-1">
+                            <CheckCircle2 size={13} /> Configurada
                           </span>
-                          <span className="text-foreground-muted font-medium">Auditoría:</span>
-                          <span className="font-normal text-foreground-secondary">Registro permanente habilitado</span>
+                        </div>
+                        <div className="flex justify-between border-b border-border/50 pb-2">
+                          <span className="text-foreground-muted font-medium">Forzar cambio de contraseña:</span>
+                          <span className="font-normal text-foreground-secondary">
+                            {wizardData.must_change_password ? 'Sí (al primer ingreso)' : 'No'}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -6790,8 +5900,8 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
             {/* 4. FOOTER FIJO CON ACCIONES */}
             <div className="px-6 py-4 border-t border-border bg-surface-subtle flex items-center justify-between gap-3 shrink-0 z-20">
-              <button 
-                type="button" 
+              <button
+                type="button"
                 disabled={currentStep === 1}
                 onClick={handlePrevStep}
                 className="px-4 py-2 rounded-xl border border-border hover:bg-surface-subtle/60 text-foreground-secondary font-medium disabled:opacity-40 disabled:cursor-not-allowed text-xs transition-colors"
@@ -6800,19 +5910,19 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               </button>
 
               <div className="flex items-center gap-3">
-                <button 
-                  type="button" 
-                  onClick={handleCancel} 
+                <button
+                  type="button"
+                  onClick={handleCancel}
                   className="px-4 py-2 rounded-xl border border-border hover:bg-surface-subtle/60 text-foreground-secondary font-medium text-xs transition-colors"
                 >
                   Cancelar
                 </button>
-                
-                {currentStep < 5 ? (
-                  <button 
-                    type="button" 
+
+                {currentStep === 1 ? (
+                  <button
+                    type="button"
                     onClick={handleNextStep}
-                    className="px-5 py-2 rounded-xl bg-primary hover:bg-primary text-slate-950 font-bold flex items-center gap-1.5 shadow-sm text-xs transition-colors"
+                    className="px-5 py-2 rounded-xl bg-primary hover:bg-primary text-slate-950 font-bold flex items-center gap-1.5 shadow-sm text-xs transition-colors cursor-pointer"
                   >
                     Siguiente <ArrowRight size={14} />
                   </button>
@@ -6821,7 +5931,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                     type="button"
                     disabled={isSaving}
                     onClick={() => handleSaveUser()}
-                    className="px-5 py-2 rounded-xl bg-primary hover:bg-primary text-slate-950 font-bold flex items-center gap-1.5 shadow-sm text-xs disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="px-5 py-2 rounded-xl bg-primary hover:bg-primary text-slate-950 font-bold flex items-center gap-1.5 shadow-sm text-xs disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
                   >
                     {isSaving ? 'Guardando...' : 'Crear usuario'}
                   </button>
@@ -6837,7 +5947,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       {showReasonModal && reasonAction && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-surface-subtle/60 backdrop-blur-md"></div>
-          
+
           <div className="relative w-full max-w-md bg-[var(--bg-elevated)] rounded-2xl shadow-2xl border border-[var(--border-color)] p-6 animate-in zoom-in-95 duration-200">
             <h3 className="text-base font-black text-[var(--text-primary)] flex items-center gap-2">
               <ShieldAlert className="text-primary" size={20} />
@@ -6853,10 +5963,10 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                   {reasonError}
                 </div>
               )}
-              
+
               <div>
                 <label className="block font-bold text-[var(--text-muted)] uppercase tracking-wide mb-1.5 text-[10px]">Motivo / Explicación del cambio *</label>
-                <textarea 
+                <textarea
                   value={reasonText}
                   onChange={(e) => setReasonText(e.target.value)}
                   placeholder="Ej. Reestructuración de zonas comerciales de la región norte por rotación de personal."
@@ -6866,15 +5976,15 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               </div>
 
               <div className="flex justify-end gap-2.5 border-t border-[var(--border-color)] pt-3 shrink-0">
-                <button 
-                  type="button" 
-                  onClick={() => { setShowReasonModal(false); setReasonAction(null); }} 
+                <button
+                  type="button"
+                  onClick={() => { setShowReasonModal(false); setReasonAction(null); }}
                   className="px-4 py-2 rounded-lg border border-[var(--border-color)] hover:bg-[var(--bg-color)] text-xs font-semibold"
                 >
                   Cancelar
                 </button>
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   className="px-5 py-2 bg-primary text-on-primary hover:bg-primary-fixed text-on-primary rounded-lg text-xs font-bold shadow-sm"
                 >
                   Confirmar Cambio
@@ -6892,7 +6002,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       {isAgencyModalOpen && typeof document !== 'undefined' && wizardData && createPortal(
         <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-surface-subtle/60 backdrop-blur-md" onClick={() => setIsAgencyModalOpen(false)}></div>
-          
+
           <div className="relative w-full max-w-3xl bg-[var(--bg-elevated)] rounded-2xl shadow-2xl border border-[var(--border-color)] overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200">
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-color)] bg-[var(--bg-color)]/50">
@@ -6905,7 +6015,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                   <p className="text-[10px] text-[var(--text-muted)] font-medium">Asigna múltiples agencias al alcance operativo del usuario</p>
                 </div>
               </div>
-              <button 
+              <button
                 onClick={() => setIsAgencyModalOpen(false)}
                 className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-color)] rounded-lg transition-all"
               >
@@ -6917,7 +6027,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
             <div className="p-4 bg-[var(--bg-color)]/30 border-b border-[var(--border-color)] grid grid-cols-1 sm:grid-cols-2 gap-3 shrink-0">
               <div className="relative">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
-                <input 
+                <input
                   type="text"
                   placeholder="Buscar por código, nombre, ubicación o terminal..."
                   value={agencySearchQuery}
@@ -6948,7 +6058,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                 <span className="w-1 h-1 bg-[var(--border-color)] rounded-full"></span>
                 <span className="text-primary">Seleccionadas: {wizardData.scope_entity_ids?.length || 0}</span>
               </div>
-              
+
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -6956,20 +6066,20 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                     const visibleCodes = agencias.filter(ag => {
                       const searchStr = agencySearchQuery.toLowerCase().trim();
                       if (!searchStr) return true;
-                      
-                      const matchesAgency = 
-                        (ag.name && ag.name.toLowerCase().includes(searchStr)) || 
+
+                      const matchesAgency =
+                        (ag.name && ag.name.toLowerCase().includes(searchStr)) ||
                         (ag.code && ag.code.toLowerCase().includes(searchStr)) ||
                         (ag.address && ag.address.toLowerCase().includes(searchStr));
-                        
-                      const matchesTerminal = ag.terminals && ag.terminals.some(t => 
+
+                      const matchesTerminal = ag.terminals && ag.terminals.some(t =>
                         (t.code && t.code.toLowerCase().includes(searchStr)) ||
                         (t.name && t.name.toLowerCase().includes(searchStr))
                       );
-                        
+
                       return matchesAgency || matchesTerminal;
                     }).map(ag => ag.id);
-                    
+
                     const existing = wizardData.scope_entity_ids || [];
                     const combined = Array.from(new Set([...existing, ...visibleCodes]));
                     handleChange('scope_entity_ids', combined);
@@ -6984,20 +6094,20 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                     const visibleCodes = agencias.filter(ag => {
                       const searchStr = agencySearchQuery.toLowerCase().trim();
                       if (!searchStr) return true;
-                      
-                      const matchesAgency = 
-                        (ag.name && ag.name.toLowerCase().includes(searchStr)) || 
+
+                      const matchesAgency =
+                        (ag.name && ag.name.toLowerCase().includes(searchStr)) ||
                         (ag.code && ag.code.toLowerCase().includes(searchStr)) ||
                         (ag.address && ag.address.toLowerCase().includes(searchStr));
-                        
-                      const matchesTerminal = ag.terminals && ag.terminals.some(t => 
+
+                      const matchesTerminal = ag.terminals && ag.terminals.some(t =>
                         (t.code && t.code.toLowerCase().includes(searchStr)) ||
                         (t.name && t.name.toLowerCase().includes(searchStr))
                       );
-                        
+
                       return matchesAgency || matchesTerminal;
                     }).map(ag => ag.id);
-                    
+
                     const existing = wizardData.scope_entity_ids || [];
                     const updated = existing.filter(x => !visibleCodes.includes(x));
                     handleChange('scope_entity_ids', updated);
@@ -7022,17 +6132,17 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                   const filtered = agencias.filter(ag => {
                     const searchStr = agencySearchQuery.toLowerCase().trim();
                     if (!searchStr) return true;
-                    
-                    const matchesAgency = 
-                      (ag.name && ag.name.toLowerCase().includes(searchStr)) || 
+
+                    const matchesAgency =
+                      (ag.name && ag.name.toLowerCase().includes(searchStr)) ||
                       (ag.code && ag.code.toLowerCase().includes(searchStr)) ||
                       (ag.address && ag.address.toLowerCase().includes(searchStr));
-                      
-                    const matchesTerminal = ag.terminals && ag.terminals.some(t => 
+
+                    const matchesTerminal = ag.terminals && ag.terminals.some(t =>
                       (t.code && t.code.toLowerCase().includes(searchStr)) ||
                       (t.name && t.name.toLowerCase().includes(searchStr))
                     );
-                      
+
                     return matchesAgency || matchesTerminal;
                   });
 
@@ -7051,14 +6161,14 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                         key={ag.id}
                         onClick={() => {
                           const existing = wizardData.scope_entity_ids || [];
-                          const updated = isSelected 
-                            ? existing.filter(x => x !== ag.id) 
+                          const updated = isSelected
+                            ? existing.filter(x => x !== ag.id)
                             : [...existing, ag.id];
                           handleChange('scope_entity_ids', updated);
                         }}
                         className={`p-3.5 rounded-xl border text-left flex items-start gap-3.5 cursor-pointer transition-all ${
-                          isSelected 
-                            ? 'bg-primary/5 border-primary shadow-sm ring-1 ring-primary/30' 
+                          isSelected
+                            ? 'bg-primary/5 border-primary shadow-sm ring-1 ring-primary/30'
                             : 'bg-[var(--bg-elevated)] border-[var(--border-color)] hover:border-primary'
                         }`}
                       >
@@ -7115,12 +6225,9 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
       {/* CONFIRM EDIT / SAVE MODAL */}
       <SecurityConfirmDialog
-        isOpen={showConfirmEditModal || showConfirmSaveModal}
-        onClose={() => {
-          setShowConfirmEditModal(false);
-          setShowConfirmSaveModal(false);
-        }}
-        onConfirm={showConfirmSaveModal ? handleExecuteSave360 : handleSaveEdit360}
+        isOpen={showConfirmSaveModal}
+        onClose={() => setShowConfirmSaveModal(false)}
+        onConfirm={handleExecuteSave360}
         variant="default"
         title="¿Confirmar guardado?"
         description="¿Desea guardar los cambios realizados en el perfil del usuario?"
@@ -7160,7 +6267,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         loadingLabel="Revocando..."
         extraContent={
           <div className="p-3 rounded-xl bg-input border border-border w-full flex items-center gap-3 text-left">
-            <input 
+            <input
               type="checkbox"
               id="keepCurrentCheck"
               checked={keepCurrentSessionOnRevokeAll}
@@ -7176,7 +6283,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
       {/* ACTION DROPDOWN PORTAL (Eliminates clipping inside scroll and overflow containers) */}
       {activeDropdown && dropdownAnchor && typeof document !== 'undefined' && createPortal(
-        <div 
+        <div
           style={{
             position: 'fixed',
             top: dropdownAnchor.isDropup ? 'auto' : `${dropdownAnchor.top}px`,
@@ -7227,7 +6334,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       {selectedSessionDetail && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-[999998] flex justify-end font-mono">
           {/* Backdrop */}
-          <div 
+          <div
             className="fixed inset-0 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200"
             onClick={() => setSelectedSessionDetail(null)}
           />
@@ -7260,14 +6367,14 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
             {/* Drawer Body - Scrollable */}
             <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar text-xs">
-              
+
               {/* Section 1: Estado */}
               <div className="p-4 rounded-xl bg-input border border-border space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold text-foreground-muted uppercase tracking-wider">1. Estado</span>
                   <span className={`px-2.5 py-1 rounded-lg font-mono text-[10px] font-bold uppercase tracking-wider inline-flex items-center gap-1 ${
-                    selectedSessionDetail.estado === 'ACTIVA' 
-                      ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' 
+                    selectedSessionDetail.estado === 'ACTIVA'
+                      ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
                       : selectedSessionDetail.estado === 'POSIBLEMENTE COLGADA'
                       ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
                       : selectedSessionDetail.estado === 'REVOCADA'
@@ -7309,7 +6416,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               {/* Section 2: Dispositivo */}
               <div className="p-4 rounded-xl bg-input border border-border space-y-3">
                 <span className="text-[11px] font-bold text-foreground-muted uppercase tracking-wider block">2. Dispositivo</span>
-                
+
                 <div className="space-y-2">
                   <div>
                     <span className="text-[10px] text-foreground-muted block font-medium">Navegador / Sistema Operativo</span>
@@ -7323,7 +6430,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               {/* Section 3: Red */}
               <div className="p-4 rounded-xl bg-input border border-border space-y-3">
                 <span className="text-[11px] font-bold text-foreground-muted uppercase tracking-wider block">3. Red</span>
-                
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <span className="text-[10px] text-foreground-muted block font-medium">Dirección IP</span>
@@ -7343,7 +6450,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               {/* Section 4: Tiempos */}
               <div className="p-4 rounded-xl bg-input border border-border space-y-3">
                 <span className="text-[11px] font-bold text-foreground-muted uppercase tracking-wider block">4. Tiempos</span>
-                
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <span className="text-[10px] text-foreground-muted block font-medium">Fecha/Hora de Inicio</span>
@@ -7375,7 +6482,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               {/* Section 5: Cierre / Revocación */}
               <div className="p-4 rounded-xl bg-input border border-border space-y-3">
                 <span className="text-[11px] font-bold text-foreground-muted uppercase tracking-wider block">5. Cierre / Revocación</span>
-                
+
                 {selectedSessionDetail.estado === 'REVOCADA' && (
                   <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 space-y-2">
                     <div className="font-bold flex items-center gap-1.5 text-rose-400 text-xs">
@@ -7490,7 +6597,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       {selectedActivityDetail && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-[999998] flex justify-end font-mono">
           {/* Backdrop */}
-          <div 
+          <div
             className="fixed inset-0 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200"
             onClick={() => setSelectedActivityDetail(null)}
           />
@@ -7523,7 +6630,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
             {/* Drawer Body - Scrollable */}
             <div className="flex-1 overflow-y-auto p-6 space-y-5 custom-scrollbar text-xs">
-              
+
               {/* Section 1: Identificación y Resultado */}
               <div className="p-4 rounded-xl bg-input border border-border space-y-3">
                 <div className="flex items-center justify-between">
@@ -7562,7 +6669,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               {/* Section 2: Evento y Módulo */}
               <div className="p-4 rounded-xl bg-input border border-border space-y-3">
                 <span className="text-[11px] font-bold text-foreground-muted uppercase tracking-wider block">2. Operación y Módulo</span>
-                
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <span className="text-[10px] text-foreground-muted block font-medium">Acción / Evento</span>
@@ -7604,7 +6711,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               {/* Section 3: Red y Entorno */}
               <div className="p-4 rounded-xl bg-input border border-border space-y-3">
                 <span className="text-[11px] font-bold text-foreground-muted uppercase tracking-wider block">3. Red y Dispositivo</span>
-                
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <span className="text-[10px] text-foreground-muted block font-medium">Dirección IP</span>
@@ -7637,7 +6744,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               {/* Section 4: Tiempos */}
               <div className="p-4 rounded-xl bg-input border border-border space-y-3">
                 <span className="text-[11px] font-bold text-foreground-muted uppercase tracking-wider block">4. Tiempos y Rendimiento</span>
-                
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <span className="text-[10px] text-foreground-muted block font-medium">Fecha y Hora</span>
@@ -7658,7 +6765,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               {(selectedActivityDetail.antes || selectedActivityDetail.valor_anterior || selectedActivityDetail.despues || selectedActivityDetail.valor_nuevo) && (
                 <div className="p-4 rounded-xl bg-input border border-border space-y-3">
                   <span className="text-[11px] font-bold text-foreground-muted uppercase tracking-wider block">5. Comparativa de Cambios (Antes / Después)</span>
-                  
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="space-y-1">
                       <span className="text-[10px] text-rose-400 font-bold uppercase tracking-wider block">Valor Previo</span>
@@ -7702,7 +6809,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       {selectedAuditDetail && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-[999998] flex justify-end font-mono">
           {/* Backdrop */}
-          <div 
+          <div
             className="fixed inset-0 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200"
             onClick={() => setSelectedAuditDetail(null)}
           />
@@ -7735,7 +6842,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
             {/* Drawer Body - Scrollable */}
             <div className="flex-1 overflow-y-auto p-6 space-y-5 custom-scrollbar text-xs">
-              
+
               {/* Section 1: Evento y Resultado */}
               <div className="p-4 rounded-xl bg-input border border-border space-y-3">
                 <div className="flex items-center justify-between">
@@ -7768,7 +6875,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               {/* Section 2: Información Administrativa */}
               <div className="p-4 rounded-xl bg-input border border-border space-y-3">
                 <span className="text-[11px] font-bold text-foreground-muted uppercase tracking-wider block">2. Operación y Ejecutor</span>
-                
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <span className="text-[10px] text-foreground-muted block font-medium">Acción Registrada</span>
@@ -7797,7 +6904,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               {/* Section 3: Red y Entorno */}
               <div className="p-4 rounded-xl bg-input border border-border space-y-3">
                 <span className="text-[11px] font-bold text-foreground-muted uppercase tracking-wider block">3. Red y Dispositivo</span>
-                
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <span className="text-[10px] text-foreground-muted block font-medium">Dirección IP</span>
@@ -7817,7 +6924,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               {/* Section 4: Fechas */}
               <div className="p-4 rounded-xl bg-input border border-border space-y-3">
                 <span className="text-[11px] font-bold text-foreground-muted uppercase tracking-wider block">4. Marca Temporal</span>
-                
+
                 <div>
                   <span className="text-[10px] text-foreground-muted block font-medium">Fecha y Hora Exacta</span>
                   <span className="text-foreground-secondary font-bold">
@@ -7943,17 +7050,17 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       {/* MANUAL RESET PASSWORD MODAL */}
       {isResetPasswordModalOpen && resetPasswordUser && typeof window !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4 font-sans">
-          <div 
-            className="fixed inset-0 bg-black/75 backdrop-blur-sm transition-opacity" 
-            onClick={handleCloseResetPasswordModal} 
+          <div
+            className="fixed inset-0 bg-black/75 backdrop-blur-sm transition-opacity"
+            onClick={handleCloseResetPasswordModal}
           />
-          
-          <div 
+
+          <div
             role="dialog"
             aria-modal="true"
             className="relative w-[480px] max-w-[calc(100vw-32px)] min-w-[320px] bg-surface-elevated border border-border rounded-2xl shadow-2xl z-10 overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 text-foreground shrink-0"
           >
-            
+
             {/* Modal Header */}
             <div className="px-6 py-4 border-b border-border bg-surface-subtle flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -7965,7 +7072,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                   <p className="text-[11px] text-foreground-muted font-sans">Asigna una nueva contraseña para este usuario.</p>
                 </div>
               </div>
-              <button 
+              <button
                 type="button"
                 onClick={handleCloseResetPasswordModal}
                 disabled={isManualResetting}
@@ -7978,7 +7085,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
             {/* Form */}
             <form onSubmit={handleSubmitManualResetPassword} className="p-6 space-y-4 font-sans">
-              
+
               {/* User Context Badge */}
               <div className="p-3 bg-surface-subtle border border-border rounded-xl flex flex-col gap-1.5 text-xs">
                 <div className="flex justify-between items-center">
