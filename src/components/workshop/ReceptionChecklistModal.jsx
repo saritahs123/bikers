@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { X, Check, AlertCircle, Camera, Trash2, Loader2, Sparkles } from "lucide-react";
 
 export default function ReceptionChecklistModal({
@@ -26,6 +26,7 @@ export default function ReceptionChecklistModal({
   const [activeCategory, setActiveCategory] = useState("CUADRO");
   const [uploadingItem, setUploadingItem] = useState(null);
   const [validationError, setValidationError] = useState(null);
+  const autoAdvanceTimerRef = useRef(null);
 
   // Sync local items when modal opens or incomingItems change
   useEffect(() => {
@@ -34,6 +35,12 @@ export default function ReceptionChecklistModal({
       setActiveCategory("CUADRO");
       setValidationError(null);
     }
+    return () => {
+      if (autoAdvanceTimerRef.current) {
+        clearTimeout(autoAdvanceTimerRef.current);
+        autoAdvanceTimerRef.current = null;
+      }
+    };
   }, [isOpen]);
 
   if (!isOpen) return null;
@@ -59,6 +66,9 @@ export default function ReceptionChecklistModal({
   const categories = CATEGORY_ORDER.filter(cat => rawCategories.includes(cat)).concat(
     rawCategories.filter(cat => !CATEGORY_ORDER.includes(cat))
   );
+
+  // Flat list of all items across categories in display sequence
+  const flatOrderedItems = categories.flatMap(cat => itemsCatalog.filter(i => i.categoria === cat));
 
   const filteredItems = itemsCatalog.filter(i => i.categoria === activeCategory);
 
@@ -104,6 +114,41 @@ export default function ReceptionChecklistModal({
     }
     if (typeof onChangeChecklist === "function") {
       onChangeChecklist(nextList);
+    }
+  };
+
+  const handleTabClick = (cat) => {
+    if (autoAdvanceTimerRef.current) {
+      clearTimeout(autoAdvanceTimerRef.current);
+      autoAdvanceTimerRef.current = null;
+    }
+    setActiveCategory(cat);
+    setValidationError(null);
+  };
+
+  const handleSelectEstado = (item, estadoId) => {
+    // 1. Immediately record selection
+    updateItem(item.item_checklist_id, { estado_checklist_id: estadoId });
+
+    // 2. Reset any previous scheduled advance
+    if (autoAdvanceTimerRef.current) {
+      clearTimeout(autoAdvanceTimerRef.current);
+      autoAdvanceTimerRef.current = null;
+    }
+
+    // 3. Find next item in checklist sequence
+    const currentIndex = flatOrderedItems.findIndex(
+      (i) => Number(i.item_checklist_id) === Number(item.item_checklist_id)
+    );
+
+    if (currentIndex >= 0 && currentIndex < flatOrderedItems.length - 1) {
+      const nextItem = flatOrderedItems[currentIndex + 1];
+      if (nextItem && nextItem.categoria && nextItem.categoria !== activeCategory) {
+        autoAdvanceTimerRef.current = setTimeout(() => {
+          setActiveCategory(nextItem.categoria);
+          setValidationError(null);
+        }, 200);
+      }
     }
   };
 
@@ -266,10 +311,7 @@ export default function ReceptionChecklistModal({
               <button
                 key={cat}
                 type="button"
-                onClick={() => {
-                  setActiveCategory(cat);
-                  setValidationError(null);
-                }}
+                onClick={() => handleTabClick(cat)}
                 className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold whitespace-nowrap flex items-center gap-1.5 transition-all cursor-pointer ${
                   isActive
                     ? "bg-primary-muted text-primary border border-primary/30"
@@ -322,7 +364,7 @@ export default function ReceptionChecklistModal({
                       <button
                         key={est.estado_checklist_id}
                         type="button"
-                        onClick={() => updateItem(item.item_checklist_id, { estado_checklist_id: est.estado_checklist_id })}
+                        onClick={() => handleSelectEstado(item, est.estado_checklist_id)}
                         className={`py-2 px-2.5 rounded-lg border text-xs font-bold transition-all text-center cursor-pointer last:col-span-2 sm:last:col-span-1 ${
                           isSelected
                             ? "bg-primary-muted border-primary text-primary shadow-sm"

@@ -32,6 +32,8 @@ export async function GET(req: Request) {
     const limit = Math.max(1, Math.min(100, parseInt(searchParams.get("limit") || "10", 10)));
     const offset = (page - 1) * limit;
     const estadoId = searchParams.get("estado_id") ? parseInt(searchParams.get("estado_id")!, 10) : null;
+    const disponiblesOT = searchParams.get("disponibles_ot") === "true";
+    const paraOrdenId = searchParams.get("para_orden_id") ? parseInt(searchParams.get("para_orden_id")!, 10) : null;
     const search = (searchParams.get("search") || "").trim().toLowerCase();
 
     let whereClause = `WHERE c.empresa_id = $1 AND (r.activo = true OR r.activo IS NULL) AND r.fecha_eliminacion IS NULL`;
@@ -40,6 +42,16 @@ export async function GET(req: Request) {
     if (estadoId && !isNaN(estadoId)) {
       params.push(estadoId);
       whereClause += ` AND r.estado_recepcion_id = $${params.length}`;
+    }
+
+    if (disponiblesOT) {
+      if (paraOrdenId && !isNaN(paraOrdenId)) {
+        params.push(paraOrdenId);
+        const pIdx = params.length;
+        whereClause += ` AND (r.convertido_orden_id IS NULL OR r.convertido_orden_id = $${pIdx} OR EXISTS (SELECT 1 FROM admin.ordenes_trabajo ot WHERE ot.recepcion_id = r.recepcion_id AND ot.orden_trabajo_id = $${pIdx}))`;
+      } else {
+        whereClause += ` AND r.convertido_orden_id IS NULL AND NOT EXISTS (SELECT 1 FROM admin.ordenes_trabajo ot WHERE ot.recepcion_id = r.recepcion_id AND ot.activo = true)`;
+      }
     }
 
     if (search) {
@@ -303,7 +315,7 @@ export async function POST(req: NextRequest) {
 
     let statusCode = error?.status || 500;
     let errorCode = error?.code || "SERVER_ERROR";
-    let message = "Ocurrió un error interno al registrar la recepción.";
+    let message = error?.message || "Ocurrió un error interno al registrar la recepción.";
 
     if (error?.code === "23505" || error?.message?.includes("uk_bicicleta_componentes")) {
       statusCode = 409;
@@ -317,6 +329,9 @@ export async function POST(req: NextRequest) {
       statusCode = 409;
       errorCode = "DUPLICATE_COMPONENT_SERIAL";
       message = "Ya existe un componente con este número de serie.";
+    } else if (statusCode === 500 && (typeof error?.code === "string" && (error.code.startsWith("42") || error.code.startsWith("28") || error.code.startsWith("XX")) || error?.message?.includes("column") || error?.message?.includes("syntax error") || error?.message?.includes("relation"))) {
+      errorCode = "INTERNAL_ERROR";
+      message = "Ocurrió un error interno en el servidor al registrar la recepción. Por favor, intente nuevamente o contacte a soporte.";
     }
 
     return NextResponse.json(

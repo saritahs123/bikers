@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import WorkOrderServicesView from "./WorkOrderServicesView";
 import WorkOrderHistoryView from "./WorkOrderHistoryView";
+import EditWorkOrderModal from "./EditWorkOrderModal";
 
 export default function WorkOrderDetailView({ ordenId, onBack }) {
   const searchParams = useSearchParams();
@@ -955,25 +956,15 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
           )}
 
 
-          <button
-            onClick={() => {
-              setNewStatusId(String(order.estado_orden_id || 1));
-              let initialMecId = order.mecanico_usuario_id ? String(order.mecanico_usuario_id) : "";
-              if (!initialMecId && order.mecanico_nombre && catalogs.mecanicos) {
-                const match = catalogs.mecanicos.find((m) => m.nombre_completo === order.mecanico_nombre);
-                if (match) initialMecId = String(match.usuario_id);
-              }
-              setNewMecanicoId(initialMecId);
-              setNewPrioridadId(order.prioridad_id ? String(order.prioridad_id) : "2");
-              setChangeNotes("");
-              setModalError(null);
-              setStatusModalOpen(true);
-            }}
-            className="flex items-center gap-2 px-4 py-2 bg-[#84924a] text-white rounded-xl hover:brightness-110 transition-all font-mono text-xs font-bold uppercase tracking-wider border-t border-[#a6b66b] shadow-lg shadow-[#84924a]/20 cursor-pointer"
-          >
-            <Edit className="w-4 h-4" />
-            EDITAR OT
-          </button>
+          {Number(order.estado_orden_id) !== 7 && Number(order.estado_orden_id) !== 8 && (
+            <button
+              onClick={() => setStatusModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-[#84924a] text-white rounded-xl hover:brightness-110 transition-all font-mono text-xs font-bold uppercase tracking-wider border-t border-[#a6b66b] shadow-lg shadow-[#84924a]/20 cursor-pointer"
+            >
+              <Edit className="w-4 h-4" />
+              EDITAR OT
+            </button>
+          )}
 
           {permissions.puede_eliminar && (
             <button
@@ -1438,150 +1429,16 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
       {/* History Tab */}
       {activeTab === "historial" && <WorkOrderHistoryView history={order.historial || []} />}
 
-      {/* Status & Edit Order Modal */}
-      {statusModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto">
-          <div
-            className="bg-[#161a21] border border-[#2d3748] rounded-2xl p-6 sm:p-7 space-y-5 shadow-2xl relative my-auto shrink-0 z-10 font-sans text-slate-100"
-            style={{ width: "100%", maxWidth: "580px", boxSizing: "border-box" }}
-          >
-            <div className="flex items-center justify-between border-b border-[#2d3748] pb-4">
-              <h3 className="text-base font-bold text-slate-100 font-mono flex items-center gap-2">
-                <Edit className="w-5 h-5 text-[#bfce7f]" />
-                Editar Orden de Trabajo — {order.codigo_orden}
-              </h3>
-              <button
-                type="button"
-                onClick={() => {
-                  setStatusModalOpen(false);
-                  setModalError(null);
-                }}
-                className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-[#1c2129] rounded-lg transition-colors"
-                title="Cerrar modal"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {modalError && (
-              <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 text-xs font-sans flex items-start gap-2.5">
-                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
-                <div className="space-y-0.5">
-                  <span className="font-bold text-rose-200 block text-sm">
-                    {typeof modalError === 'object' ? modalError.title : 'No se pudo actualizar'}
-                  </span>
-                  <span className="text-rose-300 text-xs block leading-relaxed whitespace-normal break-words">
-                    {typeof modalError === 'object' ? modalError.description : String(modalError)}
-                  </span>
-                </div>
-              </div>
-            )}
-
-            <form onSubmit={handleUpdateOrderState} className="space-y-4 text-xs font-sans">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-slate-300 mb-1 font-semibold">Estado de la Orden</label>
-                  <select
-                    value={newStatusId}
-                    onChange={(e) => setNewStatusId(e.target.value)}
-                    disabled={Number(order.estado_orden_id) === 8}
-                    className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-[#bfce7f] font-mono text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {Number(order.estado_orden_id) === 1 && (
-                      <>
-                        <option value="1">1 - Recibida (Estado actual)</option>
-                        <option value="5">5 - En Reparación</option>
-                      </>
-                    )}
-                    {Number(order.estado_orden_id) === 5 && (
-                      <>
-                        <option value="5">5 - En Reparación (Estado actual)</option>
-                        <option value="7" disabled={hasIncompleteServices}>
-                          7 - Lista para Entrega {hasIncompleteServices ? " (Servicios pendientes)" : ""}
-                        </option>
-                      </>
-                    )}
-                    {Number(order.estado_orden_id) === 7 && (
-                      <>
-                        <option value="7">7 - Lista para Entrega (Estado actual)</option>
-                        <option value="5">5 - En Reparación (Reabrir)</option>
-                        <option value="8" disabled={hasIncompleteServices}>
-                          8 - Entregada {hasIncompleteServices ? " (Servicios pendientes)" : ""}
-                        </option>
-                      </>
-                    )}
-                    {Number(order.estado_orden_id) === 8 && (
-                      <option value="8">8 - Entregada (Finalizada)</option>
-                    )}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-slate-300 mb-1 font-semibold">Prioridad</label>
-                  <select
-                    value={newPrioridadId}
-                    onChange={(e) => setNewPrioridadId(e.target.value)}
-                    className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-[#bfce7f]"
-                  >
-                    {catalogs.prioridades?.length > 0 ? (
-                      catalogs.prioridades.map((p) => (
-                        <option key={p.prioridad_id} value={String(p.prioridad_id)}>
-                          {p.nombre}
-                        </option>
-                      ))
-                    ) : (
-                      <>
-                        <option value="1">Baja</option>
-                        <option value="2">Normal</option>
-                        <option value="3">Alta</option>
-                        <option value="4">Urgente</option>
-                      </>
-                    )}
-                  </select>
-                </div>
-              </div>
-
-                    <div>
-                      <label className="block text-slate-300 mb-1 font-semibold">Observaciones / Notas del Cambio</label>
-                      <textarea
-                        rows={3}
-                        value={changeNotes}
-                        onChange={(e) => setChangeNotes(e.target.value)}
-                        placeholder="Escribe observaciones o notas internas relativas a los cambios..."
-                        className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-[#bfce7f] text-xs resize-none"
-                      />
-                    </div>
-
-                    <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#2d3748]">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setStatusModalOpen(false);
-                          setModalError(null);
-                        }}
-                        className="px-4 py-2 bg-[#1c2129] border border-[#2d3748] text-slate-300 rounded-xl hover:bg-[#252b36] transition-colors font-mono text-xs cursor-pointer"
-                      >
-                        Cancelar
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={updatingStatus}
-                        className="px-5 py-2 bg-[#84924a] text-white font-bold rounded-xl hover:brightness-110 transition-all font-mono text-xs flex items-center gap-2 border-t border-[#a6b66b] disabled:opacity-50 cursor-pointer"
-                      >
-                        {updatingStatus ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            Guardando...
-                          </>
-                        ) : (
-                          "Guardar cambios"
-                        )}
-                      </button>
-                    </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Comprehensive Edit Work Order Modal */}
+      <EditWorkOrderModal
+        isOpen={statusModalOpen}
+        ordenId={ordenId}
+        onClose={() => setStatusModalOpen(false)}
+        onSuccess={() => {
+          showSuccessToast("Orden de trabajo actualizada correctamente.");
+          fetchOrderDetail(true);
+        }}
+      />
 
       {/* DEDICATED REOPEN REPAIR MODAL */}
       {reopenModalOpen && typeof document !== "undefined" && createPortal(
