@@ -141,7 +141,8 @@ export async function executeReceptionWithWorkOrder(
        LEFT JOIN admin.tipo_usuario tu ON tu.tipo_usuario_id = u.tipo_usuario_id
        WHERE u.usuario_id = $1
          AND u.empresa_id = $2
-         AND (tu.codigo = 'MECANICO' OR u.tipo_usuario_id = 2)
+         AND tu.codigo = 'MECANICO'
+         AND tu.estado = 'ACTIVO'
          AND (u.estado = 'ACTIVO' OR u.estado IS NULL)
        LIMIT 1`,
       [mecanico_id, session.empresa_id]

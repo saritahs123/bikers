@@ -125,8 +125,8 @@ export async function POST(req: Request) {
     const docNumber = (body.document_number || body.numero_documento || '').trim();
     
     const companyId = parseNum(body.companyId || body.empresa_id);
-    const userTypeId = parseNum(body.tipo_usuario_id || body.user_type_id);
-    let rolId = parseNum(body.rol_id || body.role_id || body.rol_principal_id);
+    const userTypeId = parseNum(body.tipo_usuario_id || body.user_type_id || body.userTypeId);
+    let rolId = parseNum(body.rol_id || body.role_id || body.roleId || body.rol_principal_id);
 
     // 1. Authorize user creation with strict SEGURIDAD.puede_crear permission and multitenant company isolation
     const authCheck = await authorizeUserCreate(companyId);
@@ -167,12 +167,24 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'La empresa es obligatoria.' }, { status: 400 });
     }
 
+    if (!rolId) {
+      return NextResponse.json({ error: 'El rol principal es obligatorio.' }, { status: 400 });
+    }
+
     if (!userTypeId) {
       return NextResponse.json({ error: 'El tipo de usuario es obligatorio.' }, { status: 400 });
     }
 
-    if (!rolId) {
-      return NextResponse.json({ error: 'El rol principal es obligatorio.' }, { status: 400 });
+    // Verify userTypeId exists and is ACTIVO
+    const tuCheck = await query<{ tipo_usuario_id: number; estado: string }>(
+      `SELECT tipo_usuario_id, estado FROM admin.tipo_usuario WHERE tipo_usuario_id = $1 LIMIT 1`,
+      [userTypeId]
+    );
+    if (!tuCheck || tuCheck.length === 0) {
+      return NextResponse.json({ error: 'El tipo de usuario seleccionado no existe.' }, { status: 400 });
+    }
+    if (tuCheck[0].estado !== 'ACTIVO') {
+      return NextResponse.json({ error: 'El tipo de usuario seleccionado no se encuentra activo.' }, { status: 400 });
     }
 
     // Password validations (administrator writes password manually)
@@ -221,7 +233,7 @@ export async function POST(req: Request) {
 
     const mainType = body.primary_access_type || 'EMAIL';
     const mainIdent = mainType === 'EMAIL' ? email : (docNumber || email);
-    const forceChange = body.must_change_password !== false && body.forzar_cambio_clave !== false;
+    const forceChange = Boolean(body.must_change_password || body.forzar_cambio_clave);
     const scopeType = body.scope_type || 'COMPANY';
 
     // ATOMIC TRANSACTION: User, Identity, Security, Additional Roles, and Scope
@@ -290,20 +302,14 @@ export async function POST(req: Request) {
       // 6. Scope (admin.usuario_alcance)
       const scopeMax = await client.query(`SELECT COALESCE(MAX(usuario_alcance_id), 0) + 1 AS next_id FROM admin.usuario_alcance`);
       const nextScopeId = parseNum(scopeMax.rows[0]?.next_id) || 1;
+      const scopeLevel = body.scope_type || body.nivel_alcance || 'TODA_EMPRESA';
+      const includeHierarchy = body.incluir_herencia_jerarquica !== false && body.include_children !== false;
+
       await client.query(
         `INSERT INTO admin.usuario_alcance
-         (usuario_alcance_id, usuario_id, tipo_alcance, incluir_hijos, permite_ver, permite_editar, permite_exportar, permite_asignar)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [
-          nextScopeId,
-          createdUserId,
-          scopeType,
-          body.include_children !== false,
-          body.can_view !== false,
-          Boolean(body.can_edit),
-          Boolean(body.can_export),
-          Boolean(body.can_assign)
-        ]
+         (usuario_alcance_id, usuario_id, nivel_alcance, incluir_herencia_jerarquica)
+         VALUES ($1, $2, $3, $4)`,
+        [nextScopeId, createdUserId, scopeLevel, includeHierarchy]
       );
 
       return createdUserId;
@@ -338,6 +344,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       success: true,
       usuario_id: nextUserId,
+      user_id: nextUserId,
       message: 'Usuario creado correctamente.'
     });
   } catch (error: any) {

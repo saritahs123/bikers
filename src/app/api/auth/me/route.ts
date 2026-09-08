@@ -60,6 +60,8 @@ export async function GET() {
          ui.correo_electronico,
          us.correo_acceso,
          us.identificador_principal,
+         us.forzar_cambio_clave,
+         us.requiere_cambio_clave,
          r.nombre AS rol_nombre,
          c.nombre AS cargo_nombre,
          e.nombre_comercial AS empresa_nombre
@@ -119,6 +121,7 @@ export async function GET() {
       identificador_principal: row.identificador_principal || "",
       correo_acceso: row.correo_acceso || "",
       correo_electronico: row.correo_electronico || "",
+      forzar_cambio_clave: Boolean(row.forzar_cambio_clave || row.requiere_cambio_clave),
       rol: rolNombre,
       rol_nombre: rolNombre,
       cargo_nombre: cargoNombre,
