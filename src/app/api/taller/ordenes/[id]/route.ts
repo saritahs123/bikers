@@ -5,6 +5,7 @@ import { getCronometroStatus } from "@/lib/workshop/getCronometroStatus";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
 import { queryIncompleteServicesAndTimers } from "@/lib/workshop/validateOrderState";
 import { recordUserActivity, recordUserAudit, computeDiff } from "@/lib/auditLogger";
+import { deleteWorkOrderWithSnapshot } from "@/lib/workshop/workOrderDeletionService";
 
 // Helper for cleaning dates safely
 function cleanFecha(val: any) {
@@ -421,7 +422,7 @@ export async function GET(
       return parts[0].substring(0, 2).toUpperCase();
     };
 
-    return NextResponse.json({
+    const resPayload = NextResponse.json({
       success: true,
       data: {
         ...order,
@@ -480,9 +481,17 @@ export async function GET(
           observacion: p.observacion || null
         })),
         historial: histRes || [],
-        resumen_financiero
+        resumen_financiero,
+        permisos: perms,
+        puede_eliminar: perms.puede_eliminar
       }
     });
+    resPayload.headers.set("x-perm-ver", perms.puede_ver ? "true" : "false");
+    resPayload.headers.set("x-perm-crear", perms.puede_crear ? "true" : "false");
+    resPayload.headers.set("x-perm-editar", perms.puede_editar ? "true" : "false");
+    resPayload.headers.set("x-perm-eliminar", perms.puede_eliminar ? "true" : "false");
+    resPayload.headers.set("x-perm-exportar", perms.puede_exportar ? "true" : "false");
+    return resPayload;
   } catch (error: any) {
     console.error("GET /api/taller/ordenes/[id] exception:", error);
     return NextResponse.json(
@@ -1204,5 +1213,114 @@ export async function PUT(
     );
   } finally {
     client.release();
+  }
+}
+
+// DELETE /api/taller/ordenes/[id]
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+
+  try {
+    if (!id || typeof id !== "string" || !/^\d+$/.test(id.trim())) {
+      return NextResponse.json(
+        { error: "INVALID_ID", message: "Identificador de orden inválido." },
+        { status: 400 }
+      );
+    }
+    const ordenId = Number(id.trim());
+    if (!Number.isSafeInteger(ordenId) || ordenId <= 0) {
+      return NextResponse.json(
+        { error: "INVALID_ID", message: "Identificador de orden inválido." },
+        { status: 400 }
+      );
+    }
+
+    const session = await getWorkshopSession();
+    if (!session || !session.usuario_id) {
+      return NextResponse.json(
+        { error: "UNAUTHORIZED", message: "Sesión inválida o expirada." },
+        { status: 401 }
+      );
+    }
+
+    const perms = await getModulePermissions("TALLER", session.usuario_id);
+    if (!perms.puede_eliminar) {
+      return NextResponse.json(
+        { error: "FORBIDDEN", message: "No tienes permiso para eliminar órdenes de trabajo." },
+        { status: 403 }
+      );
+    }
+
+    let body: any = {};
+    try {
+      body = await req.json();
+    } catch {
+      body = {};
+    }
+
+    const motivo = (body.motivo_eliminacion || body.motivo || "").trim();
+    if (!motivo || motivo.length < 5) {
+      return NextResponse.json(
+        {
+          error: "INVALID_REASON",
+          message: "El motivo de eliminación es obligatorio y debe contener al menos 5 caracteres."
+        },
+        { status: 400 }
+      );
+    }
+
+    if (motivo.length > 1000) {
+      return NextResponse.json(
+        {
+          error: "REASON_TOO_LONG",
+          message: "El motivo de eliminación no puede exceder 1000 caracteres."
+        },
+        { status: 400 }
+      );
+    }
+
+    const actor = {
+      usuario_id: session.usuario_id,
+      nombre: session.nombre_usuario || `Usuario #${session.usuario_id}`,
+      correo: session.email,
+      empresa_id: session.empresa_id
+    };
+
+    const result = await deleteWorkOrderWithSnapshot(ordenId, actor, motivo, req);
+
+    if (!result.success) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: result.error || "SERVER_ERROR",
+          message: result.message || "Error al eliminar la orden de trabajo."
+        },
+        { status: result.status || 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: result.message || "Orden de trabajo eliminada correctamente.",
+      data: {
+        historial_uuid: result.historial_uuid,
+        codigo_orden: result.codigo_orden,
+        codigo_recepcion: result.codigo_recepcion
+      }
+    }, { status: 200 });
+
+  } catch (err: any) {
+    console.error("DELETE /api/taller/ordenes/[id] exception:", err);
+    return NextResponse.json(
+      {
+        success: false,
+        error: "SERVER_ERROR",
+        message: "Error interno al procesar la solicitud de eliminación."
+      },
+      { status: 500 }
+    );
   }
 }

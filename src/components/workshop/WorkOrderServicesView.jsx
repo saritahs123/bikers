@@ -124,7 +124,27 @@ function WorkshopItemModalShell({
   );
 }
 
-export default function WorkOrderServicesView({ ordenId, services = [], onRefresh, order, backUrl, onStartRepair = null }) {
+export default function WorkOrderServicesView({
+  ordenId,
+  services = [],
+  onRefresh,
+  order,
+  backUrl,
+  onStartRepair = null,
+  permissions = null
+}) {
+  const canEdit = permissions
+    ? Boolean(permissions.puede_editar)
+    : order?.permisos
+    ? Boolean(order.permisos.puede_editar)
+    : true;
+
+  const canDelete = permissions
+    ? Boolean(permissions.puede_eliminar)
+    : order?.permisos
+    ? Boolean(order.permisos.puede_eliminar)
+    : true;
+
   const [tiposServicio, setTiposServicio] = useState([]);
   const [productosList, setProductosList] = useState([]);
   const [mecanicosCatalog, setMecanicosCatalog] = useState([]);
@@ -591,8 +611,8 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
 
   // Open Unified Modal for Edit Item
   const handleOpenEditItem = (item, type = "SERVICIO") => {
-    if (!isOrderInRepair) return;
     const isService = String(type || "").trim().toUpperCase() === "SERVICIO" || String(type || "").trim().toUpperCase() === "SERVICE";
+    if (!isService && !isOrderInRepair) return;
 
     const normalizedEditingItem = isService ? {
       ...item,
@@ -647,8 +667,12 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
   // Unified Item Form Submission
   const handleSubmitItemForm = async (e) => {
     e.preventDefault();
-    if (!isOrderInRepair) {
-      setModalError("La orden debe estar en Reparación para realizar cambios.");
+    if (!isEditing && !isOrderInRepair) {
+      setModalError("La orden debe estar en Reparación para agregar servicios o repuestos.");
+      return;
+    }
+    if (isEditing && itemType !== "SERVICIO" && !isOrderInRepair) {
+      setModalError("La orden debe estar en Reparación para realizar cambios en repuestos.");
       return;
     }
     setModalError(null);
@@ -1055,25 +1079,9 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
 
   // Delete Service
   const handleDeleteService = (svc) => {
-    if (!isOrderInRepair) {
-      if (orderStateCode === "LISTA_ENTREGA") {
-        showInfoToast(
-          "La orden está en estado Lista para Entrega. Reabre la reparación para modificar servicios o repuestos.",
-          "ORDEN EN LISTA PARA ENTREGA",
-          6500
-        );
-      } else {
-        showInfoToast(
-          "La orden debe estar en Reparación para realizar cambios.",
-          "ORDEN NO ESTÁ EN REPARACIÓN",
-          6500
-        );
-      }
-      return;
-    }
     askConfirmation(
       "Eliminar Servicio",
-      `¿Deseas eliminar el servicio '${svc.tipo_servicio_nombre}' de esta orden?`,
+      `¿Deseas eliminar el servicio '${svc.tipo_servicio_nombre}' de esta orden? Se eliminará la mano de obra y los repuestos asociados exclusivamente a este servicio. La orden de trabajo no se eliminará.`,
       async () => {
         try {
           const res = await fetch(`/api/taller/ordenes/${ordenId}/servicios/${getServId(svc)}`, {
@@ -1435,32 +1443,24 @@ export default function WorkOrderServicesView({ ordenId, services = [], onRefres
                             )}
 
                             {/* Edit Button */}
-                            <button
-                              type="button"
-                              onClick={() => handleOpenEditItem(svc, "SERVICIO")}
-                              disabled={!isOrderInRepair}
-                              className={`p-1.5 bg-slate-800 text-slate-300 rounded-lg border border-slate-700 transition-colors ${
-                                !isOrderInRepair
-                                  ? "opacity-40 cursor-not-allowed"
-                                  : "hover:bg-slate-700 cursor-pointer"
-                              }`}
-                              title="Editar servicio"
-                              aria-label="Editar servicio"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
+                            {canEdit && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditItem(svc, "SERVICIO")}
+                                className="p-1.5 bg-slate-800 text-slate-300 hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors cursor-pointer"
+                                title="Editar servicio"
+                                aria-label="Editar servicio"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                            )}
 
-                            {/* Delete Button (Only if Pendiente or Cancelado) */}
-                            {(isPendiente || Number(svc.estado_servicio_id) === 4) && (
+                            {/* Delete Button */}
+                            {canDelete && (
                               <button
                                 type="button"
                                 onClick={() => handleDeleteService(svc)}
-                                disabled={!isOrderInRepair}
-                                className={`p-1.5 bg-rose-500/10 border border-rose-500/30 text-rose-400 rounded-lg transition-colors ${
-                                  !isOrderInRepair
-                                    ? "opacity-40 cursor-not-allowed"
-                                    : "hover:bg-rose-500/20 cursor-pointer"
-                                }`}
+                                className="p-1.5 bg-rose-500/10 border border-rose-500/30 text-rose-400 hover:bg-rose-500/20 rounded-lg transition-colors cursor-pointer"
                                 title="Eliminar servicio"
                                 aria-label="Eliminar servicio"
                               >
