@@ -110,6 +110,12 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
 
   const hasIncompleteServices = incompleteServices.length > 0;
 
+  const totalServiciosYRepuestos = React.useMemo(() => {
+    const servicesCount = (order?.servicios || []).filter((s) => s.activo !== false).length;
+    const productsCount = (order?.productos || []).filter((p) => p.activo !== false).length;
+    return servicesCount + productsCount;
+  }, [order?.servicios, order?.productos]);
+
   useEffect(() => {
     if (!hasActiveService) return;
 
@@ -1042,7 +1048,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
               : "text-slate-400 border-transparent hover:text-slate-200"
           }`}
         >
-          SERVICIOS ({order.servicios?.length || 0})
+          SERVICIOS ({totalServiciosYRepuestos})
         </button>
         <button
           onClick={() => setActiveTab("historial")}

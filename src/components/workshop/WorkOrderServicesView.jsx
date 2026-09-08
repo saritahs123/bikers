@@ -564,7 +564,7 @@ export default function WorkOrderServicesView({
   };
 
   // Products array from order
-  const orderProducts = order?.productos || [];
+  const orderProducts = (order?.productos || []).filter((p) => p.activo !== false);
 
 
 
@@ -1151,7 +1151,8 @@ export default function WorkOrderServicesView({
     );
   };
 
-  const totalItemsCount = services.length + orderProducts.length;
+  const activeServices = (services || []).filter((s) => s.activo !== false);
+  const totalItemsCount = activeServices.length + orderProducts.length;
 
   return (
     <div className="space-y-5 font-sans text-slate-100">
@@ -1288,7 +1289,7 @@ export default function WorkOrderServicesView({
               ) : (
                 <>
                   {/* SERVICES ROWS */}
-                  {services.map((svc, idx) => {
+                  {activeServices.map((svc, idx) => {
                     const sId = getServId(svc) || (idx + 1);
                     const srvCode = svc.codigo_servicio || (svc.secuencia ? `SRV-${String(svc.secuencia).padStart(3, "0")}` : `SRV-${String(idx + 1).padStart(3, "0")}`);
                     const stateRules = getServiceStateRules(svc.estado_servicio_id, svc.usuario_id, Number(order?.estado_orden_id || 1));
