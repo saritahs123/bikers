@@ -3,14 +3,12 @@ import { query } from "@/lib/db";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
 import { recordUserActivity, recordUserAudit, sanitizeAuditPayload } from "@/lib/auditLogger";
 
-const CANONICAL_STATUS_IDS = [1, 2, 3, 4, 5, 6, 7, 8];
+const CANONICAL_STATUS_IDS = [1, 2, 3, 5, 7, 8];
 const CANONICAL_STATUS_CODES = [
   "RECIBIDA",
-  "DIAGNOSTICO",
+  "HOLD",
   "APROBACION",
-  "REPUESTOS",
   "REPARACION",
-  "CALIDAD",
   "LISTA_ENTREGA",
   "ENTREGADA"
 ];

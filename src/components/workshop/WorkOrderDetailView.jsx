@@ -31,6 +31,7 @@ import {
 import WorkOrderServicesView from "./WorkOrderServicesView";
 import WorkOrderHistoryView from "./WorkOrderHistoryView";
 import EditWorkOrderModal from "./EditWorkOrderModal";
+import WorkOrderStatusBadge from "./WorkOrderStatusBadge";
 
 export default function WorkOrderDetailView({ ordenId, onBack }) {
   const searchParams = useSearchParams();
@@ -300,18 +301,8 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
       if (catRes.ok) {
         const catData = await catRes.json();
         setCatalogs({
-          estados: [
-            { estado_orden_id: 1, codigo: "RECIBIDA", nombre: "Recibida" },
-            { estado_orden_id: 5, codigo: "REPARACION", nombre: "En Reparación" },
-            { estado_orden_id: 7, codigo: "LISTA_ENTREGA", nombre: "Lista para Entrega" },
-            { estado_orden_id: 8, codigo: "ENTREGADA", nombre: "Entregada" }
-          ],
-          prioridades: [
-            { prioridad_id: 1, nombre: "Baja" },
-            { prioridad_id: 2, nombre: "Normal" },
-            { prioridad_id: 3, nombre: "Alta" },
-            { prioridad_id: 4, nombre: "Urgente" }
-          ],
+          estados: catData.estados_orden_trabajo || catData.data?.estados_orden_trabajo || catData.estados || [],
+          prioridades: catData.prioridades || catData.data?.prioridades || [],
           mecanicos: catData.mecanicos || catData.data?.mecanicos || []
         });
       }
@@ -699,12 +690,19 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
   }
 
   // Determine current pipeline step index
-  const currentStepId = order.estado_orden_id || 1;
+  const currentStepId = Number(order.estado_orden_id || 1);
+  const getPipelineLabel = (id, key, defaultLabel) => {
+    const fromCat = (catalogs.estados || []).find((e) => Number(e.estado_orden_id) === Number(id) || e.codigo === key);
+    if (fromCat?.nombre) return fromCat.nombre;
+    if (Number(order.estado_orden_id) === Number(id) && order.estado_nombre) return order.estado_nombre;
+    return defaultLabel;
+  };
+
   const pipelineSteps = [
-    { id: 1, key: "RECIBIDA", label: "Recibida", icon: Check },
-    { id: 5, key: "REPARACION", label: "Reparación", icon: Wrench },
-    { id: 7, key: "LISTA_ENTREGA", label: "Lista para Entrega", icon: Truck },
-    { id: 8, key: "ENTREGADA", label: "Entregada", icon: ShieldCheck }
+    { id: 1, key: "RECIBIDA", label: getPipelineLabel(1, "RECIBIDA", "Recibida"), icon: Check },
+    { id: 5, key: "REPARACION", label: getPipelineLabel(5, "REPARACION", "En Reparación"), icon: Wrench },
+    { id: 7, key: "LISTA_ENTREGA", label: getPipelineLabel(7, "LISTA_ENTREGA", "Lista para Entrega"), icon: Truck },
+    { id: 8, key: "ENTREGADA", label: getPipelineLabel(8, "ENTREGADA", "Entregada"), icon: ShieldCheck }
   ];
 
   // Extract services, labor items, and products from live backend API or order object
@@ -874,9 +872,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
             <span className="text-xs text-slate-400 uppercase tracking-widest font-bold">
               DETALLE DE ORDEN
             </span>
-            <span className="px-2.5 py-0.5 rounded-full bg-[#1c2129] text-slate-200 text-[10px] uppercase font-bold border border-[#2d3748]">
-              {order.estado_nombre || "EN PROCESO"}
-            </span>
+            <WorkOrderStatusBadge name={order.estado_nombre} color={order.estado_color} />
             <span className="px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-400 text-[10px] uppercase font-bold border border-rose-500/30">
               {order.prioridad_nombre || "NORMAL"}
             </span>

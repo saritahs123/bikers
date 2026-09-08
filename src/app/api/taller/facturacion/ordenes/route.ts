@@ -81,6 +81,7 @@ export async function GET(req: NextRequest) {
         ot.estado_orden_id,
         eot.nombre AS estado_nombre,
         eot.codigo AS estado_codigo,
+        eot.color_estado AS estado_color,
         eot.orden_visual AS estado_orden,
         ot.prioridad_orden_id AS prioridad_id,
         pot.nombre AS prioridad_nombre,
@@ -184,12 +185,11 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    const operationalEstados = [
-      { estado_orden_id: 1, codigo: "RECIBIDA", nombre: "Recibida", color_estado: "#38BDF8" },
-      { estado_orden_id: 5, codigo: "REPARACION", nombre: "En Reparación", color_estado: "#F59E0B" },
-      { estado_orden_id: 7, codigo: "LISTA_ENTREGA", nombre: "Lista para Entrega", color_estado: "#10B981" },
-      { estado_orden_id: 8, codigo: "ENTREGADA", nombre: "Entregada", color_estado: "#64748B" }
-    ];
+    const estados = await query(
+      `SELECT estado_orden_id, nombre, codigo, color_estado, orden_visual AS orden, activo, estado_inicial, estado_final
+       FROM admin.estado_orden_trabajo
+       ORDER BY orden_visual ASC`
+    );
 
     const prioridades = await query(
       `SELECT prioridad_orden_trabajo_id AS prioridad_id, nombre, codigo, color_estado AS color_hex 
@@ -206,7 +206,7 @@ export async function GET(req: NextRequest) {
         search
       },
       catalogs: {
-        estados: operationalEstados,
+        estados: estados || [],
         prioridades: prioridades || []
       }
     });

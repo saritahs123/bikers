@@ -24,6 +24,7 @@ import {
   Info
 } from "lucide-react";
 import { generateInvoicePdfDocument } from "@/lib/workshop/generateInvoicePdf";
+import WorkOrderStatusBadge from "./WorkOrderStatusBadge";
 
 export default function BillingOrderDetailView({ ordenId, onBack }) {
   const [data, setData] = useState(null);
@@ -388,43 +389,6 @@ export default function BillingOrderDetailView({ ordenId, onBack }) {
 
   const hasIncompleteServices = incompleteServices.length > 0;
 
-  const getVisualStatus = () => {
-    const id = Number(order.estado_orden_id);
-    const code = String(order.estado_codigo || "").trim().toUpperCase();
-
-    if ([1, 2, 3, 4].includes(id) || ["RECIBIDA", "RECIBIDAS", "DIAGNOSTICO", "APROBACION", "REPUESTOS"].includes(code)) {
-      return {
-        label: "Pendiente",
-        colorClass: "bg-sky-500/15 border-sky-500/30 text-sky-400"
-      };
-    }
-    if ([5, 6].includes(id) || ["REPARACION", "EN_REPARACION", "CALIDAD"].includes(code)) {
-      return {
-        label: "En Ejecución",
-        colorClass: "bg-amber-500/15 border-amber-500/30 text-amber-400"
-      };
-    }
-    if (id === 7 || ["LISTA_ENTREGA", "LISTA_PARA_ENTREGA", "LISTAS_PARA_ENTREGA"].includes(code)) {
-      return {
-        label: "Completada",
-        colorClass: "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
-      };
-    }
-    if (id === 8 || ["ENTREGADA", "ENTREGADAS"].includes(code)) {
-      return {
-        label: "Entregada",
-        colorClass: "bg-slate-800 border-slate-700 text-slate-300"
-      };
-    }
-
-    return {
-      label: "Pendiente",
-      colorClass: "bg-sky-500/15 border-sky-500/30 text-sky-400"
-    };
-  };
-
-  const visualStatus = getVisualStatus();
-
   return (
     <div className="space-y-6 animate-in fade-in duration-200 pb-12">
       {/* 1. Breadcrumb & Back Action */}
@@ -498,12 +462,8 @@ export default function BillingOrderDetailView({ ordenId, onBack }) {
                   {order.prioridad_nombre}
                 </span>
 
-                {/* Visual Operational Status Badge */}
-                <span
-                  className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${visualStatus.colorClass}`}
-                >
-                  {visualStatus.label}
-                </span>
+                {/* Dynamic Status Badge */}
+                <WorkOrderStatusBadge name={order.estado_nombre} color={order.estado_color} />
 
                 {isEntregada && (
                   <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 inline-flex items-center gap-1 font-mono">

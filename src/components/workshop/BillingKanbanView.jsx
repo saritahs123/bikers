@@ -12,6 +12,46 @@ import {
   FileSpreadsheet,
   RefreshCw
 } from "lucide-react";
+import { hexToRgba } from "./WorkOrderStatusBadge";
+
+const DESPACHO_GROUPS = [
+  {
+    key: "RECIBIDAS",
+    repCodigo: "RECIBIDA",
+    repId: 1,
+    codigos: ["RECIBIDA", "HOLD", "APROBACION"],
+    estado_ids: [1, 2, 3],
+    fallbackNombre: "Recibida",
+    fallbackColor: "#38BDF8"
+  },
+  {
+    key: "REPARACION",
+    repCodigo: "REPARACION",
+    repId: 5,
+    codigos: ["REPARACION"],
+    estado_ids: [5],
+    fallbackNombre: "En Reparación",
+    fallbackColor: "#F59E0B"
+  },
+  {
+    key: "LISTA_ENTREGA",
+    repCodigo: "LISTA_ENTREGA",
+    repId: 7,
+    codigos: ["LISTA_ENTREGA"],
+    estado_ids: [7],
+    fallbackNombre: "Lista para Entrega",
+    fallbackColor: "#10B981"
+  },
+  {
+    key: "ENTREGADAS",
+    repCodigo: "ENTREGADA",
+    repId: 8,
+    codigos: ["ENTREGADA"],
+    estado_ids: [8],
+    fallbackNombre: "Entregada",
+    fallbackColor: "#64748B"
+  }
+];
 
 export default function BillingKanbanView({ onViewInvoiceDetail }) {
   const [orders, setOrders] = useState([]);
@@ -77,37 +117,22 @@ export default function BillingKanbanView({ onViewInvoiceDetail }) {
       }
 
       setOrders(data.data || []);
-      const operationalEstados = [
-        {
-          key: "PENDIENTE",
-          codigos: ["RECIBIDA", "RECIBIDAS", "DIAGNOSTICO", "APROBACION", "REPUESTOS"],
-          estado_ids: [1, 2, 3, 4],
-          nombre: "Pendiente",
-          color_estado: "#38BDF8"
-        },
-        {
-          key: "EN_EJECUCION",
-          codigos: ["REPARACION", "EN_REPARACION", "CALIDAD"],
-          estado_ids: [5, 6],
-          nombre: "En Ejecución",
-          color_estado: "#F59E0B"
-        },
-        {
-          key: "COMPLETADA",
-          codigos: ["LISTA_ENTREGA", "LISTA_PARA_ENTREGA", "LISTAS_PARA_ENTREGA"],
-          estado_ids: [7],
-          nombre: "Completada",
-          color_estado: "#10B981"
-        },
-        {
-          key: "ENTREGADA",
-          codigos: ["ENTREGADA", "ENTREGADAS"],
-          estado_ids: [8],
-          nombre: "Entregada",
-          color_estado: "#64748B"
-        }
-      ];
-      setEstados(operationalEstados);
+      const rawEstados = data.catalogs?.estados || [];
+      const dynamicEstados = DESPACHO_GROUPS.map((group) => {
+        const rep = rawEstados.find(
+          (e) => e.codigo === group.repCodigo || e.estado_orden_id === group.repId
+        );
+        const color = (rep?.color_estado && /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(rep.color_estado.trim()))
+          ? rep.color_estado.trim()
+          : group.fallbackColor;
+
+        return {
+          ...group,
+          nombre: rep?.nombre || group.fallbackNombre,
+          color_estado: color
+        };
+      });
+      setEstados(dynamicEstados);
     } catch (err) {
       console.error("fetchBillingData Error:", err);
       if (!isSilent) {
@@ -171,11 +196,21 @@ export default function BillingKanbanView({ onViewInvoiceDetail }) {
               className="w-2.5 h-2.5 rounded-full shrink-0"
               style={{ backgroundColor: estado.color_estado || "#64748B" }}
             />
-            <h3 className="text-xs font-bold text-slate-200 tracking-wide font-sans leading-tight whitespace-normal break-words flex-1">
+            <h3
+              className="text-xs font-bold tracking-wide font-sans leading-tight whitespace-normal break-words flex-1 uppercase"
+              style={{ color: estado.color_estado || "#E2E8F0" }}
+            >
               {estado.nombre}
             </h3>
           </div>
-          <span className="text-[11px] font-mono font-bold px-2 py-0.5 bg-slate-800 text-slate-300 border border-slate-700 rounded-full shrink-0">
+          <span
+            className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-full shrink-0 border"
+            style={{
+              backgroundColor: hexToRgba(estado.color_estado, 0.15) || "rgba(100, 116, 139, 0.15)",
+              borderColor: hexToRgba(estado.color_estado, 0.35) || estado.color_estado || "#475569",
+              color: estado.color_estado || "#94a3b8"
+            }}
+          >
             {columnOrders.length}
           </span>
         </div>
