@@ -90,6 +90,7 @@ export async function GET(
         ot.estado_orden_id,
         eot.nombre AS estado_nombre,
         eot.codigo AS estado_codigo,
+        eot.color_estado AS estado_color,
         ot.prioridad_orden_id AS prioridad_id,
         pot.nombre AS prioridad_nombre,
         pot.color_estado AS prioridad_color,
@@ -141,6 +142,37 @@ export async function GET(
         COALESCE(ot.impuesto, 0) AS impuesto,
         COALESCE(ot.total_orden, ot.subtotal_general, 0) AS total_orden,
         c.empresa_id AS empresa_id,
+
+        -- Most recent HOLD event details
+        (
+          SELECT ohe.comentario
+          FROM admin.orden_historial_estado ohe
+          WHERE ohe.orden_trabajo_id = ot.orden_trabajo_id
+            AND ohe.estado_nuevo_id = 2
+            AND (ohe.activo IS DISTINCT FROM false)
+          ORDER BY ohe.orden_historial_estado_id DESC
+          LIMIT 1
+        ) AS motivo_hold,
+        (
+          SELECT COALESCE(ohe.fecha_cambio, ohe.fecha_registro)
+          FROM admin.orden_historial_estado ohe
+          WHERE ohe.orden_trabajo_id = ot.orden_trabajo_id
+            AND ohe.estado_nuevo_id = 2
+            AND (ohe.activo IS DISTINCT FROM false)
+          ORDER BY ohe.orden_historial_estado_id DESC
+          LIMIT 1
+        ) AS fecha_hold,
+        (
+          SELECT COALESCE(NULLIF(TRIM(CONCAT_WS(' ', ui_hold.nombre, ui_hold.apellido)), ''), ui_hold.correo_electronico, ('Usuario #' || u_hold.usuario_id::text))
+          FROM admin.orden_historial_estado ohe
+          LEFT JOIN admin.usuario u_hold ON ohe.usuario_cambio = u_hold.usuario_id
+          LEFT JOIN admin.usuario_identidad ui_hold ON u_hold.usuario_id = ui_hold.usuario_id
+          WHERE ohe.orden_trabajo_id = ot.orden_trabajo_id
+            AND ohe.estado_nuevo_id = 2
+            AND (ohe.activo IS DISTINCT FROM false)
+          ORDER BY ohe.orden_historial_estado_id DESC
+          LIMIT 1
+        ) AS usuario_hold_nombre,
 
         -- Customer Info
         COALESCE(cliente_ot.cliente_id, cliente_recepcion.cliente_id) AS cliente_id,
@@ -289,6 +321,7 @@ export async function GET(
           estado_orden_id: orderData.estado_orden_id,
           estado_nombre: orderData.estado_nombre,
           estado_codigo: orderData.estado_codigo,
+          estado_color: orderData.estado_color,
           prioridad_id: orderData.prioridad_id,
           prioridad_nombre: orderData.prioridad_nombre,
           prioridad_color: orderData.prioridad_color,
@@ -307,6 +340,9 @@ export async function GET(
           fecha_facturacion: orderData.fecha_facturacion ? String(orderData.fecha_facturacion) : null,
           usuario_facturacion_id: isFacturado ? orderData.usuario_facturacion_id : null,
           usuario_facturacion_nombre: isFacturado ? orderData.usuario_facturacion_nombre : null,
+          motivo_hold: orderData.motivo_hold || null,
+          fecha_hold: orderData.fecha_hold ? String(orderData.fecha_hold) : null,
+          usuario_hold_nombre: orderData.usuario_hold_nombre || null,
           puede_facturarse,
           motivo_no_facturable
         },

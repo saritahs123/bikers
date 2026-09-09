@@ -470,13 +470,6 @@ export default function PosTicketPage({ params }: TicketPageProps) {
                   <span>{formatMoney(data.resumen_financiero?.total_general ?? 0)}</span>
                 </div>
 
-                {parseFloat(String(data.resumen_financiero?.monto_pagado || 0)) > 0 && (
-                  <div className="flex justify-between text-[10px] text-gray-700">
-                    <span>Monto Pagado:</span>
-                    <span>{formatMoney(data.resumen_financiero?.monto_pagado ?? 0)}</span>
-                  </div>
-                )}
-
                 {parseFloat(String(data.resumen_financiero?.balance_pendiente || 0)) > 0 && (
                   <div className="flex justify-between text-[10px] font-bold text-black">
                     <span>Balance Pendiente:</span>
@@ -502,9 +495,8 @@ export default function PosTicketPage({ params }: TicketPageProps) {
                 )}
               </div>
 
-              <div className="mt-2.5 pt-2 border-t border-dashed border-gray-400 text-center space-y-0.5">
+              <div className="mt-2.5 pt-2 border-t border-dashed border-gray-400 text-center">
                 <div className="font-black text-[11px] uppercase tracking-wide">¡GRACIAS POR CONFIAR EN RIDE LAB!</div>
-                <div className="text-[9px] text-gray-700 uppercase font-semibold">TIENDA Y TALLER DE BICICLETAS</div>
               </div>
             </div>
           </div>

@@ -26,11 +26,14 @@ import {
   Plus,
   X,
   Info,
-  Trash2
+  Trash2,
+  Pause,
+  Play
 } from "lucide-react";
 import WorkOrderServicesView from "./WorkOrderServicesView";
 import WorkOrderHistoryView from "./WorkOrderHistoryView";
 import EditWorkOrderModal from "./EditWorkOrderModal";
+import WorkOrderStatusBadge from "./WorkOrderStatusBadge";
 
 export default function WorkOrderDetailView({ ordenId, onBack }) {
   const searchParams = useSearchParams();
@@ -109,6 +112,12 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
   }, [order?.servicios]);
 
   const hasIncompleteServices = incompleteServices.length > 0;
+
+  const totalServiciosYRepuestos = React.useMemo(() => {
+    const servicesCount = (order?.servicios || []).filter((s) => s.activo !== false).length;
+    const productsCount = (order?.productos || []).filter((p) => p.activo !== false).length;
+    return servicesCount + productsCount;
+  }, [order?.servicios, order?.productos]);
 
   useEffect(() => {
     if (!hasActiveService) return;
@@ -294,18 +303,8 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
       if (catRes.ok) {
         const catData = await catRes.json();
         setCatalogs({
-          estados: [
-            { estado_orden_id: 1, codigo: "RECIBIDA", nombre: "Recibida" },
-            { estado_orden_id: 5, codigo: "REPARACION", nombre: "En Reparación" },
-            { estado_orden_id: 7, codigo: "LISTA_ENTREGA", nombre: "Lista para Entrega" },
-            { estado_orden_id: 8, codigo: "ENTREGADA", nombre: "Entregada" }
-          ],
-          prioridades: [
-            { prioridad_id: 1, nombre: "Baja" },
-            { prioridad_id: 2, nombre: "Normal" },
-            { prioridad_id: 3, nombre: "Alta" },
-            { prioridad_id: 4, nombre: "Urgente" }
-          ],
+          estados: catData.estados_orden_trabajo || catData.data?.estados_orden_trabajo || catData.estados || [],
+          prioridades: catData.prioridades || catData.data?.prioridades || [],
           mecanicos: catData.mecanicos || catData.data?.mecanicos || []
         });
       }
@@ -487,6 +486,70 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
       setReopenModalError(err.message || "Error al conectar con el servidor.");
     } finally {
       setSubmittingReopen(false);
+    }
+  };
+
+  const [holdModalOpen, setHoldModalOpen] = useState(false);
+  const [holdReason, setHoldReason] = useState("");
+  const [holdModalError, setHoldModalError] = useState(null);
+  const [submittingHold, setSubmittingHold] = useState(false);
+
+  const handleConfirmHold = async (e) => {
+    if (e) e.preventDefault();
+    if (submittingHold) return;
+    const trimmed = holdReason.trim();
+    if (trimmed.length < 5) {
+      setHoldModalError("El motivo de hold es obligatorio y debe tener al menos 5 caracteres.");
+      return;
+    }
+    if (trimmed.length > 500) {
+      setHoldModalError("El motivo de hold no puede exceder los 500 caracteres.");
+      return;
+    }
+
+    setSubmittingHold(true);
+    setHoldModalError(null);
+
+    try {
+      const payload = {
+        estado_orden_id: 2,
+        accion: "PONER_EN_HOLD",
+        motivo_hold: trimmed,
+        observacion_cambio_estado: trimmed
+      };
+
+      const res = await fetch(`/api/taller/ordenes/${ordenId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      let data = null;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(res.ok ? "Respuesta inválida del servidor." : `Error del servidor (${res.status})`);
+      }
+
+      if (!res.ok) {
+        setHoldModalError(data?.message || data?.error || "No fue posible poner la orden en HOLD.");
+        return;
+      }
+
+      setHoldModalOpen(false);
+      setHoldReason("");
+      await fetchOrderDetail(true);
+      showInfoToast(
+        "La orden se encuentra en HOLD. Los trabajos y modificaciones de servicios quedan pausados.",
+        "ORDEN EN HOLD",
+        7000,
+        `Motivo: ${trimmed}`
+      );
+    } catch (err) {
+      console.error("handleConfirmHold Error:", err);
+      setHoldModalError(err.message || "Error al conectar con el servidor.");
+    } finally {
+      setSubmittingHold(false);
     }
   };
 
@@ -693,12 +756,30 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
   }
 
   // Determine current pipeline step index
-  const currentStepId = order.estado_orden_id || 1;
+  const currentStepId = Number(order.estado_orden_id || 1);
+  const getPipelineLabel = (id, key, defaultLabel) => {
+    const fromCat = (catalogs.estados || []).find((e) => Number(e.estado_orden_id) === Number(id) || e.codigo === key);
+    if (fromCat?.nombre) return fromCat.nombre;
+    if (Number(order.estado_orden_id) === Number(id) && (order.estado_nombre || order.nombre_estado)) {
+      return order.estado_nombre || order.nombre_estado;
+    }
+    return defaultLabel;
+  };
+
+  const getPipelineColor = (id, key, defaultColor) => {
+    const fromCat = (catalogs.estados || []).find((e) => Number(e.estado_orden_id) === Number(id) || e.codigo === key);
+    if (fromCat?.color_estado) return fromCat.color_estado;
+    if (Number(order.estado_orden_id) === Number(id) && (order.estado_color || order.color_estado)) {
+      return order.estado_color || order.color_estado;
+    }
+    return defaultColor;
+  };
+
   const pipelineSteps = [
-    { id: 1, key: "RECIBIDA", label: "Recibida", icon: Check },
-    { id: 5, key: "REPARACION", label: "Reparación", icon: Wrench },
-    { id: 7, key: "LISTA_ENTREGA", label: "Lista para Entrega", icon: Truck },
-    { id: 8, key: "ENTREGADA", label: "Entregada", icon: ShieldCheck }
+    { id: 1, key: "RECIBIDA", label: getPipelineLabel(1, "RECIBIDA", "Recibida"), color: getPipelineColor(1, "RECIBIDA", "#3b82f6"), icon: Check },
+    { id: 5, key: "REPARACION", label: getPipelineLabel(5, "REPARACION", "En Reparación"), color: getPipelineColor(5, "REPARACION", "#f97316"), icon: Wrench },
+    { id: 7, key: "LISTA_ENTREGA", label: getPipelineLabel(7, "LISTA_ENTREGA", "Lista para Entrega"), color: getPipelineColor(7, "LISTA_ENTREGA", "#10b981"), icon: Truck },
+    { id: 8, key: "ENTREGADA", label: getPipelineLabel(8, "ENTREGADA", "Entregada"), color: getPipelineColor(8, "ENTREGADA", "#059669"), icon: ShieldCheck }
   ];
 
   // Extract services, labor items, and products from live backend API or order object
@@ -802,6 +883,31 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
     ? `${Number(order.horas_estimadas).toFixed(1)} h`
     : "N/A";
 
+  const isHold = Number(order.estado_orden_id) === 2 || order.estado_codigo === "HOLD";
+  const latestHoldEvent = isHold
+    ? (order.historial || []).find(
+        (h) => (Number(h.estado_nuevo_id) === 2 || h.estado_nuevo_codigo === "HOLD") && Boolean(h.comentario)
+      )
+    : null;
+
+  const formatHoldDate = (dateStr) => {
+    if (!dateStr) return "";
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return String(dateStr);
+      return d.toLocaleDateString("es-DO", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true
+      });
+    } catch {
+      return String(dateStr);
+    }
+  };
+
   return (
     <div className="space-y-6 relative">
       {toast && (
@@ -868,16 +974,26 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
             <span className="text-xs text-slate-400 uppercase tracking-widest font-bold">
               DETALLE DE ORDEN
             </span>
-            <span className="px-2.5 py-0.5 rounded-full bg-[#1c2129] text-slate-200 text-[10px] uppercase font-bold border border-[#2d3748]">
-              {order.estado_nombre || "EN PROCESO"}
-            </span>
-            <span className="px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-400 text-[10px] uppercase font-bold border border-rose-500/30">
+          </div>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-3xl md:text-4xl font-extrabold text-slate-100 font-mono tracking-tight">
+              {order.codigo_orden}
+            </h1>
+            <span
+              style={
+                order.prioridad_color
+                  ? {
+                      backgroundColor: `${order.prioridad_color}20`,
+                      borderColor: `${order.prioridad_color}40`,
+                      color: order.prioridad_color
+                    }
+                  : undefined
+              }
+              className="px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-400 text-[10px] uppercase font-bold border border-rose-500/30 font-mono"
+            >
               {order.prioridad_nombre || "NORMAL"}
             </span>
           </div>
-          <h1 className="text-3xl md:text-4xl font-extrabold text-slate-100 font-mono tracking-tight">
-            {order.codigo_orden}
-          </h1>
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">
@@ -895,24 +1011,54 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
               INICIAR REPARACIÓN
             </button>
           )}
-          {Number(order.estado_orden_id) === 5 && (
+          {Number(order.estado_orden_id) === 2 && (
             <button
-              onClick={() => handleTransitionState(7)}
-              disabled={loadingStateChange || hasIncompleteServices}
-              className="flex items-center gap-2 px-4 py-2 bg-sky-500 text-white hover:bg-sky-600 rounded-xl transition-all font-mono text-xs font-extrabold uppercase tracking-wider shadow-lg shadow-sky-500/20 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-              title={
-                hasIncompleteServices
-                  ? `No se puede marcar lista para entrega: hay ${incompleteServices.length} servicio(s) pendiente(s).`
-                  : "Marcar orden lista para entrega"
-              }
+              onClick={() => handleTransitionState(5, "Reparación reanudada")}
+              disabled={loadingStateChange}
+              className="flex items-center gap-2 px-4 py-2 bg-[#bfce7f] text-slate-950 hover:bg-[#a6b66b] rounded-xl transition-all font-mono text-xs font-extrabold uppercase tracking-wider border-t border-[#d8e899] shadow-lg shadow-[#bfce7f]/20 disabled:opacity-50 cursor-pointer"
+              title="Reanudar reparación de la orden"
             >
               {loadingStateChange ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
-                <Truck className="w-4 h-4" />
+                <Play className="w-4 h-4" />
               )}
-              MARCAR LISTA PARA ENTREGA
+              REANUDAR REPARACIÓN
             </button>
+          )}
+          {Number(order.estado_orden_id) === 5 && (
+            <>
+              <button
+                onClick={() => {
+                  setHoldReason("");
+                  setHoldModalError(null);
+                  setHoldModalOpen(true);
+                }}
+                disabled={loadingStateChange}
+                className="flex items-center gap-2 px-4 py-2 bg-amber-500/15 border border-amber-500/40 text-amber-300 hover:bg-amber-500/25 rounded-xl transition-all font-mono text-xs font-extrabold uppercase tracking-wider shadow-lg shadow-amber-500/10 cursor-pointer disabled:opacity-50"
+                title="Pausar la orden y poner en HOLD indicando motivo obligatorio"
+              >
+                <Pause className="w-4 h-4" />
+                PONER EN HOLD
+              </button>
+              <button
+                onClick={() => handleTransitionState(7)}
+                disabled={loadingStateChange || hasIncompleteServices}
+                className="flex items-center gap-2 px-4 py-2 bg-sky-500 text-white hover:bg-sky-600 rounded-xl transition-all font-mono text-xs font-extrabold uppercase tracking-wider shadow-lg shadow-sky-500/20 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                title={
+                  hasIncompleteServices
+                    ? `No se puede marcar lista para entrega: hay ${incompleteServices.length} servicio(s) pendiente(s).`
+                    : "Marcar orden lista para entrega"
+                }
+              >
+                {loadingStateChange ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Truck className="w-4 h-4" />
+                )}
+                MARCAR LISTA PARA ENTREGA
+              </button>
+            </>
           )}
           {Number(order.estado_orden_id) === 7 && (
             <>
@@ -988,33 +1134,57 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
         <div className="flex justify-between items-center relative">
           <div className="absolute left-[5%] right-[5%] top-1/2 h-1 bg-[#2d3748] -z-0 -translate-y-1/2"></div>
           {pipelineSteps.map((step) => {
-            const StepIcon = step.icon;
-            const isCompleted = step.id < currentStepId;
-            const isActive = step.id === currentStepId;
+            const isHoldAtRepair = currentStepId === 2 && step.id === 5;
+            const isCompleted = currentStepId === 2 ? step.id === 1 : step.id < currentStepId;
+            const isActive = step.id === currentStepId || isHoldAtRepair;
+            const StepIcon = isHoldAtRepair ? Pause : step.icon;
+
+            const stepColor = isHoldAtRepair
+              ? (order.estado_color || order.color_estado || getPipelineColor(2, "HOLD", "#3b82f6"))
+              : (isActive ? (order.estado_color || order.color_estado || step.color) : step.color);
+
+            const stepLabel = isHoldAtRepair
+              ? (order.estado_nombre || getPipelineLabel(2, "HOLD", "EN HOLD"))
+              : step.label;
 
             return (
               <div key={step.id} className="flex flex-col items-center gap-2 relative z-10 w-1/6">
                 <div
+                  style={
+                    isActive
+                      ? {
+                          backgroundColor: stepColor,
+                          color: "#0a0c10",
+                          boxShadow: `0 0 12px ${stepColor}60`
+                        }
+                      : isCompleted
+                      ? {
+                          backgroundColor: "#84924a",
+                          color: "#ffffff"
+                        }
+                      : undefined
+                  }
                   className={`flex items-center justify-center transition-all ${
                     isActive
-                      ? "w-10 h-10 rounded-full bg-[#bfce7f] text-slate-950 border-2 border-[#161a21] shadow-[0_0_12px_rgba(191,206,127,0.4)]"
+                      ? "w-10 h-10 rounded-full border-2 border-[#161a21]"
                       : isCompleted
-                      ? "w-8 h-8 rounded-full bg-[#84924a] text-white border-2 border-[#161a21]"
+                      ? "w-8 h-8 rounded-full border-2 border-[#161a21]"
                       : "w-8 h-8 rounded-full bg-[#1c2129] text-slate-500 border border-[#2d3748]"
                   }`}
                 >
                   <StepIcon className={isActive ? "w-5 h-5" : "w-4 h-4"} />
                 </div>
                 <span
-                  className={`font-mono text-[10px] tracking-wider uppercase ${
+                  style={isActive ? { color: stepColor } : undefined}
+                  className={`font-mono text-[10px] tracking-wider uppercase text-center ${
                     isActive
-                      ? "text-[#bfce7f] font-bold"
+                      ? "font-extrabold"
                       : isCompleted
                       ? "text-slate-200 font-semibold"
                       : "text-slate-500"
                   }`}
                 >
-                  {step.label}
+                  {stepLabel}
                 </span>
               </div>
             );
@@ -1042,7 +1212,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
               : "text-slate-400 border-transparent hover:text-slate-200"
           }`}
         >
-          SERVICIOS ({order.servicios?.length || 0})
+          SERVICIOS ({totalServiciosYRepuestos})
         </button>
         <button
           onClick={() => setActiveTab("historial")}
@@ -1117,8 +1287,8 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
             </div>
 
             {/* Row 2: Technical Diagnostic Panel */}
-            <div className="bg-[#161a21] border border-[#2d3748] p-6 rounded-xl space-y-5">
-              <div className="flex items-center justify-between pb-3 border-b border-[#2d3748]">
+            <div className="bg-[#161a21] border border-[#2d3748] p-4 rounded-xl space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-[#2d3748]">
                 <h3 className="font-mono text-xs font-bold text-slate-300 uppercase tracking-widest">
                   DIAGNÓSTICO
                 </h3>
@@ -1128,15 +1298,15 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                 {order.descripcion_cliente || order.diagnostico_inicial || order.motivo_ingreso || "Sin diagnóstico registrado."}
               </p>
 
-              <div className="space-y-2 pt-2">
+              <div className="space-y-1.5 pt-1">
                 <div className="flex items-center justify-between text-xs font-mono">
-                  <span className="text-slate-300 font-semibold uppercase">Progreso de Reparación</span>
-                  <span className="text-[#bfce7f] font-bold">
+                  <span className="text-slate-300 font-semibold uppercase text-[11px]">Progreso de Reparación</span>
+                  <span className="text-[#bfce7f] font-bold text-[11px]">
                     {repairProgressPercent % 1 === 0 ? Math.round(repairProgressPercent) : repairProgressPercent.toFixed(1)}% COMPLETADO
                   </span>
                 </div>
                 {/* Segmented Progress Bar */}
-                <div className="h-4 w-full bg-[#1c2129] border border-[#2d3748] rounded overflow-hidden relative">
+                <div className="h-2.5 w-full bg-[#1c2129] border border-[#2d3748] rounded overflow-hidden relative">
                   <div
                     className="h-full bg-[#84924a] relative transition-all duration-500"
                     style={{ width: `${repairProgressPercent}%` }}
@@ -1152,12 +1322,52 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-6 pt-2 text-xs font-mono text-slate-400">
+              <div className="flex flex-wrap gap-4 pt-0.5 text-xs font-mono text-slate-400">
                 <div className="flex items-center gap-1.5">
-                  <Clock className="w-4 h-4 text-[#bfce7f]" />
+                  <Clock className="w-3.5 h-3.5 text-[#bfce7f]" />
                   <span>Tiempo transcurrido total: <strong aria-live="polite" className="text-slate-200">{horasRegistradasText}</strong></span>
                 </div>
               </div>
+
+              {/* Motivo de Hold (visible exclusivamente cuando la OT se encuentra actualmente en estado HOLD) */}
+              {isHold && latestHoldEvent?.comentario && (
+                <div
+                  style={{
+                    backgroundColor: `${order.estado_color || order.color_estado || "#3B82F6"}10`,
+                    borderColor: `${order.estado_color || order.color_estado || "#3B82F6"}30`
+                  }}
+                  className="mt-2.5 p-3 rounded-lg border flex flex-col gap-1.5 font-mono text-xs"
+                >
+                  <div className="flex items-center gap-2">
+                    <Pause
+                      className="w-3.5 h-3.5 shrink-0"
+                      style={{ color: order.estado_color || order.color_estado || "#3B82F6" }}
+                    />
+                    <span className="font-bold uppercase tracking-wider text-slate-200 text-[11px]">
+                      MOTIVO DE HOLD
+                    </span>
+                  </div>
+                  <p className="text-xs font-sans text-slate-100 font-medium leading-relaxed pl-5">
+                    {latestHoldEvent.comentario}
+                  </p>
+                  {(latestHoldEvent.fecha || latestHoldEvent.usuario_nombre) && (
+                    <div className="text-[10px] text-slate-400 pl-5 flex flex-wrap items-center gap-1.5 font-sans">
+                      <span>Puesto en Hold:</span>
+                      <span className="text-slate-300 font-mono">
+                        {formatHoldDate(latestHoldEvent.fecha)}
+                      </span>
+                      {latestHoldEvent.usuario_nombre && (
+                        <>
+                          <span className="text-slate-500">·</span>
+                          <span className="text-slate-300 font-semibold">
+                            {latestHoldEvent.usuario_nombre}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
               {order?.tiempo_total_confiable === false && (
                 <div className="mt-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-400 flex items-start gap-2 max-w-xl font-mono text-[11px] leading-relaxed">
                   <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -1616,6 +1826,128 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
         document.body
       )}
 
+      {/* DEDICATED HOLD MODAL */}
+      {holdModalOpen && typeof document !== "undefined" && createPortal(
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="hold-modal-title"
+          className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !submittingHold) {
+              setHoldModalOpen(false);
+              setHoldModalError(null);
+            }
+          }}
+        >
+          <div className="bg-[#161a21] border border-amber-500/40 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-[#2d3748] flex items-center justify-between bg-[#12151b]">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                  <Pause className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 id="hold-modal-title" className="text-base font-bold text-slate-100 font-mono tracking-tight">
+                    Poner Orden en HOLD
+                  </h3>
+                  <span className="text-xs text-slate-400 font-mono">
+                    {order?.codigo_orden} {order?.codigo_recepcion ? `• Rec: ${order.codigo_recepcion}` : ""}
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  if (!submittingHold) {
+                    setHoldModalOpen(false);
+                    setHoldModalError(null);
+                  }
+                }}
+                disabled={submittingHold}
+                className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-[#1f242d] rounded-lg transition-colors disabled:opacity-40 cursor-pointer"
+                title="Cerrar modal"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleConfirmHold} className="p-6 space-y-4 overflow-y-auto custom-scrollbar">
+              <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                <div className="space-y-1 text-slate-300 leading-relaxed font-sans text-xs">
+                  <p className="font-bold text-amber-300 font-mono text-xs">Pausar Reparación de la Orden</p>
+                  <p className="text-[11px] text-slate-300">
+                    Al poner la orden en HOLD, los servicios y adición de repuestos quedarán bloqueados hasta que la orden sea reanudada.
+                  </p>
+                </div>
+              </div>
+
+              {holdModalError && (
+                <div className="p-3 bg-rose-500/15 border border-rose-500/40 rounded-xl flex items-center gap-2 text-rose-300 font-sans text-xs">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                  <span>{holdModalError}</span>
+                </div>
+              )}
+
+              <div className="space-y-2 font-mono text-xs">
+                <label htmlFor="motivo_hold" className="block text-slate-200 font-semibold">
+                  Motivo de Hold <span className="text-rose-400">*</span>
+                </label>
+                <textarea
+                  id="motivo_hold"
+                  rows={3}
+                  value={holdReason}
+                  onChange={(e) => {
+                    setHoldReason(e.target.value);
+                    if (holdModalError) setHoldModalError(null);
+                  }}
+                  disabled={submittingHold}
+                  placeholder="Ej: Esperando disponibilidad del repuesto / Esperando autorización de presupuesto adicional del cliente..."
+                  className="w-full bg-[#0a0c10] border border-[#2d3748] focus:border-amber-400 rounded-xl px-3.5 py-2.5 text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-amber-400/50 resize-none text-xs transition-colors font-sans"
+                />
+                <div className="flex justify-between items-center text-[10px] text-slate-500">
+                  <span>Mínimo 5 caracteres (Máx. 500)</span>
+                  <span>{holdReason.trim().length} / 500</span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#2d3748]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHoldModalOpen(false);
+                    setHoldModalError(null);
+                  }}
+                  disabled={submittingHold}
+                  className="px-4 py-2 bg-[#1c2129] border border-[#2d3748] text-slate-300 rounded-xl hover:bg-[#252b36] transition-colors font-mono text-xs cursor-pointer disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingHold || holdReason.trim().length < 5}
+                  className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl transition-all font-mono text-xs flex items-center gap-2 shadow-lg shadow-amber-500/20 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  {submittingHold ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Guardando...
+                    </>
+                  ) : (
+                    <>
+                      <Pause className="w-4 h-4" />
+                      Poner en HOLD
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
       {/* DEDICATED DELETE WORK ORDER MODAL */}
       {deleteModalOpen && typeof document !== "undefined" && createPortal(
         <div
@@ -1623,12 +1955,6 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
           aria-modal="true"
           aria-labelledby="delete-order-modal-title"
           className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 animate-in fade-in duration-200"
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !isDeletingOrder) {
-              setDeleteModalOpen(false);
-              setDeleteError(null);
-            }
-          }}
         >
           <div className="bg-[#161a21] border border-rose-500/40 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
             {/* Modal Header */}
@@ -1670,9 +1996,6 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                   <p className="font-bold text-rose-300 font-mono text-xs">¡Acción Irreversible!</p>
                   <p className="text-[11px] text-slate-300">
                     Se eliminará permanentemente la orden de trabajo, la recepción asociada, los servicios, repuestos, mano de obra y facturación dependiente.
-                  </p>
-                  <p className="text-[11px] text-emerald-400 font-semibold font-mono">
-                    ✓ Se conservará una copia histórica completa e independiente como evidencia permanente en el sistema.
                   </p>
                 </div>
               </div>

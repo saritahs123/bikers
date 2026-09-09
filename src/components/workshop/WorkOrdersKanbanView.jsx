@@ -16,6 +16,7 @@ import {
   Calendar,
   X
 } from "lucide-react";
+import { hexToRgba } from "./WorkOrderStatusBadge";
 
 const PERIOD_OPTIONS = [
   { id: "hoy", label: "Hoy" },
@@ -27,57 +28,54 @@ const PERIOD_OPTIONS = [
 const KANBAN_COLUMNS = [
   {
     key: "RECIBIDAS",
-    codigos: ["RECIBIDA", "RECIBIDAS", "DIAGNOSTICO", "APROBACION", "REPUESTOS"],
-    estado_ids: [1, 2, 3, 4],
-    title: "PENDIENTE",
+    repCodigo: "RECIBIDA",
+    repId: 1,
+    codigos: ["RECIBIDA", "APROBACION"],
+    estado_ids: [1, 3],
+    fallbackTitle: "RECIBIDAS",
+    fallbackColor: "#38BDF8",
     subtitle: "Pendientes de inicio",
-    icon: Clock,
-    headerColor: "text-sky-500 dark:text-sky-400",
-    badgeBg: "bg-sky-500/15 text-sky-600 dark:text-sky-300 border-sky-500/30",
-    borderTop: "border-t-sky-500",
-    cardAccent: "border-l-sky-500"
+    icon: Clock
   },
   {
     key: "REPARACION",
-    codigos: ["REPARACION", "EN_REPARACION", "CALIDAD"],
-    estado_ids: [5, 6],
-    title: "EN EJECUCIÓN",
+    repCodigo: "REPARACION",
+    repId: 5,
+    codigos: ["REPARACION", "HOLD"],
+    estado_ids: [5, 2],
+    fallbackTitle: "EN REPARACIÓN",
+    fallbackColor: "#F59E0B",
     subtitle: "Trabajo técnico activo",
-    icon: Wrench,
-    headerColor: "text-amber-500 dark:text-amber-400",
-    badgeBg: "bg-amber-500/15 text-amber-600 dark:text-amber-300 border-amber-500/30",
-    borderTop: "border-t-amber-500",
-    cardAccent: "border-l-amber-500"
+    icon: Wrench
   },
   {
     key: "LISTA_ENTREGA",
-    codigos: ["LISTA_ENTREGA", "LISTA_PARA_ENTREGA", "LISTAS_PARA_ENTREGA"],
+    repCodigo: "LISTA_ENTREGA",
+    repId: 7,
+    codigos: ["LISTA_ENTREGA"],
     estado_ids: [7],
-    title: "COMPLETADA",
+    fallbackTitle: "LISTAS PARA ENTREGA",
+    fallbackColor: "#10B981",
     subtitle: "Lista para entrega",
-    icon: ClipboardCheck,
-    headerColor: "text-emerald-500 dark:text-emerald-400",
-    badgeBg: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border-emerald-500/30",
-    borderTop: "border-t-emerald-500",
-    cardAccent: "border-l-emerald-500"
+    icon: ClipboardCheck
   },
   {
     key: "ENTREGADAS",
-    codigos: ["ENTREGADA", "ENTREGADAS"],
+    repCodigo: "ENTREGADA",
+    repId: 8,
+    codigos: ["ENTREGADA"],
     estado_ids: [8],
-    title: "ENTREGADA",
+    fallbackTitle: "ENTREGADAS",
+    fallbackColor: "#64748B",
     subtitle: "Finalizadas",
-    icon: CheckCircle2,
-    headerColor: "text-slate-500 dark:text-slate-300",
-    badgeBg: "bg-slate-500/15 text-slate-600 dark:text-slate-300 border-slate-500/30",
-    borderTop: "border-t-slate-500",
-    cardAccent: "border-l-slate-500"
+    icon: CheckCircle2
   }
 ];
 
 export default function WorkOrdersKanbanView({ onViewDetail, onOpenNewModal, onToggleList }) {
   const containerRef = useRef(null);
   const [orders, setOrders] = useState([]);
+  const [catalogs, setCatalogs] = useState({ estados: [] });
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState(null);
@@ -162,6 +160,9 @@ export default function WorkOrdersKanbanView({ onViewDetail, onOpenNewModal, onT
       }
 
       setOrders(data.data || []);
+      if (data.catalogs) {
+        setCatalogs(data.catalogs);
+      }
       setLastUpdated(new Date());
     } catch (err) {
       console.error("fetchOrders Kanban Error:", err);
@@ -421,25 +422,44 @@ export default function WorkOrdersKanbanView({ onViewDetail, onOpenNewModal, onT
             const colOrders = getOrdersForColumn(col);
             const IconComponent = col.icon;
 
+            const repState = catalogs.estados?.find(e => e.codigo === col.repCodigo || e.estado_orden_id === col.repId);
+            const title = repState?.nombre || col.fallbackTitle;
+            const color = (repState?.color_estado && /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(repState.color_estado.trim()))
+              ? repState.color_estado.trim()
+              : col.fallbackColor;
+
+            const bgRgba = hexToRgba(color, 0.15) || "rgba(100, 116, 139, 0.15)";
+            const borderRgba = hexToRgba(color, 0.35) || color;
+
             return (
               <div
                 key={col.key}
-                className={`bg-card border border-border rounded-2xl flex flex-col overflow-hidden shadow-lg ${col.borderTop} border-t-4 transition-all`}
+                className="bg-card border border-border rounded-2xl flex flex-col overflow-hidden shadow-lg transition-all"
+                style={{ borderTop: `4px solid ${color}` }}
               >
                 {/* Encabezado de Columna */}
                 <div className="p-3.5 bg-surface/90 border-b border-border flex items-center justify-between sticky top-0 z-10">
                   <div className="flex items-center gap-2.5">
-                    <div className={`p-2 rounded-xl bg-card border border-border ${col.headerColor}`}>
+                    <div
+                      className="p-2 rounded-xl bg-card border border-border"
+                      style={{ color: color }}
+                    >
                       <IconComponent className="w-4 h-4" />
                     </div>
                     <div>
-                      <h2 className={`font-mono text-xs md:text-sm font-extrabold tracking-wider uppercase ${col.headerColor}`}>
-                        {col.title}
+                      <h2
+                        className="font-mono text-xs md:text-sm font-extrabold tracking-wider uppercase"
+                        style={{ color: color }}
+                      >
+                        {title}
                       </h2>
                       <p className="text-[11px] text-foreground-muted font-sans">{col.subtitle}</p>
                     </div>
                   </div>
-                  <span className={`font-mono text-xs font-extrabold px-2.5 py-0.5 rounded-full border ${col.badgeBg}`}>
+                  <span
+                    className="font-mono text-xs font-extrabold px-2.5 py-0.5 rounded-full border"
+                    style={{ backgroundColor: bgRgba, borderColor: borderRgba, color: color }}
+                  >
                     {colOrders.length}
                   </span>
                 </div>
@@ -460,16 +480,41 @@ export default function WorkOrdersKanbanView({ onViewDetail, onOpenNewModal, onT
                           ? `${ord.bicicleta_marca || ""} ${ord.bicicleta_modelo || ""}`.trim()
                           : "Bicicleta de taller";
 
+                      const isHold = String(ord.estado_codigo || "").trim().toUpperCase() === "HOLD" || Number(ord.estado_orden_id) === 2;
+                      const ordState = catalogs.estados?.find(
+                        (e) => e.codigo === ord.estado_codigo || e.estado_orden_id === ord.estado_orden_id
+                      );
+                      const ordStateName = ordState?.nombre || ord.estado_nombre || "En Hold";
+                      const ordStateColor =
+                        ordState?.color_estado && /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(ordState.color_estado.trim())
+                          ? ordState.color_estado.trim()
+                          : ord.estado_color || "#F59E0B";
+
                       return (
                         <div
                           key={ord.orden_id || ord.orden_trabajo_id}
-                          className={`bg-surface border border-border border-l-4 ${col.cardAccent} rounded-xl p-4 space-y-2.5 shadow-sm select-none transition-all cursor-default`}
+                          className="bg-surface border border-border rounded-xl p-4 space-y-2.5 shadow-sm select-none transition-all cursor-default"
+                          style={{ borderLeft: isHold ? `4px solid ${ordStateColor}` : `4px solid ${color}` }}
                         >
                           {/* 1. NÚMERO DE ORDEN Y FECHA(S) */}
                           <div className="flex items-center justify-between gap-2 border-b border-border/50 pb-2 min-w-0">
-                            <span className="font-mono text-base sm:text-lg xl:text-lg 2xl:text-xl font-black text-foreground tracking-tight whitespace-nowrap shrink-0">
-                              {ord.codigo_orden}
-                            </span>
+                            <div className="flex items-center gap-2 flex-wrap min-w-0">
+                              <span className="font-mono text-base sm:text-lg xl:text-lg 2xl:text-xl font-black text-foreground tracking-tight whitespace-nowrap shrink-0">
+                                {ord.codigo_orden}
+                              </span>
+                              {isHold && (
+                                <span
+                                  className="px-2 py-0.5 rounded-md text-[10px] sm:text-[11px] font-mono font-bold border uppercase tracking-wider whitespace-nowrap"
+                                  style={{
+                                    backgroundColor: hexToRgba(ordStateColor, 0.15) || "rgba(245, 158, 11, 0.15)",
+                                    borderColor: hexToRgba(ordStateColor, 0.35) || ordStateColor,
+                                    color: ordStateColor
+                                  }}
+                                >
+                                  {ordStateName}
+                                </span>
+                              )}
+                            </div>
 
                             {/* Fechas según columna */}
                             {(col.key === "RECIBIDAS" || col.key === "REPARACION") && (

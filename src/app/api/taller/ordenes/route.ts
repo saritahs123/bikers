@@ -164,6 +164,7 @@ export async function GET(req: NextRequest) {
         ot.estado_orden_id,
         eot.nombre AS estado_nombre,
         eot.codigo AS estado_codigo,
+        eot.color_estado AS estado_color,
         eot.orden_visual AS estado_orden,
         ot.prioridad_orden_id AS prioridad_id,
         pot.nombre AS prioridad_nombre,
@@ -224,8 +225,8 @@ export async function GET(req: NextRequest) {
 
     const items = await query(sql, [...queryParams, limit, offset]);
 
-    // Fetch Catalogs for Filters
-    const estados = await query(`SELECT estado_orden_id, nombre, codigo, orden_visual AS orden FROM admin.estado_orden_trabajo WHERE activo = true AND estado_orden_id IN (1, 5, 7, 8) ORDER BY orden_visual ASC`);
+    // Fetch Catalogs for Presentation and Filters
+    const estados = await query(`SELECT estado_orden_id, nombre, codigo, color_estado, orden_visual AS orden, activo, estado_inicial, estado_final FROM admin.estado_orden_trabajo ORDER BY orden_visual ASC`);
     const prioridades = await query(`SELECT prioridad_orden_trabajo_id AS prioridad_id, nombre, codigo, color_estado AS color_hex FROM admin.prioridad_orden_trabajo WHERE activo = true ORDER BY prioridad_orden_trabajo_id ASC`);
     const mecanicos = await query(`
       SELECT 
@@ -244,6 +245,7 @@ export async function GET(req: NextRequest) {
         COUNT(ot.orden_trabajo_id) FILTER (WHERE (eot.codigo NOT IN ('ENTREGADA', 'CANCELADA') OR eot.codigo IS NULL) AND ot.estado_orden_id NOT IN (8, 9))::int AS abiertas,
         COUNT(ot.orden_trabajo_id) FILTER (WHERE eot.codigo = 'RECIBIDA' OR ot.estado_orden_id = 1)::int AS recibidas,
         COUNT(ot.orden_trabajo_id) FILTER (WHERE eot.codigo = 'REPARACION' OR ot.estado_orden_id = 5)::int AS en_proceso,
+        COUNT(ot.orden_trabajo_id) FILTER (WHERE eot.codigo = 'HOLD' OR ot.estado_orden_id = 2)::int AS en_hold,
         COUNT(ot.orden_trabajo_id) FILTER (WHERE eot.codigo = 'LISTA_ENTREGA' OR ot.estado_orden_id = 7)::int AS listas_entrega,
         COUNT(ot.orden_trabajo_id) FILTER (WHERE eot.codigo = 'ENTREGADA' OR ot.estado_orden_id = 8)::int AS entregadas,
         COUNT(ot.orden_trabajo_id)::int AS total
@@ -258,6 +260,7 @@ export async function GET(req: NextRequest) {
       abiertas: 0,
       recibidas: 0,
       en_proceso: 0,
+      en_hold: 0,
       listas_entrega: 0,
       entregadas: 0,
       total: 0
@@ -276,6 +279,7 @@ export async function GET(req: NextRequest) {
         abiertas: Number(metricsData.abiertas || 0),
         recibidas: Number(metricsData.recibidas || 0),
         en_proceso: Number(metricsData.en_proceso || 0),
+        en_hold: Number(metricsData.en_hold || 0),
         listas_entrega: Number(metricsData.listas_entrega || 0),
         entregadas: Number(metricsData.entregadas || 0),
         total: Number(metricsData.total || 0)

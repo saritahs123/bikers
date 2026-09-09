@@ -564,7 +564,7 @@ export default function WorkOrderServicesView({
   };
 
   // Products array from order
-  const orderProducts = order?.productos || [];
+  const orderProducts = (order?.productos || []).filter((p) => p.activo !== false);
 
 
 
@@ -941,10 +941,16 @@ export default function WorkOrderServicesView({
   // Handle Operative Action Execution (Iniciar, Pausar, Reanudar, Finalizar)
   const executeOperativeAction = async (svc, actionCode, extraBody = {}) => {
     if (!isOrderInRepair) {
-      if (orderStateCode === "LISTA_ENTREGA") {
+      if (orderStateCode === "LISTA_ENTREGA" || Number(order?.estado_orden_id) === 7) {
         showInfoToast(
           "La orden está en estado Lista para Entrega. Reabre la reparación para modificar servicios o repuestos.",
           "ORDEN EN LISTA PARA ENTREGA",
+          6500
+        );
+      } else if (orderStateCode === "HOLD" || Number(order?.estado_orden_id) === 2) {
+        showInfoToast(
+          "La orden se encuentra en HOLD. Reanuda la reparación antes de operar sobre sus servicios.",
+          "ORDEN EN HOLD",
           6500
         );
       } else {
@@ -1014,10 +1020,16 @@ export default function WorkOrderServicesView({
   // Handle Finish Service Trigger
   const handleFinishServiceTrigger = (svc) => {
     if (!isOrderInRepair) {
-      if (orderStateCode === "LISTA_ENTREGA") {
+      if (orderStateCode === "LISTA_ENTREGA" || Number(order?.estado_orden_id) === 7) {
         showInfoToast(
           "La orden está en estado Lista para Entrega. Reabre la reparación para modificar servicios o repuestos.",
           "ORDEN EN LISTA PARA ENTREGA",
+          6500
+        );
+      } else if (orderStateCode === "HOLD" || Number(order?.estado_orden_id) === 2) {
+        showInfoToast(
+          "La orden se encuentra en HOLD. Reanuda la reparación antes de finalizar servicios.",
+          "ORDEN EN HOLD",
           6500
         );
       } else {
@@ -1151,7 +1163,8 @@ export default function WorkOrderServicesView({
     );
   };
 
-  const totalItemsCount = services.length + orderProducts.length;
+  const activeServices = (services || []).filter((s) => s.activo !== false);
+  const totalItemsCount = activeServices.length + orderProducts.length;
 
   return (
     <div className="space-y-5 font-sans text-slate-100">
@@ -1288,7 +1301,7 @@ export default function WorkOrderServicesView({
               ) : (
                 <>
                   {/* SERVICES ROWS */}
-                  {services.map((svc, idx) => {
+                  {activeServices.map((svc, idx) => {
                     const sId = getServId(svc) || (idx + 1);
                     const srvCode = svc.codigo_servicio || (svc.secuencia ? `SRV-${String(svc.secuencia).padStart(3, "0")}` : `SRV-${String(idx + 1).padStart(3, "0")}`);
                     const stateRules = getServiceStateRules(svc.estado_servicio_id, svc.usuario_id, Number(order?.estado_orden_id || 1));

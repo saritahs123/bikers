@@ -75,6 +75,7 @@ function SidebarContent({
       label: "CONFIGURACIÓN",
       submenu: [
         { href: "/workshop/service-types", label: "SERVICIOS" },
+        { href: "/workshop/order-statuses", label: "ESTADOS DE ORDEN DE TRABAJO" },
         { href: "/workshop/products", label: "PRODUCTOS" },
         { href: "/crm/component-categories", label: "CATEGORÍAS COMPONENTES" },
         { href: "/crm/component-states", label: "ESTADOS COMPONENTES" }
