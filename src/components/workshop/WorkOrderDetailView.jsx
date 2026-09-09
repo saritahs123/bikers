@@ -760,15 +760,26 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
   const getPipelineLabel = (id, key, defaultLabel) => {
     const fromCat = (catalogs.estados || []).find((e) => Number(e.estado_orden_id) === Number(id) || e.codigo === key);
     if (fromCat?.nombre) return fromCat.nombre;
-    if (Number(order.estado_orden_id) === Number(id) && order.estado_nombre) return order.estado_nombre;
+    if (Number(order.estado_orden_id) === Number(id) && (order.estado_nombre || order.nombre_estado)) {
+      return order.estado_nombre || order.nombre_estado;
+    }
     return defaultLabel;
   };
 
+  const getPipelineColor = (id, key, defaultColor) => {
+    const fromCat = (catalogs.estados || []).find((e) => Number(e.estado_orden_id) === Number(id) || e.codigo === key);
+    if (fromCat?.color_estado) return fromCat.color_estado;
+    if (Number(order.estado_orden_id) === Number(id) && (order.estado_color || order.color_estado)) {
+      return order.estado_color || order.color_estado;
+    }
+    return defaultColor;
+  };
+
   const pipelineSteps = [
-    { id: 1, key: "RECIBIDA", label: getPipelineLabel(1, "RECIBIDA", "Recibida"), icon: Check },
-    { id: 5, key: "REPARACION", label: getPipelineLabel(5, "REPARACION", "En Reparación"), icon: Wrench },
-    { id: 7, key: "LISTA_ENTREGA", label: getPipelineLabel(7, "LISTA_ENTREGA", "Lista para Entrega"), icon: Truck },
-    { id: 8, key: "ENTREGADA", label: getPipelineLabel(8, "ENTREGADA", "Entregada"), icon: ShieldCheck }
+    { id: 1, key: "RECIBIDA", label: getPipelineLabel(1, "RECIBIDA", "Recibida"), color: getPipelineColor(1, "RECIBIDA", "#3b82f6"), icon: Check },
+    { id: 5, key: "REPARACION", label: getPipelineLabel(5, "REPARACION", "En Reparación"), color: getPipelineColor(5, "REPARACION", "#f97316"), icon: Wrench },
+    { id: 7, key: "LISTA_ENTREGA", label: getPipelineLabel(7, "LISTA_ENTREGA", "Lista para Entrega"), color: getPipelineColor(7, "LISTA_ENTREGA", "#10b981"), icon: Truck },
+    { id: 8, key: "ENTREGADA", label: getPipelineLabel(8, "ENTREGADA", "Entregada"), color: getPipelineColor(8, "ENTREGADA", "#059669"), icon: ShieldCheck }
   ];
 
   // Extract services, labor items, and products from live backend API or order object
@@ -872,6 +883,31 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
     ? `${Number(order.horas_estimadas).toFixed(1)} h`
     : "N/A";
 
+  const isHold = Number(order.estado_orden_id) === 2 || order.estado_codigo === "HOLD";
+  const latestHoldEvent = isHold
+    ? (order.historial || []).find(
+        (h) => (Number(h.estado_nuevo_id) === 2 || h.estado_nuevo_codigo === "HOLD") && Boolean(h.comentario)
+      )
+    : null;
+
+  const formatHoldDate = (dateStr) => {
+    if (!dateStr) return "";
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return String(dateStr);
+      return d.toLocaleDateString("es-DO", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true
+      });
+    } catch {
+      return String(dateStr);
+    }
+  };
+
   return (
     <div className="space-y-6 relative">
       {toast && (
@@ -938,14 +974,26 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
             <span className="text-xs text-slate-400 uppercase tracking-widest font-bold">
               DETALLE DE ORDEN
             </span>
-            <WorkOrderStatusBadge name={order.estado_nombre} color={order.estado_color} />
-            <span className="px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-400 text-[10px] uppercase font-bold border border-rose-500/30">
+          </div>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-3xl md:text-4xl font-extrabold text-slate-100 font-mono tracking-tight">
+              {order.codigo_orden}
+            </h1>
+            <span
+              style={
+                order.prioridad_color
+                  ? {
+                      backgroundColor: `${order.prioridad_color}20`,
+                      borderColor: `${order.prioridad_color}40`,
+                      color: order.prioridad_color
+                    }
+                  : undefined
+              }
+              className="px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-400 text-[10px] uppercase font-bold border border-rose-500/30 font-mono"
+            >
               {order.prioridad_nombre || "NORMAL"}
             </span>
           </div>
-          <h1 className="text-3xl md:text-4xl font-extrabold text-slate-100 font-mono tracking-tight">
-            {order.codigo_orden}
-          </h1>
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">
@@ -1088,73 +1136,60 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
           {pipelineSteps.map((step) => {
             const isHoldAtRepair = currentStepId === 2 && step.id === 5;
             const isCompleted = currentStepId === 2 ? step.id === 1 : step.id < currentStepId;
-            const isActive = step.id === currentStepId;
+            const isActive = step.id === currentStepId || isHoldAtRepair;
             const StepIcon = isHoldAtRepair ? Pause : step.icon;
+
+            const stepColor = isHoldAtRepair
+              ? (order.estado_color || order.color_estado || getPipelineColor(2, "HOLD", "#3b82f6"))
+              : (isActive ? (order.estado_color || order.color_estado || step.color) : step.color);
+
+            const stepLabel = isHoldAtRepair
+              ? (order.estado_nombre || getPipelineLabel(2, "HOLD", "EN HOLD"))
+              : step.label;
 
             return (
               <div key={step.id} className="flex flex-col items-center gap-2 relative z-10 w-1/6">
                 <div
                   style={
-                    isHoldAtRepair
+                    isActive
                       ? {
-                          backgroundColor: order.color_estado || "#EAB308",
+                          backgroundColor: stepColor,
                           color: "#0a0c10",
-                          boxShadow: `0 0 12px ${order.color_estado || "#EAB308"}60`
+                          boxShadow: `0 0 12px ${stepColor}60`
+                        }
+                      : isCompleted
+                      ? {
+                          backgroundColor: "#84924a",
+                          color: "#ffffff"
                         }
                       : undefined
                   }
                   className={`flex items-center justify-center transition-all ${
-                    isHoldAtRepair
+                    isActive
                       ? "w-10 h-10 rounded-full border-2 border-[#161a21]"
-                      : isActive
-                      ? "w-10 h-10 rounded-full bg-[#bfce7f] text-slate-950 border-2 border-[#161a21] shadow-[0_0_12px_rgba(191,206,127,0.4)]"
                       : isCompleted
-                      ? "w-8 h-8 rounded-full bg-[#84924a] text-white border-2 border-[#161a21]"
+                      ? "w-8 h-8 rounded-full border-2 border-[#161a21]"
                       : "w-8 h-8 rounded-full bg-[#1c2129] text-slate-500 border border-[#2d3748]"
                   }`}
                 >
-                  <StepIcon className={isHoldAtRepair || isActive ? "w-5 h-5" : "w-4 h-4"} />
+                  <StepIcon className={isActive ? "w-5 h-5" : "w-4 h-4"} />
                 </div>
                 <span
-                  style={isHoldAtRepair ? { color: order.color_estado || "#EAB308" } : undefined}
+                  style={isActive ? { color: stepColor } : undefined}
                   className={`font-mono text-[10px] tracking-wider uppercase text-center ${
-                    isHoldAtRepair
+                    isActive
                       ? "font-extrabold"
-                      : isActive
-                      ? "text-[#bfce7f] font-bold"
                       : isCompleted
                       ? "text-slate-200 font-semibold"
                       : "text-slate-500"
                   }`}
                 >
-                  {isHoldAtRepair ? `${step.label} (${order.estado_nombre || "HOLD"})` : step.label}
+                  {stepLabel}
                 </span>
               </div>
             );
           })}
         </div>
-
-        {/* Dedicated HOLD Pause Banner inside Stepper Card */}
-        {currentStepId === 2 && (
-          <div
-            style={{
-              backgroundColor: `${order.color_estado || "#EAB308"}15`,
-              borderColor: `${order.color_estado || "#EAB308"}40`,
-              color: order.color_estado || "#EAB308"
-            }}
-            className="mt-4 p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2 font-mono text-xs animate-in fade-in duration-200"
-          >
-            <div className="flex items-center gap-2.5">
-              <Pause className="w-4 h-4 shrink-0" />
-              <span className="font-bold uppercase tracking-wide">
-                ORDEN EN PAUSA ({order.estado_nombre || "EN HOLD"})
-              </span>
-            </div>
-            <span className="text-[11px] text-slate-300 font-sans">
-              Los trabajos técnicos y servicios se encuentran en pausa temporal.
-            </span>
-          </div>
-        )}
       </div>
 
       {/* Sub-Navigation Tabs */}
@@ -1252,8 +1287,8 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
             </div>
 
             {/* Row 2: Technical Diagnostic Panel */}
-            <div className="bg-[#161a21] border border-[#2d3748] p-6 rounded-xl space-y-5">
-              <div className="flex items-center justify-between pb-3 border-b border-[#2d3748]">
+            <div className="bg-[#161a21] border border-[#2d3748] p-4 rounded-xl space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-[#2d3748]">
                 <h3 className="font-mono text-xs font-bold text-slate-300 uppercase tracking-widest">
                   DIAGNÓSTICO
                 </h3>
@@ -1263,15 +1298,15 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                 {order.descripcion_cliente || order.diagnostico_inicial || order.motivo_ingreso || "Sin diagnóstico registrado."}
               </p>
 
-              <div className="space-y-2 pt-2">
+              <div className="space-y-1.5 pt-1">
                 <div className="flex items-center justify-between text-xs font-mono">
-                  <span className="text-slate-300 font-semibold uppercase">Progreso de Reparación</span>
-                  <span className="text-[#bfce7f] font-bold">
+                  <span className="text-slate-300 font-semibold uppercase text-[11px]">Progreso de Reparación</span>
+                  <span className="text-[#bfce7f] font-bold text-[11px]">
                     {repairProgressPercent % 1 === 0 ? Math.round(repairProgressPercent) : repairProgressPercent.toFixed(1)}% COMPLETADO
                   </span>
                 </div>
                 {/* Segmented Progress Bar */}
-                <div className="h-4 w-full bg-[#1c2129] border border-[#2d3748] rounded overflow-hidden relative">
+                <div className="h-2.5 w-full bg-[#1c2129] border border-[#2d3748] rounded overflow-hidden relative">
                   <div
                     className="h-full bg-[#84924a] relative transition-all duration-500"
                     style={{ width: `${repairProgressPercent}%` }}
@@ -1287,12 +1322,52 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-6 pt-2 text-xs font-mono text-slate-400">
+              <div className="flex flex-wrap gap-4 pt-0.5 text-xs font-mono text-slate-400">
                 <div className="flex items-center gap-1.5">
-                  <Clock className="w-4 h-4 text-[#bfce7f]" />
+                  <Clock className="w-3.5 h-3.5 text-[#bfce7f]" />
                   <span>Tiempo transcurrido total: <strong aria-live="polite" className="text-slate-200">{horasRegistradasText}</strong></span>
                 </div>
               </div>
+
+              {/* Motivo de Hold (visible exclusivamente cuando la OT se encuentra actualmente en estado HOLD) */}
+              {isHold && latestHoldEvent?.comentario && (
+                <div
+                  style={{
+                    backgroundColor: `${order.estado_color || order.color_estado || "#3B82F6"}10`,
+                    borderColor: `${order.estado_color || order.color_estado || "#3B82F6"}30`
+                  }}
+                  className="mt-2.5 p-3 rounded-lg border flex flex-col gap-1.5 font-mono text-xs"
+                >
+                  <div className="flex items-center gap-2">
+                    <Pause
+                      className="w-3.5 h-3.5 shrink-0"
+                      style={{ color: order.estado_color || order.color_estado || "#3B82F6" }}
+                    />
+                    <span className="font-bold uppercase tracking-wider text-slate-200 text-[11px]">
+                      MOTIVO DE HOLD
+                    </span>
+                  </div>
+                  <p className="text-xs font-sans text-slate-100 font-medium leading-relaxed pl-5">
+                    {latestHoldEvent.comentario}
+                  </p>
+                  {(latestHoldEvent.fecha || latestHoldEvent.usuario_nombre) && (
+                    <div className="text-[10px] text-slate-400 pl-5 flex flex-wrap items-center gap-1.5 font-sans">
+                      <span>Puesto en Hold:</span>
+                      <span className="text-slate-300 font-mono">
+                        {formatHoldDate(latestHoldEvent.fecha)}
+                      </span>
+                      {latestHoldEvent.usuario_nombre && (
+                        <>
+                          <span className="text-slate-500">·</span>
+                          <span className="text-slate-300 font-semibold">
+                            {latestHoldEvent.usuario_nombre}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
               {order?.tiempo_total_confiable === false && (
                 <div className="mt-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-400 flex items-start gap-2 max-w-xl font-mono text-[11px] leading-relaxed">
                   <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -1880,12 +1955,6 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
           aria-modal="true"
           aria-labelledby="delete-order-modal-title"
           className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 animate-in fade-in duration-200"
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !isDeletingOrder) {
-              setDeleteModalOpen(false);
-              setDeleteError(null);
-            }
-          }}
         >
           <div className="bg-[#161a21] border border-rose-500/40 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
             {/* Modal Header */}
@@ -1927,9 +1996,6 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                   <p className="font-bold text-rose-300 font-mono text-xs">¡Acción Irreversible!</p>
                   <p className="text-[11px] text-slate-300">
                     Se eliminará permanentemente la orden de trabajo, la recepción asociada, los servicios, repuestos, mano de obra y facturación dependiente.
-                  </p>
-                  <p className="text-[11px] text-emerald-400 font-semibold font-mono">
-                    ✓ Se conservará una copia histórica completa e independiente como evidencia permanente en el sistema.
                   </p>
                 </div>
               </div>
