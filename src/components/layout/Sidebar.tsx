@@ -70,6 +70,16 @@ function SidebarContent({
       ]
     },
     {
+      id: "inventario",
+      icon: "inventory_2",
+      label: "INVENTARIO",
+      submenu: [
+        { href: "/inventory/summary", label: "RESUMEN" },
+        { href: "/inventory/stock", label: "EXISTENCIAS" },
+        { href: "/inventory/movements", label: "MOVIMIENTOS" }
+      ]
+    },
+    {
       id: "configuracion",
       icon: "settings",
       label: "CONFIGURACIÓN",
@@ -123,6 +133,15 @@ function SidebarContent({
     }
     if (subHref === "/workshop?action=new_order") {
       return pathname === "/workshop" && currentAction === "new_order";
+    }
+    if (subHref === "/inventory/summary" || subHref === "/inventory?view=summary") {
+      return pathname === "/inventory/summary" || (pathname === "/inventory" && (!currentView || currentView === "summary"));
+    }
+    if (subHref === "/inventory/stock" || subHref === "/inventory?view=stock") {
+      return pathname === "/inventory/stock" || (pathname === "/inventory" && (currentView === "stock" || currentView === "existencias"));
+    }
+    if (subHref === "/inventory/movements" || subHref === "/inventory?view=movements") {
+      return pathname === "/inventory/movements" || (pathname === "/inventory" && (currentView === "movements" || currentView === "movimientos"));
     }
     if (subHref.includes("?")) {
       return currentFullUrl === subHref;
