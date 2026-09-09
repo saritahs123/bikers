@@ -87,11 +87,14 @@ export async function GET(req: NextRequest) {
 
     if (mecanicoId) {
       queryParams.push(parseInt(mecanicoId, 10));
-      whereConditions.push(`EXISTS (
-        SELECT 1 FROM admin.orden_servicios os_mec
-        WHERE os_mec.orden_trabajo_id = ot.orden_trabajo_id
-          AND os_mec.usuario_id = $${queryParams.length}
-          AND (os_mec.activo IS DISTINCT FROM false)
+      whereConditions.push(`(
+        ot.mecanico_id = $${queryParams.length} OR
+        EXISTS (
+          SELECT 1 FROM admin.orden_servicios os_mec
+          WHERE os_mec.orden_trabajo_id = ot.orden_trabajo_id
+            AND os_mec.usuario_id = $${queryParams.length}
+            AND (os_mec.activo IS DISTINCT FROM false)
+        )
       )`);
     }
 
@@ -141,14 +144,19 @@ export async function GET(req: NextRequest) {
     } else if (sortBy === "estado") {
       orderBySql = `COALESCE(eot.orden_visual, ot.estado_orden_id) ${sortDirection}, ot.orden_trabajo_id ${sortDirection}`;
     } else if (sortBy === "mecanico") {
-      orderBySql = `(
-        SELECT LOWER(COALESCE(NULLIF(TRIM(CONCAT_WS(' ', ui.nombre, ui.apellido)), ''), ui.correo_electronico, ('Mecánico #' || u.usuario_id::text)))
-        FROM admin.orden_servicios os
-        JOIN admin.usuario u ON os.usuario_id = u.usuario_id
-        LEFT JOIN admin.usuario_identidad ui ON u.usuario_id = ui.usuario_id
-        WHERE os.orden_trabajo_id = ot.orden_trabajo_id AND os.usuario_id IS NOT NULL AND (os.activo IS DISTINCT FROM false)
-        ORDER BY os.orden_servicio_id ASC
-        LIMIT 1
+      orderBySql = `COALESCE(
+        NULLIF(TRIM(CONCAT_WS(' ', ui_mec.nombre, ui_mec.apellido)), ''),
+        ui_mec.correo_electronico,
+        ('Mecánico #' || u_mec.usuario_id::text),
+        (
+          SELECT COALESCE(NULLIF(TRIM(CONCAT_WS(' ', ui.nombre, ui.apellido)), ''), ui.correo_electronico, ('Mecánico #' || u.usuario_id::text))
+          FROM admin.orden_servicios os
+          JOIN admin.usuario u ON os.usuario_id = u.usuario_id
+          LEFT JOIN admin.usuario_identidad ui ON u.usuario_id = ui.usuario_id
+          WHERE os.orden_trabajo_id = ot.orden_trabajo_id AND os.usuario_id IS NOT NULL AND (os.activo IS DISTINCT FROM false)
+          ORDER BY os.orden_servicio_id ASC
+          LIMIT 1
+        )
       ) ${sortDirection} NULLS LAST, ot.orden_trabajo_id ${sortDirection}`;
     } else if (sortBy === "total") {
       orderBySql = `COALESCE(ot.total_orden, ot.subtotal_general, 0) ${sortDirection}, ot.orden_trabajo_id ${sortDirection}`;
@@ -196,24 +204,33 @@ export async function GET(req: NextRequest) {
           LIMIT 1
         ) AS primer_servicio,
         (SELECT COUNT(*) FROM admin.orden_servicios WHERE orden_trabajo_id = ot.orden_trabajo_id AND (activo IS DISTINCT FROM false)) AS total_servicios,
-        (
-          SELECT COALESCE(NULLIF(TRIM(CONCAT_WS(' ', ui.nombre, ui.apellido)), ''), ui.correo_electronico, ('Mecánico #' || u.usuario_id::text))
-          FROM admin.orden_servicios os
-          JOIN admin.usuario u ON os.usuario_id = u.usuario_id
-          LEFT JOIN admin.usuario_identidad ui ON u.usuario_id = ui.usuario_id
-          WHERE os.orden_trabajo_id = ot.orden_trabajo_id AND os.usuario_id IS NOT NULL AND (os.activo IS DISTINCT FROM false)
-          ORDER BY os.orden_servicio_id ASC
-          LIMIT 1
+        COALESCE(
+          NULLIF(TRIM(CONCAT_WS(' ', ui_mec.nombre, ui_mec.apellido)), ''),
+          ui_mec.correo_electronico,
+          (
+            SELECT COALESCE(NULLIF(TRIM(CONCAT_WS(' ', ui.nombre, ui.apellido)), ''), ui.correo_electronico, ('Mecánico #' || u.usuario_id::text))
+            FROM admin.orden_servicios os
+            JOIN admin.usuario u ON os.usuario_id = u.usuario_id
+            LEFT JOIN admin.usuario_identidad ui ON u.usuario_id = ui.usuario_id
+            WHERE os.orden_trabajo_id = ot.orden_trabajo_id AND os.usuario_id IS NOT NULL AND (os.activo IS DISTINCT FROM false)
+            ORDER BY os.orden_servicio_id ASC
+            LIMIT 1
+          )
         ) AS mecanico_nombre,
-        (
-          SELECT os.usuario_id
-          FROM admin.orden_servicios os
-          WHERE os.orden_trabajo_id = ot.orden_trabajo_id AND os.usuario_id IS NOT NULL AND (os.activo IS DISTINCT FROM false)
-          ORDER BY os.orden_servicio_id ASC
-          LIMIT 1
+        COALESCE(
+          ot.mecanico_id,
+          (
+            SELECT os.usuario_id
+            FROM admin.orden_servicios os
+            WHERE os.orden_trabajo_id = ot.orden_trabajo_id AND os.usuario_id IS NOT NULL AND (os.activo IS DISTINCT FROM false)
+            ORDER BY os.orden_servicio_id ASC
+            LIMIT 1
+          )
         ) AS mecanico_usuario_id
       FROM admin.ordenes_trabajo ot
       JOIN admin.clientes c ON ot.cliente_id = c.cliente_id
+      LEFT JOIN admin.usuario u_mec ON ot.mecanico_id = u_mec.usuario_id
+      LEFT JOIN admin.usuario_identidad ui_mec ON u_mec.usuario_id = ui_mec.usuario_id
       LEFT JOIN admin.recepciones r ON ot.recepcion_id = r.recepcion_id
       LEFT JOIN admin.bicicletas b ON ot.bicicleta_id = b.bicicleta_id
       LEFT JOIN admin.estado_orden_trabajo eot ON ot.estado_orden_id = eot.estado_orden_id
