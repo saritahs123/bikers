@@ -295,13 +295,16 @@ export async function GET(
       SELECT 
         ohe.orden_historial_estado_id AS historial_id,
         ohe.estado_anterior_id,
+        e1.codigo AS estado_anterior_codigo,
         e1.nombre AS estado_anterior_nombre,
         e1.color_estado AS estado_anterior_color,
         ohe.estado_nuevo_id,
+        e2.codigo AS estado_nuevo_codigo,
         e2.nombre AS estado_nuevo_nombre,
         e2.color_estado AS estado_nuevo_color,
         ohe.usuario_cambio AS usuario_id,
         COALESCE(NULLIF(TRIM(CONCAT_WS(' ', ui.nombre, ui.apellido)), ''), u.usuario_id::text) AS usuario_nombre,
+        ohe.comentario,
         COALESCE(ohe.comentario, 'Cambio de estado de la orden') AS observaciones,
         COALESCE(ohe.fecha_cambio, ohe.fecha_registro) AS fecha
       FROM admin.orden_historial_estado ohe
@@ -619,6 +622,8 @@ export async function PUT(
     }
 
     const estadoRecibidaId = codeToIdMap.get("RECIBIDA") || 1;
+    const estadoHoldId = codeToIdMap.get("HOLD") || 2;
+    const estadoAprobacionId = codeToIdMap.get("APROBACION") || 3;
     const estadoReparacionId = codeToIdMap.get("REPARACION") || 5;
     const estadoListaEntregaId = codeToIdMap.get("LISTA_ENTREGA") || 7;
     const estadoEntregadaId = codeToIdMap.get("ENTREGADA") || 8;
@@ -638,8 +643,10 @@ export async function PUT(
     let requestedStateId: number | undefined = undefined;
     if (accion === "MARCAR_LISTA_ENTREGA") {
       requestedStateId = estadoListaEntregaId;
-    } else if (accion === "INICIAR_REPARACION" || accion === "REABRIR_REPARACION") {
+    } else if (accion === "INICIAR_REPARACION" || accion === "REABRIR_REPARACION" || accion === "REANUDAR_REPARACION") {
       requestedStateId = estadoReparacionId;
+    } else if (accion === "PONER_EN_HOLD" || accion === "HOLD") {
+      requestedStateId = estadoHoldId;
     } else if (estado_orden_id !== undefined && estado_orden_id !== null && estado_orden_id !== "") {
       requestedStateId = parseInt(String(estado_orden_id), 10);
     }
@@ -1079,10 +1086,47 @@ export async function PUT(
     // State Machine allowed transitions
     const ALLOWED_TRANSITIONS: Record<number, number[]> = {
       [estadoRecibidaId]: [estadoReparacionId],
-      [estadoReparacionId]: [estadoListaEntregaId],
+      [estadoHoldId]: [estadoReparacionId],
+      [estadoAprobacionId]: [estadoReparacionId],
+      [estadoReparacionId]: [estadoHoldId, estadoListaEntregaId],
       [estadoListaEntregaId]: [estadoReparacionId, estadoEntregadaId],
       [estadoEntregadaId]: []
     };
+
+    const isTransitionToHold = (targetStateId === estadoHoldId && currentStateId === estadoReparacionId);
+    const isTransitionFromHold = (targetStateId === estadoReparacionId && currentStateId === estadoHoldId);
+
+    let motivoHold = "";
+    if (isTransitionToHold) {
+      const rawMotivo = body.motivo_hold || body.motivo || body.comentario || body.observacion_cambio_estado || body.motivo_cambio;
+      motivoHold = typeof rawMotivo === "string" ? rawMotivo.trim() : "";
+
+      if (!motivoHold || motivoHold.length < 5) {
+        await client.query("ROLLBACK");
+        return NextResponse.json(
+          {
+            success: false,
+            error: "HOLD_REASON_REQUIRED",
+            title: "Motivo de hold requerido",
+            message: "El motivo para poner la orden en HOLD es obligatorio y debe contener al menos 5 caracteres."
+          },
+          { status: 400 }
+        );
+      }
+
+      if (motivoHold.length > 500) {
+        await client.query("ROLLBACK");
+        return NextResponse.json(
+          {
+            success: false,
+            error: "HOLD_REASON_TOO_LONG",
+            title: "Motivo de hold demasiado largo",
+            message: "El motivo de hold no puede exceder los 500 caracteres."
+          },
+          { status: 400 }
+        );
+      }
+    }
 
     if (!ALLOWED_TRANSITIONS[currentStateId]?.includes(targetStateId)) {
       await client.query("ROLLBACK");
@@ -1423,9 +1467,69 @@ export async function PUT(
         ordenId
       ]);
 
-      historyComment = targetStateId === estadoReparacionId
-        ? `Reparación iniciada por ${sessionUserName}`
-        : (body.motivo_reapertura || observacion_cambio_estado || observacion_interna || "Cambio de estado de la orden");
+      if (isTransitionToHold) {
+        // 1. Close/pause all open timer sessions for services belonging to this order
+        const openSessionsRes = await client.query(`
+          WITH latest_sessions AS (
+            SELECT mo.orden_servicio_mano_obra_id, mo.orden_servicio_id, mo.fecha_inicio, mo.costo_hora
+            FROM admin.orden_servicio_mano_obra mo
+            JOIN admin.orden_servicios os ON mo.orden_servicio_id = os.orden_servicio_id
+            WHERE os.orden_trabajo_id = $1
+              AND (mo.detalle_mano_obra IS NULL OR BTRIM(mo.detalle_mano_obra) = '')
+              AND (mo.observacion IS NULL OR BTRIM(mo.observacion) = '')
+              AND mo.fecha_inicio IS NOT NULL
+              AND mo.fecha_finalizacion IS NULL
+              AND (mo.activo IS DISTINCT FROM false)
+              AND (os.activo IS DISTINCT FROM false)
+            FOR UPDATE OF mo
+          )
+          UPDATE admin.orden_servicio_mano_obra mo
+          SET
+            fecha_finalizacion = NOW(),
+            minutos_trabajados = ROUND(EXTRACT(EPOCH FROM (NOW() - ls.fecha_inicio))/60.0),
+            minutos_facturables = ROUND(EXTRACT(EPOCH FROM (NOW() - ls.fecha_inicio))/60.0),
+            costo_total = ROUND((EXTRACT(EPOCH FROM (NOW() - ls.fecha_inicio))/3600.0) * ls.costo_hora, 2),
+            usuario_actualizacion = $2
+          FROM latest_sessions ls
+          WHERE mo.orden_servicio_mano_obra_id = ls.orden_servicio_mano_obra_id
+          RETURNING mo.orden_servicio_id, ROUND(EXTRACT(EPOCH FROM (NOW() - ls.fecha_inicio))) AS session_seconds;
+        `, [ordenId, session.usuario_id]);
+
+        // 2. Accumulate session seconds on each service that had an active session
+        for (const row of openSessionsRes.rows || []) {
+          const sessSecs = Math.max(0, parseInt(row.session_seconds || 0, 10));
+          const srvId = parseInt(row.orden_servicio_id, 10);
+          if (srvId > 0 && sessSecs >= 0) {
+            await client.query(`
+              UPDATE admin.orden_servicios
+              SET tiempo_transcurrido = COALESCE(tiempo_transcurrido, 0) + $1
+              WHERE orden_servicio_id = $2
+            `, [sessSecs, srvId]);
+          }
+        }
+
+        // 3. Update any active services in state 2 (EN_PROCESO) to state 5 (SUSPENDIDO / PAUSADO)
+        await client.query(`
+          UPDATE admin.orden_servicios
+          SET
+            estado_orden_servicio_id = 5,
+            fecha_actualizacion = NOW(),
+            usuario_actualizacion = $1
+          WHERE orden_trabajo_id = $2
+            AND estado_orden_servicio_id = 2
+            AND (activo IS DISTINCT FROM false)
+        `, [session.usuario_id, ordenId]);
+
+        historyComment = motivoHold;
+      } else if (isTransitionFromHold) {
+        historyComment = typeof body.motivo === "string" && body.motivo.trim()
+          ? body.motivo.trim()
+          : (typeof body.comentario === "string" && body.comentario.trim() ? body.comentario.trim() : "Reparación reanudada");
+      } else if (targetStateId === estadoReparacionId && currentStateId === estadoRecibidaId) {
+        historyComment = `Reparación iniciada por ${sessionUserName}`;
+      } else {
+        historyComment = body.motivo_reapertura || observacion_cambio_estado || (targetStateId === estadoReparacionId ? `Reparación reanudada por ${sessionUserName}` : "Cambio de estado de la orden");
+      }
     }
 
     // Insert Single History Record using PostgreSQL sequence
@@ -1458,6 +1562,28 @@ export async function PUT(
         client,
         throwOnError: true
       });
+    } else if (isTransitionToHold) {
+      await recordUserAudit({
+        userId: session.usuario_id,
+        accion: "ORDEN_EN_HOLD",
+        valorAnterior: { estado_orden_id: currentStateId, estado_codigo: estadoAnteriorObj.codigo },
+        valorNuevo: { estado_orden_id: targetStateId, estado_codigo: estadoNuevoObj.codigo },
+        motivo: historyComment,
+        resultado: "COMPLETADO",
+        client,
+        throwOnError: true
+      });
+    } else if (isTransitionFromHold) {
+      await recordUserAudit({
+        userId: session.usuario_id,
+        accion: "ORDEN_REANUDAR_HOLD",
+        valorAnterior: { estado_orden_id: currentStateId, estado_codigo: estadoAnteriorObj.codigo },
+        valorNuevo: { estado_orden_id: targetStateId, estado_codigo: estadoNuevoObj.codigo },
+        motivo: historyComment,
+        resultado: "COMPLETADO",
+        client,
+        throwOnError: true
+      });
     } else {
       await recordUserAudit({
         userId: session.usuario_id,
@@ -1482,6 +1608,24 @@ export async function PUT(
         resultado: "Exitoso",
         req
       });
+    } else if (isTransitionToHold) {
+      await recordUserActivity({
+        userId: session.usuario_id,
+        modulo: "TALLER_ORDENES",
+        evento: "WORK_ORDER_HOLD",
+        descripcion: `Orden #${ordenId} puesta en HOLD por ${sessionUserName}. Motivo: ${historyComment}`,
+        resultado: "Exitoso",
+        req
+      });
+    } else if (isTransitionFromHold) {
+      await recordUserActivity({
+        userId: session.usuario_id,
+        modulo: "TALLER_ORDENES",
+        evento: "WORK_ORDER_HOLD_RESUMED",
+        descripcion: `Orden #${ordenId} reanudada de HOLD a Reparación por ${sessionUserName}.`,
+        resultado: "Exitoso",
+        req
+      });
     } else {
       await recordUserActivity({
         userId: session.usuario_id,
@@ -1493,13 +1637,20 @@ export async function PUT(
       });
     }
 
+    let successMessage = "Estado de la orden actualizado correctamente.";
+    if (isTransitionToHold) {
+      successMessage = "La orden fue puesta en HOLD correctamente.";
+    } else if (isTransitionFromHold) {
+      successMessage = "Reparación reanudada correctamente.";
+    } else if (targetStateId === estadoReparacionId && currentStateId === estadoRecibidaId) {
+      successMessage = "La reparación fue iniciada correctamente.";
+    } else if (targetStateId === estadoListaEntregaId) {
+      successMessage = "La orden fue marcada como lista para entrega.";
+    }
+
     return NextResponse.json({
       success: true,
-      message: targetStateId === estadoReparacionId
-        ? "La reparación fue iniciada correctamente."
-        : targetStateId === estadoListaEntregaId
-        ? "La orden fue marcada como lista para entrega."
-        : "Estado de la orden actualizado correctamente.",
+      message: successMessage,
       data: {
         orden_id: ordenId,
         orden_trabajo_id: ordenId,

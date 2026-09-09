@@ -26,7 +26,9 @@ import {
   Plus,
   X,
   Info,
-  Trash2
+  Trash2,
+  Pause,
+  Play
 } from "lucide-react";
 import WorkOrderServicesView from "./WorkOrderServicesView";
 import WorkOrderHistoryView from "./WorkOrderHistoryView";
@@ -487,6 +489,70 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
     }
   };
 
+  const [holdModalOpen, setHoldModalOpen] = useState(false);
+  const [holdReason, setHoldReason] = useState("");
+  const [holdModalError, setHoldModalError] = useState(null);
+  const [submittingHold, setSubmittingHold] = useState(false);
+
+  const handleConfirmHold = async (e) => {
+    if (e) e.preventDefault();
+    if (submittingHold) return;
+    const trimmed = holdReason.trim();
+    if (trimmed.length < 5) {
+      setHoldModalError("El motivo de hold es obligatorio y debe tener al menos 5 caracteres.");
+      return;
+    }
+    if (trimmed.length > 500) {
+      setHoldModalError("El motivo de hold no puede exceder los 500 caracteres.");
+      return;
+    }
+
+    setSubmittingHold(true);
+    setHoldModalError(null);
+
+    try {
+      const payload = {
+        estado_orden_id: 2,
+        accion: "PONER_EN_HOLD",
+        motivo_hold: trimmed,
+        observacion_cambio_estado: trimmed
+      };
+
+      const res = await fetch(`/api/taller/ordenes/${ordenId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      let data = null;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(res.ok ? "Respuesta inválida del servidor." : `Error del servidor (${res.status})`);
+      }
+
+      if (!res.ok) {
+        setHoldModalError(data?.message || data?.error || "No fue posible poner la orden en HOLD.");
+        return;
+      }
+
+      setHoldModalOpen(false);
+      setHoldReason("");
+      await fetchOrderDetail(true);
+      showInfoToast(
+        "La orden se encuentra en HOLD. Los trabajos y modificaciones de servicios quedan pausados.",
+        "ORDEN EN HOLD",
+        7000,
+        `Motivo: ${trimmed}`
+      );
+    } catch (err) {
+      console.error("handleConfirmHold Error:", err);
+      setHoldModalError(err.message || "Error al conectar con el servidor.");
+    } finally {
+      setSubmittingHold(false);
+    }
+  };
+
   const handleUpdateOrderState = async (e) => {
     e.preventDefault();
     if (updatingStatus) return;
@@ -897,24 +963,54 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
               INICIAR REPARACIÓN
             </button>
           )}
-          {Number(order.estado_orden_id) === 5 && (
+          {Number(order.estado_orden_id) === 2 && (
             <button
-              onClick={() => handleTransitionState(7)}
-              disabled={loadingStateChange || hasIncompleteServices}
-              className="flex items-center gap-2 px-4 py-2 bg-sky-500 text-white hover:bg-sky-600 rounded-xl transition-all font-mono text-xs font-extrabold uppercase tracking-wider shadow-lg shadow-sky-500/20 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-              title={
-                hasIncompleteServices
-                  ? `No se puede marcar lista para entrega: hay ${incompleteServices.length} servicio(s) pendiente(s).`
-                  : "Marcar orden lista para entrega"
-              }
+              onClick={() => handleTransitionState(5, "Reparación reanudada")}
+              disabled={loadingStateChange}
+              className="flex items-center gap-2 px-4 py-2 bg-[#bfce7f] text-slate-950 hover:bg-[#a6b66b] rounded-xl transition-all font-mono text-xs font-extrabold uppercase tracking-wider border-t border-[#d8e899] shadow-lg shadow-[#bfce7f]/20 disabled:opacity-50 cursor-pointer"
+              title="Reanudar reparación de la orden"
             >
               {loadingStateChange ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
-                <Truck className="w-4 h-4" />
+                <Play className="w-4 h-4" />
               )}
-              MARCAR LISTA PARA ENTREGA
+              REANUDAR REPARACIÓN
             </button>
+          )}
+          {Number(order.estado_orden_id) === 5 && (
+            <>
+              <button
+                onClick={() => {
+                  setHoldReason("");
+                  setHoldModalError(null);
+                  setHoldModalOpen(true);
+                }}
+                disabled={loadingStateChange}
+                className="flex items-center gap-2 px-4 py-2 bg-amber-500/15 border border-amber-500/40 text-amber-300 hover:bg-amber-500/25 rounded-xl transition-all font-mono text-xs font-extrabold uppercase tracking-wider shadow-lg shadow-amber-500/10 cursor-pointer disabled:opacity-50"
+                title="Pausar la orden y poner en HOLD indicando motivo obligatorio"
+              >
+                <Pause className="w-4 h-4" />
+                PONER EN HOLD
+              </button>
+              <button
+                onClick={() => handleTransitionState(7)}
+                disabled={loadingStateChange || hasIncompleteServices}
+                className="flex items-center gap-2 px-4 py-2 bg-sky-500 text-white hover:bg-sky-600 rounded-xl transition-all font-mono text-xs font-extrabold uppercase tracking-wider shadow-lg shadow-sky-500/20 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                title={
+                  hasIncompleteServices
+                    ? `No se puede marcar lista para entrega: hay ${incompleteServices.length} servicio(s) pendiente(s).`
+                    : "Marcar orden lista para entrega"
+                }
+              >
+                {loadingStateChange ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Truck className="w-4 h-4" />
+                )}
+                MARCAR LISTA PARA ENTREGA
+              </button>
+            </>
           )}
           {Number(order.estado_orden_id) === 7 && (
             <>
@@ -990,38 +1086,75 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
         <div className="flex justify-between items-center relative">
           <div className="absolute left-[5%] right-[5%] top-1/2 h-1 bg-[#2d3748] -z-0 -translate-y-1/2"></div>
           {pipelineSteps.map((step) => {
-            const StepIcon = step.icon;
-            const isCompleted = step.id < currentStepId;
+            const isHoldAtRepair = currentStepId === 2 && step.id === 5;
+            const isCompleted = currentStepId === 2 ? step.id === 1 : step.id < currentStepId;
             const isActive = step.id === currentStepId;
+            const StepIcon = isHoldAtRepair ? Pause : step.icon;
 
             return (
               <div key={step.id} className="flex flex-col items-center gap-2 relative z-10 w-1/6">
                 <div
+                  style={
+                    isHoldAtRepair
+                      ? {
+                          backgroundColor: order.color_estado || "#EAB308",
+                          color: "#0a0c10",
+                          boxShadow: `0 0 12px ${order.color_estado || "#EAB308"}60`
+                        }
+                      : undefined
+                  }
                   className={`flex items-center justify-center transition-all ${
-                    isActive
+                    isHoldAtRepair
+                      ? "w-10 h-10 rounded-full border-2 border-[#161a21]"
+                      : isActive
                       ? "w-10 h-10 rounded-full bg-[#bfce7f] text-slate-950 border-2 border-[#161a21] shadow-[0_0_12px_rgba(191,206,127,0.4)]"
                       : isCompleted
                       ? "w-8 h-8 rounded-full bg-[#84924a] text-white border-2 border-[#161a21]"
                       : "w-8 h-8 rounded-full bg-[#1c2129] text-slate-500 border border-[#2d3748]"
                   }`}
                 >
-                  <StepIcon className={isActive ? "w-5 h-5" : "w-4 h-4"} />
+                  <StepIcon className={isHoldAtRepair || isActive ? "w-5 h-5" : "w-4 h-4"} />
                 </div>
                 <span
-                  className={`font-mono text-[10px] tracking-wider uppercase ${
-                    isActive
+                  style={isHoldAtRepair ? { color: order.color_estado || "#EAB308" } : undefined}
+                  className={`font-mono text-[10px] tracking-wider uppercase text-center ${
+                    isHoldAtRepair
+                      ? "font-extrabold"
+                      : isActive
                       ? "text-[#bfce7f] font-bold"
                       : isCompleted
                       ? "text-slate-200 font-semibold"
                       : "text-slate-500"
                   }`}
                 >
-                  {step.label}
+                  {isHoldAtRepair ? `${step.label} (${order.estado_nombre || "HOLD"})` : step.label}
                 </span>
               </div>
             );
           })}
         </div>
+
+        {/* Dedicated HOLD Pause Banner inside Stepper Card */}
+        {currentStepId === 2 && (
+          <div
+            style={{
+              backgroundColor: `${order.color_estado || "#EAB308"}15`,
+              borderColor: `${order.color_estado || "#EAB308"}40`,
+              color: order.color_estado || "#EAB308"
+            }}
+            className="mt-4 p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2 font-mono text-xs animate-in fade-in duration-200"
+          >
+            <div className="flex items-center gap-2.5">
+              <Pause className="w-4 h-4 shrink-0" />
+              <span className="font-bold uppercase tracking-wide">
+                ORDEN EN PAUSA ({order.estado_nombre || "EN HOLD"})
+              </span>
+            </div>
+            <span className="text-[11px] text-slate-300 font-sans">
+              Los trabajos técnicos y servicios se encuentran en pausa temporal.
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Sub-Navigation Tabs */}
@@ -1608,6 +1741,128 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                     <>
                       <RotateCcw className="w-4 h-4" />
                       Confirmar reapertura
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* DEDICATED HOLD MODAL */}
+      {holdModalOpen && typeof document !== "undefined" && createPortal(
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="hold-modal-title"
+          className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !submittingHold) {
+              setHoldModalOpen(false);
+              setHoldModalError(null);
+            }
+          }}
+        >
+          <div className="bg-[#161a21] border border-amber-500/40 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-[#2d3748] flex items-center justify-between bg-[#12151b]">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                  <Pause className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 id="hold-modal-title" className="text-base font-bold text-slate-100 font-mono tracking-tight">
+                    Poner Orden en HOLD
+                  </h3>
+                  <span className="text-xs text-slate-400 font-mono">
+                    {order?.codigo_orden} {order?.codigo_recepcion ? `• Rec: ${order.codigo_recepcion}` : ""}
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  if (!submittingHold) {
+                    setHoldModalOpen(false);
+                    setHoldModalError(null);
+                  }
+                }}
+                disabled={submittingHold}
+                className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-[#1f242d] rounded-lg transition-colors disabled:opacity-40 cursor-pointer"
+                title="Cerrar modal"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleConfirmHold} className="p-6 space-y-4 overflow-y-auto custom-scrollbar">
+              <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                <div className="space-y-1 text-slate-300 leading-relaxed font-sans text-xs">
+                  <p className="font-bold text-amber-300 font-mono text-xs">Pausar Reparación de la Orden</p>
+                  <p className="text-[11px] text-slate-300">
+                    Al poner la orden en HOLD, los servicios y adición de repuestos quedarán bloqueados hasta que la orden sea reanudada.
+                  </p>
+                </div>
+              </div>
+
+              {holdModalError && (
+                <div className="p-3 bg-rose-500/15 border border-rose-500/40 rounded-xl flex items-center gap-2 text-rose-300 font-sans text-xs">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                  <span>{holdModalError}</span>
+                </div>
+              )}
+
+              <div className="space-y-2 font-mono text-xs">
+                <label htmlFor="motivo_hold" className="block text-slate-200 font-semibold">
+                  Motivo de Hold <span className="text-rose-400">*</span>
+                </label>
+                <textarea
+                  id="motivo_hold"
+                  rows={3}
+                  value={holdReason}
+                  onChange={(e) => {
+                    setHoldReason(e.target.value);
+                    if (holdModalError) setHoldModalError(null);
+                  }}
+                  disabled={submittingHold}
+                  placeholder="Ej: Esperando disponibilidad del repuesto / Esperando autorización de presupuesto adicional del cliente..."
+                  className="w-full bg-[#0a0c10] border border-[#2d3748] focus:border-amber-400 rounded-xl px-3.5 py-2.5 text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-amber-400/50 resize-none text-xs transition-colors font-sans"
+                />
+                <div className="flex justify-between items-center text-[10px] text-slate-500">
+                  <span>Mínimo 5 caracteres (Máx. 500)</span>
+                  <span>{holdReason.trim().length} / 500</span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#2d3748]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHoldModalOpen(false);
+                    setHoldModalError(null);
+                  }}
+                  disabled={submittingHold}
+                  className="px-4 py-2 bg-[#1c2129] border border-[#2d3748] text-slate-300 rounded-xl hover:bg-[#252b36] transition-colors font-mono text-xs cursor-pointer disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingHold || holdReason.trim().length < 5}
+                  className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl transition-all font-mono text-xs flex items-center gap-2 shadow-lg shadow-amber-500/20 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  {submittingHold ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Guardando...
+                    </>
+                  ) : (
+                    <>
+                      <Pause className="w-4 h-4" />
+                      Poner en HOLD
                     </>
                   )}
                 </button>

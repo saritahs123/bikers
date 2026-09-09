@@ -8,7 +8,8 @@ import {
   Wrench,
   Package,
   FileText,
-  UserCheck
+  UserCheck,
+  Pause
 } from "lucide-react";
 
 export default function WorkOrderHistoryView({ history = [] }) {
@@ -45,8 +46,13 @@ export default function WorkOrderHistoryView({ history = [] }) {
     let iconType = "service";
 
     if (isRealStateChange) {
-      title = `Orden cambió de ${stPrev} a ${stNext}`;
-      iconType = "state";
+      if (item.estado_nuevo_id === 2 || item.estado_nuevo_codigo === "HOLD" || String(stNext || "").toUpperCase().includes("HOLD")) {
+        title = `Orden puesta en ${stNext || "HOLD"}`;
+        iconType = "hold";
+      } else {
+        title = `Orden cambió de ${stPrev} a ${stNext}`;
+        iconType = "state";
+      }
     } else if (cLower.includes("mecanico") || cLower.includes("mecánico") || cLower.includes("reasign") || cLower.includes("iniciada por")) {
       title = cLower.includes("reasign") ? "Mecánico Reasignado" : "Mecánico Asignado / Reparación Iniciada";
       iconType = "mechanic";
@@ -74,6 +80,8 @@ export default function WorkOrderHistoryView({ history = [] }) {
   // Icon renderer
   const renderIcon = (iconType) => {
     switch (iconType) {
+      case "hold":
+        return <Pause className="w-3.5 h-3.5 text-amber-400" />;
       case "state":
         return <History className="w-3.5 h-3.5 text-emerald-400" />;
       case "mechanic":
@@ -166,7 +174,14 @@ export default function WorkOrderHistoryView({ history = [] }) {
                   {/* Comment / Detail text */}
                   {(item.comentario || item.observacion) && (
                     <p className="text-xs text-slate-300 bg-[#0a0c10] p-2.5 rounded-lg border border-[#2d3748]/60 font-mono leading-relaxed">
-                      {item.comentario || item.observacion}
+                      {(item.estado_nuevo_id === 2 || item.estado_nuevo_codigo === "HOLD" || String(item.estado_nuevo_nombre || "").toUpperCase().includes("HOLD")) ? (
+                        <span>
+                          <strong className="text-amber-400 font-bold">Motivo: </strong>
+                          {item.comentario || item.observacion}
+                        </span>
+                      ) : (
+                        item.comentario || item.observacion
+                      )}
                     </p>
                   )}
 

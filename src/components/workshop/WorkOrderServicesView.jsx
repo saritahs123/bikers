@@ -941,10 +941,16 @@ export default function WorkOrderServicesView({
   // Handle Operative Action Execution (Iniciar, Pausar, Reanudar, Finalizar)
   const executeOperativeAction = async (svc, actionCode, extraBody = {}) => {
     if (!isOrderInRepair) {
-      if (orderStateCode === "LISTA_ENTREGA") {
+      if (orderStateCode === "LISTA_ENTREGA" || Number(order?.estado_orden_id) === 7) {
         showInfoToast(
           "La orden está en estado Lista para Entrega. Reabre la reparación para modificar servicios o repuestos.",
           "ORDEN EN LISTA PARA ENTREGA",
+          6500
+        );
+      } else if (orderStateCode === "HOLD" || Number(order?.estado_orden_id) === 2) {
+        showInfoToast(
+          "La orden se encuentra en HOLD. Reanuda la reparación antes de operar sobre sus servicios.",
+          "ORDEN EN HOLD",
           6500
         );
       } else {
@@ -1014,10 +1020,16 @@ export default function WorkOrderServicesView({
   // Handle Finish Service Trigger
   const handleFinishServiceTrigger = (svc) => {
     if (!isOrderInRepair) {
-      if (orderStateCode === "LISTA_ENTREGA") {
+      if (orderStateCode === "LISTA_ENTREGA" || Number(order?.estado_orden_id) === 7) {
         showInfoToast(
           "La orden está en estado Lista para Entrega. Reabre la reparación para modificar servicios o repuestos.",
           "ORDEN EN LISTA PARA ENTREGA",
+          6500
+        );
+      } else if (orderStateCode === "HOLD" || Number(order?.estado_orden_id) === 2) {
+        showInfoToast(
+          "La orden se encuentra en HOLD. Reanuda la reparación antes de finalizar servicios.",
+          "ORDEN EN HOLD",
           6500
         );
       } else {
