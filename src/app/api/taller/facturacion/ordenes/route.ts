@@ -25,7 +25,11 @@ export async function GET(req: NextRequest) {
     const estadoId = searchParams.get("estado_id") || "";
     const prioridadId = searchParams.get("prioridad_id") || "";
     const facturadoFilter = searchParams.get("facturado"); // 'true' | 'false' | null
+    const period = searchParams.get("period") || "";
+    const from = searchParams.get("from") || "";
+    const to = searchParams.get("to") || "";
     const limit = parseInt(searchParams.get("limit") || "100", 10);
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
 
     const queryParams: any[] = [empresaId];
     const whereConditions: string[] = [
@@ -69,6 +73,23 @@ export async function GET(req: NextRequest) {
       whereConditions.push(`(ot.facturado = false OR ot.facturado IS NULL)`);
     }
 
+    if (period === "hoy" || period === "today") {
+      whereConditions.push(`(ot.fecha_registro AT TIME ZONE 'America/Santo_Domingo')::date = (NOW() AT TIME ZONE 'America/Santo_Domingo')::date`);
+    } else if (period === "7d" || period === "7_dias" || period === "7dias") {
+      whereConditions.push(`(ot.fecha_registro AT TIME ZONE 'America/Santo_Domingo')::date >= ((NOW() AT TIME ZONE 'America/Santo_Domingo')::date - INTERVAL '6 days')::date AND (ot.fecha_registro AT TIME ZONE 'America/Santo_Domingo')::date <= (NOW() AT TIME ZONE 'America/Santo_Domingo')::date`);
+    } else if (period === "30d" || period === "30_dias" || period === "30dias") {
+      whereConditions.push(`(ot.fecha_registro AT TIME ZONE 'America/Santo_Domingo')::date >= ((NOW() AT TIME ZONE 'America/Santo_Domingo')::date - INTERVAL '29 days')::date AND (ot.fecha_registro AT TIME ZONE 'America/Santo_Domingo')::date <= (NOW() AT TIME ZONE 'America/Santo_Domingo')::date`);
+    } else {
+      if (from && dateRegex.test(from)) {
+        queryParams.push(from);
+        whereConditions.push(`(ot.fecha_registro AT TIME ZONE 'America/Santo_Domingo')::date >= $${queryParams.length}::date`);
+      }
+      if (to && dateRegex.test(to)) {
+        queryParams.push(to);
+        whereConditions.push(`(ot.fecha_registro AT TIME ZONE 'America/Santo_Domingo')::date <= $${queryParams.length}::date`);
+      }
+    }
+
     const whereClause = `WHERE ${whereConditions.join(" AND ")}`;
 
     const sql = `
@@ -86,9 +107,47 @@ export async function GET(req: NextRequest) {
         ot.prioridad_orden_id AS prioridad_id,
         pot.nombre AS prioridad_nombre,
         pot.color_estado AS prioridad_color,
+        ot.fecha_registro AS fecha_creacion,
+        ot.fecha_registro,
+        COALESCE(
+          ot.fecha_inicio_trabajo,
+          (
+            SELECT fecha_cambio
+            FROM admin.orden_historial_estado
+            WHERE orden_trabajo_id = ot.orden_trabajo_id AND estado_nuevo_id = 5
+            ORDER BY orden_historial_estado_id ASC
+            LIMIT 1
+          )
+        ) AS fecha_inicio_reparacion,
+        (
+          SELECT fecha_cambio
+          FROM admin.orden_historial_estado
+          WHERE orden_trabajo_id = ot.orden_trabajo_id AND estado_nuevo_id = 2
+          ORDER BY orden_historial_estado_id DESC
+          LIMIT 1
+        ) AS fecha_hold,
+        COALESCE(
+          ot.fecha_finalizacion,
+          (
+            SELECT fecha_cambio
+            FROM admin.orden_historial_estado
+            WHERE orden_trabajo_id = ot.orden_trabajo_id AND estado_nuevo_id = 7
+            ORDER BY orden_historial_estado_id DESC
+            LIMIT 1
+          )
+        ) AS fecha_completada,
+        COALESCE(
+          ot.fecha_entrega_real,
+          (
+            SELECT fecha_cambio
+            FROM admin.orden_historial_estado
+            WHERE orden_trabajo_id = ot.orden_trabajo_id AND estado_nuevo_id = 8
+            ORDER BY orden_historial_estado_id DESC
+            LIMIT 1
+          )
+        ) AS fecha_entregada,
         ot.fecha_recepcion AS fecha_ingreso,
         ot.fecha_entrega_estimada AS fecha_prometida,
-        ot.fecha_entrega_real AS fecha_entrega,
         COALESCE(ot.facturado, false) AS facturado,
         ot.fecha_facturacion,
         ot.usuario_facturacion_id,

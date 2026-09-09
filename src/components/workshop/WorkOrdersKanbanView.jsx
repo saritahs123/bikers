@@ -30,8 +30,8 @@ const KANBAN_COLUMNS = [
     key: "RECIBIDAS",
     repCodigo: "RECIBIDA",
     repId: 1,
-    codigos: ["RECIBIDA", "HOLD", "APROBACION"],
-    estado_ids: [1, 2, 3],
+    codigos: ["RECIBIDA", "APROBACION"],
+    estado_ids: [1, 3],
     fallbackTitle: "RECIBIDAS",
     fallbackColor: "#38BDF8",
     subtitle: "Pendientes de inicio",
@@ -41,8 +41,8 @@ const KANBAN_COLUMNS = [
     key: "REPARACION",
     repCodigo: "REPARACION",
     repId: 5,
-    codigos: ["REPARACION"],
-    estado_ids: [5],
+    codigos: ["REPARACION", "HOLD"],
+    estado_ids: [5, 2],
     fallbackTitle: "EN REPARACIÓN",
     fallbackColor: "#F59E0B",
     subtitle: "Trabajo técnico activo",
@@ -480,17 +480,41 @@ export default function WorkOrdersKanbanView({ onViewDetail, onOpenNewModal, onT
                           ? `${ord.bicicleta_marca || ""} ${ord.bicicleta_modelo || ""}`.trim()
                           : "Bicicleta de taller";
 
+                      const isHold = String(ord.estado_codigo || "").trim().toUpperCase() === "HOLD" || Number(ord.estado_orden_id) === 2;
+                      const ordState = catalogs.estados?.find(
+                        (e) => e.codigo === ord.estado_codigo || e.estado_orden_id === ord.estado_orden_id
+                      );
+                      const ordStateName = ordState?.nombre || ord.estado_nombre || "En Hold";
+                      const ordStateColor =
+                        ordState?.color_estado && /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(ordState.color_estado.trim())
+                          ? ordState.color_estado.trim()
+                          : ord.estado_color || "#F59E0B";
+
                       return (
                         <div
                           key={ord.orden_id || ord.orden_trabajo_id}
                           className="bg-surface border border-border rounded-xl p-4 space-y-2.5 shadow-sm select-none transition-all cursor-default"
-                          style={{ borderLeft: `4px solid ${color}` }}
+                          style={{ borderLeft: isHold ? `4px solid ${ordStateColor}` : `4px solid ${color}` }}
                         >
                           {/* 1. NÚMERO DE ORDEN Y FECHA(S) */}
                           <div className="flex items-center justify-between gap-2 border-b border-border/50 pb-2 min-w-0">
-                            <span className="font-mono text-base sm:text-lg xl:text-lg 2xl:text-xl font-black text-foreground tracking-tight whitespace-nowrap shrink-0">
-                              {ord.codigo_orden}
-                            </span>
+                            <div className="flex items-center gap-2 flex-wrap min-w-0">
+                              <span className="font-mono text-base sm:text-lg xl:text-lg 2xl:text-xl font-black text-foreground tracking-tight whitespace-nowrap shrink-0">
+                                {ord.codigo_orden}
+                              </span>
+                              {isHold && (
+                                <span
+                                  className="px-2 py-0.5 rounded-md text-[10px] sm:text-[11px] font-mono font-bold border uppercase tracking-wider whitespace-nowrap"
+                                  style={{
+                                    backgroundColor: hexToRgba(ordStateColor, 0.15) || "rgba(245, 158, 11, 0.15)",
+                                    borderColor: hexToRgba(ordStateColor, 0.35) || ordStateColor,
+                                    color: ordStateColor
+                                  }}
+                                >
+                                  {ordStateName}
+                                </span>
+                              )}
+                            </div>
 
                             {/* Fechas según columna */}
                             {(col.key === "RECIBIDAS" || col.key === "REPARACION") && (
