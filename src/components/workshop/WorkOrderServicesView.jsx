@@ -1265,9 +1265,6 @@ export default function WorkOrderServicesView({
               DETALLE DE SERVICIOS Y REPUESTOS ({totalItemsCount})
             </h4>
           </div>
-          <span className="text-[11px] font-mono text-slate-400">
-            Ancho completo 100% • Control directo en tabla
-          </span>
         </div>
 
         <div className="overflow-x-auto custom-scrollbar">
