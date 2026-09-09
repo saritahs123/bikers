@@ -245,6 +245,7 @@ export async function GET(req: NextRequest) {
         COUNT(ot.orden_trabajo_id) FILTER (WHERE (eot.codigo NOT IN ('ENTREGADA', 'CANCELADA') OR eot.codigo IS NULL) AND ot.estado_orden_id NOT IN (8, 9))::int AS abiertas,
         COUNT(ot.orden_trabajo_id) FILTER (WHERE eot.codigo = 'RECIBIDA' OR ot.estado_orden_id = 1)::int AS recibidas,
         COUNT(ot.orden_trabajo_id) FILTER (WHERE eot.codigo = 'REPARACION' OR ot.estado_orden_id = 5)::int AS en_proceso,
+        COUNT(ot.orden_trabajo_id) FILTER (WHERE eot.codigo = 'HOLD' OR ot.estado_orden_id = 2)::int AS en_hold,
         COUNT(ot.orden_trabajo_id) FILTER (WHERE eot.codigo = 'LISTA_ENTREGA' OR ot.estado_orden_id = 7)::int AS listas_entrega,
         COUNT(ot.orden_trabajo_id) FILTER (WHERE eot.codigo = 'ENTREGADA' OR ot.estado_orden_id = 8)::int AS entregadas,
         COUNT(ot.orden_trabajo_id)::int AS total
@@ -259,6 +260,7 @@ export async function GET(req: NextRequest) {
       abiertas: 0,
       recibidas: 0,
       en_proceso: 0,
+      en_hold: 0,
       listas_entrega: 0,
       entregadas: 0,
       total: 0
@@ -277,6 +279,7 @@ export async function GET(req: NextRequest) {
         abiertas: Number(metricsData.abiertas || 0),
         recibidas: Number(metricsData.recibidas || 0),
         en_proceso: Number(metricsData.en_proceso || 0),
+        en_hold: Number(metricsData.en_hold || 0),
         listas_entrega: Number(metricsData.listas_entrega || 0),
         entregadas: Number(metricsData.entregadas || 0),
         total: Number(metricsData.total || 0)
