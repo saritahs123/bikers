@@ -28,6 +28,7 @@ import {
   ArrowUp,
   ArrowDown
 } from "lucide-react";
+import WorkOrderStatusBadge, { hexToRgba } from "./WorkOrderStatusBadge";
 
 const STATUS_FILTERS = {
   TOTAL: "",
@@ -65,7 +66,7 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
 
   const [orders, setOrders] = useState([]);
   const [catalogs, setCatalogs] = useState({ estados: [], prioridades: [], mecanicos: [] });
-  const [metrics, setMetrics] = useState({ total: 0, abiertas: 0, recibidas: 0, en_proceso: 0, listas_entrega: 0, entregadas: 0 });
+  const [metrics, setMetrics] = useState({ total: 0, abiertas: 0, recibidas: 0, en_proceso: 0, en_hold: 0, listas_entrega: 0, entregadas: 0 });
   const [initialLoading, setInitialLoading] = useState(true);
   const [isFetching, setIsFetching] = useState(false);
   const [error, setError] = useState(null);
@@ -174,6 +175,7 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
           abiertas: Number(data.metrics.abiertas || 0),
           recibidas: Number(data.metrics.recibidas || 0),
           en_proceso: Number(data.metrics.en_proceso || 0),
+          en_hold: Number(data.metrics.en_hold || 0),
           listas_entrega: Number(data.metrics.listas_entrega || 0),
           entregadas: Number(data.metrics.entregadas || 0)
         });
@@ -286,22 +288,29 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
     }
   };
 
-  const getEstadoBadge = (codigo, nombre) => {
-    let style = "bg-slate-800 text-slate-300 border-slate-700";
-    if (codigo === "RECIBIDA") style = "bg-slate-800 text-slate-300 border-slate-700";
-    if (codigo === "REPARACION") style = "bg-[#84924a]/20 text-[#bfce7f] border-[#84924a]/40";
-    if (codigo === "LISTA_ENTREGA") style = "bg-emerald-500/20 text-emerald-400 border-emerald-500/30";
-    if (codigo === "ENTREGADA") style = "bg-slate-700/40 text-slate-400 border-slate-600/30";
-
-    return (
-      <span className={`inline-flex items-center px-2 py-1 rounded font-mono text-[10px] font-bold border uppercase tracking-wider ${style}`}>
-        {nombre}
-      </span>
-    );
-  };
-
   const selectedMecanicoObj = catalogs.mecanicos?.find(m => String(m.usuario_id) === String(selectedMecanico));
   const hasActiveFilters = Boolean(search || selectedEstado || selectedMecanico || dateFrom || dateTo);
+
+  const stRecibida = catalogs.estados?.find(e => e.codigo === "RECIBIDA" || e.estado_orden_id === 1);
+  const stReparacion = catalogs.estados?.find(e => e.codigo === "REPARACION" || e.estado_orden_id === 5);
+  const stHold = catalogs.estados?.find(e => e.codigo === "HOLD" || e.estado_orden_id === 2);
+  const stListaEntrega = catalogs.estados?.find(e => e.codigo === "LISTA_ENTREGA" || e.estado_orden_id === 7);
+  const stEntregada = catalogs.estados?.find(e => e.codigo === "ENTREGADA" || e.estado_orden_id === 8);
+
+  const titleRecibida = stRecibida?.nombre || "RECIBIDAS";
+  const colorRecibida = (stRecibida?.color_estado && /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(stRecibida.color_estado.trim())) ? stRecibida.color_estado.trim() : "#38BDF8";
+
+  const titleReparacion = stReparacion?.nombre || "EN REPARACIÓN";
+  const colorReparacion = (stReparacion?.color_estado && /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(stReparacion.color_estado.trim())) ? stReparacion.color_estado.trim() : "#F59E0B";
+
+  const titleHold = stHold?.nombre || "EN HOLD";
+  const colorHold = (stHold?.color_estado && /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(stHold.color_estado.trim())) ? stHold.color_estado.trim() : "#EAB308";
+
+  const titleListaEntrega = stListaEntrega?.nombre || "LISTAS PARA ENTREGA";
+  const colorListaEntrega = (stListaEntrega?.color_estado && /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(stListaEntrega.color_estado.trim())) ? stListaEntrega.color_estado.trim() : "#10B981";
+
+  const titleEntregada = stEntregada?.nombre || "ENTREGADAS";
+  const colorEntregada = (stEntregada?.color_estado && /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(stEntregada.color_estado.trim())) ? stEntregada.color_estado.trim() : "#64748B";
 
   return (
     <div className="space-y-6">
@@ -338,86 +347,153 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
         {/* Card 1: TOTAL DE ÓRDENES */}
         <div
           onClick={() => updateUrlParams({ estado: null, estado_id: null })}
-          className={`bg-[#161a21] border rounded-xl p-5 transition-all relative overflow-hidden group cursor-pointer ${
+          className={`bg-[#161a21] border rounded-xl px-4 py-3 transition-all relative overflow-hidden group cursor-pointer flex flex-col justify-between ${
             !selectedEstado || selectedEstado === STATUS_FILTERS.TOTAL
               ? "border-[#bfce7f] shadow-[0_0_15px_rgba(191,206,127,0.15)] ring-1 ring-[#bfce7f]/30"
               : "border-[#2d3748] hover:border-[#4a5568]"
           }`}
         >
-          <div className="flex justify-between items-start mb-3">
-            <span className="font-mono text-xs font-bold text-slate-400 tracking-wider uppercase">TOTAL DE ÓRDENES</span>
-            <Inbox className="w-5 h-5 text-[#bfce7f]" />
+          <div>
+            <div className="flex justify-between items-start mb-1.5">
+              <span
+                className="font-mono text-[11px] font-bold tracking-wider uppercase truncate"
+                style={{ color: (!selectedEstado || selectedEstado === STATUS_FILTERS.TOTAL) ? "#bfce7f" : "#94a3b8" }}
+              >
+                TOTAL DE ÓRDENES
+              </span>
+              <Inbox className="w-4 h-4 text-[#bfce7f] shrink-0" />
+            </div>
+            <div className="text-2xl font-extrabold text-slate-100 font-mono leading-none tracking-tight">{metrics.total || 0}</div>
           </div>
-          <div className="text-3xl font-extrabold text-slate-100 font-mono">{metrics.total || 0}</div>
-          <div className="text-xs text-[#bfce7f] mt-1 font-medium">Todas las órdenes registradas</div>
+          <div className="text-[11px] text-slate-400 mt-2 font-medium leading-tight">Todas las órdenes registradas</div>
         </div>
 
         {/* Card 2: RECIBIDAS */}
         <div
           onClick={() => updateUrlParams({ estado: STATUS_FILTERS.RECIBIDAS, estado_id: null })}
-          className={`bg-[#161a21] border rounded-xl p-5 transition-all relative overflow-hidden group cursor-pointer ${
+          className={`bg-[#161a21] border rounded-xl px-4 py-3 transition-all relative overflow-hidden group cursor-pointer flex flex-col justify-between ${
             selectedEstado === STATUS_FILTERS.RECIBIDAS
-              ? "border-sky-400 shadow-[0_0_15px_rgba(56,189,248,0.15)] ring-1 ring-sky-400/30"
+              ? "ring-1"
               : "border-[#2d3748] hover:border-[#4a5568]"
           }`}
+          style={selectedEstado === STATUS_FILTERS.RECIBIDAS ? {
+            borderColor: colorRecibida,
+            boxShadow: `0 0 15px ${hexToRgba(colorRecibida, 0.15) || 'rgba(56,189,248,0.15)'}`,
+            outlineColor: hexToRgba(colorRecibida, 0.3) || 'rgba(56,189,248,0.3)'
+          } : {}}
         >
-          <div className="flex justify-between items-start mb-3">
-            <span className="font-mono text-xs font-bold text-slate-400 tracking-wider uppercase">RECIBIDAS</span>
-            <Clock className="w-5 h-5 text-sky-400" />
+          <div>
+            <div className="flex justify-between items-start mb-1.5">
+              <span
+                className="font-mono text-[11px] font-bold tracking-wider uppercase truncate"
+                style={{ color: selectedEstado === STATUS_FILTERS.RECIBIDAS ? colorRecibida : "#94a3b8" }}
+              >
+                {titleRecibida}
+              </span>
+              <Clock className="w-4 h-4 shrink-0" style={{ color: colorRecibida }} />
+            </div>
+            <div className="text-2xl font-extrabold text-slate-100 font-mono leading-none tracking-tight">{metrics.recibidas || 0}</div>
           </div>
-          <div className="text-3xl font-extrabold text-slate-100 font-mono">{metrics.recibidas || 0}</div>
-          <div className="text-xs text-slate-400 mt-1 font-medium">Pendientes de inicio</div>
+          <div className="text-[11px] text-slate-400 mt-2 font-medium leading-tight">Pendientes de inicio</div>
         </div>
 
         {/* Card 3: EN REPARACIÓN */}
         <div
           onClick={() => updateUrlParams({ estado: STATUS_FILTERS.REPARACION, estado_id: null })}
-          className={`bg-[#161a21] border rounded-xl p-5 transition-all relative overflow-hidden group cursor-pointer ${
+          className={`bg-[#161a21] border rounded-xl px-4 py-3 transition-all relative overflow-hidden group cursor-pointer flex flex-col justify-between ${
             selectedEstado === STATUS_FILTERS.REPARACION
-              ? "border-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.15)] ring-1 ring-amber-400/30"
+              ? "ring-1"
               : "border-[#2d3748] hover:border-[#4a5568]"
           }`}
+          style={selectedEstado === STATUS_FILTERS.REPARACION ? {
+            borderColor: colorReparacion,
+            boxShadow: `0 0 15px ${hexToRgba(colorReparacion, 0.15) || 'rgba(251,191,36,0.15)'}`,
+            outlineColor: hexToRgba(colorReparacion, 0.3) || 'rgba(251,191,36,0.3)'
+          } : {}}
         >
-          <div className="flex justify-between items-start mb-3">
-            <span className="font-mono text-xs font-bold text-slate-400 tracking-wider uppercase">EN REPARACIÓN</span>
-            <Wrench className="w-5 h-5 text-amber-400" />
+          <div>
+            <div className="flex justify-between items-start mb-1.5">
+              <span
+                className="font-mono text-[11px] font-bold tracking-wider uppercase truncate"
+                style={{ color: selectedEstado === STATUS_FILTERS.REPARACION ? colorReparacion : "#94a3b8" }}
+              >
+                {titleReparacion}
+              </span>
+              <Wrench className="w-4 h-4 shrink-0" style={{ color: colorReparacion }} />
+            </div>
+            <div className="text-2xl font-extrabold text-slate-100 font-mono leading-none tracking-tight">{metrics.en_proceso || 0}</div>
+            <div className="text-[11px] text-slate-400 mt-1 font-medium leading-tight">Trabajo técnico activo</div>
           </div>
-          <div className="text-3xl font-extrabold text-slate-100 font-mono">{metrics.en_proceso || 0}</div>
-          <div className="text-xs text-slate-400 mt-1 font-medium">Trabajo técnico activo</div>
+
+          <div className="mt-2 pt-1.5 border-t border-[#2d3748]/60 flex items-center justify-between text-[11px] font-mono leading-none">
+            <span className="text-slate-400 font-medium uppercase tracking-wider">
+              {titleHold}:
+            </span>
+            <span
+              className="font-bold text-xs"
+              style={{ color: colorHold }}
+            >
+              {metrics.en_hold || 0}
+            </span>
+          </div>
         </div>
 
         {/* Card 4: LISTAS PARA ENTREGA */}
         <div
           onClick={() => updateUrlParams({ estado: STATUS_FILTERS.LISTAS_ENTREGA, estado_id: null })}
-          className={`bg-[#161a21] border rounded-xl p-5 transition-all relative overflow-hidden group cursor-pointer ${
+          className={`bg-[#161a21] border rounded-xl px-4 py-3 transition-all relative overflow-hidden group cursor-pointer flex flex-col justify-between ${
             selectedEstado === STATUS_FILTERS.LISTAS_ENTREGA
-              ? "border-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.2)] ring-1 ring-emerald-400/40"
-              : "border-amber-500/30 hover:border-amber-500/50"
+              ? "ring-1"
+              : "border-[#2d3748] hover:border-[#4a5568]"
           }`}
+          style={selectedEstado === STATUS_FILTERS.LISTAS_ENTREGA ? {
+            borderColor: colorListaEntrega,
+            boxShadow: `0 0 15px ${hexToRgba(colorListaEntrega, 0.15) || 'rgba(16,185,129,0.15)'}`,
+            outlineColor: hexToRgba(colorListaEntrega, 0.3) || 'rgba(16,185,129,0.3)'
+          } : {}}
         >
-          <div className="flex justify-between items-start mb-3">
-            <span className="font-mono text-xs font-bold text-emerald-400 tracking-wider uppercase">LISTAS PARA ENTREGA</span>
-            <ClipboardList className="w-5 h-5 text-emerald-400" />
+          <div>
+            <div className="flex justify-between items-start mb-1.5">
+              <span
+                className="font-mono text-[11px] font-bold tracking-wider uppercase truncate"
+                style={{ color: selectedEstado === STATUS_FILTERS.LISTAS_ENTREGA ? colorListaEntrega : "#94a3b8" }}
+              >
+                {titleListaEntrega}
+              </span>
+              <ClipboardList className="w-4 h-4 shrink-0" style={{ color: colorListaEntrega }} />
+            </div>
+            <div className="text-2xl font-extrabold text-slate-100 font-mono leading-none tracking-tight">{metrics.listas_entrega || 0}</div>
           </div>
-          <div className="text-3xl font-extrabold text-emerald-400 font-mono">{metrics.listas_entrega || 0}</div>
-          <div className="text-xs text-emerald-400/80 mt-1 font-medium">Listas para cliente</div>
+          <div className="text-[11px] text-slate-400 mt-2 font-medium leading-tight">Listas para cliente</div>
         </div>
 
         {/* Card 5: ENTREGADAS */}
         <div
           onClick={() => updateUrlParams({ estado: STATUS_FILTERS.ENTREGADAS, estado_id: null })}
-          className={`bg-[#161a21] border rounded-xl p-5 transition-all relative overflow-hidden group cursor-pointer ${
+          className={`bg-[#161a21] border rounded-xl px-4 py-3 transition-all relative overflow-hidden group cursor-pointer flex flex-col justify-between ${
             selectedEstado === STATUS_FILTERS.ENTREGADAS
-              ? "border-slate-400 shadow-[0_0_15px_rgba(148,163,184,0.15)] ring-1 ring-slate-400/30"
-              : "border-emerald-500/30 hover:border-emerald-500/50"
+              ? "ring-1"
+              : "border-[#2d3748] hover:border-[#4a5568]"
           }`}
+          style={selectedEstado === STATUS_FILTERS.ENTREGADAS ? {
+            borderColor: colorEntregada,
+            boxShadow: `0 0 15px ${hexToRgba(colorEntregada, 0.15) || 'rgba(148,163,184,0.15)'}`,
+            outlineColor: hexToRgba(colorEntregada, 0.3) || 'rgba(148,163,184,0.3)'
+          } : {}}
         >
-          <div className="flex justify-between items-start mb-3">
-            <span className="font-mono text-xs font-bold text-slate-400 tracking-wider uppercase">ENTREGADAS</span>
-            <CheckCircle2 className="w-5 h-5 text-slate-400" />
+          <div>
+            <div className="flex justify-between items-start mb-1.5">
+              <span
+                className="font-mono text-[11px] font-bold tracking-wider uppercase truncate"
+                style={{ color: selectedEstado === STATUS_FILTERS.ENTREGADAS ? colorEntregada : "#94a3b8" }}
+              >
+                {titleEntregada}
+              </span>
+              <CheckCircle2 className="w-4 h-4 shrink-0" style={{ color: colorEntregada }} />
+            </div>
+            <div className="text-2xl font-extrabold text-slate-100 font-mono leading-none tracking-tight">{metrics.entregadas || 0}</div>
           </div>
-          <div className="text-3xl font-extrabold text-slate-300 font-mono">{metrics.entregadas || 0}</div>
-          <div className="text-xs text-slate-400 mt-1 font-medium">Completadas / entregadas</div>
+          <div className="text-[11px] text-slate-400 mt-2 font-medium leading-tight">Completadas / entregadas</div>
         </div>
       </div>
 
@@ -511,11 +587,11 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
             {selectedEstado && selectedEstado !== STATUS_FILTERS.TOTAL && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-400 font-bold">
                 Estado: {
-                  selectedEstado === STATUS_FILTERS.RECIBIDAS ? "Recibida" :
-                  selectedEstado === STATUS_FILTERS.REPARACION ? "En Reparación" :
-                  selectedEstado === STATUS_FILTERS.LISTAS_ENTREGA ? "Lista para Entrega" :
-                  selectedEstado === STATUS_FILTERS.ENTREGADAS ? "Entregada" :
-                  catalogs.estados?.find(e => e.codigo === selectedEstado)?.nombre || selectedEstado
+                  selectedEstado === STATUS_FILTERS.RECIBIDAS ? titleRecibida :
+                  selectedEstado === STATUS_FILTERS.REPARACION ? titleReparacion :
+                  selectedEstado === STATUS_FILTERS.LISTAS_ENTREGA ? titleListaEntrega :
+                  selectedEstado === STATUS_FILTERS.ENTREGADAS ? titleEntregada :
+                  catalogs.estados?.find(e => e.codigo === selectedEstado || String(e.estado_orden_id) === String(selectedEstado))?.nombre || selectedEstado
                 }
                 <button onClick={() => removeFilter("estado")} className="hover:text-white ml-0.5 cursor-pointer">
                   <X size={12} />
@@ -651,7 +727,7 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
                         </div>
                       </td>
                       <td className="py-3.5 px-4 text-center whitespace-nowrap">
-                        {getEstadoBadge(order.estado_codigo, order.estado_nombre)}
+                        <WorkOrderStatusBadge name={order.estado_nombre} color={order.estado_color} />
                       </td>
                       <td className="py-3.5 px-4 font-mono text-slate-300 whitespace-nowrap">
                         <div className="flex items-center gap-2">

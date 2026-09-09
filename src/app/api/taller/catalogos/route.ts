@@ -46,7 +46,7 @@ export async function GET() {
       `SELECT estado_orden_servicio_id, codigo, nombre, descripcion FROM admin.estado_orden_servicio WHERE (activo = true OR activo IS NULL) ORDER BY estado_orden_servicio_id ASC`
     );
     const estadosOrdenTrabajo = await query(
-      `SELECT estado_orden_id, codigo, nombre, descripcion FROM admin.estado_orden_trabajo WHERE activo = true ORDER BY orden_visual ASC`
+      `SELECT estado_orden_id, codigo, nombre, descripcion, color_estado, orden_visual, estado_inicial, estado_final FROM admin.estado_orden_trabajo WHERE activo = true ORDER BY orden_visual ASC`
     );
     const prioridades = await query(
       `SELECT prioridad_orden_trabajo_id AS prioridad_id, codigo, nombre FROM admin.prioridad_orden_trabajo WHERE activo = true ORDER BY prioridad_orden_trabajo_id ASC`

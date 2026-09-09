@@ -359,9 +359,47 @@ export default function BicyclesView({ initialBikeId = null, initialTab = "gener
     }
   };
 
+  const populateFormDataFromBike = (bike) => {
+    if (!bike) return;
+    const foundClient = (clientes || []).find(
+      (c) =>
+        String(c.id ?? c.cliente_id) === String(bike.cliente_id) ||
+        (bike.cliente_nombre && c.nombre_completo === bike.cliente_nombre)
+    );
+    const targetClienteId = foundClient
+      ? String(foundClient.id ?? foundClient.cliente_id)
+      : bike.cliente_id !== undefined && bike.cliente_id !== null && bike.cliente_id !== ""
+      ? String(bike.cliente_id)
+      : "";
+
+    setFormData({
+      cliente_id: targetClienteId,
+      marca: bike.marca || "",
+      modelo: bike.modelo || "",
+      tipo_bicicleta: bike.tipo_bicicleta || "MTB",
+      ano: bike.ano || new Date().getFullYear(),
+      color: bike.color || "",
+      talla: bike.talla || "M",
+      numero_serie_cuadro: bike.numero_serie_cuadro || "",
+      descripcion: bike.descripcion || "",
+      kilometraje_actual:
+        bike.kilometraje_actual !== undefined && bike.kilometraje_actual !== null
+          ? bike.kilometraje_actual
+          : 0,
+      notas_tecnicas: bike.notas_tecnicas || ""
+    });
+  };
+
+  useEffect(() => {
+    if (detailBike && !isEditingDetail) {
+      populateFormDataFromBike(detailBike);
+    }
+  }, [detailBike, clientes]);
+
   const handleViewDetail = (bike, startInEdit = false) => {
     setDetailBike(bike);
     setIsEditingDetail(startInEdit);
+    populateFormDataFromBike(bike);
     setActiveTab("general");
     const bikeId = bike.id || bike.bicicleta_id;
     if (bikeId) {
@@ -402,13 +440,15 @@ export default function BicyclesView({ initialBikeId = null, initialTab = "gener
 
       showToast("Expediente de bicicleta actualizado correctamente.", "success");
       setIsEditingDetail(false);
-      setDetailBike((prev) => ({
-        ...prev,
+      const updatedBike = {
+        ...detailBike,
         ...payload,
         cliente_nombre:
-          clientes.find((c) => String(c.id) === String(payload.cliente_id))?.nombre_completo ||
-          prev.cliente_nombre
-      }));
+          clientes.find((c) => String(c.id ?? c.cliente_id) === String(payload.cliente_id))?.nombre_completo ||
+          detailBike.cliente_nombre
+      };
+      setDetailBike(updatedBike);
+      populateFormDataFromBike(updatedBike);
       fetchData();
     } catch (err) {
       showToast(err.message, "error");
@@ -419,6 +459,9 @@ export default function BicyclesView({ initialBikeId = null, initialTab = "gener
 
   const handleCancelDetailEdit = () => {
     setIsEditingDetail(false);
+    if (detailBike) {
+      populateFormDataFromBike(detailBike);
+    }
   };
 
   const handleDeleteConfirm = async () => {
@@ -1120,25 +1163,7 @@ export default function BicyclesView({ initialBikeId = null, initialTab = "gener
                     type="button"
                     onClick={() => {
                       setIsEditingDetail(true);
-                      const foundClient = clientes.find(
-                        (c) =>
-                          String(c.id) === String(detailBike.cliente_id) ||
-                          c.nombre_completo === detailBike.cliente_nombre
-                      );
-                      const targetClienteId = foundClient ? foundClient.id : detailBike.cliente_id || "";
-                      setFormData({
-                        cliente_id: targetClienteId,
-                        marca: detailBike.marca || "",
-                        modelo: detailBike.modelo || "",
-                        tipo_bicicleta: detailBike.tipo_bicicleta || "MTB",
-                        ano: detailBike.ano || new Date().getFullYear(),
-                        color: detailBike.color || "",
-                        talla: detailBike.talla || "M",
-                        numero_serie_cuadro: detailBike.numero_serie_cuadro || "",
-                        descripcion: detailBike.descripcion || "",
-                        kilometraje_actual: detailBike.kilometraje_actual || 0,
-                        notas_tecnicas: detailBike.notas_tecnicas || ""
-                      });
+                      populateFormDataFromBike(detailBike);
                     }}
                     className="px-4 py-2 bg-primary hover:opacity-90 text-primary-foreground font-bold rounded-xl text-xs flex items-center gap-2 transition-all cursor-pointer shadow-lg"
                   >
@@ -1366,7 +1391,7 @@ export default function BicyclesView({ initialBikeId = null, initialTab = "gener
                         >
                           <option value="">Seleccionar cliente...</option>
                           {clientes.map((c) => (
-                            <option key={c.id} value={c.id}>
+                            <option key={c.id || c.cliente_id} value={c.id || c.cliente_id}>
                               {c.nombre_completo}
                             </option>
                           ))}
@@ -1423,6 +1448,16 @@ export default function BicyclesView({ initialBikeId = null, initialTab = "gener
                         />
                       </div>
                       <div>
+                        <label className="block text-foreground-muted mb-1">Talla del Cuadro</label>
+                        <input
+                          type="text"
+                          value={formData.talla || ""}
+                          onChange={(e) => setFormData({ ...formData, talla: e.target.value })}
+                          className="w-full bg-background border border-border rounded-xl p-2.5 text-foreground"
+                          placeholder="Ej: S, M, L, XL, 54cm..."
+                        />
+                      </div>
+                      <div>
                         <label className="block text-foreground-muted mb-1">N° Serie / Cuadro</label>
                         <input
                           type="text"
@@ -1438,6 +1473,28 @@ export default function BicyclesView({ initialBikeId = null, initialTab = "gener
                           value={formData.kilometraje_actual}
                           onChange={(e) => setFormData({ ...formData, kilometraje_actual: e.target.value })}
                           className="w-full bg-background border border-border rounded-xl p-2.5 text-foreground"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-mono text-xs pt-2">
+                      <div>
+                        <label className="block text-foreground-muted mb-1">Descripción General</label>
+                        <textarea
+                          rows={3}
+                          value={formData.descripcion || ""}
+                          onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
+                          className="w-full bg-background border border-border rounded-xl p-2.5 text-foreground resize-none"
+                          placeholder="Detalles sobre modificaciones o estado general..."
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-foreground-muted mb-1">Notas Técnicas Internas</label>
+                        <textarea
+                          rows={3}
+                          value={formData.notas_tecnicas || ""}
+                          onChange={(e) => setFormData({ ...formData, notas_tecnicas: e.target.value })}
+                          className="w-full bg-background border border-border rounded-xl p-2.5 text-foreground resize-none"
+                          placeholder="Notas exclusivas para el equipo del taller..."
                         />
                       </div>
                     </div>
