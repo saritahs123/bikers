@@ -87,6 +87,11 @@ function SidebarContent({
         { href: "/workshop/service-types", label: "SERVICIOS" },
         { href: "/workshop/order-statuses", label: "ESTADOS DE ORDEN DE TRABAJO" },
         { href: "/workshop/products", label: "PRODUCTOS" },
+        { href: "/inventory/product-types", label: "TIPOS DE PRODUCTO" },
+        { href: "/inventory/product-categories", label: "CATEGORÍAS DE PRODUCTO" },
+        { href: "/inventory/product-brands", label: "MARCAS DE PRODUCTO" },
+        { href: "/inventory/measurement-units", label: "UNIDADES DE MEDIDA" },
+        { href: "/inventory/suppliers", label: "PROVEEDORES" },
         { href: "/crm/component-categories", label: "CATEGORÍAS COMPONENTES" },
         { href: "/crm/component-states", label: "ESTADOS COMPONENTES" }
       ]
