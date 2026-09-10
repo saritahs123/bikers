@@ -9,6 +9,8 @@ import crypto from "crypto";
 export type TipoMovimientoCodigo =
   | "ENT_COMPRA"
   | "SAL_ORDEN"
+  | "SAL_MANUAL"
+  | "INV_INICIAL"
   | "AJU_POS"
   | "AJU_NEG"
   | "DEV_CLIENTE"
@@ -292,6 +294,7 @@ async function executeRegistrarMovimiento(
        producto_id,
        almacen_id,
        cantidad_actual,
+       COALESCE(cantidad_reservada, 0)::numeric AS cantidad_reservada,
        COALESCE(costo_promedio, 0)::numeric AS costo_promedio,
        estado
      FROM admin.existencias_producto
@@ -305,12 +308,19 @@ async function executeRegistrarMovimiento(
       throw new StockInsuficienteError(
         `Stock insuficiente para el producto '${product.nombre}' (ID: ${productoId}) en el almacén '${almacen.nombre}' (ID: ${almacenId}). Disponible: 0, Solicitado: ${cantidadNum}.`,
         {
+          code: "STOCK_DISPONIBLE_INSUFICIENTE",
+          cantidad_actual: 0,
+          cantidad_reservada: 0,
+          cantidad_disponible: 0,
+          cantidad_solicitada: cantidadNum,
+          cantidadActual: 0,
+          cantidadReservada: 0,
+          cantidadDisponible: 0,
+          cantidadSolicitada: cantidadNum,
           productoId: Number(productoId),
           almacenId: Number(almacenId),
           productoNombre: product.nombre,
           almacenNombre: almacen.nombre,
-          disponible: 0,
-          solicitado: cantidadNum,
         }
       );
     }
@@ -340,6 +350,7 @@ async function executeRegistrarMovimiento(
          producto_id,
          almacen_id,
          cantidad_actual,
+         COALESCE(cantidad_reservada, 0)::numeric AS cantidad_reservada,
          COALESCE(costo_promedio, 0)::numeric AS costo_promedio,
          estado
        FROM admin.existencias_producto
@@ -351,6 +362,7 @@ async function executeRegistrarMovimiento(
 
   const existencia = lockRes.rows[0];
   const stockAnterior = Number(existencia.cantidad_actual || 0);
+  const stockReservado = Number(existencia.cantidad_reservada || 0);
   const costoPromedioAnterior = Number(existencia.costo_promedio || 0);
 
   let stockNuevo: number;
@@ -359,32 +371,143 @@ async function executeRegistrarMovimiento(
 
   // 7. Calculate Stock and Weighted Average Cost (PMP) per Warehouse
   if (naturaleza === "SALIDA") {
-    if (stockAnterior < cantidadNum) {
+    // Audit physical consistency: cantidad_reservada cannot exceed cantidad_actual
+    if (stockReservado > stockAnterior) {
       throw new StockInsuficienteError(
-        `Stock insuficiente para el producto '${product.nombre}' (ID: ${productoId}) en el almacén '${almacen.nombre}' (ID: ${almacenId}). Disponible: ${stockAnterior}, Solicitado: ${cantidadNum}.`,
+        `Inconsistencia de inventario: La cantidad reservada (${stockReservado}) supera el stock físico actual (${stockAnterior}) para el producto '${product.nombre}' (ID: ${productoId}) en el almacén '${almacen.nombre}' (ID: ${almacenId}). Operación bloqueada.`,
         {
+          code: "INCONSISTENCIA_STOCK_RESERVADO",
+          cantidad_actual: stockAnterior,
+          cantidad_reservada: stockReservado,
+          cantidad_disponible: stockAnterior - stockReservado,
+          cantidad_solicitada: cantidadNum,
+          cantidadActual: stockAnterior,
+          cantidadReservada: stockReservado,
+          cantidadDisponible: stockAnterior - stockReservado,
+          cantidadSolicitada: cantidadNum,
           productoId: Number(productoId),
           almacenId: Number(almacenId),
           productoNombre: product.nombre,
           almacenNombre: almacen.nombre,
-          disponible: stockAnterior,
-          solicitado: cantidadNum,
         }
       );
     }
 
+    // Generic exit operations (SAL_MANUAL, AJU_NEG, TRAS_SAL, etc.) must respect reserved stock!
+    const esSalidaGenerica = cleanCodigo !== "SAL_ORDEN";
+
+    if (esSalidaGenerica) {
+      const stockDisponible = Number((stockAnterior - stockReservado).toFixed(4));
+      if (cantidadNum > stockDisponible) {
+        throw new StockInsuficienteError(
+          `Stock disponible insuficiente para el producto '${product.nombre}' (ID: ${productoId}) en el almacén '${almacen.nombre}' (ID: ${almacenId}). Stock actual: ${stockAnterior}, Reservado: ${stockReservado}, Disponible: ${stockDisponible}, Solicitado: ${cantidadNum}.`,
+          {
+            code: "STOCK_DISPONIBLE_INSUFICIENTE",
+            cantidad_actual: stockAnterior,
+            cantidad_reservada: stockReservado,
+            cantidad_disponible: stockDisponible,
+            cantidad_solicitada: cantidadNum,
+            cantidadActual: stockAnterior,
+            cantidadReservada: stockReservado,
+            cantidadDisponible: stockDisponible,
+            cantidadSolicitada: cantidadNum,
+            productoId: Number(productoId),
+            almacenId: Number(almacenId),
+            productoNombre: product.nombre,
+            almacenNombre: almacen.nombre,
+          }
+        );
+      }
+    } else {
+      // SAL_ORDEN (for future Taller integration): validate total physical stock
+      if (stockAnterior < cantidadNum) {
+        throw new StockInsuficienteError(
+          `Stock insuficiente para el producto '${product.nombre}' (ID: ${productoId}) en el almacén '${almacen.nombre}' (ID: ${almacenId}). Disponible: ${stockAnterior}, Solicitado: ${cantidadNum}.`,
+          {
+            code: "STOCK_INSUFICIENTE",
+            cantidad_actual: stockAnterior,
+            cantidad_reservada: stockReservado,
+            cantidad_disponible: stockAnterior,
+            cantidad_solicitada: cantidadNum,
+            cantidadActual: stockAnterior,
+            cantidadReservada: stockReservado,
+            cantidadDisponible: stockAnterior,
+            cantidadSolicitada: cantidadNum,
+            productoId: Number(productoId),
+            almacenId: Number(almacenId),
+            productoNombre: product.nombre,
+            almacenNombre: almacen.nombre,
+          }
+        );
+      }
+    }
+
     stockNuevo = Number((stockAnterior - cantidadNum).toFixed(4));
+
+    // Post-operation invariant: after generic exit, cantidad_actual_nueva cannot be less than cantidad_reservada
+    if (esSalidaGenerica && stockNuevo < stockReservado) {
+      throw new StockInsuficienteError(
+        `Operación rechazada: El stock resultante (${stockNuevo}) no puede quedar por debajo del stock reservado (${stockReservado}).`,
+        {
+          code: "STOCK_NUEVO_MENOR_RESERVADO",
+          cantidad_actual: stockAnterior,
+          cantidad_reservada: stockReservado,
+          cantidad_disponible: stockAnterior - stockReservado,
+          cantidad_solicitada: cantidadNum,
+          cantidadActual: stockAnterior,
+          cantidadReservada: stockReservado,
+          cantidadDisponible: stockAnterior - stockReservado,
+          cantidadSolicitada: cantidadNum,
+          stockNuevo,
+        }
+      );
+    }
+
     // For SALIDA: PMP of remaining stock in this warehouse is preserved intact!
     costoPromedioNuevo = costoPromedioAnterior > 0 ? costoPromedioAnterior : Number(product.costo_actual || 0);
     // Movement unit cost records current warehouse PMP
     costoUnitarioMovimiento = costoPromedioNuevo;
   } else {
     // ENTRADA
+    // Special validations for INV_INICIAL (Saldo de apertura inicial)
+    if (cleanCodigo === "INV_INICIAL") {
+      const histCheck = await client.query(
+        `SELECT COUNT(*)::int AS count
+         FROM admin.movimientos_inventario
+         WHERE producto_id = $1 AND almacen_id = $2 AND empresa_id = $3`,
+        [Number(productoId), Number(almacenId), Number(empresaId)]
+      );
+      const movCount = histCheck.rows[0]?.count || 0;
+      if (movCount > 0) {
+        throw new ValidacionInventarioError(
+          `Este producto ya posee historial de inventario en este almacén (${movCount} movimiento(s)). Utiliza Ajuste de Inventario.`,
+          "HISTORIAL_PREVIO_EXISTE",
+          { productoId: Number(productoId), almacenId: Number(almacenId), movCount }
+        );
+      }
+
+      if (stockReservado > 0) {
+        throw new ValidacionInventarioError(
+          `No se puede registrar inventario inicial sobre una existencia con stock reservado (${stockReservado}).`,
+          "RESERVA_PREVIA_EXISTE",
+          { productoId: Number(productoId), almacenId: Number(almacenId), stockReservado }
+        );
+      }
+
+      if (stockAnterior > 0) {
+        throw new ValidacionInventarioError(
+          `El producto ya cuenta con stock registrado (${stockAnterior}) en este almacén. Utiliza Ajuste de Inventario.`,
+          "STOCK_PREVIO_EXISTE",
+          { productoId: Number(productoId), almacenId: Number(almacenId), stockAnterior }
+        );
+      }
+    }
+
     stockNuevo = Number((stockAnterior + cantidadNum).toFixed(4));
 
     // Determine entry unit cost per policy
     let costoUnitarioEntrada: number;
-    if (costoUnitario !== undefined && costoUnitario !== null && !isNaN(Number(costoUnitario)) && Number(costoUnitario) > 0) {
+    if (costoUnitario !== undefined && costoUnitario !== null && !isNaN(Number(costoUnitario)) && Number(costoUnitario) >= 0) {
       costoUnitarioEntrada = Number(costoUnitario);
     } else if (costoPromedioAnterior > 0) {
       costoUnitarioEntrada = costoPromedioAnterior;
@@ -395,7 +518,7 @@ async function executeRegistrarMovimiento(
     costoUnitarioMovimiento = costoUnitarioEntrada;
 
     // Recalculate PMP per warehouse:
-    if (stockAnterior <= 0 || costoPromedioAnterior <= 0) {
+    if (cleanCodigo === "INV_INICIAL" || stockAnterior <= 0 || costoPromedioAnterior <= 0) {
       costoPromedioNuevo = costoUnitarioEntrada;
     } else {
       const valorAnterior = stockAnterior * costoPromedioAnterior;
@@ -603,7 +726,7 @@ export async function transferirInventario(
 
       // Lock row FOR UPDATE in deterministic ascending order
       await client.query(
-        `SELECT existencia_producto_id, empresa_id, cantidad_actual, costo_promedio
+        `SELECT existencia_producto_id, empresa_id, cantidad_actual, COALESCE(cantidad_reservada, 0)::numeric AS cantidad_reservada, costo_promedio
          FROM admin.existencias_producto
          WHERE producto_id = $1 AND almacen_id = $2 AND empresa_id = $3
          FOR UPDATE`,

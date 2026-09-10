@@ -76,7 +76,11 @@ function SidebarContent({
       submenu: [
         { href: "/inventory/summary", label: "RESUMEN" },
         { href: "/inventory/stock", label: "EXISTENCIAS" },
-        { href: "/inventory/movements", label: "MOVIMIENTOS" }
+        { href: "/inventory/movements", label: "MOVIMIENTOS" },
+        { href: "/inventory/entries", label: "ENTRADAS" },
+        { href: "/inventory/adjustments", label: "SALIDAS Y AJUSTES" },
+        { href: "/inventory/transfers", label: "TRANSFERENCIAS" },
+        { href: "/inventory/initial", label: "INVENTARIO INICIAL" }
       ]
     },
     {
