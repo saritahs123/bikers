@@ -125,6 +125,7 @@ export default function InventoryEntriesView() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadCatalogos();
     loadUltimasEntradas();
   }, [loadCatalogos, loadUltimasEntradas]);
@@ -1135,6 +1136,7 @@ export default function InventoryEntriesView() {
               <thead>
                 <tr className="bg-surface text-foreground-muted border-b border-border font-semibold">
                   <th className="p-3">Fecha</th>
+                  <th className="p-3">Código Movimiento</th>
                   <th className="p-3">Producto</th>
                   <th className="p-3">Proveedor</th>
                   <th className="p-3">Almacén</th>
@@ -1156,6 +1158,15 @@ export default function InventoryEntriesView() {
                         hour: "2-digit",
                         minute: "2-digit",
                       })}
+                    </td>
+                    <td className="p-3 whitespace-nowrap">
+                      {ent.codigoMovimiento && ent.codigoMovimiento !== "-" ? (
+                        <span className="font-mono text-xs font-bold text-primary px-2 py-0.5 rounded-md bg-primary/10 border border-primary/20">
+                          {ent.codigoMovimiento}
+                        </span>
+                      ) : (
+                        <span className="font-mono text-xs text-foreground-muted">—</span>
+                      )}
                     </td>
                     <td className="p-3 font-medium text-foreground">
                       <span className="font-mono font-bold text-primary mr-1.5">{ent.productoCodigo}</span>
