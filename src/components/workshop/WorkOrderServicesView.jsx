@@ -23,7 +23,8 @@ import {
   ChevronDown,
   Warehouse,
   PackageCheck,
-  RotateCcw
+  RotateCcw,
+  History
 } from "lucide-react";
 import { getServiceStateRules } from "@/lib/workshop-state-machine";
 
@@ -175,6 +176,26 @@ export default function WorkOrderServicesView({
   const [itemModalOpen, setItemModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
+
+  // Kardex History Modal States (INV-TALLER-5)
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [historyProduct, setHistoryProduct] = useState(null);
+  const [historyData, setHistoryData] = useState(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState(null);
+  const kardexCacheRef = useRef(new Map());
+
+  const invalidateKardexCache = (ordenProductoId) => {
+    if (ordenProductoId) {
+      kardexCacheRef.current.delete(Number(ordenProductoId));
+    } else {
+      kardexCacheRef.current.clear();
+    }
+  };
+
+  useEffect(() => {
+    kardexCacheRef.current.clear();
+  }, [ordenId]);
 
   // Unified Item Modal Form States
   const [itemType, setItemType] = useState("SERVICIO"); // "SERVICIO" | "PRODUCTO"
@@ -979,6 +1000,10 @@ export default function WorkOrderServicesView({
           setSubmitting(false);
           return;
         }
+
+        if (isEditing && itemType === "PRODUCTO" && editingItem?.orden_producto_id) {
+          invalidateKardexCache(editingItem.orden_producto_id);
+        }
       }
 
       // Await page refresh to update order state before closing modal
@@ -1241,6 +1266,7 @@ export default function WorkOrderServicesView({
             return;
           }
           showSuccessToast("Repuesto eliminado de la orden.");
+          invalidateKardexCache(prod.orden_producto_id);
           if (onRefresh) onRefresh();
         } catch (err) {
           showErrorToast("Error de conexión al eliminar el repuesto.");
@@ -1296,6 +1322,7 @@ export default function WorkOrderServicesView({
             return;
           }
           showSuccessToast(`Repuesto consumido físicamente del inventario. Movimiento: ${json.data?.codigo_movimiento || 'Registrado'}`);
+          invalidateKardexCache(prod.orden_producto_id);
           if (onRefresh) onRefresh();
         } catch (err) {
           showErrorToast("Error de conexión al consumir el repuesto.");
@@ -1353,6 +1380,7 @@ export default function WorkOrderServicesView({
             return;
           }
           showSuccessToast(`Consumo revertido exitosamente. Repuesto reingresado a inventario y reserva restaurada. Movimiento: ${json.data?.codigo_movimiento || 'Registrado'}`);
+          invalidateKardexCache(prod.orden_producto_id);
           if (onRefresh) onRefresh();
         } catch (err) {
           showErrorToast("Error de conexión al reversar el consumo.");
@@ -1360,6 +1388,47 @@ export default function WorkOrderServicesView({
       },
       "reverse"
     );
+  };
+
+  const fetchProductHistory = async (prod, forceRefresh = false) => {
+    if (!prod?.orden_producto_id) return;
+    const opId = Number(prod.orden_producto_id);
+
+    if (!forceRefresh && kardexCacheRef.current.has(opId)) {
+      setHistoryData(kardexCacheRef.current.get(opId));
+      setHistoryLoading(false);
+      setHistoryError(null);
+      return;
+    }
+
+    setHistoryLoading(true);
+    setHistoryError(null);
+
+    try {
+      const res = await fetch(`/api/taller/ordenes/${ordenId}/productos/${opId}/movimientos`);
+      const json = await res.json();
+
+      if (!res.ok || !json.success) {
+        throw new Error(json.message || json.error || `Error ${res.status}: No se pudo consultar el historial.`);
+      }
+
+      kardexCacheRef.current.set(opId, json.data);
+      setHistoryData(json.data);
+      setHistoryError(null);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Error de conexión al consultar el historial.";
+      setHistoryError(msg);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const handleOpenProductHistory = (prod) => {
+    setHistoryProduct(prod);
+    setHistoryData(null);
+    setHistoryError(null);
+    setHistoryModalOpen(true);
+    fetchProductHistory(prod, false);
   };
 
   const activeServices = (services || []).filter((s) => s.activo !== false);
@@ -1748,6 +1817,17 @@ export default function WorkOrderServicesView({
                         {/* Actions (Consume / Edit / Delete Product) */}
                         <td className="p-3.5 pr-4 text-center whitespace-nowrap">
                           <div className="flex items-center justify-center gap-1.5">
+                            {/* Botón Historial de Inventario (Kardex) */}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenProductHistory(prod)}
+                              className="p-1.5 rounded-lg border transition-colors bg-cyan-500/10 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 cursor-pointer"
+                              title="Ver historial de inventario (Kardex)"
+                              aria-label="Ver historial de inventario"
+                            >
+                              <History className="w-3.5 h-3.5" />
+                            </button>
+
                             {/* Botón Consumir / Reversar */}
                             {prod.utilizado === true ? (
                               <button
@@ -2891,6 +2971,227 @@ export default function WorkOrderServicesView({
             {confirmModalMessage}
           </p>
         </div>
+      </WorkshopItemModalShell>
+
+      {/* KARDEX / INVENTORY HISTORY MODAL */}
+      <WorkshopItemModalShell
+        open={historyModalOpen}
+        title="HISTORIAL DE INVENTARIO (KARDEX)"
+        description="Trazabilidad y movimientos físicos de almacén asociados a esta línea de repuesto."
+        maxWidth="840px"
+        onClose={() => {
+          setHistoryModalOpen(false);
+          setHistoryProduct(null);
+          setHistoryData(null);
+          setHistoryError(null);
+        }}
+        footer={
+          <div className="flex items-center justify-between font-sans">
+            <div className="text-[11px] text-slate-400 font-mono">
+              {historyData?.movimientos?.length > 0
+                ? `${historyData.movimientos.length} movimiento(s) registrado(s)`
+                : "Sin movimientos físicos registrados"}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setHistoryModalOpen(false);
+                setHistoryProduct(null);
+                setHistoryData(null);
+                setHistoryError(null);
+              }}
+              className="px-4 py-2 text-xs font-semibold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl transition-colors cursor-pointer font-mono"
+            >
+              Cerrar
+            </button>
+          </div>
+        }
+      >
+        {/* Cabecera / Info del Repuesto */}
+        {historyProduct && (
+          <div className="mb-5 p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-bold text-slate-100 flex items-center gap-2">
+                  <Package className="w-4 h-4 text-cyan-400 shrink-0" />
+                  <span>{historyData?.linea?.producto_nombre || historyProduct.nombre || historyProduct.producto_nombre || "Repuesto"}</span>
+                </div>
+                <div className="text-xs text-slate-400 font-mono mt-0.5 flex flex-wrap items-center gap-3">
+                  <span>Código: <strong className="text-slate-300">{historyData?.linea?.codigo_producto || historyProduct.codigo_producto || historyProduct.codigo || `PROD-${historyProduct.producto_id}`}</strong></span>
+                  <span>•</span>
+                  <span>Almacén: <strong className="text-slate-300">{historyData?.linea?.almacen_nombre || historyProduct.almacen_nombre || `Almacén #${historyProduct.almacen_id}`}</strong></span>
+                  <span>•</span>
+                  <span>Cantidad línea: <strong className="text-slate-300">{historyData?.linea?.cantidad ?? historyProduct.cantidad} u.</strong></span>
+                </div>
+              </div>
+
+              {/* Estado Actual Badge (fuente de verdad: utilizado) */}
+              <div className="shrink-0 flex items-center gap-2">
+                <span className="text-[11px] text-slate-400 uppercase font-mono tracking-wider">Estado actual:</span>
+                {(historyData?.linea?.utilizado ?? historyProduct.utilizado) === true ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold font-mono uppercase bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    CONSUMIDO
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold font-mono uppercase bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                    <Package className="w-3.5 h-3.5" />
+                    RESERVADO
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Loading State */}
+        {historyLoading && (
+          <div className="p-8 flex flex-col items-center justify-center gap-3 text-slate-400">
+            <Loader2 className="w-6 h-6 animate-spin text-cyan-400" />
+            <p className="text-xs font-mono">Consultando movimientos de inventario...</p>
+          </div>
+        )}
+
+        {/* Error / Retry State */}
+        {!historyLoading && historyError && (
+          <div className="p-4 rounded-xl bg-rose-950/60 border border-rose-500/40 text-rose-200 space-y-3">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 shrink-0 text-rose-400 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold uppercase tracking-wider font-mono">Error al consultar el historial</p>
+                <p className="text-xs font-sans mt-1 text-rose-300">{historyError}</p>
+              </div>
+            </div>
+            <div className="flex justify-end pt-1">
+              <button
+                type="button"
+                onClick={() => fetchProductHistory(historyProduct, true)}
+                className="px-3 py-1.5 text-xs font-bold font-mono uppercase bg-rose-600 hover:bg-rose-500 text-white rounded-lg transition-colors flex items-center gap-2 cursor-pointer shadow"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                Reintentar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Empty State */}
+        {!historyLoading && !historyError && historyData && historyData.movimientos.length === 0 && (
+          <div className="p-8 rounded-xl border border-slate-800 bg-slate-950/50 text-center space-y-2">
+            <div className="w-10 h-10 mx-auto rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+              <Package className="w-5 h-5" />
+            </div>
+            <p className="text-xs font-semibold text-slate-300">
+              No hay movimientos físicos registrados para este repuesto. Actualmente se encuentra reservado.
+            </p>
+            <p className="text-[11px] text-slate-500 font-sans max-w-md mx-auto">
+              La reserva compromete la disponibilidad en el almacén pero no descuenta stock físico hasta que el repuesto sea consumido.
+            </p>
+          </div>
+        )}
+
+        {/* Movements Timeline / Table */}
+        {!historyLoading && !historyError && historyData && historyData.movimientos.length > 0 && (
+          <div className="space-y-3">
+            <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/60">
+              <table className="w-full text-left border-collapse font-sans text-xs">
+                <thead>
+                  <tr className="border-b border-slate-800 bg-slate-900/90 text-slate-400 text-[11px] uppercase font-mono tracking-wider">
+                    <th className="p-3 pl-4">Fecha / Movimiento</th>
+                    <th className="p-3">Tipo</th>
+                    <th className="p-3 text-right">Cantidad</th>
+                    <th className="p-3 text-right">Costo Inventario</th>
+                    <th className="p-3 text-center">Stock Almacén</th>
+                    <th className="p-3 pr-4">Usuario</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {historyData.movimientos.map((m) => {
+                    const isEntrada = m.naturaleza === "ENTRADA";
+                    const isSalida = m.naturaleza === "SALIDA";
+                    const sign = isEntrada ? "+" : isSalida ? "-" : "";
+                    const qtyColor = isEntrada ? "text-emerald-400" : isSalida ? "text-rose-400" : "text-slate-200";
+
+                    return (
+                      <tr key={m.movimiento_inventario_id} className="hover:bg-slate-900/50 transition-colors">
+                        {/* Fecha y Código */}
+                        <td className="p-3 pl-4">
+                          <div className="font-mono text-slate-200 text-xs font-medium">
+                            {formatDate(m.fecha_movimiento)}
+                          </div>
+                          <div className="font-mono text-[11px] text-slate-400 flex items-center gap-1.5 mt-0.5">
+                            <span className="text-cyan-400 font-semibold">{m.codigo_movimiento}</span>
+                            {m.referencia && <span className="text-slate-500">• {m.referencia}</span>}
+                          </div>
+                        </td>
+
+                        {/* Tipo con badge y Reversa */}
+                        <td className="p-3">
+                          <div className="flex flex-col gap-1 items-start">
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold tracking-wider uppercase border ${
+                              m.tipo_movimiento_codigo === "DEV_TALLER"
+                                ? "bg-amber-500/10 text-amber-300 border-amber-500/30"
+                                : m.tipo_movimiento_codigo === "SAL_ORDEN"
+                                ? "bg-rose-500/10 text-rose-300 border-rose-500/30"
+                                : "bg-slate-800 text-slate-300 border-slate-700"
+                            }`}>
+                              {m.tipo_movimiento_nombre || m.tipo_movimiento_codigo}
+                            </span>
+                            {m.es_reverso && (
+                              <span className="text-[10px] text-amber-400 font-mono flex items-center gap-1">
+                                <RotateCcw className="w-2.5 h-2.5 shrink-0" />
+                                Reversa {m.reversa_a || m.codigo_movimiento_origen}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Cantidad (+ / -) */}
+                        <td className="p-3 text-right whitespace-nowrap font-mono text-xs">
+                          <span className={`font-bold ${qtyColor}`}>
+                            {sign}{m.cantidad} u.
+                          </span>
+                        </td>
+
+                        {/* Costo Inventario */}
+                        <td className="p-3 text-right whitespace-nowrap font-mono text-xs">
+                          <div className="text-slate-200">
+                            RD$ {m.costo_total.toLocaleString("es-DO", { minimumFractionDigits: 2 })}
+                          </div>
+                          <div className="text-[10px] text-slate-500">
+                            Unit: RD$ {m.costo_unitario.toLocaleString("es-DO", { minimumFractionDigits: 2 })}
+                          </div>
+                        </td>
+
+                        {/* Stock Almacén: stock_anterior -> stock_nuevo */}
+                        <td className="p-3 text-center whitespace-nowrap font-mono text-[11px] text-slate-400">
+                          <span>{m.stock_anterior}</span>
+                          <span className="text-slate-600 mx-1">→</span>
+                          <span className="text-slate-200 font-semibold">{m.stock_nuevo}</span>
+                        </td>
+
+                        {/* Usuario */}
+                        <td className="p-3 pr-4 text-xs font-sans text-slate-400">
+                          <div className="truncate max-w-[140px]" title={m.usuario_nombre}>
+                            {m.usuario_nombre}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Note banner */}
+            <div className="text-[11px] text-slate-500 font-sans flex items-center gap-1.5 px-1">
+              <Info className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+              <span>
+                Los costos visualizados corresponden a la valuación contable del inventario al momento del movimiento.
+              </span>
+            </div>
+          </div>
+        )}
       </WorkshopItemModalShell>
     </div>
   );
