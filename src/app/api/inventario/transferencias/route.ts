@@ -38,6 +38,7 @@ export async function GET(request: NextRequest) {
     // Obtener las transferencias agrupadas por su UUID compartido
     const rows = await query(
       `SELECT
+         m_sal.movimiento_inventario_id AS id,
          m_sal.transferencia_uuid,
          m_sal.codigo_movimiento,
          m_sal.fecha_movimiento,
@@ -56,6 +57,7 @@ export async function GET(request: NextRequest) {
        FROM admin.movimientos_inventario m_sal
        JOIN admin.movimientos_inventario m_ent
          ON m_sal.transferencia_uuid = m_ent.transferencia_uuid
+         AND m_sal.producto_id = m_ent.producto_id
          AND m_ent.tipo_movimiento_id = (SELECT tipo_movimiento_id FROM admin.tipo_movimiento_inventario WHERE codigo = 'TRAS_ENT')
        JOIN admin.productos p ON m_sal.producto_id = p.producto_id
        JOIN admin.almacenes alm_org ON m_sal.almacen_id = alm_org.almacen_id
@@ -70,22 +72,23 @@ export async function GET(request: NextRequest) {
     );
 
     return NextResponse.json({
-      transferencias: (rows || []).map((r: any) => ({
-        uuid: r.transferencia_uuid,
-        codigoMovimiento: r.codigo_movimiento || "-",
-        fecha: r.fecha_movimiento,
-        productoCodigo: r.codigo_producto,
-        productoNombre: r.producto_nombre,
-        origenCodigo: r.origen_codigo,
-        origenNombre: r.origen_nombre,
-        destinoCodigo: r.destino_codigo,
-        destinoNombre: r.destino_nombre,
+      transferencias: (rows || []).map((r: Record<string, unknown>) => ({
+        id: (r.id || r.movimiento_inventario_id) as number,
+        uuid: r.transferencia_uuid as string,
+        codigoMovimiento: (r.codigo_movimiento as string) || "-",
+        fecha: r.fecha_movimiento as string,
+        productoCodigo: r.codigo_producto as string,
+        productoNombre: r.producto_nombre as string,
+        origenCodigo: r.origen_codigo as string,
+        origenNombre: r.origen_nombre as string,
+        destinoCodigo: r.destino_codigo as string,
+        destinoNombre: r.destino_nombre as string,
         cantidad: Number(r.cantidad || 0),
-        referencia: r.referencia || "-",
-        usuario: r.usuario_nombre || "Sistema",
+        referencia: (r.referencia as string) || "-",
+        usuario: (r.usuario_nombre as string) || "Sistema",
       })),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error en GET /api/inventario/transferencias:", error);
     return NextResponse.json(
       { error: "INTERNAL_ERROR", message: "Error al consultar transferencias." },
@@ -149,7 +152,7 @@ export async function POST(request: NextRequest) {
     }> = [];
 
     if (Array.isArray(lineas) && lineas.length > 0) {
-      lineasToProcess = lineas.map((l: any) => ({
+      lineasToProcess = lineas.map((l: { productoId?: number | string; cantidad?: number | string }) => ({
         productoId: Number(l.productoId),
         cantidad: Number(l.cantidad),
       }));
@@ -226,7 +229,7 @@ export async function POST(request: NextRequest) {
         // Generar un único UUID para correlacionar todas las líneas del lote de transferencia
         const transferenciaUuid = crypto.randomUUID();
 
-        const transferenciasResult: any[] = [];
+        const transferenciasResult: Array<Awaited<ReturnType<typeof transferirInventario>>> = [];
 
         for (const line of lineasToProcess) {
           const transferRes = await transferirInventario({
@@ -262,7 +265,7 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json(result.data, { status: result.statusCode });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof InventoryError) {
       return NextResponse.json(
         {
@@ -275,8 +278,9 @@ export async function POST(request: NextRequest) {
     }
 
     console.error("Error en POST /api/inventario/transferencias:", error);
+    const msg = error instanceof Error ? error.message : "Error al procesar la transferencia.";
     return NextResponse.json(
-      { error: "INTERNAL_ERROR", message: error.message || "Error al procesar la transferencia." },
+      { error: "INTERNAL_ERROR", message: msg },
       { status: 500 }
     );
   }

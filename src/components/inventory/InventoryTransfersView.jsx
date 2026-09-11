@@ -29,7 +29,7 @@ export default function InventoryTransfersView() {
   const [productos, setProductos] = useState([]);
   const [transferencias, setTransferencias] = useState([]);
   const [errorTransferencias, setErrorTransferencias] = useState(null);
-  const [loadingCatalogos, setLoadingCatalogos] = useState(true);
+  const [, setLoadingCatalogos] = useState(true);
   const [loadingTransferencias, setLoadingTransferencias] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -144,6 +144,7 @@ export default function InventoryTransfersView() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadCatalogos();
     loadTransferencias();
   }, [loadCatalogos, loadTransferencias]);
@@ -1111,6 +1112,7 @@ export default function InventoryTransfersView() {
               <thead>
                 <tr className="bg-surface text-foreground-muted border-b border-border font-semibold">
                   <th className="p-3">Fecha</th>
+                  <th className="p-3">Código Movimiento</th>
                   <th className="p-3">Producto</th>
                   <th className="p-3">Origen</th>
                   <th className="p-3">Destino</th>
@@ -1122,8 +1124,8 @@ export default function InventoryTransfersView() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {transferencias.map((t) => (
-                  <tr key={t.uuid || Math.random()} className="hover:bg-surface-subtle/60 transition-colors">
+                {transferencias.map((t, idx) => (
+                  <tr key={`transf-${t.id || t.uuid}-${idx}`} className="hover:bg-surface-subtle/60 transition-colors">
                     <td className="p-3 text-foreground-muted whitespace-nowrap">
                       {new Date(t.fecha).toLocaleDateString("es-DO", {
                         day: "2-digit",
@@ -1132,6 +1134,15 @@ export default function InventoryTransfersView() {
                         hour: "2-digit",
                         minute: "2-digit",
                       })}
+                    </td>
+                    <td className="p-3 whitespace-nowrap">
+                      {t.codigoMovimiento && t.codigoMovimiento !== "-" ? (
+                        <span className="font-mono text-xs font-bold text-primary px-2 py-0.5 rounded-md bg-primary/10 border border-primary/20">
+                          {t.codigoMovimiento}
+                        </span>
+                      ) : (
+                        <span className="font-mono text-xs text-foreground-muted">—</span>
+                      )}
                     </td>
                     <td className="p-3 font-medium text-foreground">
                       <span className="font-mono font-bold mr-1.5">{t.productoCodigo}</span>

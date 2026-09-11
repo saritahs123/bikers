@@ -149,10 +149,12 @@ export default function InventoryAdjustmentsView() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadCatalogos();
   }, [loadCatalogos]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadMovimientos(activeTab);
   }, [activeTab, loadMovimientos]);
 
@@ -1607,11 +1609,12 @@ export default function InventoryAdjustmentsView() {
         ) : (
           <div className="overflow-x-auto">
             {activeTab === "SALIDA" ? (
-              // Tabla para SALIDA (Image 2): Fecha, Tipo, Producto, Almacén, Cant. Movimiento, Stock Anterior, Stock Nuevo, Referencia, Usuario
+              // Tabla para SALIDA (Image 2): Fecha, Código Movimiento, Tipo, Producto, Almacén, Cant. Movimiento, Stock Anterior, Stock Nuevo, Referencia, Usuario
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-surface text-foreground-muted border-b border-border font-semibold">
                     <th className="p-3">Fecha</th>
+                    <th className="p-3">Código Movimiento</th>
                     <th className="p-3">Tipo</th>
                     <th className="p-3">Producto</th>
                     <th className="p-3">Almacén</th>
@@ -1634,6 +1637,15 @@ export default function InventoryAdjustmentsView() {
                           hour: "2-digit",
                           minute: "2-digit",
                         })}
+                      </td>
+                      <td className="p-3 whitespace-nowrap">
+                        {m.codigoMovimiento && m.codigoMovimiento !== "-" ? (
+                          <span className="font-mono text-xs font-bold text-primary px-2 py-0.5 rounded-md bg-primary/10 border border-primary/20">
+                            {m.codigoMovimiento}
+                          </span>
+                        ) : (
+                          <span className="font-mono text-xs text-foreground-muted">—</span>
+                        )}
                       </td>
                       <td className="p-3">
                         <span
@@ -1680,11 +1692,12 @@ export default function InventoryAdjustmentsView() {
                 </tbody>
               </table>
             ) : (
-              // Tabla para AJUSTE POSITIVO y NEGATIVO (Images 3 y 4): Fecha, Producto, Almacén, Cantidad, Costo Unit., Valor Total, Motivo, Referencia, Usuario
+              // Tabla para AJUSTE POSITIVO y NEGATIVO (Images 3 y 4): Fecha, Código Movimiento, Producto, Almacén, Cantidad, Costo Unit., Valor Total, Motivo, Referencia, Usuario
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-surface text-foreground-muted border-b border-border font-semibold">
                     <th className="p-3">Fecha</th>
+                    <th className="p-3">Código Movimiento</th>
                     <th className="p-3">Producto</th>
                     <th className="p-3">Almacén</th>
                     <th className="p-3 text-right">Cantidad</th>
@@ -1707,6 +1720,15 @@ export default function InventoryAdjustmentsView() {
                           hour: "2-digit",
                           minute: "2-digit",
                         })}
+                      </td>
+                      <td className="p-3 whitespace-nowrap">
+                        {m.codigoMovimiento && m.codigoMovimiento !== "-" ? (
+                          <span className="font-mono text-xs font-bold text-primary px-2 py-0.5 rounded-md bg-primary/10 border border-primary/20">
+                            {m.codigoMovimiento}
+                          </span>
+                        ) : (
+                          <span className="font-mono text-xs text-foreground-muted">—</span>
+                        )}
                       </td>
                       <td className="p-3 font-medium text-foreground">
                         <span className="font-mono font-bold mr-1.5">{m.productoCodigo}</span>
