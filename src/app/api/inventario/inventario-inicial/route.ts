@@ -7,6 +7,10 @@ import {
   InventoryError,
   ValidacionInventarioError,
 } from "@/lib/inventory/inventoryMovementService";
+import {
+  INVENTORY_SYSTEM_CODES,
+  generarCodigoMovimiento,
+} from "@/lib/inventory/inventoryConstants";
 import crypto from "crypto";
 
 export async function POST(request: NextRequest) {
@@ -80,11 +84,18 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 2. Generar UUID de lote
+    // 2. Orden determinista para evitar deadlocks (producto_id ASC, almacen_id ASC)
+    items.sort((a: any, b: any) => {
+      const pDiff = Number(a.productoId) - Number(b.productoId);
+      if (pDiff !== 0) return pDiff;
+      return Number(a.almacenId) - Number(b.almacenId);
+    });
+
+    // 3. Generar identificador de lote de referencia
     const loteUuid = crypto.randomUUID();
     const shortRef = `INV-INI-${loteUuid.substring(0, 8).toUpperCase()}`;
 
-    // 3. Procesar lote de forma atómica e idempotente
+    // 4. Procesar lote de forma atómica e idempotente con código de sistema compartido
     const result = await executeWithIdempotency({
       empresaId,
       usuarioId,
@@ -92,6 +103,13 @@ export async function POST(request: NextRequest) {
       idempotencyKey,
       requestPayload: { items, observaciones, shortRef },
       operation: async (client) => {
+        // Generar código de sistema de la operación (código 10 = Inventario Inicial)
+        const codigoMovimiento = await generarCodigoMovimiento(
+          client,
+          empresaId,
+          INVENTORY_SYSTEM_CODES.INVENTARIO_INICIAL
+        );
+
         const movimientosGenerados: any[] = [];
         let totalUnidades = 0;
         let totalValor = 0;
@@ -113,6 +131,7 @@ export async function POST(request: NextRequest) {
             costoUnitario: costo,
             referencia: shortRef,
             observacion: observaciones ? `Lote ${shortRef} | ${observaciones}` : `Lote de apertura ${shortRef}`,
+            codigoMovimiento,
           });
 
           movimientosGenerados.push(mov);
@@ -124,12 +143,13 @@ export async function POST(request: NextRequest) {
           statusCode: 201,
           data: {
             success: true,
+            codigoMovimiento,
             referenciaLote: shortRef,
             totalProductos: items.length,
             totalUnidades,
             totalValor: Number(totalValor.toFixed(2)),
             movimientos: movimientosGenerados,
-            mensaje: "Inventario inicial cargado correctamente y listo para operar.",
+            mensaje: `Inventario inicial cargado correctamente con código ${codigoMovimiento}.`,
           },
           recursoId: movimientosGenerados[0]?.movimientoId || null,
         };

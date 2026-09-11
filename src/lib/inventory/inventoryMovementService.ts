@@ -37,6 +37,7 @@ export interface RegistrarMovimientoParams {
   referencia?: string | null;
   observacion?: string | null;
   transferenciaUuid?: string | null;
+  codigoMovimiento?: string | null;
 }
 
 export interface RegistrarMovimientoResult {
@@ -55,6 +56,7 @@ export interface RegistrarMovimientoResult {
   costoPromedioAnterior: number;
   costoPromedioNuevo: number;
   transferenciaUuid?: string | null;
+  codigoMovimiento?: string | null;
   fechaMovimiento: Date;
 }
 
@@ -68,11 +70,14 @@ export interface TransferirInventarioParams {
   cantidad: number;
   referencia?: string | null;
   observacion?: string | null;
+  transferenciaUuid?: string | null;
+  codigoMovimiento?: string | null;
 }
 
 export interface TransferirInventarioResult {
   success: boolean;
   transferenciaUuid: string;
+  codigoMovimiento?: string | null;
   productoId: number;
   almacenOrigenId: number;
   almacenDestinoId: number;
@@ -159,6 +164,7 @@ async function executeRegistrarMovimiento(
     referencia = null,
     observacion = null,
     transferenciaUuid = null,
+    codigoMovimiento = null,
   } = params;
 
   // 1. Validate basic inputs & Multitenancy requirement
@@ -562,13 +568,14 @@ async function executeRegistrarMovimiento(
        referencia,
        observacion,
        transferencia_uuid,
+       codigo_movimiento,
        fecha_movimiento,
        usuario_movimiento,
        fecha_registro,
        usuario_registro
      )
      VALUES (
-       $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), $15, NOW(), $15
+       $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW(), $16, NOW(), $16
      )
      RETURNING movimiento_inventario_id, fecha_movimiento`,
     [
@@ -586,6 +593,7 @@ async function executeRegistrarMovimiento(
       referencia ? String(referencia).trim() : null,
       observacion ? String(observacion).trim() : null,
       transferenciaUuid ? String(transferenciaUuid).trim() : null,
+      codigoMovimiento ? String(codigoMovimiento).trim() : null,
       Number(usuarioId),
     ]
   );
@@ -608,6 +616,7 @@ async function executeRegistrarMovimiento(
     costoPromedioAnterior,
     costoPromedioNuevo,
     transferenciaUuid: transferenciaUuid || null,
+    codigoMovimiento: codigoMovimiento ? String(codigoMovimiento).trim() : null,
     fechaMovimiento: movRow.fecha_movimiento,
   };
 }
@@ -647,6 +656,8 @@ export async function transferirInventario(
     cantidad,
     referencia = null,
     observacion = null,
+    transferenciaUuid: paramTransferenciaUuid = null,
+    codigoMovimiento = null,
   } = params;
 
   if (!empresaId || isNaN(Number(empresaId))) {
@@ -734,8 +745,8 @@ export async function transferirInventario(
       );
     }
 
-    // 2. Generate Single Correlation UUID for both legs
-    const transferenciaUuid = crypto.randomUUID();
+    // 2. Correlation UUID for both legs (use passed uuid if batch operation)
+    const transferenciaUuid = paramTransferenciaUuid || crypto.randomUUID();
     const cleanRef = referencia || `TRF-${transferenciaUuid.substring(0, 8).toUpperCase()}`;
 
     // 3. Step 1: TRAS_SAL on origin warehouse
@@ -750,6 +761,7 @@ export async function transferirInventario(
       referencia: cleanRef,
       observacion: observacion || `Transferencia hacia almacén ID ${almacenDestinoId}`,
       transferenciaUuid,
+      codigoMovimiento,
     });
 
     // 4. Step 2: TRAS_ENT on destination warehouse using origin's PMP cost
@@ -765,11 +777,13 @@ export async function transferirInventario(
       referencia: cleanRef,
       observacion: observacion || `Transferencia desde almacén ID ${almacenOrigenId}`,
       transferenciaUuid,
+      codigoMovimiento,
     });
 
     return {
       success: true,
       transferenciaUuid,
+      codigoMovimiento,
       productoId: Number(productoId),
       almacenOrigenId: Number(almacenOrigenId),
       almacenDestinoId: Number(almacenDestinoId),

@@ -6,6 +6,10 @@ import {
   registrarMovimientoInventario,
   InventoryError,
 } from "@/lib/inventory/inventoryMovementService";
+import {
+  INVENTORY_SYSTEM_CODES,
+  generarCodigoMovimiento,
+} from "@/lib/inventory/inventoryConstants";
 
 // GET /api/inventario/ajustes - Últimos movimientos de salidas y ajustes
 export async function GET(request: NextRequest) {
@@ -47,6 +51,7 @@ export async function GET(request: NextRequest) {
     const rows = await query(
       `SELECT
          m.movimiento_inventario_id,
+         m.codigo_movimiento,
          m.fecha_movimiento,
          m.cantidad::numeric AS cantidad,
          m.costo_unitario::numeric AS costo_unitario,
@@ -79,6 +84,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       movimientos: (rows || []).map((r: any) => ({
         id: r.movimiento_inventario_id,
+        codigoMovimiento: r.codigo_movimiento || "-",
         fecha: r.fecha_movimiento,
         tipoCodigo: r.tipo_codigo,
         tipoNombre: r.tipo_nombre,
@@ -105,7 +111,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/inventario/ajustes - Registrar Salida Manual o Ajuste Positivo/Negativo
+// POST /api/inventario/ajustes - Registrar Salida Manual o Ajuste Positivo/Negativo (Multiproducto Atómica)
 export async function POST(request: NextRequest) {
   try {
     const session = await getWorkshopSession();
@@ -126,14 +132,16 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const {
-      tipo, // "SALIDA" | "AJU_POS" | "AJU_NEG"
+      tipo, // "SALIDA" | "SAL_MANUAL" | "AJU_POS" | "AJU_NEG"
       almacenId,
+      motivo,
+      observacion,
+      lineas,
+      // Legacy single-line fallback
       productoId,
       cantidad,
       costoUnitario,
-      motivo,
       referencia,
-      observacion,
     } = body;
 
     const empresaId = session.empresa_id;
@@ -143,31 +151,102 @@ export async function POST(request: NextRequest) {
     if (!almacenId) {
       return NextResponse.json({ error: "ALMACEN_REQUERIDO", message: "El almacén es obligatorio." }, { status: 400 });
     }
-    if (!productoId) {
-      return NextResponse.json({ error: "PRODUCTO_REQUERIDO", message: "El producto es obligatorio." }, { status: 400 });
-    }
-    if (!cantidad || Number(cantidad) <= 0) {
-      return NextResponse.json({ error: "CANTIDAD_INVALIDA", message: "La cantidad debe ser mayor a 0." }, { status: 400 });
-    }
 
     let tipoMovimientoCodigo: string;
     let tipoOperacionIdem: string;
+    let codigoSistemaId: number;
 
     const cleanTipo = String(tipo || "").toUpperCase();
     if (cleanTipo === "SALIDA" || cleanTipo === "SAL_MANUAL") {
       tipoMovimientoCodigo = "SAL_MANUAL";
       tipoOperacionIdem = "SALIDA_MANUAL_INVENTARIO";
+      codigoSistemaId = INVENTORY_SYSTEM_CODES.SALIDA; // 6
     } else if (cleanTipo === "AJU_POS") {
       tipoMovimientoCodigo = "AJU_POS";
       tipoOperacionIdem = "AJUSTE_INVENTARIO";
+      codigoSistemaId = INVENTORY_SYSTEM_CODES.AJUSTE_POSITIVO; // 7
     } else if (cleanTipo === "AJU_NEG") {
       tipoMovimientoCodigo = "AJU_NEG";
       tipoOperacionIdem = "AJUSTE_INVENTARIO";
+      codigoSistemaId = INVENTORY_SYSTEM_CODES.AJUSTE_NEGATIVO; // 8
     } else {
       return NextResponse.json(
         { error: "TIPO_INVALIDO", message: "El tipo de operación debe ser SALIDA, AJU_POS o AJU_NEG." },
         { status: 400 }
       );
+    }
+
+    // Normalizar líneas de la operación
+    let lineasToProcess: Array<{
+      productoId: number;
+      cantidad: number;
+      costoUnitario?: number | null;
+      referencia?: string | null;
+    }> = [];
+
+    if (Array.isArray(lineas) && lineas.length > 0) {
+      lineasToProcess = lineas.map((l: any) => ({
+        productoId: Number(l.productoId),
+        cantidad: Number(l.cantidad),
+        costoUnitario: l.costoUnitario !== undefined && l.costoUnitario !== null ? Number(l.costoUnitario) : null,
+        referencia: l.referencia ? String(l.referencia).trim() : null,
+      }));
+    } else if (productoId && cantidad) {
+      lineasToProcess = [
+        {
+          productoId: Number(productoId),
+          cantidad: Number(cantidad),
+          costoUnitario: costoUnitario !== undefined && costoUnitario !== null ? Number(costoUnitario) : null,
+          referencia: referencia ? String(referencia).trim() : null,
+        },
+      ];
+    } else {
+      return NextResponse.json(
+        { error: "LINEAS_REQUERIDAS", message: "Debe incluir al menos una línea de producto." },
+        { status: 400 }
+      );
+    }
+
+    // Validar duplicados en el lote
+    const seenProds = new Set<number>();
+    for (let i = 0; i < lineasToProcess.length; i++) {
+      const line = lineasToProcess[i];
+      if (!line.productoId || isNaN(line.productoId)) {
+        return NextResponse.json(
+          { error: "PRODUCTO_REQUERIDO", message: `La línea #${i + 1} no tiene un producto válido.` },
+          { status: 400 }
+        );
+      }
+      if (seenProds.has(line.productoId)) {
+        return NextResponse.json(
+          {
+            error: "PRODUCTO_DUPLICADO",
+            message: `El producto ID ${line.productoId} aparece más de una vez en el lote. Consolide la cantidad en una sola línea.`,
+          },
+          { status: 400 }
+        );
+      }
+      seenProds.add(line.productoId);
+
+      if (isNaN(line.cantidad) || line.cantidad <= 0) {
+        return NextResponse.json(
+          { error: "CANTIDAD_INVALIDA", message: `La cantidad en la línea #${i + 1} debe ser mayor a 0.` },
+          { status: 400 }
+        );
+      }
+
+      if (
+        cleanTipo === "AJU_POS" &&
+        (line.costoUnitario === null ||
+          line.costoUnitario === undefined ||
+          isNaN(Number(line.costoUnitario)) ||
+          Number(line.costoUnitario) < 0)
+      ) {
+        return NextResponse.json(
+          { error: "COSTO_INVALIDO", message: `El costo unitario en la línea #${i + 1} debe ser igual o mayor a 0 para ajuste positivo.` },
+          { status: 400 }
+        );
+      }
     }
 
     const combinedObs = [
@@ -177,35 +256,61 @@ export async function POST(request: NextRequest) {
       .filter(Boolean)
       .join(" | ");
 
-    // Ejecutar con idempotencia atómica
+    // Orden determinista para evitar deadlocks: producto_id ASC
+    lineasToProcess.sort((a, b) => a.productoId - b.productoId);
+
+    // Ejecutar con idempotencia atómica y código único por lote
     const result = await executeWithIdempotency({
       empresaId,
       usuarioId,
       tipoOperacion: tipoOperacionIdem,
       idempotencyKey,
-      requestPayload: { tipo, almacenId, productoId, cantidad, costoUnitario, motivo, referencia },
+      requestPayload: { tipo, almacenId, lineas: lineasToProcess, motivo, observacion },
       operation: async (client) => {
-        const mov = await registrarMovimientoInventario({
+        // Generar código de sistema de la operación según el tipo (6, 7 u 8)
+        const codigoMovimiento = await generarCodigoMovimiento(
           client,
           empresaId,
-          usuarioId,
-          tipoMovimientoCodigo,
-          productoId: Number(productoId),
-          almacenId: Number(almacenId),
-          cantidad: Number(cantidad),
-          costoUnitario: costoUnitario !== undefined && costoUnitario !== null ? Number(costoUnitario) : null,
-          referencia: referencia ? String(referencia).trim() : null,
-          observacion: combinedObs || null,
-        });
+          codigoSistemaId
+        );
+
+        const movimientosResult: any[] = [];
+
+        for (const line of lineasToProcess) {
+          const mov = await registrarMovimientoInventario({
+            client,
+            empresaId,
+            usuarioId,
+            tipoMovimientoCodigo,
+            productoId: line.productoId,
+            almacenId: Number(almacenId),
+            cantidad: line.cantidad,
+            costoUnitario: line.costoUnitario,
+            referencia: line.referencia,
+            observacion: combinedObs || null,
+            codigoMovimiento,
+          });
+
+          movimientosResult.push(mov);
+        }
+
+        const tipoLabel =
+          cleanTipo === "SALIDA" || cleanTipo === "SAL_MANUAL"
+            ? "Salida manual"
+            : cleanTipo === "AJU_POS"
+            ? "Ajuste positivo"
+            : "Ajuste negativo";
 
         return {
           statusCode: 201,
           data: {
             success: true,
-            movimiento: mov,
-            mensaje: `${cleanTipo === "SALIDA" ? "Salida manual" : cleanTipo === "AJU_POS" ? "Ajuste positivo" : "Ajuste negativo"} registrado exitosamente.`,
+            codigoMovimiento,
+            totalLineas: movimientosResult.length,
+            movimientos: movimientosResult,
+            mensaje: `${tipoLabel} registrada exitosamente con código ${codigoMovimiento}.`,
           },
-          recursoId: mov.movimientoId,
+          recursoId: movimientosResult[0]?.movimientoId || null,
         };
       },
     });

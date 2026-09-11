@@ -236,7 +236,7 @@ export default function InventoryMovementsView() {
                 setSearch(e.target.value);
                 setPage(1);
               }}
-              placeholder="Buscar por SKU, producto, ref..."
+              placeholder="Buscar por código mov, SKU, producto, ref..."
               className="w-full pl-9 pr-3 py-1.5 bg-input border border-border rounded-md text-xs text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-primary transition-colors"
             />
           </div>
@@ -367,6 +367,12 @@ export default function InventoryMovementsView() {
                     Fecha y Hora {getSortIcon("fecha_movimiento")}
                   </th>
                   <th
+                    onClick={() => handleSort("codigo_movimiento")}
+                    className="py-3 px-4 cursor-pointer hover:text-foreground transition-colors"
+                  >
+                    Código Mov. {getSortIcon("codigo_movimiento")}
+                  </th>
+                  <th
                     onClick={() => handleSort("tipo_nombre")}
                     className="py-3 px-4 cursor-pointer hover:text-foreground transition-colors"
                   >
@@ -423,6 +429,9 @@ export default function InventoryMovementsView() {
                     >
                       <td className="py-3 px-4 text-foreground-muted whitespace-nowrap font-medium">
                         {formatDateTime(item.fecha_movimiento)}
+                      </td>
+                      <td className="py-3 px-4 whitespace-nowrap font-mono text-[11px] font-bold text-primary">
+                        {item.codigo_movimiento || "—"}
                       </td>
                       <td className="py-3 px-4 whitespace-nowrap">
                         <div className="flex items-center gap-1.5">
@@ -582,6 +591,25 @@ export default function InventoryMovementsView() {
 
             {/* Modal Body */}
             <div className="p-5 space-y-4 overflow-y-auto text-xs">
+              {/* Código de Movimiento Funcional */}
+              {selectedMovement.codigo_movimiento && (
+                <div className="bg-primary/5 p-3 rounded-md border border-primary/20 flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] text-foreground-muted uppercase font-semibold">Código de Movimiento</p>
+                    <p className="font-mono font-bold text-primary text-sm">
+                      {selectedMovement.codigo_movimiento}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleCopyUuid(selectedMovement.codigo_movimiento)}
+                    className="p-1.5 rounded bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 transition-colors cursor-pointer shrink-0"
+                    title="Copiar Código"
+                  >
+                    {copiedUuid ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              )}
+
               {/* Type and Nature Banner */}
               <div className="bg-surface-subtle p-3 rounded-md border border-border flex items-center justify-between">
                 <div>

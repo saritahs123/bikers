@@ -6,6 +6,11 @@ import {
   transferirInventario,
   InventoryError,
 } from "@/lib/inventory/inventoryMovementService";
+import {
+  INVENTORY_SYSTEM_CODES,
+  generarCodigoMovimiento,
+} from "@/lib/inventory/inventoryConstants";
+import crypto from "crypto";
 
 // GET /api/inventario/transferencias - Últimas transferencias registradas
 export async function GET(request: NextRequest) {
@@ -34,6 +39,7 @@ export async function GET(request: NextRequest) {
     const rows = await query(
       `SELECT
          m_sal.transferencia_uuid,
+         m_sal.codigo_movimiento,
          m_sal.fecha_movimiento,
          m_sal.cantidad::numeric AS cantidad,
          m_sal.referencia,
@@ -66,6 +72,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       transferencias: (rows || []).map((r: any) => ({
         uuid: r.transferencia_uuid,
+        codigoMovimiento: r.codigo_movimiento || "-",
         fecha: r.fecha_movimiento,
         productoCodigo: r.codigo_producto,
         productoNombre: r.producto_nombre,
@@ -87,7 +94,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/inventario/transferencias - Ejecutar transferencia entre almacenes
+// POST /api/inventario/transferencias - Ejecutar transferencia entre almacenes (Multiproducto Atómica)
 export async function POST(request: NextRequest) {
   try {
     const session = await getWorkshopSession();
@@ -110,10 +117,12 @@ export async function POST(request: NextRequest) {
     const {
       almacenOrigenId,
       almacenDestinoId,
-      productoId,
-      cantidad,
       referencia,
       observacion,
+      lineas,
+      // Legacy single-line fallback
+      productoId,
+      cantidad,
     } = body;
 
     const empresaId = session.empresa_id;
@@ -121,46 +130,136 @@ export async function POST(request: NextRequest) {
     const idempotencyKey = request.headers.get("x-idempotency-key") || body.idempotencyKey;
 
     if (!almacenOrigenId || !almacenDestinoId) {
-      return NextResponse.json({ error: "ALMACENES_REQUERIDOS", message: "Los almacenes de origen y destino son obligatorios." }, { status: 400 });
+      return NextResponse.json(
+        { error: "ALMACENES_REQUERIDOS", message: "Los almacenes de origen y destino son obligatorios." },
+        { status: 400 }
+      );
     }
     if (Number(almacenOrigenId) === Number(almacenDestinoId)) {
-      return NextResponse.json({ error: "MISMO_ALMACEN", message: "El almacén de origen y destino deben ser distintos." }, { status: 400 });
-    }
-    if (!productoId) {
-      return NextResponse.json({ error: "PRODUCTO_REQUERIDO", message: "El producto es obligatorio." }, { status: 400 });
-    }
-    if (!cantidad || Number(cantidad) <= 0) {
-      return NextResponse.json({ error: "CANTIDAD_INVALIDA", message: "La cantidad a transferir debe ser mayor a 0." }, { status: 400 });
+      return NextResponse.json(
+        { error: "MISMO_ALMACEN", message: "El almacén de origen y destino deben ser distintos." },
+        { status: 400 }
+      );
     }
 
-    // Ejecutar transferencia con idempotencia atómica
+    // Normalizar líneas de la transferencia
+    let lineasToProcess: Array<{
+      productoId: number;
+      cantidad: number;
+      referencia?: string | null;
+    }> = [];
+
+    if (Array.isArray(lineas) && lineas.length > 0) {
+      lineasToProcess = lineas.map((l: any) => ({
+        productoId: Number(l.productoId),
+        cantidad: Number(l.cantidad),
+        referencia: l.referencia ? String(l.referencia).trim() : null,
+      }));
+    } else if (productoId && cantidad) {
+      lineasToProcess = [
+        {
+          productoId: Number(productoId),
+          cantidad: Number(cantidad),
+          referencia: referencia ? String(referencia).trim() : null,
+        },
+      ];
+    } else {
+      return NextResponse.json(
+        { error: "LINEAS_REQUERIDAS", message: "Debe incluir al menos una línea de producto a transferir." },
+        { status: 400 }
+      );
+    }
+
+    // Validar duplicados en el lote de transferencia
+    const seenProds = new Set<number>();
+    for (let i = 0; i < lineasToProcess.length; i++) {
+      const line = lineasToProcess[i];
+      if (!line.productoId || isNaN(line.productoId)) {
+        return NextResponse.json(
+          { error: "PRODUCTO_REQUERIDO", message: `La línea #${i + 1} no tiene un producto válido.` },
+          { status: 400 }
+        );
+      }
+      if (seenProds.has(line.productoId)) {
+        return NextResponse.json(
+          {
+            error: "PRODUCTO_DUPLICADO",
+            message: `El producto ID ${line.productoId} aparece más de una vez en la transferencia. Consolide la cantidad en una sola línea.`,
+          },
+          { status: 400 }
+        );
+      }
+      seenProds.add(line.productoId);
+
+      if (isNaN(line.cantidad) || line.cantidad <= 0) {
+        return NextResponse.json(
+          { error: "CANTIDAD_INVALIDA", message: `La cantidad en la línea #${i + 1} debe ser mayor a 0.` },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Orden determinista para evitar deadlocks: producto_id ASC
+    lineasToProcess.sort((a, b) => a.productoId - b.productoId);
+
+    // Ejecutar transferencia con idempotencia atómica, único codigo_movimiento y único transferencia_uuid compartido
     const result = await executeWithIdempotency({
       empresaId,
       usuarioId,
       tipoOperacion: "TRANSFERENCIA_INVENTARIO",
       idempotencyKey,
-      requestPayload: { almacenOrigenId, almacenDestinoId, productoId, cantidad, referencia },
+      requestPayload: {
+        almacenOrigenId,
+        almacenDestinoId,
+        lineas: lineasToProcess,
+        referencia,
+        observacion,
+      },
       operation: async (client) => {
-        const transferRes = await transferirInventario({
+        // Generar código de sistema de la operación (código 9 = Transferencia de Inventario)
+        const codigoMovimiento = await generarCodigoMovimiento(
           client,
           empresaId,
-          usuarioId,
-          productoId: Number(productoId),
-          almacenOrigenId: Number(almacenOrigenId),
-          almacenDestinoId: Number(almacenDestinoId),
-          cantidad: Number(cantidad),
-          referencia: referencia ? String(referencia).trim() : null,
-          observacion: observacion ? String(observacion).trim() : null,
-        });
+          INVENTORY_SYSTEM_CODES.TRANSFERENCIA
+        );
+
+        // Generar un único UUID para correlacionar todas las líneas del lote de transferencia
+        const transferenciaUuid = crypto.randomUUID();
+        const batchRef = referencia ? String(referencia).trim() : `TRF-${transferenciaUuid.substring(0, 8).toUpperCase()}`;
+
+        const transferenciasResult: any[] = [];
+
+        for (const line of lineasToProcess) {
+          const lineRef = line.referencia || batchRef;
+
+          const transferRes = await transferirInventario({
+            client,
+            empresaId,
+            usuarioId,
+            productoId: line.productoId,
+            almacenOrigenId: Number(almacenOrigenId),
+            almacenDestinoId: Number(almacenDestinoId),
+            cantidad: line.cantidad,
+            referencia: lineRef,
+            observacion: observacion ? String(observacion).trim() : null,
+            transferenciaUuid,
+            codigoMovimiento,
+          });
+
+          transferenciasResult.push(transferRes);
+        }
 
         return {
           statusCode: 201,
           data: {
             success: true,
-            transferencia: transferRes,
-            mensaje: "Transferencia de inventario realizada exitosamente.",
+            codigoMovimiento,
+            transferenciaUuid,
+            totalLineas: transferenciasResult.length,
+            transferencias: transferenciasResult,
+            mensaje: `Transferencia de inventario realizada exitosamente con código ${codigoMovimiento}.`,
           },
-          recursoId: transferRes.movimientoSalida?.movimientoId || null,
+          recursoId: transferenciasResult[0]?.movimientoSalida?.movimientoId || null,
         };
       },
     });

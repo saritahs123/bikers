@@ -6,6 +6,10 @@ import {
   registrarMovimientoInventario,
   InventoryError,
 } from "@/lib/inventory/inventoryMovementService";
+import {
+  INVENTORY_SYSTEM_CODES,
+  generarCodigoMovimiento,
+} from "@/lib/inventory/inventoryConstants";
 
 // GET /api/inventario/entradas - Últimas entradas registradas
 export async function GET(request: NextRequest) {
@@ -33,6 +37,7 @@ export async function GET(request: NextRequest) {
     const rows = await query(
       `SELECT
          m.movimiento_inventario_id,
+         m.codigo_movimiento,
          m.fecha_movimiento,
          m.cantidad::numeric AS cantidad,
          m.costo_unitario::numeric AS costo_unitario,
@@ -44,6 +49,12 @@ export async function GET(request: NextRequest) {
          p.nombre AS producto_nombre,
          a.almacen_id,
          a.nombre AS almacen_nombre,
+         COALESCE(
+           NULLIF(TRIM(SUBSTRING(m.observacion FROM 'Proveedor: ([^|]+)')), ''),
+           (SELECT pr.nombre_comercial FROM admin.producto_proveedor pp JOIN admin.proveedores pr ON pp.proveedor_id = pr.proveedor_id WHERE pp.producto_id = p.producto_id AND pp.proveedor_principal = true AND pr.empresa_id = $1 LIMIT 1),
+           (SELECT pr.nombre_comercial FROM admin.producto_proveedor pp JOIN admin.proveedores pr ON pp.proveedor_id = pr.proveedor_id WHERE pp.producto_id = p.producto_id AND pr.empresa_id = $1 LIMIT 1),
+           '—'
+         ) AS proveedor_nombre,
          COALESCE(NULLIF(TRIM(CONCAT(COALESCE(ui.nombre, ''), ' ', COALESCE(ui.apellido, ''))), ''), ui.correo_electronico, 'Sistema') AS usuario_nombre,
          tm.codigo AS tipo_codigo,
          tm.nombre AS tipo_nombre
@@ -63,9 +74,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       entradas: (rows || []).map((r: any) => ({
         id: r.movimiento_inventario_id,
+        codigoMovimiento: r.codigo_movimiento || "-",
         fecha: r.fecha_movimiento,
         productoCodigo: r.codigo_producto,
         productoNombre: r.producto_nombre,
+        proveedorNombre: r.proveedor_nombre?.trim() || "—",
         almacenNombre: r.almacen_nombre,
         cantidad: Number(r.cantidad || 0),
         costoUnitario: Number(r.costo_unitario || 0),
@@ -83,7 +96,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/inventario/entradas - Registrar Entrada por Compra
+// POST /api/inventario/entradas - Registrar Entrada por Compra (Multiproducto Atómica)
 export async function POST(request: NextRequest) {
   try {
     const session = await getWorkshopSession();
@@ -105,12 +118,14 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const {
       almacenId,
-      proveedorId,
+      proveedorId, // General / respaldo opcional
+      observacion,
+      lineas,
+      // Legacy single-line fallback
       productoId,
       cantidad,
       costoUnitario,
       referencia,
-      observacion,
     } = body;
 
     const empresaId = session.empresa_id;
@@ -120,79 +135,282 @@ export async function POST(request: NextRequest) {
     if (!almacenId) {
       return NextResponse.json({ error: "ALMACEN_REQUERIDO", message: "El almacén es obligatorio." }, { status: 400 });
     }
-    if (!productoId) {
-      return NextResponse.json({ error: "PRODUCTO_REQUERIDO", message: "El producto es obligatorio." }, { status: 400 });
-    }
-    if (!proveedorId) {
-      return NextResponse.json({ error: "PROVEEDOR_REQUERIDO", message: "El proveedor es obligatorio para una entrada por compra." }, { status: 400 });
-    }
-    if (!cantidad || Number(cantidad) <= 0) {
-      return NextResponse.json({ error: "CANTIDAD_INVALIDA", message: "La cantidad debe ser mayor a 0." }, { status: 400 });
-    }
-    if (costoUnitario === undefined || costoUnitario === null || Number(costoUnitario) < 0) {
-      return NextResponse.json({ error: "COSTO_INVALIDO", message: "El costo unitario debe ser igual o mayor a 0." }, { status: 400 });
-    }
 
-    // Validar relación producto ↔ proveedor activa (Regla INV-2B 12 y 13)
-    const ppCheck = await query(
-      `SELECT pp.producto_proveedor_id, pr.nombre_comercial
-       FROM admin.producto_proveedor pp
-       JOIN admin.proveedores pr ON pp.proveedor_id = pr.proveedor_id
-       JOIN admin.productos p ON pp.producto_id = p.producto_id
-       WHERE pp.producto_id = $1
-         AND pp.proveedor_id = $2
-         AND p.empresa_id = $3
-         AND pr.empresa_id = $3
-         AND UPPER(pp.estado) = 'ACTIVO'
-         AND UPPER(pr.estado) = 'ACTIVO'
-       LIMIT 1`,
-      [Number(productoId), Number(proveedorId), empresaId]
-    );
+    // Normalizar líneas de la operación
+    let lineasToProcess: Array<{
+      productoId: number;
+      cantidad: number;
+      costoUnitario: number;
+      referencia?: string | null;
+      proveedorId?: number | null;
+    }> = [];
 
-    if (!ppCheck || ppCheck.length === 0) {
-      return NextResponse.json(
+    if (Array.isArray(lineas) && lineas.length > 0) {
+      lineasToProcess = lineas.map((l: any) => ({
+        productoId: Number(l.productoId),
+        cantidad: Number(l.cantidad),
+        costoUnitario: Number(l.costoUnitario),
+        referencia: l.referencia ? String(l.referencia).trim() : null,
+        proveedorId: l.proveedorId ? Number(l.proveedorId) : null,
+      }));
+    } else if (productoId && cantidad) {
+      lineasToProcess = [
         {
-          error: "PROVEEDOR_NO_ASOCIADO",
-          message: "Este proveedor no se encuentra activo o asociado a este producto. Configura la relación previamente.",
+          productoId: Number(productoId),
+          cantidad: Number(cantidad),
+          costoUnitario: Number(costoUnitario || 0),
+          referencia: referencia ? String(referencia).trim() : null,
+          proveedorId: proveedorId ? Number(proveedorId) : null,
         },
+      ];
+    } else {
+      return NextResponse.json(
+        { error: "LINEAS_REQUERIDAS", message: "Debe incluir al menos una línea de producto en la entrada." },
         { status: 400 }
       );
     }
 
-    const proveedorNombre = ppCheck[0].nombre_comercial;
-    const finalObs = observacion
-      ? `${observacion} | Proveedor: ${proveedorNombre}`
-      : `Proveedor: ${proveedorNombre}`;
+    // Validar duplicados en el mismo lote
+    const seenProds = new Set<number>();
+    for (let i = 0; i < lineasToProcess.length; i++) {
+      const line = lineasToProcess[i];
+      if (!line.productoId || isNaN(line.productoId)) {
+        return NextResponse.json(
+          { error: "PRODUCTO_REQUERIDO", message: `La línea #${i + 1} no tiene un producto válido.` },
+          { status: 400 }
+        );
+      }
+      if (seenProds.has(line.productoId)) {
+        return NextResponse.json(
+          {
+            error: "PRODUCTO_DUPLICADO",
+            message: `El producto ID ${line.productoId} aparece más de una vez en el lote. Consolide la cantidad en una sola línea.`,
+          },
+          { status: 400 }
+        );
+      }
+      seenProds.add(line.productoId);
 
-    // Ejecutar con idempotencia atómica
+      if (isNaN(line.cantidad) || line.cantidad <= 0) {
+        return NextResponse.json(
+          { error: "CANTIDAD_INVALIDA", message: `La cantidad en la línea #${i + 1} debe ser mayor a 0.` },
+          { status: 400 }
+        );
+      }
+      if (isNaN(line.costoUnitario) || line.costoUnitario < 0) {
+        return NextResponse.json(
+          { error: "COSTO_INVALIDO", message: `El costo unitario en la línea #${i + 1} no puede ser negativo.` },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Validar productos pertenezcan a la empresa y estén activos
+    const productIds = lineasToProcess.map((l) => l.productoId);
+    const prodRows = await query(
+      `SELECT producto_id, codigo_producto, nombre
+       FROM admin.productos
+       WHERE producto_id = ANY($1::int[])
+         AND empresa_id = $2
+         AND (UPPER(estado) = 'ACTIVO' OR estado IS NULL)`,
+      [productIds, empresaId]
+    );
+    const validProdMap = new Map((prodRows || []).map((p: any) => [Number(p.producto_id), p]));
+    for (const pid of productIds) {
+      if (!validProdMap.has(pid)) {
+        return NextResponse.json(
+          { error: "PRODUCTO_NO_ENCONTRADO", message: `El producto ID ${pid} no pertenece a esta empresa o está inactivo.` },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Consultar relaciones en admin.producto_proveedor para los productos del lote
+    const ppRows = await query(
+      `SELECT
+         pp.producto_id,
+         pp.proveedor_id,
+         COALESCE(pp.proveedor_principal, false) AS proveedor_principal,
+         pr.nombre_comercial,
+         pr.codigo_proveedor
+       FROM admin.producto_proveedor pp
+       JOIN admin.proveedores pr ON pp.proveedor_id = pr.proveedor_id
+       WHERE pp.producto_id = ANY($1::int[])
+         AND pr.empresa_id = $2
+         AND (UPPER(pp.estado) = 'ACTIVO' OR pp.estado IS NULL)
+         AND (UPPER(pr.estado) = 'ACTIVO' OR pr.estado IS NULL)
+       ORDER BY pp.proveedor_principal DESC, pr.nombre_comercial ASC`,
+      [productIds, empresaId]
+    );
+
+    // Agrupar proveedores asociados por producto
+    const ppMap = new Map<number, any[]>();
+    for (const r of ppRows || []) {
+      const pid = Number(r.producto_id);
+      if (!ppMap.has(pid)) ppMap.set(pid, []);
+      ppMap.get(pid)!.push(r);
+    }
+
+    // Validar proveedor general si fue provisto
+    let generalProvName: string | null = null;
+    if (proveedorId) {
+      const genProvRows = await query(
+        `SELECT proveedor_id, nombre_comercial
+         FROM admin.proveedores
+         WHERE proveedor_id = $1 AND empresa_id = $2 AND (UPPER(estado) = 'ACTIVO' OR estado IS NULL)`,
+        [Number(proveedorId), empresaId]
+      );
+      if (!genProvRows || genProvRows.length === 0) {
+        return NextResponse.json(
+          { error: "PROVEEDOR_INVALIDO", message: "El proveedor general seleccionado no es válido o está inactivo." },
+          { status: 400 }
+        );
+      }
+      generalProvName = genProvRows[0].nombre_comercial;
+    }
+
+    // Resolver proveedor efectivo para cada línea
+    // Reglas de negocio:
+    // 1. Si la línea especificó proveedorId, validar que sea activo en el tenant
+    // 2. Si no, si el producto tiene proveedor_principal = true, usarlo
+    // 3. Si no, si el producto tiene exactamente 1 proveedor activo, usarlo
+    // 4. Si no, si hay proveedor general, usarlo de fallback
+    // 5. Si no, NULL (permitido sin proveedor)
+    const lineasResueltas: Array<{
+      productoId: number;
+      cantidad: number;
+      costoUnitario: number;
+      referencia?: string | null;
+      proveedorId?: number | null;
+      proveedorNombre?: string | null;
+    }> = [];
+
+    for (let i = 0; i < lineasToProcess.length; i++) {
+      const line = lineasToProcess[i];
+      const prodsProvs = ppMap.get(line.productoId) || [];
+
+      let effProvId: number | null = null;
+      let effProvName: string | null = null;
+
+      if (line.proveedorId) {
+        // Validar que el proveedor especificado exista en el tenant
+        const pMatch = prodsProvs.find((p) => Number(p.proveedor_id) === Number(line.proveedorId));
+        if (pMatch) {
+          effProvId = Number(pMatch.proveedor_id);
+          effProvName = pMatch.nombre_comercial;
+        } else {
+          // Verificar si existe como proveedor general de la empresa
+          const provCheck = await query(
+            `SELECT proveedor_id, nombre_comercial FROM admin.proveedores WHERE proveedor_id = $1 AND empresa_id = $2 AND (UPPER(estado) = 'ACTIVO' OR estado IS NULL)`,
+            [Number(line.proveedorId), empresaId]
+          );
+          if (provCheck && provCheck.length > 0) {
+            effProvId = Number(provCheck[0].proveedor_id);
+            effProvName = provCheck[0].nombre_comercial;
+          } else {
+            return NextResponse.json(
+              { error: "PROVEEDOR_INVALIDO", message: `El proveedor especificado en la línea #${i + 1} no es válido.` },
+              { status: 400 }
+            );
+          }
+        }
+      } else {
+        // CASO A: proveedor_principal activo
+        const principal = prodsProvs.find((p) => p.proveedor_principal === true);
+        if (principal) {
+          effProvId = Number(principal.proveedor_id);
+          effProvName = principal.nombre_comercial;
+        } else if (prodsProvs.length === 1) {
+          // CASO B: exactamente un proveedor activo
+          effProvId = Number(prodsProvs[0].proveedor_id);
+          effProvName = prodsProvs[0].nombre_comercial;
+        } else if (prodsProvs.length > 1) {
+          // CASO C: varios proveedores y ninguno principal
+          // Usar el primer proveedor o general fallback
+          if (generalProvName && proveedorId) {
+            effProvId = Number(proveedorId);
+            effProvName = generalProvName;
+          } else {
+            effProvId = Number(prodsProvs[0].proveedor_id);
+            effProvName = prodsProvs[0].nombre_comercial;
+          }
+        } else {
+          // CASO D / E: sin proveedor asociado -> fallback a proveedor general o NULL
+          if (generalProvName && proveedorId) {
+            effProvId = Number(proveedorId);
+            effProvName = generalProvName;
+          } else {
+            effProvId = null;
+            effProvName = null;
+          }
+        }
+      }
+
+      lineasResueltas.push({
+        ...line,
+        proveedorId: effProvId,
+        proveedorNombre: effProvName,
+      });
+    }
+
+    // Orden determinista para evitar deadlocks: producto_id ASC
+    lineasResueltas.sort((a, b) => a.productoId - b.productoId);
+
+    // Ejecutar con idempotencia atómica y código único por lote
     const result = await executeWithIdempotency({
       empresaId,
       usuarioId,
       tipoOperacion: "ENTRADA_INVENTARIO",
       idempotencyKey,
-      requestPayload: { almacenId, proveedorId, productoId, cantidad, costoUnitario, referencia },
+      requestPayload: { almacenId, proveedorId, lineas: lineasResueltas, observacion },
       operation: async (client) => {
-        const mov = await registrarMovimientoInventario({
+        // Generar código de sistema de la operación (código 5 = Entrada de Inventario)
+        const codigoMovimiento = await generarCodigoMovimiento(
           client,
           empresaId,
-          usuarioId,
-          tipoMovimientoCodigo: "ENT_COMPRA",
-          productoId: Number(productoId),
-          almacenId: Number(almacenId),
-          cantidad: Number(cantidad),
-          costoUnitario: Number(costoUnitario),
-          referencia: referencia ? String(referencia).trim() : null,
-          observacion: finalObs,
-        });
+          INVENTORY_SYSTEM_CODES.ENTRADA
+        );
+
+        const movimientosResult: any[] = [];
+
+        for (const line of lineasResueltas) {
+          // Construir observación con el proveedor correspondiente de esta línea
+          let lineObs = observacion ? observacion.trim() : "";
+          if (line.proveedorNombre) {
+            lineObs = lineObs ? `${lineObs} | Proveedor: ${line.proveedorNombre}` : `Proveedor: ${line.proveedorNombre}`;
+          }
+
+          const mov = await registrarMovimientoInventario({
+            client,
+            empresaId,
+            usuarioId,
+            tipoMovimientoCodigo: "ENT_COMPRA",
+            productoId: line.productoId,
+            almacenId: Number(almacenId),
+            cantidad: line.cantidad,
+            costoUnitario: line.costoUnitario,
+            referencia: line.referencia,
+            observacion: lineObs || null,
+            codigoMovimiento,
+          });
+
+          movimientosResult.push({
+            ...mov,
+            proveedorId: line.proveedorId,
+            proveedorNombre: line.proveedorNombre,
+          });
+        }
 
         return {
           statusCode: 201,
           data: {
             success: true,
-            movimiento: mov,
-            mensaje: "Entrada por compra registrada exitosamente.",
+            codigoMovimiento,
+            totalLineas: movimientosResult.length,
+            movimientos: movimientosResult,
+            mensaje: `Entrada por compra registrada exitosamente con código ${codigoMovimiento}.`,
           },
-          recursoId: mov.movimientoId,
+          recursoId: movimientosResult[0]?.movimientoId || null,
         };
       },
     });

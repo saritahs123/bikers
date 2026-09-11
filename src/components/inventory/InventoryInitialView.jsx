@@ -473,8 +473,8 @@ export default function InventoryInitialView() {
                 </label>
                 <input
                   type="number"
-                  min="0.01"
-                  step={selectedProduct?.unidad_medida?.permite_decimales ? "0.01" : "1"}
+                  min={selectedProduct?.unidad_medida?.permite_decimales ? "0.01" : "1"}
+                  step={selectedProduct?.unidad_medida?.permite_decimales ? "any" : "1"}
                   value={cantidad}
                   onChange={(e) => setCantidad(e.target.value)}
                   placeholder="0"
@@ -540,7 +540,7 @@ export default function InventoryInitialView() {
                 <tbody className="divide-y divide-border">
                   {items.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-8 text-center text-foreground-muted text-xs">
+                      <td colSpan={8} className="py-6 text-center text-foreground-muted text-xs">
                         No hay productos agregados en el lote. Completa los campos arriba y haz clic en Agregar.
                       </td>
                     </tr>
@@ -868,10 +868,16 @@ export default function InventoryInitialView() {
                 </p>
               </div>
 
-              <div className="p-4 rounded-lg bg-surface border border-border grid grid-cols-3 gap-3 text-xs">
+              <div className="p-4 rounded-lg bg-surface border border-border grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div>
+                  <span className="text-foreground-muted block">Código Movimiento:</span>
+                  <span className="font-mono font-bold text-primary">
+                    {processedResult.codigoMovimiento || "-"}
+                  </span>
+                </div>
                 <div>
                   <span className="text-foreground-muted block">Lote:</span>
-                  <span className="font-mono font-bold text-primary">
+                  <span className="font-mono font-semibold text-foreground-secondary">
                     {processedResult.referenciaLote}
                   </span>
                 </div>

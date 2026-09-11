@@ -3,12 +3,10 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import {
+  ArrowLeftRight,
   Package,
-  ArrowRightLeft,
-  ArrowRight,
-  TrendingUp,
+  Calendar,
   Clock,
-  ExternalLink,
   RotateCcw,
   AlertCircle,
   CheckCircle2,
@@ -16,13 +14,17 @@ import {
   Search,
   ChevronDown,
   Info,
-  Calendar,
-  Layers,
-  RefreshCw,
+  ArrowRight,
+  Edit2,
+  Trash2,
+  Plus,
+  ExternalLink,
+  MoreVertical,
+  BarChart2,
 } from "lucide-react";
 
 export default function InventoryTransfersView() {
-  // Catalogs
+  // Catálogos
   const [almacenes, setAlmacenes] = useState([]);
   const [productos, setProductos] = useState([]);
   const [transferencias, setTransferencias] = useState([]);
@@ -31,23 +33,33 @@ export default function InventoryTransfersView() {
   const [loadingTransferencias, setLoadingTransferencias] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // Form inputs
+  // Cabecera de la operación
   const [almacenOrigenId, setAlmacenOrigenId] = useState("");
   const [almacenDestinoId, setAlmacenDestinoId] = useState("");
+  const [referenciaGeneral, setReferenciaGeneral] = useState("");
+  const [observacionGeneral, setObservacionGeneral] = useState("");
+
+  // Líneas temporales de la transferencia multiproducto
+  const [lineas, setLineas] = useState([]);
+  const [editingIndex, setEditingIndex] = useState(null);
+
+  // Formulario para agregar/editar una línea
   const [productoId, setProductoId] = useState("");
   const [cantidad, setCantidad] = useState("");
-  const [referencia, setReferencia] = useState("");
-  const [observacion, setObservacion] = useState("");
+  const [referenciaLinea, setReferenciaLinea] = useState("");
 
-  // Product search dropdown
+  // Dropdown de búsqueda de productos
   const [productSearch, setProductSearch] = useState("");
   const [productDropdownOpen, setProductDropdownOpen] = useState(false);
 
   // Feedback notifications
   const [feedback, setFeedback] = useState(null);
 
-  // Clock
-  const [currentDateTime, setCurrentDateTime] = useState("");
+  // Fecha y hora actual en vivo
+  const [currentTime, setCurrentTime] = useState({
+    dateStr: "",
+    timeStr: "",
+  });
 
   useEffect(() => {
     const updateTime = () => {
@@ -63,15 +75,17 @@ export default function InventoryTransfersView() {
         minute: "2-digit",
         hour12: true,
       });
-      const capitalized = dateStr.charAt(0).toUpperCase() + dateStr.slice(1);
-      setCurrentDateTime(`${capitalized} | ${timeStr} | America/Santo Domingo`);
+      setCurrentTime({
+        dateStr: dateStr.charAt(0).toUpperCase() + dateStr.slice(1),
+        timeStr,
+      });
     };
     updateTime();
-    const interval = setInterval(updateTime, 60000);
-    return () => clearInterval(interval);
+    const timer = setInterval(updateTime, 1000);
+    return () => clearInterval(timer);
   }, []);
 
-  // Load catalogs
+  // Cargar catálogos
   const loadCatalogos = useCallback(async () => {
     try {
       setLoadingCatalogos(true);
@@ -83,10 +97,21 @@ export default function InventoryTransfersView() {
       setProductos(data.productos || []);
 
       if (alms.length >= 2) {
-        if (!almacenOrigenId) setAlmacenOrigenId(String(alms[0].almacen_id));
-        if (!almacenDestinoId) setAlmacenDestinoId(String(alms[1].almacen_id));
+        setAlmacenOrigenId((prev) => {
+          if (prev && alms.some((a) => String(a.almacen_id) === String(prev))) return prev;
+          return String(alms[0].almacen_id);
+        });
+        setAlmacenDestinoId((prev) => {
+          const currentOrigin = almacenOrigenId || String(alms[0].almacen_id);
+          if (prev && String(prev) !== currentOrigin && alms.some((a) => String(a.almacen_id) === String(prev))) {
+            return prev;
+          }
+          const alt = alms.find((a) => String(a.almacen_id) !== currentOrigin);
+          return alt ? String(alt.almacen_id) : "";
+        });
       } else if (alms.length === 1) {
-        if (!almacenOrigenId) setAlmacenOrigenId(String(alms[0].almacen_id));
+        setAlmacenOrigenId(String(alms[0].almacen_id));
+        setAlmacenDestinoId("");
       }
     } catch (err) {
       console.error(err);
@@ -94,9 +119,9 @@ export default function InventoryTransfersView() {
     } finally {
       setLoadingCatalogos(false);
     }
-  }, [almacenOrigenId, almacenDestinoId]);
+  }, [almacenOrigenId]);
 
-  // Load recent transfers (differentiating error from empty)
+  // Cargar transferencias recientes
   const loadTransferencias = useCallback(async () => {
     try {
       setLoadingTransferencias(true);
@@ -124,31 +149,55 @@ export default function InventoryTransfersView() {
     loadTransferencias();
   }, [loadCatalogos, loadTransferencias]);
 
-  // Swap warehouses
+  // Almacenes disponibles para destino (excluye estrictamente el de origen)
+  const almacenesDestino = useMemo(() => {
+    if (!almacenOrigenId) return almacenes;
+    return almacenes.filter((a) => String(a.almacen_id) !== String(almacenOrigenId));
+  }, [almacenes, almacenOrigenId]);
+
+  // Manejar cambio de origen
+  const handleOrigenChange = (newOrigenId) => {
+    if (lineas.length > 0) {
+      if (!window.confirm("Cambiar el almacén de origen descartará las líneas agregadas. ¿Continuar?")) {
+        return;
+      }
+      setLineas([]);
+      resetLineForm();
+    }
+    setAlmacenOrigenId(newOrigenId);
+
+    if (String(almacenDestinoId) === String(newOrigenId)) {
+      const alternate = almacenes.find((a) => String(a.almacen_id) !== String(newOrigenId));
+      setAlmacenDestinoId(alternate ? String(alternate.almacen_id) : "");
+    }
+  };
+
+  // Intercambiar almacenes
   const handleSwapWarehouses = () => {
+    if (!almacenOrigenId || !almacenDestinoId) return;
+    if (lineas.length > 0) {
+      if (!window.confirm("Intercambiar almacenes descartará las líneas actuales agregadas. ¿Continuar?")) {
+        return;
+      }
+      setLineas([]);
+      resetLineForm();
+    }
     const temp = almacenOrigenId;
     setAlmacenOrigenId(almacenDestinoId);
     setAlmacenDestinoId(temp);
   };
 
-  // Selected product
+  // Producto seleccionado actualmente
   const selectedProduct = useMemo(() => {
     if (!productoId) return null;
     return productos.find((p) => String(p.producto_id) === String(productoId)) || null;
   }, [productos, productoId]);
 
-  // Warehouses objects
-  const almOrigenObj = useMemo(() => {
-    return almacenes.find((a) => String(a.almacen_id) === String(almacenOrigenId)) || null;
-  }, [almacenes, almacenOrigenId]);
-
-  const almDestinoObj = useMemo(() => {
-    return almacenes.find((a) => String(a.almacen_id) === String(almacenDestinoId)) || null;
-  }, [almacenes, almacenDestinoId]);
-
-  // Stock in origin and destination
+  // Stock en origen
   const stockOrigen = useMemo(() => {
-    if (!selectedProduct || !almacenOrigenId) return { actual: 0, reservado: 0, disponible: 0 };
+    if (!selectedProduct || !almacenOrigenId) {
+      return { actual: 0, reservado: 0, disponible: 0 };
+    }
     const ex = (selectedProduct.existencias || []).find(
       (e) => String(e.almacen_id) === String(almacenOrigenId)
     );
@@ -157,43 +206,47 @@ export default function InventoryTransfersView() {
     return { actual: act, reservado: res, disponible: act - res };
   }, [selectedProduct, almacenOrigenId]);
 
+  // Stock en destino
   const stockDestino = useMemo(() => {
-    if (!selectedProduct || !almacenDestinoId) return { actual: 0, reservado: 0, disponible: 0 };
+    if (!selectedProduct || !almacenDestinoId) {
+      return { actual: 0 };
+    }
     const ex = (selectedProduct.existencias || []).find(
       (e) => String(e.almacen_id) === String(almacenDestinoId)
     );
-    const act = ex ? Number(ex.cantidad_actual) : 0;
-    const res = ex ? Number(ex.cantidad_reservada) : 0;
-    return { actual: act, reservado: res, disponible: act - res };
+    return { actual: ex ? Number(ex.cantidad_actual) : 0 };
   }, [selectedProduct, almacenDestinoId]);
 
-  // Calculations
-  const cantidadNum = parseFloat(cantidad) || 0;
-  const stockExcedido = cantidadNum > stockOrigen.disponible;
+  // Búsqueda de productos
+  const filteredProducts = useMemo(() => {
+    if (!productSearch.trim()) return productos.slice(0, 30);
+    const q = productSearch.toLowerCase();
+    return productos.filter(
+      (p) =>
+        p.codigo_producto?.toLowerCase().includes(q) ||
+        p.nombre?.toLowerCase().includes(q) ||
+        p.marca_nombre?.toLowerCase().includes(q) ||
+        p.codigo_barra?.toLowerCase().includes(q)
+    );
+  }, [productos, productSearch]);
 
-  const stockOrigenDespues = stockOrigen.actual - cantidadNum;
-  const stockDestinoDespues = stockDestino.actual + cantidadNum;
-
-  // Select product
   const handleSelectProduct = (prod) => {
     setProductoId(String(prod.producto_id));
     setProductSearch(`${prod.codigo_producto} - ${prod.nombre}`);
     setProductDropdownOpen(false);
   };
 
-  // Reset form
-  const handleReset = () => {
+  const resetLineForm = () => {
     setProductoId("");
     setProductSearch("");
     setCantidad("");
-    setReferencia("");
-    setObservacion("");
-    setFeedback(null);
+    setReferenciaLinea("");
+    setEditingIndex(null);
   };
 
-  // Submit transfer
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  // Agregar línea temporal
+  const handleAddLine = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
     setFeedback(null);
 
     if (!almacenOrigenId || !almacenDestinoId) {
@@ -201,94 +254,259 @@ export default function InventoryTransfersView() {
       return;
     }
     if (almacenOrigenId === almacenDestinoId) {
-      setFeedback({
-        type: "error",
-        message: "El almacén de origen y destino deben ser diferentes.",
-      });
+      setFeedback({ type: "error", message: "Los almacenes de origen y destino deben ser diferentes." });
       return;
     }
-    if (!productoId) {
+    if (!selectedProduct) {
       setFeedback({ type: "error", message: "Selecciona un producto para transferir." });
       return;
     }
-    if (cantidadNum <= 0) {
+
+    const cantNum = parseFloat(cantidad);
+    if (isNaN(cantNum) || cantNum <= 0) {
       setFeedback({ type: "error", message: "La cantidad a transferir debe ser mayor a 0." });
       return;
     }
-    if (stockExcedido) {
+
+    const permiteDec = Boolean(selectedProduct?.unidad_medida?.permite_decimales);
+    if (!permiteDec && !Number.isInteger(cantNum)) {
       setFeedback({
         type: "error",
-        message: `La cantidad a transferir (${cantidadNum}) supera el stock disponible en origen (${stockOrigen.disponible}).`,
+        message: `La unidad ${selectedProduct?.unidad_medida?.codigo || "UND"} no permite decimales. Ingrese un número entero.`,
       });
+      return;
+    }
+
+    if (cantNum > stockOrigen.disponible) {
+      setFeedback({
+        type: "error",
+        message: `Stock disponible insuficiente en origen para '${selectedProduct.nombre}'. Disponible: ${stockOrigen.disponible}, Solicitado: ${cantNum}.`,
+      });
+      return;
+    }
+
+    // Validar duplicados
+    const duplicateIndex = lineas.findIndex(
+      (l, idx) => l.productoId === selectedProduct.producto_id && idx !== editingIndex
+    );
+    if (duplicateIndex >= 0) {
+      setFeedback({
+        type: "error",
+        message: "Este producto ya está agregado en la transferencia. Modifica la cantidad o edita la línea.",
+      });
+      return;
+    }
+
+    const newLine = {
+      productoId: selectedProduct.producto_id,
+      codigoProducto: selectedProduct.codigo_producto,
+      nombreProducto: selectedProduct.nombre,
+      marca: selectedProduct.marca_nombre || "Genérico",
+      unidad: selectedProduct.unidad_medida?.codigo || "UND",
+      permiteDecimales: permiteDec,
+      cantidad: cantNum,
+      referencia: referenciaLinea.trim() || null,
+      stockOrigenActual: stockOrigen.actual,
+      stockOrigenDisponible: stockOrigen.disponible,
+      stockOrigenProyectado: stockOrigen.actual - cantNum,
+      stockDestinoActual: stockDestino.actual,
+      stockDestinoProyectado: stockDestino.actual + cantNum,
+    };
+
+    if (editingIndex !== null) {
+      const updated = [...lineas];
+      updated[editingIndex] = newLine;
+      setLineas(updated);
+      setFeedback({ type: "success", message: "Línea de transferencia actualizada." });
+    } else {
+      setLineas((prev) => [...prev, newLine]);
+      setFeedback({ type: "success", message: `Producto '${selectedProduct.nombre}' agregado a la transferencia.` });
+    }
+
+    resetLineForm();
+  };
+
+  const handleEditLine = (index) => {
+    const l = lineas[index];
+    const prod = productos.find((p) => p.producto_id === l.productoId);
+    if (prod) {
+      setProductoId(String(prod.producto_id));
+      setProductSearch(`${prod.codigo_producto} - ${prod.nombre}`);
+      setCantidad(String(l.cantidad));
+      setReferenciaLinea(l.referencia || "");
+      setEditingIndex(index);
+      setFeedback(null);
+    }
+  };
+
+  const handleDeleteLine = (index) => {
+    setLineas((prev) => prev.filter((_, i) => i !== index));
+    if (editingIndex === index) {
+      resetLineForm();
+    }
+  };
+
+  const totales = useMemo(() => {
+    const totalLineas = lineas.length;
+    const totalUnidades = lineas.reduce((acc, l) => acc + l.cantidad, 0);
+    return { totalLineas, totalUnidades };
+  }, [lineas]);
+
+  const handleResetAll = () => {
+    if (lineas.length > 0) {
+      if (!window.confirm("¿Estás seguro de que deseas limpiar toda la transferencia? Se descartarán las líneas agregadas.")) {
+        return;
+      }
+    }
+    setLineas([]);
+    resetLineForm();
+    setReferenciaGeneral("");
+    setObservacionGeneral("");
+    setFeedback(null);
+  };
+
+  // Submit batch atómico en PostgreSQL
+  const handleSubmitBatch = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    setFeedback(null);
+
+    let batchLines = [...lineas];
+    if (batchLines.length === 0) {
+      if (selectedProduct && parseFloat(cantidad) > 0) {
+        const cantNum = parseFloat(cantidad);
+        if (cantNum > stockOrigen.disponible) {
+          setFeedback({
+            type: "error",
+            message: `Stock disponible insuficiente en origen. Disponible: ${stockOrigen.disponible}, Solicitado: ${cantNum}.`,
+          });
+          return;
+        }
+        batchLines.push({
+          productoId: selectedProduct.producto_id,
+          codigoProducto: selectedProduct.codigo_producto,
+          nombreProducto: selectedProduct.nombre,
+          marca: selectedProduct.marca_nombre || "Genérico",
+          unidad: selectedProduct.unidad_medida?.codigo || "UND",
+          cantidad: cantNum,
+          referencia: referenciaLinea.trim() || null,
+        });
+      }
+    }
+
+    if (!almacenOrigenId || !almacenDestinoId) {
+      setFeedback({ type: "error", message: "Selecciona los almacenes de origen y destino." });
+      return;
+    }
+    if (almacenOrigenId === almacenDestinoId) {
+      setFeedback({ type: "error", message: "Los almacenes de origen y destino deben ser distintos." });
+      return;
+    }
+    if (batchLines.length === 0) {
+      setFeedback({ type: "error", message: "Selecciona un producto e indica la cantidad antes de registrar la transferencia." });
       return;
     }
 
     setSubmitting(true);
-    const idempotencyKey = `TRF-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    const idempotencyKey = `TRF-BATCH-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
     try {
+      const payload = {
+        almacenOrigenId: Number(almacenOrigenId),
+        almacenDestinoId: Number(almacenDestinoId),
+        referencia: referenciaGeneral.trim() || null,
+        observacion: observacionGeneral.trim() || null,
+        lineas: batchLines.map((l) => ({
+          productoId: l.productoId,
+          cantidad: l.cantidad,
+          referencia: l.referencia || referenciaGeneral.trim() || null,
+        })),
+      };
+
       const res = await fetch("/api/inventario/transferencias", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "x-idempotency-key": idempotencyKey,
         },
-        body: JSON.stringify({
-          almacenOrigenId: Number(almacenOrigenId),
-          almacenDestinoId: Number(almacenDestinoId),
-          productoId: Number(productoId),
-          cantidad: cantidadNum,
-          referencia: referencia.trim() || null,
-          observacion: observacion.trim() || null,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.message || "Error al procesar la transferencia");
+        throw new Error(data.message || "Error al procesar la transferencia.");
       }
 
       setFeedback({
         type: "success",
-        message: `Transferencia procesada atómicamente. Origen ahora tiene: ${stockOrigenDespues}, Destino: ${stockDestinoDespues}.`,
+        message: `${data.mensaje || "Transferencia realizada exitosamente."} Código: ${data.codigoMovimiento}`,
       });
 
+      setLineas([]);
+      resetLineForm();
+      setReferenciaGeneral("");
+      setObservacionGeneral("");
       await loadCatalogos();
       await loadTransferencias();
-
-      setProductoId("");
-      setProductSearch("");
-      setCantidad("");
-      setReferencia("");
-      setObservacion("");
     } catch (err) {
       console.error(err);
       setFeedback({
         type: "error",
-        message: err.message || "Ocurrió un error inesperado al realizar la transferencia.",
+        message: err.message || "Ocurrió un error inesperado al registrar la transferencia.",
       });
     } finally {
       setSubmitting(false);
     }
   };
 
-  const filteredProducts = useMemo(() => {
-    if (!productSearch.trim()) return productos.slice(0, 20);
-    const q = productSearch.toLowerCase();
-    return productos.filter(
-      (p) =>
-        p.codigo_producto?.toLowerCase().includes(q) ||
-        p.nombre?.toLowerCase().includes(q) ||
-        p.marca_nombre?.toLowerCase().includes(q)
-    );
-  }, [productos, productSearch]);
+  const almOrigenObj = useMemo(
+    () => almacenes.find((a) => String(a.almacen_id) === String(almacenOrigenId)),
+    [almacenes, almacenOrigenId]
+  );
+  const almDestinoObj = useMemo(
+    () => almacenes.find((a) => String(a.almacen_id) === String(almacenDestinoId)),
+    [almacenes, almacenDestinoId]
+  );
+
+  // Datos para el Resumen Derecho
+  const activeProductForSummary = useMemo(() => {
+    if (selectedProduct) {
+      const cantNum = parseFloat(cantidad) || 0;
+      return {
+        isEditing: true,
+        producto: selectedProduct,
+        codigo: selectedProduct.codigo_producto,
+        nombre: selectedProduct.nombre,
+        unidad: selectedProduct.unidad_medida?.codigo || "UND",
+        cantidad: cantNum,
+        origenActual: stockOrigen.actual,
+        origenProyectado: stockOrigen.actual - cantNum,
+        destinoActual: stockDestino.actual,
+        destinoProyectado: stockDestino.actual + cantNum,
+      };
+    } else if (lineas.length > 0) {
+      const last = lineas[lineas.length - 1];
+      return {
+        isEditing: false,
+        producto: null,
+        codigo: last.codigoProducto,
+        nombre: last.nombreProducto,
+        unidad: last.unidad,
+        cantidad: last.cantidad,
+        origenActual: last.stockOrigenActual,
+        origenProyectado: last.stockOrigenProyectado,
+        destinoActual: last.stockDestinoActual,
+        destinoProyectado: last.stockDestinoProyectado,
+      };
+    }
+    return null;
+  }, [selectedProduct, cantidad, stockOrigen, stockDestino, lineas]);
 
   return (
     <div className="space-y-6">
-      {/* 1. Header Superior & Breadcrumb */}
+      {/* 1. HEADER EXACTO SEGÚN REFERENCIA IMAGE 5 */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 text-xs text-foreground-muted mb-1">
+          <div className="flex items-center gap-1.5 text-xs text-foreground-muted mb-1">
             <Link href="/inventory/summary" className="hover:text-foreground transition-colors">
               Inventario
             </Link>
@@ -296,8 +514,8 @@ export default function InventoryTransfersView() {
             <span className="text-foreground font-medium">Transferencias</span>
           </div>
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-primary/10 border border-primary/20 text-primary">
-              <ArrowRightLeft className="w-7 h-7" />
+            <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400">
+              <ArrowLeftRight className="w-7 h-7" />
             </div>
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-foreground">
@@ -310,16 +528,22 @@ export default function InventoryTransfersView() {
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3 text-right">
-          <div className="text-[11px] text-foreground-muted hidden sm:block">
-            <div className="flex items-center gap-1.5 justify-end">
-              <Calendar className="w-3.5 h-3.5 text-foreground-muted" />
-              <span>{currentDateTime}</span>
+        {/* Live Clock / Calendar widget & Ver movimientos */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg bg-surface border border-border text-xs shadow-2xs">
+            <Calendar className="w-4 h-4 text-foreground-muted" />
+            <div>
+              <div className="text-[10px] text-foreground-muted">{currentTime.dateStr || "—"}</div>
+              <div className="text-xs font-bold text-foreground">
+                {currentTime.timeStr || "—"}{" "}
+                <span className="text-[10px] font-normal text-foreground-muted">America/Santo Domingo</span>
+              </div>
             </div>
           </div>
+
           <Link
             href="/inventory/movements"
-            className="flex items-center gap-2 px-3.5 py-2 text-xs font-medium rounded-lg bg-surface hover:bg-hover text-foreground-secondary hover:text-foreground border border-border transition-all shadow-xs"
+            className="flex items-center gap-2 px-3.5 py-2 text-xs font-medium rounded-lg bg-surface hover:bg-hover text-foreground-secondary hover:text-foreground border border-border transition-all shadow-2xs"
           >
             <span>Ver movimientos</span>
             <ArrowRight className="w-3.5 h-3.5 text-foreground-muted" />
@@ -342,43 +566,47 @@ export default function InventoryTransfersView() {
             <AlertCircle className="w-5 h-5 flex-shrink-0 text-error mt-0.5" />
           )}
           <div className="flex-1">
-            <p className="font-medium">{feedback.message}</p>
+            <p className="font-semibold">{feedback.message}</p>
           </div>
-          <button onClick={() => setFeedback(null)} className="text-xs opacity-70 hover:opacity-100 cursor-pointer">
+          <button
+            onClick={() => setFeedback(null)}
+            className="text-xs opacity-70 hover:opacity-100 cursor-pointer"
+          >
             ✕
           </button>
         </div>
       )}
 
-      {/* 2. Cuerpo Principal: 2 Columnas (Formulario + Resumen Gemelo) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Columna Izquierda: Formulario (65%) */}
-        <div className="lg:col-span-7 xl:col-span-8 bg-card border border-border rounded-xl p-5 md:p-6 shadow-sm">
-          <div className="flex items-center gap-2.5 pb-4 border-b border-border mb-5">
-            <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
-              <Layers className="w-5 h-5" />
+      {/* 2. LAYOUT PRINCIPAL DE 2 COLUMNAS IDÉNTICO A LA REFERENCIA */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* COLUMNA IZQUIERDA: Card Registrar Transferencia */}
+        <div className="lg:col-span-8 bg-card border border-border rounded-xl p-5 md:p-6 shadow-sm space-y-5">
+          {/* Encabezado del Card */}
+          <div className="flex items-center gap-3 pb-3 border-b border-border">
+            <div className="p-2 rounded-lg bg-purple-500/10 text-purple-400">
+              <ArrowLeftRight className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-foreground">Registrar Transferencia</h2>
+              <h2 className="text-sm font-bold text-foreground">Registrar Transferencia</h2>
               <p className="text-xs text-foreground-muted">
                 Transfiere productos entre almacenes de la empresa.
               </p>
             </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Fila 1: Origen <-> Destino con botón Swap central */}
-            <div className="grid grid-cols-1 sm:grid-cols-11 gap-3 items-center">
+          <form onSubmit={handleAddLine} className="space-y-4">
+            {/* FILA 1: Almacén Origen, Botón Swap, Almacén Destino */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
               {/* Almacén Origen */}
-              <div className="sm:col-span-5">
-                <label className="block text-xs font-medium text-foreground-secondary mb-1.5">
+              <div className="md:col-span-5">
+                <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">
                   Almacén Origen <span className="text-error">*</span>
                 </label>
                 <div className="relative">
                   <Warehouse className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-muted pointer-events-none" />
                   <select
                     value={almacenOrigenId}
-                    onChange={(e) => setAlmacenOrigenId(e.target.value)}
+                    onChange={(e) => handleOrigenChange(e.target.value)}
                     className="w-full pl-9 pr-8 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground focus:outline-none focus:border-primary transition-colors cursor-pointer"
                   >
                     {almacenes.map((a) => (
@@ -389,32 +617,32 @@ export default function InventoryTransfersView() {
                   </select>
                 </div>
                 {selectedProduct && (
-                  <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-primary">
-                    <Info className="w-3.5 h-3.5 flex-shrink-0" />
+                  <div className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface border border-border text-[11px] text-foreground-muted">
+                    <Info className="w-3 h-3 text-sky-400" />
                     <span>
                       Stock disponible:{" "}
-                      <strong className="text-foreground">{stockOrigen.disponible}</strong>{" "}
-                      {selectedProduct.unidad_medida?.codigo || "UND"}
+                      <strong className="text-foreground">{stockOrigen.disponible} {selectedProduct?.unidad_medida?.codigo || "UND"}</strong>
                     </span>
                   </div>
                 )}
               </div>
 
               {/* Botón Swap en el centro */}
-              <div className="sm:col-span-1 flex justify-center pt-2 sm:pt-6">
+              <div className="md:col-span-2 flex justify-center items-center pt-6">
                 <button
                   type="button"
                   onClick={handleSwapWarehouses}
+                  disabled={almacenesDestino.length === 0 || !almacenDestinoId}
+                  className="w-9 h-9 rounded-full bg-surface hover:bg-hover border border-border flex items-center justify-center text-foreground-muted hover:text-foreground transition-all cursor-pointer shadow-xs disabled:opacity-40"
                   title="Intercambiar almacenes"
-                  className="p-2 rounded-lg bg-surface hover:bg-hover text-foreground-secondary hover:text-foreground border border-border transition-all shadow-xs cursor-pointer"
                 >
-                  <ArrowRightLeft className="w-4 h-4" />
+                  <ArrowRight className="w-4 h-4" />
                 </button>
               </div>
 
               {/* Almacén Destino */}
-              <div className="sm:col-span-5">
-                <label className="block text-xs font-medium text-foreground-secondary mb-1.5">
+              <div className="md:col-span-5">
+                <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">
                   Almacén Destino <span className="text-error">*</span>
                 </label>
                 <div className="relative">
@@ -422,31 +650,37 @@ export default function InventoryTransfersView() {
                   <select
                     value={almacenDestinoId}
                     onChange={(e) => setAlmacenDestinoId(e.target.value)}
-                    className="w-full pl-9 pr-8 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground focus:outline-none focus:border-primary transition-colors cursor-pointer"
+                    disabled={almacenesDestino.length === 0}
+                    className="w-full pl-9 pr-8 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground focus:outline-none focus:border-primary transition-colors cursor-pointer disabled:opacity-50"
                   >
-                    {almacenes.map((a) => (
-                      <option key={a.almacen_id} value={a.almacen_id}>
-                        {a.codigo} - {a.nombre}
+                    {almacenesDestino.length === 0 ? (
+                      <option value="" disabled>
+                        No hay otros almacenes disponibles
                       </option>
-                    ))}
+                    ) : (
+                      almacenesDestino.map((a) => (
+                        <option key={a.almacen_id} value={a.almacen_id}>
+                          {a.codigo} - {a.nombre}
+                        </option>
+                      ))
+                    )}
                   </select>
                 </div>
                 {selectedProduct && (
-                  <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-primary">
-                    <Info className="w-3.5 h-3.5 flex-shrink-0" />
+                  <div className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded bg-surface border border-border text-[11px] text-foreground-muted">
+                    <Info className="w-3 h-3 text-sky-400" />
                     <span>
-                      Stock disponible:{" "}
-                      <strong className="text-foreground">{stockDestino.disponible}</strong>{" "}
-                      {selectedProduct.unidad_medida?.codigo || "UND"}
+                      Stock actual en destino:{" "}
+                      <strong className="text-foreground">{stockDestino.actual} {selectedProduct?.unidad_medida?.codigo || "UND"}</strong>
                     </span>
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Fila 2: Producto */}
+            {/* FILA 2: Producto */}
             <div>
-              <label className="block text-xs font-medium text-foreground-secondary mb-1.5">
+              <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">
                 Producto <span className="text-error">*</span>
               </label>
               <div className="relative">
@@ -459,7 +693,7 @@ export default function InventoryTransfersView() {
                     setProductDropdownOpen(true);
                   }}
                   onFocus={() => setProductDropdownOpen(true)}
-                  placeholder="Buscar producto por código o nombre..."
+                  placeholder="Buscar producto por SKU, nombre..."
                   className="w-full pl-9 pr-8 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-primary transition-colors"
                 />
                 <button
@@ -471,96 +705,103 @@ export default function InventoryTransfersView() {
                 </button>
 
                 {productDropdownOpen && (
-                  <div className="absolute z-20 left-0 right-0 mt-1 max-h-56 overflow-y-auto bg-card border border-border rounded-xl shadow-xl divide-y divide-border">
-                    {filteredProducts.map((p) => (
-                      <div
-                        key={p.producto_id}
-                        onClick={() => handleSelectProduct(p)}
-                        className="p-2.5 hover:bg-surface-subtle/60 cursor-pointer flex items-center justify-between text-xs transition-colors"
-                      >
-                        <div>
-                          <span className="font-semibold text-foreground mr-2">
-                            {p.codigo_producto}
-                          </span>
-                          <span className="text-foreground-secondary">{p.nombre}</span>
-                        </div>
-                        <div className="text-[11px] text-foreground-muted">
-                          {p.marca_nombre || "General"}
-                        </div>
+                  <div className="absolute z-30 left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-card border border-border rounded-xl shadow-xl divide-y divide-border">
+                    {filteredProducts.length === 0 ? (
+                      <div className="p-3 text-xs text-foreground-muted text-center">
+                        No se encontraron productos coincidentes.
                       </div>
-                    ))}
+                    ) : (
+                      filteredProducts.map((p) => {
+                        const exOrg = (p.existencias || []).find(
+                          (e) => String(e.almacen_id) === String(almacenOrigenId)
+                        );
+                        const dispOrg = exOrg ? exOrg.cantidad_actual - (exOrg.cantidad_reservada || 0) : 0;
+                        return (
+                          <div
+                            key={p.producto_id}
+                            onClick={() => handleSelectProduct(p)}
+                            className="p-2.5 hover:bg-surface-subtle/60 cursor-pointer flex items-center justify-between text-xs transition-colors"
+                          >
+                            <div>
+                              <span className="font-semibold text-foreground mr-2">
+                                {p.codigo_producto}
+                              </span>
+                              <span className="text-foreground-secondary">{p.nombre}</span>
+                            </div>
+                            <span className="text-[11px] text-foreground-muted font-mono">
+                              Disp en origen: {dispOrg} {p.unidad_medida?.codigo || "UND"}
+                            </span>
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
                 )}
               </div>
 
-              {/* Info de stock bajo producto */}
+              {/* Info Pill de Producto idéntica a Image 5 */}
               {selectedProduct && (
-                <div className="mt-1.5 flex items-center gap-2 text-[11px] text-primary">
+                <div className="mt-1.5 inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-sky-950/30 border border-sky-800/40 text-[11px] text-sky-400">
                   <Info className="w-3.5 h-3.5 flex-shrink-0" />
                   <span>
-                    Unidad: {selectedProduct.unidad_medida?.codigo || "UND"} | Stock en origen:{" "}
-                    <strong className="text-foreground">{stockOrigen.actual}</strong> | Stock en destino:{" "}
-                    <strong className="text-foreground">{stockDestino.actual}</strong>
+                    Unidad: <strong>{selectedProduct?.unidad_medida?.codigo || "UND"}</strong>
+                  </span>
+                  <span className="text-sky-600">|</span>
+                  <span>
+                    Stock en origen: <strong>{stockOrigen.actual}</strong>
+                  </span>
+                  <span className="text-sky-600">|</span>
+                  <span>
+                    Stock en destino: <strong>{stockDestino.actual}</strong>
                   </span>
                 </div>
               )}
             </div>
 
-            {/* Fila 3: Cantidad y Stock Proyectado Gemelo */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* FILA 3: Cantidad y Caja Especial de Stock Proyectado (Exacta a Image 5) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Cantidad */}
               <div>
-                <label className="block text-xs font-medium text-foreground-secondary mb-1.5">
+                <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">
                   Cantidad <span className="text-error">*</span>
                 </label>
                 <div className="relative">
                   <input
                     type="number"
-                    min="0.01"
-                    step={selectedProduct?.unidad_medida?.permite_decimales ? "0.01" : "1"}
+                    min={selectedProduct?.unidad_medida?.permite_decimales ? "0.01" : "1"}
+                    step={selectedProduct?.unidad_medida?.permite_decimales ? "any" : "1"}
                     value={cantidad}
                     onChange={(e) => setCantidad(e.target.value)}
                     placeholder="0"
-                    className={`w-full px-3.5 py-2.5 text-xs bg-input border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none transition-colors ${
-                      stockExcedido
-                        ? "border-error focus:border-error"
-                        : "border-border focus:border-primary"
-                    }`}
+                    className="w-full px-3.5 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-primary transition-colors"
                   />
                   <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-foreground-muted pointer-events-none">
                     {selectedProduct?.unidad_medida?.codigo || "Unidades"}
                   </span>
                 </div>
-                {stockExcedido && (
-                  <p className="mt-1 text-[11px] text-error font-medium">
-                    Supera el stock disponible en origen ({stockOrigen.disponible}).
-                  </p>
-                )}
               </div>
 
+              {/* Caja de Stock Proyectado (2 Columnas con divisor y números coloreados rojo/verde) */}
               <div>
-                <label className="block text-xs font-medium text-foreground-secondary mb-1.5">
+                <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">
                   Stock proyectado
                 </label>
-                <div className="px-3.5 py-2 text-xs bg-surface border border-border rounded-lg grid grid-cols-2 gap-2">
-                  <div className="border-r border-border pr-2">
-                    <span className="text-[10px] text-foreground-muted block">Origen:</span>
-                    <span className="font-mono text-foreground-secondary">
-                      {stockOrigen.actual} →{" "}
-                      <strong
-                        className={`${
-                          stockOrigenDespues < 0 ? "text-error" : "text-error font-bold"
-                        }`}
-                      >
-                        {stockOrigenDespues}
+                <div className="px-3.5 py-2 text-xs bg-input border border-border rounded-lg flex items-center justify-around divide-x divide-border">
+                  <div className="pr-4 flex items-center gap-2">
+                    <span className="text-foreground-muted text-[11px]">Origen:</span>
+                    <span className="font-mono text-xs">
+                      {stockOrigen.actual} &rarr;{" "}
+                      <strong className="text-red-500 font-bold">
+                        {stockOrigen.actual - (parseFloat(cantidad) || 0)}
                       </strong>
                     </span>
                   </div>
-                  <div className="pl-1">
-                    <span className="text-[10px] text-foreground-muted block">Destino:</span>
-                    <span className="font-mono text-foreground-secondary">
-                      {stockDestino.actual} →{" "}
-                      <strong className="text-success font-bold">
-                        {stockDestinoDespues}
+                  <div className="pl-4 flex items-center gap-2">
+                    <span className="text-foreground-muted text-[11px]">Destino:</span>
+                    <span className="font-mono text-xs">
+                      {stockDestino.actual} &rarr;{" "}
+                      <strong className="text-emerald-500 font-bold">
+                        {stockDestino.actual + (parseFloat(cantidad) || 0)}
                       </strong>
                     </span>
                   </div>
@@ -568,193 +809,284 @@ export default function InventoryTransfersView() {
               </div>
             </div>
 
-            {/* Fila 4: Referencia y Observación */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* FILA 4: Referencia y Observación */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-medium text-foreground-secondary mb-1.5">
+                <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">
                   Referencia (opcional)
                 </label>
                 <input
                   type="text"
-                  value={referencia}
-                  onChange={(e) => setReferencia(e.target.value)}
-                  placeholder="TRF-2025-003"
+                  value={referenciaGeneral}
+                  onChange={(e) => setReferenciaGeneral(e.target.value)}
+                  placeholder="TRF-2025-003, GUIA-98..."
                   className="w-full px-3.5 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-primary transition-colors"
                 />
               </div>
 
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-medium text-foreground-secondary">
+                  <label className="block text-xs font-semibold text-foreground-secondary">
                     Observación (opcional)
                   </label>
-                  <span className="text-[10px] text-foreground-muted">
-                    {observacion.length}/200
+                  <span className="text-[10px] text-foreground-muted font-mono">
+                    {observacionGeneral.length}/200
                   </span>
                 </div>
                 <input
                   type="text"
                   maxLength={200}
-                  value={observacion}
-                  onChange={(e) => setObservacion(e.target.value)}
-                  placeholder="Transferencia por redistribución..."
+                  value={observacionGeneral}
+                  onChange={(e) => setObservacionGeneral(e.target.value)}
+                  placeholder="Transferencia por redistribución de inventario..."
                   className="w-full px-3.5 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-primary transition-colors"
                 />
               </div>
             </div>
 
-            {/* Botones */}
-            <div className="flex items-center justify-end gap-3 pt-3 border-t border-border">
+            {/* BOTONES DE ACCIÓN INFERIORES */}
+            <div className="pt-2 flex flex-wrap items-center justify-between gap-3">
               <button
                 type="button"
-                onClick={handleReset}
+                onClick={handleResetAll}
                 disabled={submitting}
-                className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium rounded-lg bg-surface hover:bg-hover text-foreground-secondary hover:text-foreground border border-border transition-all disabled:opacity-50 cursor-pointer"
+                className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium rounded-lg bg-surface hover:bg-hover text-foreground-secondary border border-border transition-colors cursor-pointer disabled:opacity-50"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
                 <span>Limpiar</span>
               </button>
 
-              <button
-                type="submit"
-                disabled={
-                  submitting ||
-                  !selectedProduct ||
-                  stockExcedido ||
-                  !almacenOrigenId ||
-                  !almacenDestinoId ||
-                  almacenOrigenId === almacenDestinoId
-                }
-                className="flex items-center gap-2 px-5 py-2 text-xs font-semibold rounded-lg bg-primary hover:bg-primary-hover text-primary-foreground shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-              >
-                <ArrowRightLeft className="w-4 h-4" />
-                <span>{submitting ? "Transfiriendo..." : "Registrar Transferencia"}</span>
-              </button>
+              <div className="flex items-center gap-2">
+                {/* Botón discreto para multiproducto */}
+                <button
+                  type="button"
+                  onClick={handleAddLine}
+                  disabled={!selectedProduct || !cantidad || parseFloat(cantidad) <= 0}
+                  className="flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-semibold rounded-lg bg-surface hover:bg-hover text-foreground border border-border transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>{editingIndex !== null ? "Actualizar línea" : "+ Agregar a lista"}</span>
+                </button>
+
+                {/* Botón Registrar Transferencia (Púrpura exacto según referencia) */}
+                <button
+                  type="button"
+                  onClick={handleSubmitBatch}
+                  disabled={submitting || (lineas.length === 0 && (!selectedProduct || !cantidad))}
+                  className="flex items-center gap-2 px-5 py-2.5 text-xs font-bold rounded-lg bg-purple-600 hover:bg-purple-700 text-white shadow-sm transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ArrowLeftRight className="w-4 h-4" />
+                  <span>{submitting ? "Transfiriendo..." : "Registrar Transferencia"}</span>
+                </button>
+              </div>
             </div>
+
+            {/* TABLA DISCRETA DE LÍNEAS MULTIPRODUCTO DENTRO DEL CARD */}
+            {lineas.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-border space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-foreground">
+                    Productos a transferir en este lote ({lineas.length})
+                  </span>
+                  <span className="text-[11px] text-foreground-muted">
+                    Total unidades: <strong>{totales.totalUnidades}</strong>
+                  </span>
+                </div>
+                <div className="overflow-x-auto border border-border rounded-lg max-h-48">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-surface text-foreground-muted border-b border-border font-semibold">
+                        <th className="p-2.5">Producto</th>
+                        <th className="p-2.5 text-right">Cant.</th>
+                        <th className="p-2.5 text-right">Origen (proy)</th>
+                        <th className="p-2.5 text-right">Destino (proy)</th>
+                        <th className="p-2.5 text-center">Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {lineas.map((l, idx) => (
+                        <tr key={l.productoId} className="hover:bg-surface-subtle/50">
+                          <td className="p-2.5">
+                            <span className="font-mono font-bold text-foreground mr-1.5">
+                              {l.codigoProducto}
+                            </span>
+                            <span className="text-foreground-secondary">{l.nombreProducto}</span>
+                          </td>
+                          <td className="p-2.5 text-right font-bold text-foreground">
+                            {l.cantidad} {l.unidad}
+                          </td>
+                          <td className="p-2.5 text-right font-mono font-semibold text-red-400">
+                            {l.stockOrigenProyectado} {l.unidad}
+                          </td>
+                          <td className="p-2.5 text-right font-mono font-semibold text-emerald-400">
+                            {l.stockDestinoProyectado} {l.unidad}
+                          </td>
+                          <td className="p-2.5 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleEditLine(idx)}
+                                className="p-1 text-foreground-muted hover:text-foreground cursor-pointer"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteLine(idx)}
+                                className="p-1 text-error/70 hover:text-error cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </form>
         </div>
 
-        {/* Columna Derecha: Panel de Resumen Gemelo (35%) */}
-        <div className="lg:col-span-5 xl:col-span-4 bg-card border border-border rounded-xl p-5 md:p-6 shadow-sm flex flex-col justify-between">
-          <div>
-            <div className="flex items-center gap-2 pb-4 border-b border-border mb-5">
-              <TrendingUp className="w-5 h-5 text-primary" />
-              <div>
-                <h2 className="text-base font-semibold text-foreground">
-                  Resumen de la Transferencia
-                </h2>
+        {/* COLUMNA DERECHA: Resumen de la Transferencia (Tarjetas Origen y Destino lado a lado con conector) */}
+        <div className="lg:col-span-4 self-start bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
+          <div className="flex items-center gap-2 pb-3 border-b border-border">
+            <BarChart2 className="w-5 h-5 text-amber-500" />
+            <h2 className="text-sm font-bold text-foreground">Resumen de la Transferencia</h2>
+          </div>
+
+          {activeProductForSummary ? (
+            <div className="space-y-4 text-xs">
+              {/* Mini card de producto */}
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-surface border border-border">
+                <div className="w-12 h-12 rounded-lg bg-surface-subtle border border-border flex items-center justify-center flex-shrink-0 text-foreground-muted">
+                  <Package className="w-6 h-6 text-foreground-muted" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-bold text-foreground truncate text-sm">
+                    {activeProductForSummary.nombre}
+                  </h4>
+                  <div className="text-xs text-foreground-muted font-mono mb-0.5">
+                    {activeProductForSummary.codigo}
+                  </div>
+                  <div className="text-[11px] text-foreground-muted">
+                    Unidad: <strong>{activeProductForSummary.unidad}</strong>
+                  </div>
+                </div>
               </div>
+
+              {/* DOS TARJETAS LADO A LADO: ORIGEN (VERDE) & DESTINO (AZUL) CON FLECHA AL CENTRO */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 relative">
+                {/* Tarjeta Origen (Verde) */}
+                <div className="p-3 rounded-xl border border-emerald-500/40 bg-emerald-950/20 space-y-2">
+                  <div className="flex items-center gap-1.5 text-emerald-400 font-bold text-[11px]">
+                    <Warehouse className="w-3.5 h-3.5" />
+                    <span>Almacén Origen</span>
+                  </div>
+                  <div className="text-xs font-semibold text-foreground">
+                    {almOrigenObj?.codigo || "ALM-01"}
+                  </div>
+                  <div className="text-[11px] text-foreground-muted truncate">
+                    {almOrigenObj?.nombre || "Principal"}
+                  </div>
+
+                  <div className="pt-2 border-t border-emerald-500/20 space-y-1 text-[11px]">
+                    <div className="flex items-center justify-between text-foreground-muted">
+                      <span>Stock actual:</span>
+                      <span className="font-semibold text-foreground">
+                        {activeProductForSummary.origenActual} {activeProductForSummary.unidad}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-foreground-muted">
+                      <span>Cantidad a transferir:</span>
+                      <span className="font-bold text-red-400">
+                        - {activeProductForSummary.cantidad} {activeProductForSummary.unidad}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-foreground-muted">
+                      <span>Stock después:</span>
+                      <span className="font-bold text-red-400">
+                        {activeProductForSummary.origenProyectado} {activeProductForSummary.unidad}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tarjeta Destino (Azul) */}
+                <div className="p-3 rounded-xl border border-sky-500/40 bg-sky-950/20 space-y-2">
+                  <div className="flex items-center gap-1.5 text-sky-400 font-bold text-[11px]">
+                    <Warehouse className="w-3.5 h-3.5" />
+                    <span>Almacén Destino</span>
+                  </div>
+                  <div className="text-xs font-semibold text-foreground">
+                    {almDestinoObj?.codigo || "ALM-02"}
+                  </div>
+                  <div className="text-[11px] text-foreground-muted truncate">
+                    {almDestinoObj?.nombre || "Secundario"}
+                  </div>
+
+                  <div className="pt-2 border-t border-sky-500/20 space-y-1 text-[11px]">
+                    <div className="flex items-center justify-between text-foreground-muted">
+                      <span>Stock actual:</span>
+                      <span className="font-semibold text-foreground">
+                        {activeProductForSummary.destinoActual} {activeProductForSummary.unidad}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-foreground-muted">
+                      <span>Cantidad a recibir:</span>
+                      <span className="font-bold text-emerald-400">
+                        + {activeProductForSummary.cantidad} {activeProductForSummary.unidad}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-foreground-muted">
+                      <span>Stock después:</span>
+                      <span className="font-bold text-emerald-400">
+                        {activeProductForSummary.destinoProyectado} {activeProductForSummary.unidad}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Callout Púrpura de Atomicidad exacto según Image 5 */}
+              <div className="p-3 rounded-xl bg-purple-950/30 border border-purple-800/40 text-[11px] text-purple-300 flex items-start gap-2">
+                <Info className="w-4 h-4 text-purple-400 flex-shrink-0 mt-0.5" />
+                <span>
+                  La transferencia se realizará de forma atómica. Se generarán dos movimientos:{" "}
+                  <strong>TRAS_SAL</strong> y <strong>TRAS_ENT</strong> con el mismo UUID de transferencia.
+                </span>
+              </div>
+
+              {/* Resumen multiproducto discreto */}
+              {lineas.length > 0 && (
+                <div className="pt-2 border-t border-border flex items-center justify-between text-[11px] text-foreground-muted">
+                  <span>
+                    Productos en transferencia: <strong>{lineas.length}</strong>
+                  </span>
+                  <span>
+                    Total unidades: <strong>{totales.totalUnidades}</strong>
+                  </span>
+                </div>
+              )}
             </div>
-
-            {selectedProduct ? (
-              <div className="space-y-4">
-                {/* Mini card producto */}
-                <div className="flex items-center gap-3 p-3 rounded-xl bg-surface border border-border">
-                  <div className="w-10 h-10 rounded-lg bg-card border border-border flex items-center justify-center overflow-hidden flex-shrink-0">
-                    {selectedProduct.imagen_url ? (
-                      <img
-                        src={selectedProduct.imagen_url}
-                        alt={selectedProduct.nombre}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <Package className="w-5 h-5 text-foreground-muted" />
-                    )}
-                  </div>
-                  <div className="truncate">
-                    <p className="text-xs font-semibold text-foreground truncate">
-                      {selectedProduct.nombre}
-                    </p>
-                    <span className="text-[11px] text-foreground-muted font-mono block">
-                      {selectedProduct.codigo_producto}
-                    </span>
-                    <p className="text-[10px] text-foreground-muted">
-                      Unidad: {selectedProduct.unidad_medida?.codigo || "UND"}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Dos Cards Gemelas: Origen y Destino */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* Card Origen */}
-                  <div className="p-3 rounded-xl bg-surface border border-border space-y-2 text-xs">
-                    <div className="flex items-center gap-1.5 text-error font-semibold border-b border-border pb-1.5">
-                      <Warehouse className="w-3.5 h-3.5" />
-                      <span className="truncate">Almacén Origen</span>
-                    </div>
-                    <p className="text-[11px] text-foreground font-medium truncate">
-                      {almOrigenObj?.nombre || "Origen"}
-                    </p>
-                    <div className="space-y-1 text-[11px]">
-                      <div className="flex justify-between text-foreground-muted">
-                        <span>Stock actual:</span>
-                        <span className="text-foreground font-medium">{stockOrigen.actual}</span>
-                      </div>
-                      <div className="flex justify-between text-error font-medium">
-                        <span>Cantidad a transferir:</span>
-                        <span>- {cantidadNum}</span>
-                      </div>
-                      <div className="flex justify-between text-foreground font-bold border-t border-border pt-1">
-                        <span>Stock después:</span>
-                        <span className="text-error">{stockOrigenDespues}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Card Destino */}
-                  <div className="p-3 rounded-xl bg-surface border border-border space-y-2 text-xs">
-                    <div className="flex items-center gap-1.5 text-success font-semibold border-b border-border pb-1.5">
-                      <Warehouse className="w-3.5 h-3.5" />
-                      <span className="truncate">Almacén Destino</span>
-                    </div>
-                    <p className="text-[11px] text-foreground font-medium truncate">
-                      {almDestinoObj?.nombre || "Destino"}
-                    </p>
-                    <div className="space-y-1 text-[11px]">
-                      <div className="flex justify-between text-foreground-muted">
-                        <span>Stock actual:</span>
-                        <span className="text-foreground font-medium">{stockDestino.actual}</span>
-                      </div>
-                      <div className="flex justify-between text-success font-medium">
-                        <span>Cantidad a recibir:</span>
-                        <span>+ {cantidadNum}</span>
-                      </div>
-                      <div className="flex justify-between text-foreground font-bold border-t border-border pt-1">
-                        <span>Stock después:</span>
-                        <span className="text-success">{stockDestinoDespues}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="py-12 text-center text-foreground-muted text-xs">
-                Selecciona un producto para visualizar el impacto de la transferencia.
-              </div>
-            )}
-          </div>
-
-          {/* Bloque informativo inferior sobre atomicidad */}
-          <div className="mt-6 p-3.5 rounded-xl bg-surface border border-border text-[11px] text-foreground-muted flex items-start gap-2.5">
-            <Info className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
-            <span>
-              La transferencia se ejecuta en una sola transacción atómica. Si falla algún almacén, ningún stock se altera.
-            </span>
-          </div>
+          ) : (
+            <div className="py-12 text-center text-xs text-foreground-muted">
+              Selecciona un producto para previsualizar el impacto de la transferencia entre almacenes.
+            </div>
+          )}
         </div>
       </div>
 
-      {/* 3. Sección Inferior: Tabla "Últimas Transferencias" con Estados Diferenciados */}
+      {/* 3. TABLA HISTÓRICA INFERIOR EXACTA SEGÚN REFERENCIA IMAGE 5 */}
       <div className="bg-card border border-border rounded-xl p-5 shadow-sm">
         <div className="flex items-center justify-between pb-4 border-b border-border mb-4">
           <div className="flex items-center gap-2.5">
-            <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
+            <div className="p-2 rounded-lg bg-purple-500/10 text-purple-400">
               <Clock className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-foreground">
-                Últimas Transferencias
-              </h3>
+              <h2 className="text-sm font-bold text-foreground">Últimas Transferencias</h2>
               <p className="text-[11px] text-foreground-muted">
                 Mostrando las 5 transferencias más recientes
               </p>
@@ -762,67 +1094,44 @@ export default function InventoryTransfersView() {
           </div>
 
           <Link
-            href="/inventory/movements?tipo=TRAS_SAL"
-            className="flex items-center gap-1.5 text-xs text-foreground-muted hover:text-foreground transition-colors"
+            href="/inventory/movements"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-foreground-secondary hover:text-foreground bg-surface border border-border rounded-lg font-medium transition-colors"
           >
             <span>Ver todas</span>
-            <ExternalLink className="w-3.5 h-3.5" />
+            <ExternalLink className="w-3 h-3" />
           </Link>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="bg-surface border-b border-border text-foreground-muted font-semibold">
-                <th className="py-2.5 px-3 font-medium">Fecha</th>
-                <th className="py-2.5 px-3 font-medium">Producto</th>
-                <th className="py-2.5 px-3 font-medium">Origen</th>
-                <th className="py-2.5 px-3 font-medium">Destino</th>
-                <th className="py-2.5 px-3 font-medium text-right">Cantidad</th>
-                <th className="py-2.5 px-3 font-medium">Referencia</th>
-                <th className="py-2.5 px-3 font-medium">UUID</th>
-                <th className="py-2.5 px-3 font-medium">Usuario</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {loadingTransferencias ? (
-                <tr>
-                  <td colSpan={8} className="py-8 text-center text-foreground-muted text-xs">
-                    <div className="flex items-center justify-center gap-2">
-                      <RefreshCw className="w-4 h-4 animate-spin text-primary" />
-                      <span>Cargando transferencias...</span>
-                    </div>
-                  </td>
+        {loadingTransferencias ? (
+          <div className="p-8 text-center text-xs text-foreground-muted">
+            Cargando historial de transferencias...
+          </div>
+        ) : errorTransferencias ? (
+          <div className="p-6 text-center text-xs text-error">{errorTransferencias}</div>
+        ) : transferencias.length === 0 ? (
+          <div className="p-8 text-center text-xs text-foreground-muted">
+            No hay transferencias registradas recientemente.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-surface text-foreground-muted border-b border-border font-semibold">
+                  <th className="p-3">Fecha</th>
+                  <th className="p-3">Producto</th>
+                  <th className="p-3">Origen</th>
+                  <th className="p-3">Destino</th>
+                  <th className="p-3 text-right">Cantidad</th>
+                  <th className="p-3">Referencia</th>
+                  <th className="p-3">UUID</th>
+                  <th className="p-3">Usuario</th>
+                  <th className="p-3 text-center"></th>
                 </tr>
-              ) : errorTransferencias ? (
-                <tr>
-                  <td colSpan={8} className="py-8 text-center text-xs">
-                    <div className="flex flex-col items-center justify-center gap-2 text-error">
-                      <div className="flex items-center gap-1.5 font-medium">
-                        <AlertCircle className="w-4 h-4" />
-                        <span>{errorTransferencias}</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={loadTransferencias}
-                        className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-foreground bg-surface hover:bg-hover border border-border rounded-md shadow-xs transition-colors cursor-pointer"
-                      >
-                        <RefreshCw className="w-3.5 h-3.5" />
-                        <span>Reintentar</span>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ) : transferencias.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="py-8 text-center text-foreground-muted text-xs">
-                    No se registran transferencias recientes.
-                  </td>
-                </tr>
-              ) : (
-                transferencias.map((t, idx) => (
-                  <tr key={idx} className="hover:bg-surface-subtle/60 transition-colors">
-                    <td className="py-3 px-3 text-foreground-muted whitespace-nowrap">
+              </thead>
+              <tbody className="divide-y divide-border">
+                {transferencias.map((t) => (
+                  <tr key={t.uuid || Math.random()} className="hover:bg-surface-subtle/60 transition-colors">
+                    <td className="p-3 text-foreground-muted whitespace-nowrap">
                       {new Date(t.fecha).toLocaleDateString("es-DO", {
                         day: "2-digit",
                         month: "2-digit",
@@ -831,26 +1140,39 @@ export default function InventoryTransfersView() {
                         minute: "2-digit",
                       })}
                     </td>
-                    <td className="py-3 px-3 font-medium text-foreground">
-                      <span className="text-primary font-mono font-semibold mr-1.5">
-                        {t.productoCodigo}
-                      </span>
-                      <span className="text-foreground-secondary">{t.productoNombre}</span>
+                    <td className="p-3 font-medium text-foreground">
+                      <span className="font-mono font-bold mr-1.5">{t.productoCodigo}</span>
+                      <span>- {t.productoNombre}</span>
                     </td>
-                    <td className="py-3 px-3 text-foreground-secondary">{t.origenCodigo || t.origenNombre}</td>
-                    <td className="py-3 px-3 text-foreground-secondary">{t.destinoCodigo || t.destinoNombre}</td>
-                    <td className="py-3 px-3 text-right font-bold text-foreground">{t.cantidad}</td>
-                    <td className="py-3 px-3 text-foreground-muted">{t.referencia}</td>
-                    <td className="py-3 px-3 text-[10px] font-mono text-foreground-muted">
-                      {t.uuid ? `${t.uuid.substring(0, 8)}...` : "-"}
+                    <td className="p-3 text-foreground-secondary">
+                      <span className="font-semibold text-foreground">{t.origenCodigo}</span>
                     </td>
-                    <td className="py-3 px-3 text-foreground-muted">{t.usuario}</td>
+                    <td className="p-3 text-foreground-secondary">
+                      <span className="font-semibold text-foreground">{t.destinoCodigo}</span>
+                    </td>
+                    <td className="p-3 text-right font-bold font-mono text-foreground">
+                      {t.cantidad}
+                    </td>
+                    <td className="p-3 font-mono text-foreground-muted truncate max-w-[120px]">
+                      {t.referencia || "—"}
+                    </td>
+                    <td className="p-3 font-mono text-[11px] text-purple-400 truncate max-w-[120px]" title={t.uuid}>
+                      {t.uuid ? `${t.uuid.substring(0, 18)}...` : "—"}
+                    </td>
+                    <td className="p-3 text-foreground-secondary whitespace-nowrap">
+                      {t.usuario}
+                    </td>
+                    <td className="p-3 text-center">
+                      <button className="text-foreground-muted hover:text-foreground cursor-pointer">
+                        <MoreVertical className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

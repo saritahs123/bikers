@@ -25,6 +25,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
 
     const search = (searchParams.get("search") || "").trim();
+    const codigoMovimiento = (searchParams.get("codigo_movimiento") || "").trim();
     const almacenId = searchParams.get("almacen_id") ? parseInt(searchParams.get("almacen_id")!, 10) : null;
     const productoId = searchParams.get("producto_id") ? parseInt(searchParams.get("producto_id")!, 10) : null;
     const tipoMovimientoId = searchParams.get("tipo_movimiento_id") ? parseInt(searchParams.get("tipo_movimiento_id")!, 10) : null;
@@ -40,6 +41,7 @@ export async function GET(req: NextRequest) {
     // Whitelist for sort columns
     const sortMapping: Record<string, string> = {
       fecha_movimiento: "mi.fecha_movimiento",
+      codigo_movimiento: "mi.codigo_movimiento",
       cantidad: "mi.cantidad",
       costo_unitario: "mi.costo_unitario",
       costo_total: "mi.costo_total",
@@ -59,9 +61,15 @@ export async function GET(req: NextRequest) {
 
     if (search) {
       conditions.push(
-        `(p.codigo_producto ILIKE $${paramIndex} OR p.nombre ILIKE $${paramIndex} OR a.nombre ILIKE $${paramIndex} OR mi.referencia ILIKE $${paramIndex} OR mi.observacion ILIKE $${paramIndex} OR CONCAT(ui.nombre, ' ', ui.apellido) ILIKE $${paramIndex})`
+        `(p.codigo_producto ILIKE $${paramIndex} OR p.nombre ILIKE $${paramIndex} OR a.nombre ILIKE $${paramIndex} OR mi.referencia ILIKE $${paramIndex} OR mi.observacion ILIKE $${paramIndex} OR mi.codigo_movimiento ILIKE $${paramIndex} OR CONCAT(ui.nombre, ' ', ui.apellido) ILIKE $${paramIndex})`
       );
       params.push(`%${search}%`);
+      paramIndex++;
+    }
+
+    if (codigoMovimiento) {
+      conditions.push(`mi.codigo_movimiento ILIKE $${paramIndex}`);
+      params.push(`%${codigoMovimiento}%`);
       paramIndex++;
     }
 
@@ -138,7 +146,8 @@ export async function GET(req: NextRequest) {
         mi.observacion,
         mi.usuario_movimiento,
         COALESCE(CONCAT(ui.nombre, ' ', ui.apellido), 'Sistema') AS usuario_nombre,
-        mi.transferencia_uuid
+        mi.transferencia_uuid,
+        mi.codigo_movimiento
       FROM admin.movimientos_inventario mi
       JOIN admin.productos p ON mi.producto_id = p.producto_id AND p.empresa_id = mi.empresa_id
       JOIN admin.almacenes a ON mi.almacen_id = a.almacen_id AND a.empresa_id = mi.empresa_id
@@ -172,6 +181,7 @@ export async function GET(req: NextRequest) {
 
     const items = rows.map((r: any) => ({
       movimiento_inventario_id: r.movimiento_inventario_id,
+      codigo_movimiento: r.codigo_movimiento || null,
       fecha_movimiento: r.fecha_movimiento,
       tipo_movimiento_id: r.tipo_movimiento_id,
       tipo_codigo: r.tipo_codigo,

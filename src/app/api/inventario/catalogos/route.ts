@@ -176,9 +176,25 @@ export async function GET() {
       };
     });
 
+    // 5. Todos los proveedores activos de la empresa
+    const proveedoresRows = await query(
+      `SELECT
+         pr.proveedor_id,
+         pr.codigo_proveedor,
+         pr.nombre_comercial,
+         pr.rnc,
+         pr.telefono,
+         pr.correo
+       FROM admin.proveedores pr
+       WHERE pr.empresa_id = $1 AND (UPPER(pr.estado) = 'ACTIVO' OR pr.estado IS NULL)
+       ORDER BY pr.nombre_comercial ASC`,
+      [empresaId]
+    );
+
     return NextResponse.json({
       almacenes: almacenesRows || [],
       productos,
+      proveedores: proveedoresRows || [],
     });
   } catch (error: any) {
     console.error("Error en GET /api/inventario/catalogos:", error);
