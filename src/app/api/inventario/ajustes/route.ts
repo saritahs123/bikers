@@ -176,12 +176,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Normalizar líneas de la operación
+    // Normalizar líneas de la operación (referencia es exclusivamente de cabecera)
     let lineasToProcess: Array<{
       productoId: number;
       cantidad: number;
       costoUnitario?: number | null;
-      referencia?: string | null;
     }> = [];
 
     if (Array.isArray(lineas) && lineas.length > 0) {
@@ -189,7 +188,6 @@ export async function POST(request: NextRequest) {
         productoId: Number(l.productoId),
         cantidad: Number(l.cantidad),
         costoUnitario: l.costoUnitario !== undefined && l.costoUnitario !== null ? Number(l.costoUnitario) : null,
-        referencia: l.referencia ? String(l.referencia).trim() : null,
       }));
     } else if (productoId && cantidad) {
       lineasToProcess = [
@@ -197,7 +195,6 @@ export async function POST(request: NextRequest) {
           productoId: Number(productoId),
           cantidad: Number(cantidad),
           costoUnitario: costoUnitario !== undefined && costoUnitario !== null ? Number(costoUnitario) : null,
-          referencia: referencia ? String(referencia).trim() : null,
         },
       ];
     } else {
@@ -259,13 +256,16 @@ export async function POST(request: NextRequest) {
     // Orden determinista para evitar deadlocks: producto_id ASC
     lineasToProcess.sort((a, b) => a.productoId - b.productoId);
 
+    // Referencia exclusiva de cabecera para todo el lote
+    const effectiveRef = (referencia && String(referencia).trim()) ? String(referencia).trim() : null;
+
     // Ejecutar con idempotencia atómica y código único por lote
     const result = await executeWithIdempotency({
       empresaId,
       usuarioId,
       tipoOperacion: tipoOperacionIdem,
       idempotencyKey,
-      requestPayload: { tipo, almacenId, lineas: lineasToProcess, motivo, observacion },
+      requestPayload: { tipo, almacenId, referencia: effectiveRef, lineas: lineasToProcess, motivo, observacion },
       operation: async (client) => {
         // Generar código de sistema de la operación según el tipo (6, 7 u 8)
         const codigoMovimiento = await generarCodigoMovimiento(
@@ -286,7 +286,7 @@ export async function POST(request: NextRequest) {
             almacenId: Number(almacenId),
             cantidad: line.cantidad,
             costoUnitario: line.costoUnitario,
-            referencia: line.referencia,
+            referencia: effectiveRef,
             observacion: combinedObs || null,
             codigoMovimiento,
           });

@@ -142,25 +142,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Normalizar líneas de la transferencia
+    // Normalizar líneas de la transferencia (referencia es exclusivamente de cabecera)
     let lineasToProcess: Array<{
       productoId: number;
       cantidad: number;
-      referencia?: string | null;
     }> = [];
 
     if (Array.isArray(lineas) && lineas.length > 0) {
       lineasToProcess = lineas.map((l: any) => ({
         productoId: Number(l.productoId),
         cantidad: Number(l.cantidad),
-        referencia: l.referencia ? String(l.referencia).trim() : null,
       }));
     } else if (productoId && cantidad) {
       lineasToProcess = [
         {
           productoId: Number(productoId),
           cantidad: Number(cantidad),
-          referencia: referencia ? String(referencia).trim() : null,
         },
       ];
     } else {
@@ -202,6 +199,9 @@ export async function POST(request: NextRequest) {
     // Orden determinista para evitar deadlocks: producto_id ASC
     lineasToProcess.sort((a, b) => a.productoId - b.productoId);
 
+    // Referencia exclusiva de cabecera para toda la transferencia
+    const effectiveRef = (referencia && String(referencia).trim()) ? String(referencia).trim() : null;
+
     // Ejecutar transferencia con idempotencia atómica, único codigo_movimiento y único transferencia_uuid compartido
     const result = await executeWithIdempotency({
       empresaId,
@@ -212,7 +212,7 @@ export async function POST(request: NextRequest) {
         almacenOrigenId,
         almacenDestinoId,
         lineas: lineasToProcess,
-        referencia,
+        referencia: effectiveRef,
         observacion,
       },
       operation: async (client) => {
@@ -225,13 +225,10 @@ export async function POST(request: NextRequest) {
 
         // Generar un único UUID para correlacionar todas las líneas del lote de transferencia
         const transferenciaUuid = crypto.randomUUID();
-        const batchRef = referencia ? String(referencia).trim() : `TRF-${transferenciaUuid.substring(0, 8).toUpperCase()}`;
 
         const transferenciasResult: any[] = [];
 
         for (const line of lineasToProcess) {
-          const lineRef = line.referencia || batchRef;
-
           const transferRes = await transferirInventario({
             client,
             empresaId,
@@ -240,7 +237,7 @@ export async function POST(request: NextRequest) {
             almacenOrigenId: Number(almacenOrigenId),
             almacenDestinoId: Number(almacenDestinoId),
             cantidad: line.cantidad,
-            referencia: lineRef,
+            referencia: effectiveRef,
             observacion: observacion ? String(observacion).trim() : null,
             transferenciaUuid,
             codigoMovimiento,

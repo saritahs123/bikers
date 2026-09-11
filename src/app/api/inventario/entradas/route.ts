@@ -48,13 +48,8 @@ export async function GET(request: NextRequest) {
          p.codigo_producto,
          p.nombre AS producto_nombre,
          a.almacen_id,
-         a.nombre AS almacen_nombre,
-         COALESCE(
-           NULLIF(TRIM(SUBSTRING(m.observacion FROM 'Proveedor: ([^|]+)')), ''),
-           (SELECT pr.nombre_comercial FROM admin.producto_proveedor pp JOIN admin.proveedores pr ON pp.proveedor_id = pr.proveedor_id WHERE pp.producto_id = p.producto_id AND pp.proveedor_principal = true AND pr.empresa_id = $1 LIMIT 1),
-           (SELECT pr.nombre_comercial FROM admin.producto_proveedor pp JOIN admin.proveedores pr ON pp.proveedor_id = pr.proveedor_id WHERE pp.producto_id = p.producto_id AND pr.empresa_id = $1 LIMIT 1),
-           '—'
-         ) AS proveedor_nombre,
+         m.proveedor_id,
+         COALESCE(prov.nombre_comercial, '—') AS proveedor_nombre,
          COALESCE(NULLIF(TRIM(CONCAT(COALESCE(ui.nombre, ''), ' ', COALESCE(ui.apellido, ''))), ''), ui.correo_electronico, 'Sistema') AS usuario_nombre,
          tm.codigo AS tipo_codigo,
          tm.nombre AS tipo_nombre
@@ -62,6 +57,7 @@ export async function GET(request: NextRequest) {
        JOIN admin.productos p ON m.producto_id = p.producto_id
        JOIN admin.almacenes a ON m.almacen_id = a.almacen_id
        JOIN admin.tipo_movimiento_inventario tm ON m.tipo_movimiento_id = tm.tipo_movimiento_id
+       LEFT JOIN admin.proveedores prov ON m.proveedor_id = prov.proveedor_id
        LEFT JOIN admin.usuario u ON m.usuario_movimiento = u.usuario_id
        LEFT JOIN admin.usuario_identidad ui ON u.usuario_id = ui.usuario_id
        WHERE m.empresa_id = $1
@@ -78,6 +74,7 @@ export async function GET(request: NextRequest) {
         fecha: r.fecha_movimiento,
         productoCodigo: r.codigo_producto,
         productoNombre: r.producto_nombre,
+        proveedorId: r.proveedor_id || null,
         proveedorNombre: r.proveedor_nombre?.trim() || "—",
         almacenNombre: r.almacen_nombre,
         cantidad: Number(r.cantidad || 0),
@@ -136,12 +133,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "ALMACEN_REQUERIDO", message: "El almacén es obligatorio." }, { status: 400 });
     }
 
-    // Normalizar líneas de la operación
+    // Normalizar líneas de la operación (referencia es exclusivamente de cabecera)
     let lineasToProcess: Array<{
       productoId: number;
       cantidad: number;
       costoUnitario: number;
-      referencia?: string | null;
       proveedorId?: number | null;
     }> = [];
 
@@ -150,7 +146,6 @@ export async function POST(request: NextRequest) {
         productoId: Number(l.productoId),
         cantidad: Number(l.cantidad),
         costoUnitario: Number(l.costoUnitario),
-        referencia: l.referencia ? String(l.referencia).trim() : null,
         proveedorId: l.proveedorId ? Number(l.proveedorId) : null,
       }));
     } else if (productoId && cantidad) {
@@ -159,7 +154,6 @@ export async function POST(request: NextRequest) {
           productoId: Number(productoId),
           cantidad: Number(cantidad),
           costoUnitario: Number(costoUnitario || 0),
-          referencia: referencia ? String(referencia).trim() : null,
           proveedorId: proveedorId ? Number(proveedorId) : null,
         },
       ];
@@ -356,13 +350,16 @@ export async function POST(request: NextRequest) {
     // Orden determinista para evitar deadlocks: producto_id ASC
     lineasResueltas.sort((a, b) => a.productoId - b.productoId);
 
+    // Referencia exclusiva de cabecera
+    const effectiveRef = (referencia && String(referencia).trim()) ? String(referencia).trim() : null;
+
     // Ejecutar con idempotencia atómica y código único por lote
     const result = await executeWithIdempotency({
       empresaId,
       usuarioId,
       tipoOperacion: "ENTRADA_INVENTARIO",
       idempotencyKey,
-      requestPayload: { almacenId, proveedorId, lineas: lineasResueltas, observacion },
+      requestPayload: { almacenId, referencia: effectiveRef, proveedorId, lineas: lineasResueltas, observacion },
       operation: async (client) => {
         // Generar código de sistema de la operación (código 5 = Entrada de Inventario)
         const codigoMovimiento = await generarCodigoMovimiento(
@@ -374,12 +371,6 @@ export async function POST(request: NextRequest) {
         const movimientosResult: any[] = [];
 
         for (const line of lineasResueltas) {
-          // Construir observación con el proveedor correspondiente de esta línea
-          let lineObs = observacion ? observacion.trim() : "";
-          if (line.proveedorNombre) {
-            lineObs = lineObs ? `${lineObs} | Proveedor: ${line.proveedorNombre}` : `Proveedor: ${line.proveedorNombre}`;
-          }
-
           const mov = await registrarMovimientoInventario({
             client,
             empresaId,
@@ -389,8 +380,9 @@ export async function POST(request: NextRequest) {
             almacenId: Number(almacenId),
             cantidad: line.cantidad,
             costoUnitario: line.costoUnitario,
-            referencia: line.referencia,
-            observacion: lineObs || null,
+            referencia: effectiveRef,
+            observacion: (observacion && String(observacion).trim()) ? String(observacion).trim() : null,
+            proveedorId: line.proveedorId ? Number(line.proveedorId) : null,
             codigoMovimiento,
           });
 

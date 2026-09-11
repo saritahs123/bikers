@@ -37,6 +37,7 @@ export default function InventoryEntriesView() {
 
   // Cabecera de la operación
   const [almacenId, setAlmacenId] = useState("");
+  const [referenciaGeneral, setReferenciaGeneral] = useState(""); // Referencia/Documento común a toda la entrada
   const [proveedorGeneralId, setProveedorGeneralId] = useState(""); // Proveedor general opcional
   const [observacionGeneral, setObservacionGeneral] = useState("");
 
@@ -48,7 +49,6 @@ export default function InventoryEntriesView() {
   const [productoId, setProductoId] = useState("");
   const [cantidad, setCantidad] = useState("");
   const [costoUnitario, setCostoUnitario] = useState("");
-  const [referenciaLinea, setReferenciaLinea] = useState("");
   const [lineProveedorId, setLineProveedorId] = useState(""); // Proveedor específico de la línea
 
   // Búsqueda de productos
@@ -242,13 +242,12 @@ export default function InventoryEntriesView() {
     setCostoUnitario(suggestedCost > 0 ? String(suggestedCost) : "");
   };
 
-  // Reset del formulario de una línea
+  // Reset del formulario de una línea (preserva cabecera: almacén, referencia y proveedor general)
   const resetLineForm = () => {
     setProductoId("");
     setProductSearch("");
     setCantidad("");
     setCostoUnitario("");
-    setReferenciaLinea("");
     setLineProveedorId("");
     setEditingIndex(null);
   };
@@ -319,7 +318,6 @@ export default function InventoryEntriesView() {
       costoUnitario: costoNum,
       costoTotal: Number((cantNum * costoNum).toFixed(2)),
       subtotal: Number((cantNum * costoNum).toFixed(2)),
-      referencia: referenciaLinea.trim() || null,
       stockActual: selectedStockInfo.actual,
       stockProyectado: selectedStockInfo.actual + cantNum,
     };
@@ -336,7 +334,7 @@ export default function InventoryEntriesView() {
     resetLineForm();
   };
 
-  // Cargar línea para edición
+  // Cargar línea para edición (NO edita la referencia de cabecera)
   const handleEditLine = (index) => {
     const l = lineas[index];
     const prod = productos.find((p) => p.producto_id === l.productoId);
@@ -345,7 +343,6 @@ export default function InventoryEntriesView() {
       setProductSearch(`${prod.codigo_producto} - ${prod.nombre}`);
       setCantidad(String(l.cantidad));
       setCostoUnitario(String(l.costoUnitario));
-      setReferenciaLinea(l.referencia || "");
       setLineProveedorId(l.proveedorId ? String(l.proveedorId) : "");
       setEditingIndex(index);
       setFeedback(null);
@@ -368,7 +365,7 @@ export default function InventoryEntriesView() {
     return { totalLineas, totalUnidades, totalCosto };
   }, [lineas]);
 
-  // Limpiar todo
+  // Limpiar todo (cabecera, proveedor general, líneas y campos de línea)
   const handleResetAll = () => {
     if (lineas.length > 0) {
       if (!window.confirm("¿Deseas limpiar toda la entrada? Se descartarán las líneas agregadas.")) {
@@ -377,6 +374,8 @@ export default function InventoryEntriesView() {
     }
     setLineas([]);
     resetLineForm();
+    setReferenciaGeneral("");
+    setProveedorGeneralId("");
     setObservacionGeneral("");
     setFeedback(null);
   };
@@ -413,7 +412,6 @@ export default function InventoryEntriesView() {
           costoUnitario: costoUnitarioNum,
           costoTotal: Number((cantidadNum * costoUnitarioNum).toFixed(2)),
           subtotal: Number((cantidadNum * costoUnitarioNum).toFixed(2)),
-          referencia: referenciaLinea.trim() || null,
           stockActual: selectedStockInfo.actual,
           stockProyectado: selectedStockInfo.actual + cantidadNum,
         },
@@ -429,8 +427,10 @@ export default function InventoryEntriesView() {
     const idempotencyKey = `ENT-BATCH-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
     try {
+      // Contrato exclusivo de cabecera: referencia en nivel superior
       const payload = {
         almacenId: Number(almacenId),
+        referencia: referenciaGeneral.trim() || null,
         proveedorId: proveedorGeneralId ? Number(proveedorGeneralId) : null,
         observacion: observacionGeneral.trim() || null,
         lineas: batchLines.map((l) => ({
@@ -438,7 +438,6 @@ export default function InventoryEntriesView() {
           proveedorId: l.proveedorId,
           cantidad: l.cantidad,
           costoUnitario: l.costoUnitario,
-          referencia: l.referencia,
         })),
       };
 
@@ -461,13 +460,17 @@ export default function InventoryEntriesView() {
         message: `Entrada registrada exitosamente con código ${data.codigoMovimiento}.`,
       });
 
+      // Registro exitoso: limpiar toda la operación
       setLineas([]);
       resetLineForm();
+      setReferenciaGeneral("");
+      setProveedorGeneralId("");
       setObservacionGeneral("");
       await loadCatalogos();
       await loadUltimasEntradas();
     } catch (err) {
       console.error(err);
+      // En error de registro: NO limpiar referenciaGeneral ni líneas
       setFeedback({
         type: "error",
         message: err.message || "Ocurrió un error inesperado al registrar la entrada.",
@@ -595,7 +598,7 @@ export default function InventoryEntriesView() {
           </div>
 
           <form onSubmit={handleAddOrUpdateLine} className="space-y-4">
-            {/* Fila 1: Almacén * y Proveedor (General opcional) */}
+            {/* Fila 1: Almacén * (Izquierda) y Referencia / Documento (Derecha) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-medium text-foreground-secondary mb-1.5">
@@ -619,24 +622,15 @@ export default function InventoryEntriesView() {
 
               <div>
                 <label className="block text-xs font-medium text-foreground-secondary mb-1.5">
-                  Proveedor
+                  Referencia / Documento
                 </label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-muted pointer-events-none" />
-                  <select
-                    value={proveedorGeneralId}
-                    onChange={(e) => setProveedorGeneralId(e.target.value)}
-                    className="w-full pl-9 pr-8 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground focus:outline-none focus:border-primary transition-colors cursor-pointer"
-                  >
-                    <option value="">Seleccionar proveedor (opcional)...</option>
-                    {proveedores.map((pr) => (
-                      <option key={pr.proveedor_id} value={pr.proveedor_id}>
-                        {pr.codigo_proveedor ? `${pr.codigo_proveedor} - ` : ""}
-                        {pr.nombre_comercial}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <input
+                  type="text"
+                  value={referenciaGeneral}
+                  onChange={(e) => setReferenciaGeneral(e.target.value)}
+                  placeholder="FAC-001234, Factura #, etc."
+                  className="w-full px-3.5 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-primary transition-colors"
+                />
               </div>
             </div>
 
@@ -828,19 +822,28 @@ export default function InventoryEntriesView() {
               </div>
             </div>
 
-            {/* Fila 4: Referencia / Documento y Observación */}
+            {/* Fila 4: Proveedor general (opcional / secundario) y Observación */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-medium text-foreground-secondary mb-1.5">
-                  Referencia / Documento
+                  Proveedor general <span className="text-foreground-muted font-normal text-[11px]">(opcional)</span>
                 </label>
-                <input
-                  type="text"
-                  value={referenciaLinea}
-                  onChange={(e) => setReferenciaLinea(e.target.value)}
-                  placeholder="FAC-001234"
-                  className="w-full px-3.5 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-primary transition-colors"
-                />
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-muted pointer-events-none" />
+                  <select
+                    value={proveedorGeneralId}
+                    onChange={(e) => setProveedorGeneralId(e.target.value)}
+                    className="w-full pl-9 pr-8 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground focus:outline-none focus:border-primary transition-colors cursor-pointer"
+                  >
+                    <option value="">Seleccionar proveedor (opcional)...</option>
+                    {proveedores.map((pr) => (
+                      <option key={pr.proveedor_id} value={pr.proveedor_id}>
+                        {pr.codigo_proveedor ? `${pr.codigo_proveedor} - ` : ""}
+                        {pr.nombre_comercial}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               <div>
@@ -922,7 +925,6 @@ export default function InventoryEntriesView() {
                       <th className="py-2 px-3 text-right">Cantidad</th>
                       <th className="py-2 px-3 text-right">Costo Unit.</th>
                       <th className="py-2 px-3 text-right">Total</th>
-                      <th className="py-2 px-3">Referencia</th>
                       <th className="py-2 px-3 text-center w-16">Acciones</th>
                     </tr>
                   </thead>
@@ -949,9 +951,6 @@ export default function InventoryEntriesView() {
                         </td>
                         <td className="py-2 px-3 text-right font-mono font-bold text-foreground">
                           RD$ {l.costoTotal.toLocaleString("es-DO", { minimumFractionDigits: 2 })}
-                        </td>
-                        <td className="py-2 px-3 font-mono text-foreground-secondary text-[11px]">
-                          {l.referencia || "—"}
                         </td>
                         <td className="py-2 px-3 text-center">
                           <div className="flex items-center justify-center gap-1">

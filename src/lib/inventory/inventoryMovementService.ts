@@ -38,6 +38,7 @@ export interface RegistrarMovimientoParams {
   observacion?: string | null;
   transferenciaUuid?: string | null;
   codigoMovimiento?: string | null;
+  proveedorId?: number | null;
 }
 
 export interface RegistrarMovimientoResult {
@@ -57,6 +58,7 @@ export interface RegistrarMovimientoResult {
   costoPromedioNuevo: number;
   transferenciaUuid?: string | null;
   codigoMovimiento?: string | null;
+  proveedorId?: number | null;
   fechaMovimiento: Date;
 }
 
@@ -165,6 +167,7 @@ async function executeRegistrarMovimiento(
     observacion = null,
     transferenciaUuid = null,
     codigoMovimiento = null,
+    proveedorId = null,
   } = params;
 
   // 1. Validate basic inputs & Multitenancy requirement
@@ -274,6 +277,47 @@ async function executeRegistrarMovimiento(
 
   if (product.estado && String(product.estado).toUpperCase() === "INACTIVO") {
     throw new ValidacionInventarioError(`El producto '${product.nombre}' (ID: ${productoId}) se encuentra inactivo.`, "PRODUCTO_INACTIVO");
+  }
+
+  // 4.1 Validate Supplier if ENT_COMPRA (admin.proveedores) + Multitenancy
+  let validatedProveedorId: number | null = null;
+  if (cleanCodigo === "ENT_COMPRA" && proveedorId !== undefined && proveedorId !== null) {
+    const pIdNum = Number(proveedorId);
+    if (!isNaN(pIdNum) && pIdNum > 0) {
+      const provRes = await client.query(
+        `SELECT proveedor_id, empresa_id, estado, nombre_comercial
+         FROM admin.proveedores
+         WHERE proveedor_id = $1
+         LIMIT 1`,
+        [pIdNum]
+      );
+
+      if (!provRes.rows || provRes.rows.length === 0) {
+        throw new ValidacionInventarioError(
+          `Proveedor con ID ${pIdNum} no encontrado.`,
+          "PROVEEDOR_NO_ENCONTRADO",
+          { proveedorId: pIdNum }
+        );
+      }
+
+      const prov = provRes.rows[0];
+      if (Number(prov.empresa_id) !== Number(empresaId)) {
+        throw new AccesoDenegadoInventarioError(
+          `Acceso denegado: El proveedor '${prov.nombre_comercial}' (ID: ${pIdNum}) no pertenece a su empresa.`,
+          { proveedorId: pIdNum, empresaId, proveedorEmpresaId: prov.empresa_id }
+        );
+      }
+
+      if (prov.estado && String(prov.estado).toUpperCase() === "INACTIVO") {
+        throw new ValidacionInventarioError(
+          `El proveedor '${prov.nombre_comercial}' (ID: ${pIdNum}) se encuentra inactivo.`,
+          "PROVEEDOR_INACTIVO",
+          { proveedorId: pIdNum }
+        );
+      }
+
+      validatedProveedorId = pIdNum;
+    }
   }
 
   // 5. Unit & Decimal Validation (strictly from BD admin.unidad_medida.permite_decimales)
@@ -572,10 +616,11 @@ async function executeRegistrarMovimiento(
        fecha_movimiento,
        usuario_movimiento,
        fecha_registro,
-       usuario_registro
+       usuario_registro,
+       proveedor_id
      )
      VALUES (
-       $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW(), $16, NOW(), $16
+       $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW(), $16, NOW(), $16, $17
      )
      RETURNING movimiento_inventario_id, fecha_movimiento`,
     [
@@ -595,6 +640,7 @@ async function executeRegistrarMovimiento(
       transferenciaUuid ? String(transferenciaUuid).trim() : null,
       codigoMovimiento ? String(codigoMovimiento).trim() : null,
       Number(usuarioId),
+      validatedProveedorId,
     ]
   );
 
@@ -617,6 +663,7 @@ async function executeRegistrarMovimiento(
     costoPromedioNuevo,
     transferenciaUuid: transferenciaUuid || null,
     codigoMovimiento: codigoMovimiento ? String(codigoMovimiento).trim() : null,
+    proveedorId: validatedProveedorId,
     fechaMovimiento: movRow.fecha_movimiento,
   };
 }

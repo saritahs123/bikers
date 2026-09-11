@@ -31,17 +31,20 @@ export default function InventoryInitialView() {
   const [productos, setProductos] = useState([]);
   const [loadingCatalogos, setLoadingCatalogos] = useState(true);
 
+  // Header Operation State
+  const [almacenId, setAlmacenId] = useState("");
+  const [referenciaLote, setReferenciaLote] = useState("");
+  const [observaciones, setObservaciones] = useState("");
+
   // Current line input form
   const [productoId, setProductoId] = useState("");
   const [productSearch, setProductSearch] = useState("");
   const [productDropdownOpen, setProductDropdownOpen] = useState(false);
-  const [almacenId, setAlmacenId] = useState("");
   const [cantidad, setCantidad] = useState("");
   const [costoUnitario, setCostoUnitario] = useState("");
 
   // Batch items collection
   const [items, setItems] = useState([]);
-  const [observaciones, setObservaciones] = useState("");
 
   // Processing & Feedback state
   const [submitting, setSubmitting] = useState(false);
@@ -175,6 +178,8 @@ export default function InventoryInitialView() {
       return;
     }
     setItems([]);
+    setReferenciaLote("");
+    setObservaciones("");
     setFeedback(null);
   };
 
@@ -205,6 +210,7 @@ export default function InventoryInitialView() {
           "x-idempotency-key": idempotencyKey,
         },
         body: JSON.stringify({
+          referencia: referenciaLote.trim() || null,
           items: items.map((it) => ({
             productoId: it.productoId,
             almacenId: it.almacenId,
@@ -388,15 +394,54 @@ export default function InventoryInitialView() {
       {/* ===================== PASO 1: CARGA DE PRODUCTOS ===================== */}
       {step === 1 && (
         <>
-          {/* Card Formulario Superior: Agregar productos */}
-          <div className="bg-card border border-border rounded-xl p-5 shadow-xs">
-            <h2 className="text-sm font-semibold text-foreground mb-4">
-              Agregar productos al inventario inicial
+          {/* Card Formulario Superior: Cabecera y Agregar productos */}
+          <div className="bg-card border border-border rounded-xl p-5 shadow-xs space-y-4">
+            <h2 className="text-sm font-semibold text-foreground">
+              Datos de la Operación y Productos
             </h2>
 
+            {/* SECCIÓN CABECERA: Almacén y Referencia / Documento / Lote */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-4 border-b border-border">
+              {/* Almacén */}
+              <div>
+                <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">
+                  Almacén <span className="text-error">*</span>
+                </label>
+                <div className="relative">
+                  <Warehouse className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-muted pointer-events-none" />
+                  <select
+                    value={almacenId}
+                    onChange={(e) => setAlmacenId(e.target.value)}
+                    className="w-full pl-9 pr-8 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground focus:outline-none focus:border-primary transition-colors cursor-pointer"
+                  >
+                    {almacenes.map((a) => (
+                      <option key={a.almacen_id} value={a.almacen_id}>
+                        {a.codigo} - {a.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Referencia / Documento / Lote */}
+              <div>
+                <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">
+                  Referencia / Documento / Lote <span className="text-foreground-muted font-normal text-[11px]">(opcional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={referenciaLote}
+                  onChange={(e) => setReferenciaLote(e.target.value)}
+                  placeholder="Ej. INI-001, LOTE-2026-A, ACTA-04..."
+                  className="w-full px-3.5 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-primary transition-colors"
+                />
+              </div>
+            </div>
+
+            {/* SECCIÓN LÍNEA: Producto, Cantidad, Costo Unitario, Botón Agregar */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-end">
               {/* Producto */}
-              <div className="lg:col-span-4 relative">
+              <div className="lg:col-span-5 relative">
                 <label className="block text-xs font-medium text-foreground-secondary mb-1.5">
                   Producto <span className="text-error">*</span>
                 </label>
@@ -445,29 +490,8 @@ export default function InventoryInitialView() {
                 </div>
               </div>
 
-              {/* Almacén */}
-              <div className="lg:col-span-3">
-                <label className="block text-xs font-medium text-foreground-secondary mb-1.5">
-                  Almacén <span className="text-error">*</span>
-                </label>
-                <div className="relative">
-                  <Warehouse className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-muted pointer-events-none" />
-                  <select
-                    value={almacenId}
-                    onChange={(e) => setAlmacenId(e.target.value)}
-                    className="w-full pl-9 pr-8 py-2 text-xs bg-input border border-border rounded-lg text-foreground focus:outline-none focus:border-primary transition-colors"
-                  >
-                    {almacenes.map((a) => (
-                      <option key={a.almacen_id} value={a.almacen_id}>
-                        {a.nombre}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
               {/* Cantidad */}
-              <div className="lg:col-span-2">
+              <div className="lg:col-span-3">
                 <label className="block text-xs font-medium text-foreground-secondary mb-1.5">
                   Cantidad <span className="text-error">*</span>
                 </label>
@@ -483,7 +507,7 @@ export default function InventoryInitialView() {
               </div>
 
               {/* Costo Unitario (RD$) */}
-              <div className="lg:col-span-2">
+              <div className="lg:col-span-3">
                 <label className="block text-xs font-medium text-foreground-secondary mb-1.5">
                   Costo unitario (RD$) <span className="text-error">*</span>
                 </label>
@@ -771,6 +795,14 @@ export default function InventoryInitialView() {
               </div>
             </div>
 
+            {/* Referencia de Lote si existe */}
+            {referenciaLote && (
+              <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-lg bg-surface border border-border text-xs">
+                <span className="text-foreground-muted">Referencia / Documento / Lote:</span>
+                <span className="font-mono font-bold text-foreground">{referenciaLote}</span>
+              </div>
+            )}
+
             {/* Tabla Resumen */}
             <div className="overflow-x-auto border border-border rounded-lg">
               <table className="w-full text-left text-xs border-collapse">
@@ -876,9 +908,9 @@ export default function InventoryInitialView() {
                   </span>
                 </div>
                 <div>
-                  <span className="text-foreground-muted block">Lote:</span>
+                  <span className="text-foreground-muted block">Lote / Documento:</span>
                   <span className="font-mono font-semibold text-foreground-secondary">
-                    {processedResult.referenciaLote}
+                    {processedResult.referenciaLote || "-"}
                   </span>
                 </div>
                 <div>
@@ -910,6 +942,8 @@ export default function InventoryInitialView() {
                   type="button"
                   onClick={() => {
                     setItems([]);
+                    setReferenciaLote("");
+                    setObservaciones("");
                     setProcessedResult(null);
                     setStep(1);
                   }}

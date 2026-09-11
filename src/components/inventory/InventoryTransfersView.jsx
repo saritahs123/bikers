@@ -46,7 +46,6 @@ export default function InventoryTransfersView() {
   // Formulario para agregar/editar una línea
   const [productoId, setProductoId] = useState("");
   const [cantidad, setCantidad] = useState("");
-  const [referenciaLinea, setReferenciaLinea] = useState("");
 
   // Dropdown de búsqueda de productos
   const [productSearch, setProductSearch] = useState("");
@@ -240,7 +239,6 @@ export default function InventoryTransfersView() {
     setProductoId("");
     setProductSearch("");
     setCantidad("");
-    setReferenciaLinea("");
     setEditingIndex(null);
   };
 
@@ -305,7 +303,6 @@ export default function InventoryTransfersView() {
       unidad: selectedProduct.unidad_medida?.codigo || "UND",
       permiteDecimales: permiteDec,
       cantidad: cantNum,
-      referencia: referenciaLinea.trim() || null,
       stockOrigenActual: stockOrigen.actual,
       stockOrigenDisponible: stockOrigen.disponible,
       stockOrigenProyectado: stockOrigen.actual - cantNum,
@@ -333,7 +330,6 @@ export default function InventoryTransfersView() {
       setProductoId(String(prod.producto_id));
       setProductSearch(`${prod.codigo_producto} - ${prod.nombre}`);
       setCantidad(String(l.cantidad));
-      setReferenciaLinea(l.referencia || "");
       setEditingIndex(index);
       setFeedback(null);
     }
@@ -388,7 +384,6 @@ export default function InventoryTransfersView() {
           marca: selectedProduct.marca_nombre || "Genérico",
           unidad: selectedProduct.unidad_medida?.codigo || "UND",
           cantidad: cantNum,
-          referencia: referenciaLinea.trim() || null,
         });
       }
     }
@@ -418,7 +413,6 @@ export default function InventoryTransfersView() {
         lineas: batchLines.map((l) => ({
           productoId: l.productoId,
           cantidad: l.cantidad,
-          referencia: l.referencia || referenciaGeneral.trim() || null,
         })),
       };
 
@@ -678,7 +672,21 @@ export default function InventoryTransfersView() {
               </div>
             </div>
 
-            {/* FILA 2: Producto */}
+            {/* FILA 2: Referencia / Documento */}
+            <div>
+              <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">
+                Referencia / Documento <span className="text-foreground-muted font-normal text-[11px]">(opcional)</span>
+              </label>
+              <input
+                type="text"
+                value={referenciaGeneral}
+                onChange={(e) => setReferenciaGeneral(e.target.value)}
+                placeholder="TRF-2026-005, GUIA-98, etc."
+                className="w-full px-3.5 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-primary transition-colors"
+              />
+            </div>
+
+            {/* FILA 3: Producto */}
             <div>
               <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">
                 Producto <span className="text-error">*</span>
@@ -758,7 +766,7 @@ export default function InventoryTransfersView() {
               )}
             </div>
 
-            {/* FILA 3: Cantidad y Caja Especial de Stock Proyectado (Exacta a Image 5) */}
+            {/* FILA 4: Cantidad y Caja Especial de Stock Proyectado (Exacta a Image 5) */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Cantidad */}
               <div>
@@ -809,39 +817,24 @@ export default function InventoryTransfersView() {
               </div>
             </div>
 
-            {/* FILA 4: Referencia y Observación */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">
-                  Referencia (opcional)
+            {/* FILA 5: Observación */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-semibold text-foreground-secondary">
+                  Observación <span className="text-foreground-muted font-normal text-[11px]">(opcional)</span>
                 </label>
-                <input
-                  type="text"
-                  value={referenciaGeneral}
-                  onChange={(e) => setReferenciaGeneral(e.target.value)}
-                  placeholder="TRF-2025-003, GUIA-98..."
-                  className="w-full px-3.5 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-primary transition-colors"
-                />
+                <span className="text-[10px] text-foreground-muted font-mono">
+                  {observacionGeneral.length}/200
+                </span>
               </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-semibold text-foreground-secondary">
-                    Observación (opcional)
-                  </label>
-                  <span className="text-[10px] text-foreground-muted font-mono">
-                    {observacionGeneral.length}/200
-                  </span>
-                </div>
-                <input
-                  type="text"
-                  maxLength={200}
-                  value={observacionGeneral}
-                  onChange={(e) => setObservacionGeneral(e.target.value)}
-                  placeholder="Transferencia por redistribución de inventario..."
-                  className="w-full px-3.5 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-primary transition-colors"
-                />
-              </div>
+              <input
+                type="text"
+                maxLength={200}
+                value={observacionGeneral}
+                onChange={(e) => setObservacionGeneral(e.target.value)}
+                placeholder="Transferencia por redistribución de inventario..."
+                className="w-full px-3.5 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-primary transition-colors"
+              />
             </div>
 
             {/* BOTONES DE ACCIÓN INFERIORES */}

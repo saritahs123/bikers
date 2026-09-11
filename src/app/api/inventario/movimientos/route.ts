@@ -147,11 +147,14 @@ export async function GET(req: NextRequest) {
         mi.usuario_movimiento,
         COALESCE(CONCAT(ui.nombre, ' ', ui.apellido), 'Sistema') AS usuario_nombre,
         mi.transferencia_uuid,
-        mi.codigo_movimiento
+        mi.codigo_movimiento,
+        mi.proveedor_id,
+        prov.nombre_comercial AS proveedor_nombre
       FROM admin.movimientos_inventario mi
       JOIN admin.productos p ON mi.producto_id = p.producto_id AND p.empresa_id = mi.empresa_id
       JOIN admin.almacenes a ON mi.almacen_id = a.almacen_id AND a.empresa_id = mi.empresa_id
       JOIN admin.tipo_movimiento_inventario tmi ON mi.tipo_movimiento_id = tmi.tipo_movimiento_id
+      LEFT JOIN admin.proveedores prov ON mi.proveedor_id = prov.proveedor_id
       LEFT JOIN admin.usuario u ON mi.usuario_movimiento = u.usuario_id
       LEFT JOIN admin.usuario_identidad ui ON u.usuario_id = ui.usuario_id
       WHERE ${whereSql}
@@ -204,7 +207,9 @@ export async function GET(req: NextRequest) {
       observacion: r.observacion,
       usuario_movimiento: r.usuario_movimiento,
       usuario_nombre: r.usuario_nombre,
-      transferencia_uuid: r.transferencia_uuid
+      transferencia_uuid: r.transferencia_uuid,
+      proveedor_id: r.proveedor_id || null,
+      proveedor_nombre: r.proveedor_nombre || null
     }));
 
     const response = NextResponse.json({

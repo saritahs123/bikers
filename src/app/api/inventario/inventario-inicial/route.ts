@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { items, observaciones } = body;
+    const { items, observaciones, referencia } = body;
     const empresaId = session.empresa_id;
     const usuarioId = session.usuario_id;
     const idempotencyKey = request.headers.get("x-idempotency-key") || body.idempotencyKey;
@@ -91,9 +91,8 @@ export async function POST(request: NextRequest) {
       return Number(a.almacenId) - Number(b.almacenId);
     });
 
-    // 3. Generar identificador de lote de referencia
-    const loteUuid = crypto.randomUUID();
-    const shortRef = `INV-INI-${loteUuid.substring(0, 8).toUpperCase()}`;
+    // 3. Referencia de cabecera (exclusivamente del usuario, sin códigos sintéticos)
+    const effectiveRef = (referencia && String(referencia).trim()) ? String(referencia).trim() : null;
 
     // 4. Procesar lote de forma atómica e idempotente con código de sistema compartido
     const result = await executeWithIdempotency({
@@ -101,7 +100,7 @@ export async function POST(request: NextRequest) {
       usuarioId,
       tipoOperacion: "INVENTARIO_INICIAL",
       idempotencyKey,
-      requestPayload: { items, observaciones, shortRef },
+      requestPayload: { items, observaciones, referencia: effectiveRef },
       operation: async (client) => {
         // Generar código de sistema de la operación (código 10 = Inventario Inicial)
         const codigoMovimiento = await generarCodigoMovimiento(
@@ -129,8 +128,8 @@ export async function POST(request: NextRequest) {
             almacenId: almId,
             cantidad: cant,
             costoUnitario: costo,
-            referencia: shortRef,
-            observacion: observaciones ? `Lote ${shortRef} | ${observaciones}` : `Lote de apertura ${shortRef}`,
+            referencia: effectiveRef,
+            observacion: observaciones ? String(observaciones).trim() : null,
             codigoMovimiento,
           });
 
@@ -144,7 +143,7 @@ export async function POST(request: NextRequest) {
           data: {
             success: true,
             codigoMovimiento,
-            referenciaLote: shortRef,
+            referenciaLote: effectiveRef,
             totalProductos: items.length,
             totalUnidades,
             totalValor: Number(totalValor.toFixed(2)),

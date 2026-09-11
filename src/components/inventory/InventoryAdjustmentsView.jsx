@@ -59,7 +59,6 @@ export default function InventoryAdjustmentsView() {
   const [productoId, setProductoId] = useState("");
   const [cantidad, setCantidad] = useState("");
   const [costoUnitario, setCostoUnitario] = useState("");
-  const [referenciaLinea, setReferenciaLinea] = useState("");
 
   // Dropdown de búsqueda de productos
   const [productSearch, setProductSearch] = useState("");
@@ -214,7 +213,6 @@ export default function InventoryAdjustmentsView() {
     setProductSearch("");
     setCantidad("");
     setCostoUnitario("");
-    setReferenciaLinea("");
     setEditingIndex(null);
   };
 
@@ -308,7 +306,6 @@ export default function InventoryAdjustmentsView() {
       cantidad: cantNum,
       costoUnitario: costoNum,
       costoTotal: Number((cantNum * costoNum).toFixed(2)),
-      referencia: referenciaLinea.trim() || null,
       stockActual: stockInfo.actual,
       stockReservado: stockInfo.reservado,
       stockDisponible: stockInfo.disponible,
@@ -338,7 +335,6 @@ export default function InventoryAdjustmentsView() {
       if (activeTab === "AJU_POS") {
         setCostoUnitario(String(l.costoUnitario));
       }
-      setReferenciaLinea(l.referencia || "");
       setEditingIndex(index);
       setFeedback(null);
     }
@@ -407,7 +403,6 @@ export default function InventoryAdjustmentsView() {
           cantidad: cantNum,
           costoUnitario: cUnit,
           costoTotal: Number((cantNum * cUnit).toFixed(2)),
-          referencia: referenciaLinea.trim() || null,
         });
       }
     }
@@ -439,7 +434,6 @@ export default function InventoryAdjustmentsView() {
           productoId: l.productoId,
           cantidad: l.cantidad,
           costoUnitario: activeTab === "AJU_POS" ? l.costoUnitario : null,
-          referencia: l.referencia || referenciaGeneral.trim() || null,
         })),
       };
 
@@ -729,334 +723,489 @@ export default function InventoryAdjustmentsView() {
 
           {/* Formulario Principal */}
           <form onSubmit={handleAddLine} className="space-y-4">
-            {/* FILA 1: Almacén y Producto */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Almacén */}
-              <div>
-                <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">
-                  Almacén <span className="text-error">*</span>
-                </label>
-                <div className="relative">
-                  <Warehouse className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-muted pointer-events-none" />
-                  <select
-                    value={almacenId}
-                    onChange={(e) => {
-                      if (lineas.length > 0) {
-                        if (
-                          !window.confirm(
-                            "Cambiar el almacén recalculará o descartará las líneas actuales. ¿Continuar?"
-                          )
-                        ) {
-                          return;
-                        }
-                        setLineas([]);
-                        resetLineForm();
-                      }
-                      setAlmacenId(e.target.value);
-                    }}
-                    className="w-full pl-9 pr-8 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground focus:outline-none focus:border-primary transition-colors cursor-pointer"
-                  >
-                    {almacenes.map((a) => (
-                      <option key={a.almacen_id} value={a.almacen_id}>
-                        {a.codigo} - {a.nombre}
-                      </option>
-                    ))}
-                  </select>
+            {activeTab === "SALIDA" ? (
+              /* TAB SALIDA: Orden visual requerido: Almacén y Referencia en Cabecera */
+              <>
+                {/* FILA 1: Almacén * (Izquierda) y Referencia / Documento (Derecha) */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Almacén */}
+                  <div>
+                    <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">
+                      Almacén <span className="text-error">*</span>
+                    </label>
+                    <div className="relative">
+                      <Warehouse className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-muted pointer-events-none" />
+                      <select
+                        value={almacenId}
+                        onChange={(e) => {
+                          if (lineas.length > 0) {
+                            if (
+                              !window.confirm(
+                                "Cambiar el almacén recalculará o descartará las líneas actuales. ¿Continuar?"
+                              )
+                            ) {
+                              return;
+                            }
+                            setLineas([]);
+                            resetLineForm();
+                          }
+                          setAlmacenId(e.target.value);
+                        }}
+                        className="w-full pl-9 pr-8 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground focus:outline-none focus:border-primary transition-colors cursor-pointer"
+                      >
+                        {almacenes.map((a) => (
+                          <option key={a.almacen_id} value={a.almacen_id}>
+                            {a.codigo} - {a.nombre}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Referencia / Documento común a la operación */}
+                  <div>
+                    <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">
+                      Referencia / Documento
+                    </label>
+                    <input
+                      type="text"
+                      value={referenciaGeneral}
+                      onChange={(e) => setReferenciaGeneral(e.target.value)}
+                      placeholder="SAL-2026-010, Documento #, etc."
+                      className="w-full px-3.5 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-primary transition-colors"
+                    />
+                  </div>
                 </div>
-              </div>
 
-              {/* Producto Selector */}
-              <div>
-                <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">
-                  Producto <span className="text-error">*</span>
-                </label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-muted pointer-events-none" />
-                  <input
-                    type="text"
-                    value={productSearch}
-                    onChange={(e) => {
-                      setProductSearch(e.target.value);
-                      setProductDropdownOpen(true);
-                    }}
-                    onFocus={() => setProductDropdownOpen(true)}
-                    placeholder="Buscar producto por SKU, nombre..."
-                    className="w-full pl-9 pr-8 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-primary transition-colors"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setProductDropdownOpen(!productDropdownOpen)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground-muted hover:text-foreground cursor-pointer"
-                  >
-                    <ChevronDown className="w-4 h-4" />
-                  </button>
+                {/* FILA 2: Producto Selector */}
+                <div>
+                  <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">
+                    Producto <span className="text-error">*</span>
+                  </label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-muted pointer-events-none" />
+                    <input
+                      type="text"
+                      value={productSearch}
+                      onChange={(e) => {
+                        setProductSearch(e.target.value);
+                        setProductDropdownOpen(true);
+                      }}
+                      onFocus={() => setProductDropdownOpen(true)}
+                      placeholder="Buscar producto por SKU, nombre..."
+                      className="w-full pl-9 pr-8 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-primary transition-colors"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setProductDropdownOpen(!productDropdownOpen)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground-muted hover:text-foreground cursor-pointer"
+                    >
+                      <ChevronDown className="w-4 h-4" />
+                    </button>
 
-                  {productDropdownOpen && (
-                    <div className="absolute z-30 left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-card border border-border rounded-xl shadow-xl divide-y divide-border">
-                      {filteredProducts.length === 0 ? (
-                        <div className="p-3 text-xs text-foreground-muted text-center">
-                          No se encontraron productos coincidentes.
-                        </div>
-                      ) : (
-                        filteredProducts.map((p) => {
-                          const ex = (p.existencias || []).find(
-                            (e) => String(e.almacen_id) === String(almacenId)
-                          );
-                          const disp = ex ? ex.cantidad_actual - (ex.cantidad_reservada || 0) : 0;
-                          return (
-                            <div
-                              key={p.producto_id}
-                              onClick={() => handleSelectProduct(p)}
-                              className="p-2.5 hover:bg-surface-subtle/60 cursor-pointer flex items-center justify-between text-xs transition-colors"
-                            >
-                              <div>
-                                <span className="font-semibold text-foreground mr-2">
-                                  {p.codigo_producto}
+                    {productDropdownOpen && (
+                      <div className="absolute z-30 left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-card border border-border rounded-xl shadow-xl divide-y divide-border">
+                        {filteredProducts.length === 0 ? (
+                          <div className="p-3 text-xs text-foreground-muted text-center">
+                            No se encontraron productos coincidentes.
+                          </div>
+                        ) : (
+                          filteredProducts.map((p) => {
+                            const ex = (p.existencias || []).find(
+                              (e) => String(e.almacen_id) === String(almacenId)
+                            );
+                            const disp = ex ? ex.cantidad_actual - (ex.cantidad_reservada || 0) : 0;
+                            return (
+                              <div
+                                key={p.producto_id}
+                                onClick={() => handleSelectProduct(p)}
+                                className="p-2.5 hover:bg-surface-subtle/60 cursor-pointer flex items-center justify-between text-xs transition-colors"
+                              >
+                                <div>
+                                  <span className="font-semibold text-foreground mr-2">
+                                    {p.codigo_producto}
+                                  </span>
+                                  <span className="text-foreground-secondary">{p.nombre}</span>
+                                </div>
+                                <span className="text-[11px] text-foreground-muted font-mono">
+                                  Disp: {disp} {p.unidad_medida?.codigo || "UND"}
                                 </span>
-                                <span className="text-foreground-secondary">{p.nombre}</span>
                               </div>
-                              <span className="text-[11px] text-foreground-muted font-mono">
-                                Disp: {disp} {p.unidad_medida?.codigo || "UND"}
-                              </span>
-                            </div>
-                          );
-                        })
-                      )}
+                            );
+                          })
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Info Pill debajo del selector de Producto */}
+                  {selectedProduct && (
+                    <div className="mt-1.5 inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-sky-950/30 border border-sky-800/40 text-[11px] text-sky-400">
+                      <Info className="w-3.5 h-3.5 flex-shrink-0" />
+                      <span>
+                        Unidad: <strong>{selectedProduct?.unidad_medida?.codigo || "UND"}</strong>
+                      </span>
+                      <span className="text-sky-600">|</span>
+                      <span>
+                        Stock actual: <strong>{stockInfo.actual}</strong>
+                      </span>
+                      <span className="text-sky-600">|</span>
+                      <span>
+                        Costo prom.:{" "}
+                        <strong>
+                          RD$ {stockInfo.costoPromedio.toLocaleString("es-DO", { minimumFractionDigits: 2 })}
+                        </strong>
+                      </span>
                     </div>
                   )}
                 </div>
 
-                {/* Info Pill debajo del selector de Producto (idéntica a la imagen) */}
-                {selectedProduct && (
-                  <div className="mt-1.5 inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-sky-950/30 border border-sky-800/40 text-[11px] text-sky-400">
-                    <Info className="w-3.5 h-3.5 flex-shrink-0" />
-                    <span>
-                      Unidad: <strong>{selectedProduct?.unidad_medida?.codigo || "UND"}</strong>
-                    </span>
-                    <span className="text-sky-600">|</span>
-                    <span>
-                      Stock actual: <strong>{stockInfo.actual}</strong>
-                    </span>
-                    <span className="text-sky-600">|</span>
-                    <span>
-                      Costo prom.:{" "}
-                      <strong>
-                        RD$ {stockInfo.costoPromedio.toLocaleString("es-DO", { minimumFractionDigits: 2 })}
-                      </strong>
-                    </span>
+                {/* FILA 3: Cantidad y Motivo */}
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                  {/* Cantidad */}
+                  <div className="md:col-span-4">
+                    <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">
+                      Cantidad <span className="text-error">*</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min={selectedProduct?.unidad_medida?.permite_decimales ? "0.01" : "1"}
+                        step={selectedProduct?.unidad_medida?.permite_decimales ? "any" : "1"}
+                        value={cantidad}
+                        onChange={(e) => setCantidad(e.target.value)}
+                        placeholder="0"
+                        className="w-full px-3.5 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-primary transition-colors"
+                      />
+                      <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-foreground-muted pointer-events-none">
+                        {selectedProduct?.unidad_medida?.codigo || "Unidades"}
+                      </span>
+                    </div>
                   </div>
-                )}
-              </div>
-            </div>
 
-            {/* FILA 2: Depende del Tab */}
-            {activeTab === "SALIDA" && (
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-                {/* Cantidad */}
-                <div className="md:col-span-4">
-                  <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">
-                    Cantidad <span className="text-error">*</span>
-                  </label>
-                  <div className="relative">
+                  {/* Motivo */}
+                  <div className="md:col-span-8">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-semibold text-foreground-secondary">
+                        Motivo <span className="text-error">*</span>
+                      </label>
+                      <span className="text-[10px] text-foreground-muted font-mono">
+                        {motivo.length}/200
+                      </span>
+                    </div>
                     <input
-                      type="number"
-                      min={selectedProduct?.unidad_medida?.permite_decimales ? "0.01" : "1"}
-                      step={selectedProduct?.unidad_medida?.permite_decimales ? "any" : "1"}
-                      value={cantidad}
-                      onChange={(e) => setCantidad(e.target.value)}
-                      placeholder="0"
+                      type="text"
+                      maxLength={200}
+                      value={motivo}
+                      onChange={(e) => setMotivo(e.target.value)}
+                      placeholder="Venta de mostrador, consumo interno..."
                       className="w-full px-3.5 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-primary transition-colors"
                     />
-                    <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-foreground-muted pointer-events-none">
-                      {selectedProduct?.unidad_medida?.codigo || "Unidades"}
-                    </span>
                   </div>
                 </div>
 
-                {/* Motivo */}
-                <div className="md:col-span-8">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-xs font-semibold text-foreground-secondary">
-                      Motivo <span className="text-error">*</span>
-                    </label>
-                    <span className="text-[10px] text-foreground-muted font-mono">
-                      {motivo.length}/200
-                    </span>
-                  </div>
-                  <input
-                    type="text"
-                    maxLength={200}
-                    value={motivo}
-                    onChange={(e) => setMotivo(e.target.value)}
-                    placeholder="Venta de mostrador, consumo interno..."
-                    className="w-full px-3.5 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-primary transition-colors"
-                  />
-                </div>
-              </div>
-            )}
-
-            {activeTab === "AJU_POS" && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Cantidad */}
-                  <div>
-                    <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">
-                      Cantidad <span className="text-error">*</span>
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        min={selectedProduct?.unidad_medida?.permite_decimales ? "0.01" : "1"}
-                        step={selectedProduct?.unidad_medida?.permite_decimales ? "any" : "1"}
-                        value={cantidad}
-                        onChange={(e) => setCantidad(e.target.value)}
-                        placeholder="0"
-                        className="w-full px-3.5 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-primary transition-colors"
-                      />
-                      <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-foreground-muted pointer-events-none">
-                        {selectedProduct?.unidad_medida?.codigo || "Unidades"}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Costo Unitario */}
-                  <div>
-                    <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">
-                      Costo unitario <span className="text-error">*</span>
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={costoUnitario}
-                        onChange={(e) => setCostoUnitario(e.target.value)}
-                        placeholder="0.00"
-                        className="w-full px-3.5 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-primary transition-colors font-mono"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Motivo del Ajuste */}
+                {/* FILA 4: Observación (opcional) */}
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="block text-xs font-semibold text-foreground-secondary">
-                      Motivo del ajuste <span className="text-error">*</span>
+                      Observación (opcional)
                     </label>
                     <span className="text-[10px] text-foreground-muted font-mono">
-                      {motivo.length}/200
+                      {observacionGeneral.length}/500
                     </span>
                   </div>
                   <input
                     type="text"
-                    maxLength={200}
-                    value={motivo}
-                    onChange={(e) => setMotivo(e.target.value)}
-                    placeholder="Conteo físico - inventario mensual, corrección..."
+                    maxLength={500}
+                    value={observacionGeneral}
+                    onChange={(e) => setObservacionGeneral(e.target.value)}
+                    placeholder="Observaciones adicionales de la salida..."
                     className="w-full px-3.5 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-primary transition-colors"
                   />
                 </div>
-              </div>
-            )}
-
-            {activeTab === "AJU_NEG" && (
-              <div className="space-y-4">
+              </>
+            ) : (
+              /* AJUSTE POSITIVO Y AJUSTE NEGATIVO (Diseño restaurado intacto según Sección 11) */
+              <>
+                {/* FILA 1: Almacén y Producto */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Cantidad */}
+                  {/* Almacén */}
                   <div>
                     <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">
-                      Cantidad <span className="text-error">*</span>
+                      Almacén <span className="text-error">*</span>
                     </label>
                     <div className="relative">
-                      <input
-                        type="number"
-                        min={selectedProduct?.unidad_medida?.permite_decimales ? "0.01" : "1"}
-                        step={selectedProduct?.unidad_medida?.permite_decimales ? "any" : "1"}
-                        value={cantidad}
-                        onChange={(e) => setCantidad(e.target.value)}
-                        placeholder="0"
-                        className="w-full px-3.5 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-primary transition-colors"
-                      />
-                      <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-foreground-muted pointer-events-none">
-                        {selectedProduct?.unidad_medida?.codigo || "Unidades"}
-                      </span>
+                      <Warehouse className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-muted pointer-events-none" />
+                      <select
+                        value={almacenId}
+                        onChange={(e) => {
+                          if (lineas.length > 0) {
+                            if (
+                              !window.confirm(
+                                "Cambiar el almacén recalculará o descartará las líneas actuales. ¿Continuar?"
+                              )
+                            ) {
+                              return;
+                            }
+                            setLineas([]);
+                            resetLineForm();
+                          }
+                          setAlmacenId(e.target.value);
+                        }}
+                        className="w-full pl-9 pr-8 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground focus:outline-none focus:border-primary transition-colors cursor-pointer"
+                      >
+                        {almacenes.map((a) => (
+                          <option key={a.almacen_id} value={a.almacen_id}>
+                            {a.codigo} - {a.nombre}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
 
-                  {/* Stock Resultante (Fórmula especial exacta según referencia Image 4) */}
+                  {/* Producto Selector */}
                   <div>
                     <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">
-                      Stock resultante
+                      Producto <span className="text-error">*</span>
                     </label>
-                    <div className="px-3.5 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground flex items-center justify-between font-mono">
-                      <span>
-                        {stockInfo.actual} &nbsp;—&nbsp; {parseFloat(cantidad) || 0}
-                      </span>
-                      <span className="font-bold text-red-500">
-                        = {stockInfo.actual - (parseFloat(cantidad) || 0)}{" "}
-                        {selectedProduct?.unidad_medida?.codigo || "UND"}
-                      </span>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-muted pointer-events-none" />
+                      <input
+                        type="text"
+                        value={productSearch}
+                        onChange={(e) => {
+                          setProductSearch(e.target.value);
+                          setProductDropdownOpen(true);
+                        }}
+                        onFocus={() => setProductDropdownOpen(true)}
+                        placeholder="Buscar producto por SKU, nombre..."
+                        className="w-full pl-9 pr-8 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-primary transition-colors"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setProductDropdownOpen(!productDropdownOpen)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground-muted hover:text-foreground cursor-pointer"
+                      >
+                        <ChevronDown className="w-4 h-4" />
+                      </button>
+
+                      {productDropdownOpen && (
+                        <div className="absolute z-30 left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-card border border-border rounded-xl shadow-xl divide-y divide-border">
+                          {filteredProducts.length === 0 ? (
+                            <div className="p-3 text-xs text-foreground-muted text-center">
+                              No se encontraron productos coincidentes.
+                            </div>
+                          ) : (
+                            filteredProducts.map((p) => {
+                              const ex = (p.existencias || []).find(
+                                (e) => String(e.almacen_id) === String(almacenId)
+                              );
+                              const disp = ex ? ex.cantidad_actual - (ex.cantidad_reservada || 0) : 0;
+                              return (
+                                <div
+                                  key={p.producto_id}
+                                  onClick={() => handleSelectProduct(p)}
+                                  className="p-2.5 hover:bg-surface-subtle/60 cursor-pointer flex items-center justify-between text-xs transition-colors"
+                                >
+                                  <div>
+                                    <span className="font-semibold text-foreground mr-2">
+                                      {p.codigo_producto}
+                                    </span>
+                                    <span className="text-foreground-secondary">{p.nombre}</span>
+                                  </div>
+                                  <span className="text-[11px] text-foreground-muted font-mono">
+                                    Disp: {disp} {p.unidad_medida?.codigo || "UND"}
+                                  </span>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Info Pill debajo del selector de Producto */}
+                    {selectedProduct && (
+                      <div className="mt-1.5 inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-sky-950/30 border border-sky-800/40 text-[11px] text-sky-400">
+                        <Info className="w-3.5 h-3.5 flex-shrink-0" />
+                        <span>
+                          Unidad: <strong>{selectedProduct?.unidad_medida?.codigo || "UND"}</strong>
+                        </span>
+                        <span className="text-sky-600">|</span>
+                        <span>
+                          Stock actual: <strong>{stockInfo.actual}</strong>
+                        </span>
+                        <span className="text-sky-600">|</span>
+                        <span>
+                          Costo prom.:{" "}
+                          <strong>
+                            RD$ {stockInfo.costoPromedio.toLocaleString("es-DO", { minimumFractionDigits: 2 })}
+                          </strong>
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* FILA 2: Específica de AJU_POS o AJU_NEG */}
+                {activeTab === "AJU_POS" && (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">
+                          Cantidad <span className="text-error">*</span>
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min={selectedProduct?.unidad_medida?.permite_decimales ? "0.01" : "1"}
+                            step={selectedProduct?.unidad_medida?.permite_decimales ? "any" : "1"}
+                            value={cantidad}
+                            onChange={(e) => setCantidad(e.target.value)}
+                            placeholder="0"
+                            className="w-full px-3.5 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-primary transition-colors"
+                          />
+                          <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-foreground-muted pointer-events-none">
+                            {selectedProduct?.unidad_medida?.codigo || "Unidades"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">
+                          Costo unitario <span className="text-error">*</span>
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={costoUnitario}
+                            onChange={(e) => setCostoUnitario(e.target.value)}
+                            placeholder="0.00"
+                            className="w-full px-3.5 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-primary transition-colors font-mono"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-xs font-semibold text-foreground-secondary">
+                          Motivo del ajuste <span className="text-error">*</span>
+                        </label>
+                        <span className="text-[10px] text-foreground-muted font-mono">
+                          {motivo.length}/200
+                        </span>
+                      </div>
+                      <input
+                        type="text"
+                        maxLength={200}
+                        value={motivo}
+                        onChange={(e) => setMotivo(e.target.value)}
+                        placeholder="Conteo físico - inventario mensual, corrección..."
+                        className="w-full px-3.5 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-primary transition-colors"
+                      />
                     </div>
                   </div>
-                </div>
+                )}
 
-                {/* Motivo del Ajuste */}
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-xs font-semibold text-foreground-secondary">
-                      Motivo del ajuste <span className="text-error">*</span>
-                    </label>
-                    <span className="text-[10px] text-foreground-muted font-mono">
-                      {motivo.length}/200
-                    </span>
+                {activeTab === "AJU_NEG" && (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">
+                          Cantidad <span className="text-error">*</span>
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min={selectedProduct?.unidad_medida?.permite_decimales ? "0.01" : "1"}
+                            step={selectedProduct?.unidad_medida?.permite_decimales ? "any" : "1"}
+                            value={cantidad}
+                            onChange={(e) => setCantidad(e.target.value)}
+                            placeholder="0"
+                            className="w-full px-3.5 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-primary transition-colors"
+                          />
+                          <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-foreground-muted pointer-events-none">
+                            {selectedProduct?.unidad_medida?.codigo || "Unidades"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">
+                          Stock resultante
+                        </label>
+                        <div className="px-3.5 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground flex items-center justify-between font-mono">
+                          <span>
+                            {stockInfo.actual} &nbsp;—&nbsp; {parseFloat(cantidad) || 0}
+                          </span>
+                          <span className="font-bold text-red-500">
+                            = {stockInfo.actual - (parseFloat(cantidad) || 0)}{" "}
+                            {selectedProduct?.unidad_medida?.codigo || "UND"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-xs font-semibold text-foreground-secondary">
+                          Motivo del ajuste <span className="text-error">*</span>
+                        </label>
+                        <span className="text-[10px] text-foreground-muted font-mono">
+                          {motivo.length}/200
+                        </span>
+                      </div>
+                      <input
+                        type="text"
+                        maxLength={200}
+                        value={motivo}
+                        onChange={(e) => setMotivo(e.target.value)}
+                        placeholder="Producto dañado en transporte, merma..."
+                        className="w-full px-3.5 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-primary transition-colors"
+                      />
+                    </div>
                   </div>
-                  <input
-                    type="text"
-                    maxLength={200}
-                    value={motivo}
-                    onChange={(e) => setMotivo(e.target.value)}
-                    placeholder="Producto dañado en transporte, merma..."
-                    className="w-full px-3.5 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-primary transition-colors"
-                  />
+                )}
+
+                {/* FILA 3: Referencia y Observación para Ajustes */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">
+                      Referencia / Documento
+                    </label>
+                    <input
+                      type="text"
+                      value={referenciaGeneral}
+                      onChange={(e) => setReferenciaGeneral(e.target.value)}
+                      placeholder="Ej. Factura #1234, OT-5678, AJU-2025-01..."
+                      className="w-full px-3.5 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-primary transition-colors"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-semibold text-foreground-secondary">
+                        Observación (opcional)
+                      </label>
+                      <span className="text-[10px] text-foreground-muted font-mono">
+                        {observacionGeneral.length}/500
+                      </span>
+                    </div>
+                    <input
+                      type="text"
+                      maxLength={500}
+                      value={observacionGeneral}
+                      onChange={(e) => setObservacionGeneral(e.target.value)}
+                      placeholder="Observaciones adicionales..."
+                      className="w-full px-3.5 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-primary transition-colors"
+                    />
+                  </div>
                 </div>
-              </div>
+              </>
             )}
-
-            {/* FILA 3: Referencia y Observación */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">
-                  Referencia / Documento
-                </label>
-                <input
-                  type="text"
-                  value={referenciaGeneral}
-                  onChange={(e) => setReferenciaGeneral(e.target.value)}
-                  placeholder="Ej. Factura #1234, OT-5678, AJU-2025-01..."
-                  className="w-full px-3.5 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-primary transition-colors"
-                />
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-semibold text-foreground-secondary">
-                    Observación (opcional)
-                  </label>
-                  <span className="text-[10px] text-foreground-muted font-mono">
-                    {observacionGeneral.length}/500
-                  </span>
-                </div>
-                <input
-                  type="text"
-                  maxLength={500}
-                  value={observacionGeneral}
-                  onChange={(e) => setObservacionGeneral(e.target.value)}
-                  placeholder="Observaciones adicionales..."
-                  className="w-full px-3.5 py-2.5 text-xs bg-input border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-primary transition-colors"
-                />
-              </div>
-            </div>
 
             {/* BOTONES DE ACCIÓN INFERIORES DEL CARD */}
             <div className="pt-2 flex flex-wrap items-center justify-between gap-3">
