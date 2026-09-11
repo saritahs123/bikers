@@ -22,7 +22,8 @@ import {
   Search,
   ChevronDown,
   Warehouse,
-  PackageCheck
+  PackageCheck,
+  RotateCcw
 } from "lucide-react";
 import { getServiceStateRules } from "@/lib/workshop-state-machine";
 
@@ -1304,6 +1305,63 @@ export default function WorkOrderServicesView({
     );
   };
 
+  const handleReverseProduct = (prod) => {
+    if (!isOrderInRepair) {
+      if (orderStateCode === "ENTREGADA") {
+        showInfoToast(
+          "La orden se encuentra en estado ENTREGADA. Está en modo de solo lectura permanente.",
+          "ORDEN ENTREGADA",
+          6500
+        );
+      } else {
+        showInfoToast(
+          "La orden debe estar en Reparación para reversar consumos de repuestos.",
+          "ORDEN NO ESTÁ EN REPARACIÓN",
+          6500
+        );
+      }
+      return;
+    }
+    if (prod.utilizado !== true) {
+      showInfoToast("Este repuesto no se encuentra en estado consumido.", "REPUESTO NO CONSUMIDO", 5000);
+      return;
+    }
+
+    const prodName = prod.nombre || prod.producto_nombre || "Repuesto";
+    const almName = prod.almacen_nombre || `Almacén #${prod.almacen_id}`;
+    const qty = parseFloat(prod.cantidad || "0") || 0;
+    const refOt = orderCode || `#${ordenId}`;
+
+    const confirmMessage = `Producto: ${prodName}\nAlmacén: ${almName}\nCantidad: ${qty} u.\nReferencia OT: ${refOt}\n\nEsta acción devolverá el repuesto al inventario y restaurará su reserva en la orden.`;
+
+    askConfirmation(
+      "Reversar Consumo de Repuesto",
+      confirmMessage,
+      async () => {
+        try {
+          const res = await fetch(`/api/taller/ordenes/${ordenId}/productos/${prod.orden_producto_id}/reversar`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" }
+          });
+          const json = await res.json();
+          if (!res.ok) {
+            if (res.status === 409) {
+              showInfoToast(json.message || "No se puede reversar el consumo en el estado actual.", "RESTRICCIÓN DE PROCESO", 6500);
+            } else {
+              showErrorToast(json.message || json.error || "No se pudo reversar el consumo.");
+            }
+            return;
+          }
+          showSuccessToast(`Consumo revertido exitosamente. Repuesto reingresado a inventario y reserva restaurada. Movimiento: ${json.data?.codigo_movimiento || 'Registrado'}`);
+          if (onRefresh) onRefresh();
+        } catch (err) {
+          showErrorToast("Error de conexión al reversar el consumo.");
+        }
+      },
+      "reverse"
+    );
+  };
+
   const activeServices = (services || []).filter((s) => s.activo !== false);
   const totalItemsCount = activeServices.length + orderProducts.length;
 
@@ -1690,21 +1748,38 @@ export default function WorkOrderServicesView({
                         {/* Actions (Consume / Edit / Delete Product) */}
                         <td className="p-3.5 pr-4 text-center whitespace-nowrap">
                           <div className="flex items-center justify-center gap-1.5">
-                            {/* Botón Consumir */}
-                            <button
-                              type="button"
-                              onClick={() => handleConsumeProduct(prod)}
-                              disabled={!isOrderInRepair || prod.utilizado === true}
-                              className={`p-1.5 rounded-lg border transition-colors ${
-                                !isOrderInRepair || prod.utilizado === true
-                                  ? "opacity-30 cursor-not-allowed bg-slate-900 border-slate-800 text-slate-600"
-                                  : "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 cursor-pointer"
-                              }`}
-                              title={prod.utilizado === true ? "Repuesto ya consumido" : !isOrderInRepair ? "La orden debe estar en Reparación" : "Consumir repuesto físicamente"}
-                              aria-label="Consumir repuesto"
-                            >
-                              <PackageCheck className="w-3.5 h-3.5" />
-                            </button>
+                            {/* Botón Consumir / Reversar */}
+                            {prod.utilizado === true ? (
+                              <button
+                                type="button"
+                                onClick={() => handleReverseProduct(prod)}
+                                disabled={!isOrderInRepair}
+                                className={`p-1.5 rounded-lg border transition-colors ${
+                                  !isOrderInRepair
+                                    ? "opacity-30 cursor-not-allowed bg-slate-900 border-slate-800 text-slate-600"
+                                    : "bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20 cursor-pointer"
+                                }`}
+                                title={!isOrderInRepair ? "La orden debe estar en Reparación para reversar consumo" : "Reversar consumo y restaurar reserva"}
+                                aria-label="Reversar consumo"
+                              >
+                                <RotateCcw className="w-3.5 h-3.5" />
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleConsumeProduct(prod)}
+                                disabled={!isOrderInRepair}
+                                className={`p-1.5 rounded-lg border transition-colors ${
+                                  !isOrderInRepair
+                                    ? "opacity-30 cursor-not-allowed bg-slate-900 border-slate-800 text-slate-600"
+                                    : "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 cursor-pointer"
+                                }`}
+                                title={!isOrderInRepair ? "La orden debe estar en Reparación para consumir repuestos" : "Consumir repuesto físicamente"}
+                                aria-label="Consumir repuesto"
+                              >
+                                <PackageCheck className="w-3.5 h-3.5" />
+                              </button>
+                            )}
 
                             {/* Botón Editar */}
                             <button
@@ -2780,10 +2855,16 @@ export default function WorkOrderServicesView({
                   ? "bg-emerald-400 hover:bg-emerald-300"
                   : confirmModalType === "consume"
                   ? "bg-emerald-500 hover:bg-emerald-400 text-slate-950"
+                  : confirmModalType === "reverse"
+                  ? "bg-amber-500 hover:bg-amber-400 text-slate-950"
                   : "bg-rose-500 hover:bg-rose-400 text-white"
               }`}
             >
-              {confirmModalType === "consume" ? "Consumir" : "Confirmar"}
+              {confirmModalType === "consume"
+                ? "Consumir"
+                : confirmModalType === "reverse"
+                ? "Reversar"
+                : "Confirmar"}
             </button>
           </div>
         }
@@ -2792,17 +2873,21 @@ export default function WorkOrderServicesView({
           <div className={`p-2.5 rounded-xl shrink-0 ${
             confirmModalType === "finish" || confirmModalType === "consume"
               ? "bg-emerald-500/20 text-emerald-400"
+              : confirmModalType === "reverse"
+              ? "bg-amber-500/20 text-amber-400"
               : "bg-rose-500/20 text-rose-400"
           }`}>
             {confirmModalType === "finish" ? (
               <CheckCircle2 className="w-5 h-5" />
             ) : confirmModalType === "consume" ? (
               <PackageCheck className="w-5 h-5" />
+            ) : confirmModalType === "reverse" ? (
+              <RotateCcw className="w-5 h-5" />
             ) : (
               <AlertTriangle className="w-5 h-5" />
             )}
           </div>
-          <p className="text-xs text-slate-200 font-sans leading-relaxed">
+          <p className="text-xs text-slate-200 font-sans leading-relaxed whitespace-pre-line">
             {confirmModalMessage}
           </p>
         </div>

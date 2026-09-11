@@ -142,6 +142,7 @@ export async function GET(req: NextRequest) {
         mi.orden_trabajo_id,
         mi.orden_servicio_id,
         mi.orden_producto_id,
+        mi.movimiento_origen_id,
         mi.referencia,
         mi.observacion,
         mi.usuario_movimiento,

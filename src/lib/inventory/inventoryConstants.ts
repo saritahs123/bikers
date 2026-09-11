@@ -12,13 +12,14 @@ export const INVENTORY_SYSTEM_CODES = {
   TRANSFERENCIA: 9,
   INVENTARIO_INICIAL: 10,
   CONSUMO_TALLER: 12,
+  DEVOLUCION_TALLER: 13,
 } as const;
 
 export type InventorySystemCodeKey = keyof typeof INVENTORY_SYSTEM_CODES;
 
 /**
  * Asegura de forma idempotente que la empresa posea los registros de código de sistema
- * para el módulo de inventario (IDs 5 al 10, y 12 para taller).
+ * para el módulo de inventario (IDs 5 al 10, 12 para consumo y 13 para devolución/reverso de taller).
  */
 export async function ensureEmpresaCodigoSistemaProvisioned(
   client: PoolClient,
@@ -45,7 +46,8 @@ export async function ensureEmpresaCodigoSistemaProvisioned(
       ($1, 8, 'AJUSTE_NEGATIVO_INVENTARIO', 'ANI', 6, 0, TO_CHAR(CURRENT_TIMESTAMP AT TIME ZONE 'America/Santo_Domingo', 'YYYYMM'), true, false, NOW(), NOW()),
       ($1, 9, 'TRANSFERENCIA_INVENTARIO', 'TRFI', 6, 0, TO_CHAR(CURRENT_TIMESTAMP AT TIME ZONE 'America/Santo_Domingo', 'YYYYMM'), true, false, NOW(), NOW()),
       ($1, 10, 'INVENTARIO_INCIAL', 'INVI', 6, 0, TO_CHAR(CURRENT_TIMESTAMP AT TIME ZONE 'America/Santo_Domingo', 'YYYYMM'), true, false, NOW(), NOW()),
-      ($1, 12, 'CONSUMO_REPUESTO_TALLER', 'CRT', 6, 0, TO_CHAR(CURRENT_TIMESTAMP AT TIME ZONE 'America/Santo_Domingo', 'YYYYMM'), true, false, NOW(), NOW())
+      ($1, 12, 'CONSUMO_REPUESTO_TALLER', 'CRT', 6, 0, TO_CHAR(CURRENT_TIMESTAMP AT TIME ZONE 'America/Santo_Domingo', 'YYYYMM'), true, false, NOW(), NOW()),
+      ($1, 13, 'DEVOLUCION_REPUESTO_TALLER', 'DRT', 6, 0, TO_CHAR(CURRENT_TIMESTAMP AT TIME ZONE 'America/Santo_Domingo', 'YYYYMM'), true, false, NOW(), NOW())
     ON CONFLICT (empresa_id, codigo_sistema_id) DO NOTHING
   `;
   await client.query(sql, [empresaId]);

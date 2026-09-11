@@ -15,6 +15,7 @@ export type TipoMovimientoCodigo =
   | "AJU_NEG"
   | "DEV_CLIENTE"
   | "DEV_PROVEEDOR"
+  | "DEV_TALLER"
   | "TRAS_SAL"
   | "TRAS_ENT"
   | string;
@@ -96,9 +97,9 @@ export interface TransferirInventarioResult {
 export class InventoryError extends Error {
   code: string;
   status: number;
-  details?: Record<string, any>;
+  details?: Record<string, unknown>;
 
-  constructor(message: string, code = "INVENTORY_ERROR", status = 400, details?: Record<string, any>) {
+  constructor(message: string, code = "INVENTORY_ERROR", status = 400, details?: Record<string, unknown>) {
     super(message);
     this.name = "InventoryError";
     this.code = code;
@@ -108,35 +109,35 @@ export class InventoryError extends Error {
 }
 
 export class StockInsuficienteError extends InventoryError {
-  constructor(message: string, details?: Record<string, any>) {
+  constructor(message: string, details?: Record<string, unknown>) {
     super(message, "STOCK_INSUFICIENTE", 400, details);
     this.name = "StockInsuficienteError";
   }
 }
 
 export class AlmacenNoEncontradoError extends InventoryError {
-  constructor(message: string, details?: Record<string, any>) {
+  constructor(message: string, details?: Record<string, unknown>) {
     super(message, "ALMACEN_NO_ENCONTRADO", 404, details);
     this.name = "AlmacenNoEncontradoError";
   }
 }
 
 export class ProductoNoEncontradoError extends InventoryError {
-  constructor(message: string, details?: Record<string, any>) {
+  constructor(message: string, details?: Record<string, unknown>) {
     super(message, "PRODUCTO_NO_ENCONTRADO", 404, details);
     this.name = "ProductoNoEncontradoError";
   }
 }
 
 export class ValidacionInventarioError extends InventoryError {
-  constructor(message: string, code = "VALIDACION_INVENTARIO_ERROR", details?: Record<string, any>) {
+  constructor(message: string, code = "VALIDACION_INVENTARIO_ERROR", details?: Record<string, unknown>) {
     super(message, code, 400, details);
     this.name = "ValidacionInventarioError";
   }
 }
 
 export class AccesoDenegadoInventarioError extends InventoryError {
-  constructor(message: string, details?: Record<string, any>) {
+  constructor(message: string, details?: Record<string, unknown>) {
     super(message, "ACCESO_DENEGADO", 403, details);
     this.name = "AccesoDenegadoInventarioError";
   }
@@ -145,6 +146,25 @@ export class AccesoDenegadoInventarioError extends InventoryError {
 // ============================================================================
 // CANONICAL INVENTORY SERVICE IMPLEMENTATION
 // ============================================================================
+
+/**
+ * Calcula el nuevo Precio Medio Ponderado (PMP) ante una entrada de inventario.
+ * Si el stock físico previo es 0 o negativo, o el costo promedio previo es 0,
+ * el nuevo PMP es exactamente el costo unitario de la entrada.
+ */
+export function calcularNuevoPMP(
+  stockAnterior: number,
+  costoPromedioAnterior: number,
+  cantidadEntrada: number,
+  costoUnitarioEntrada: number
+): number {
+  if (stockAnterior <= 0 || costoPromedioAnterior <= 0) {
+    return Number(costoUnitarioEntrada.toFixed(2));
+  }
+  const valorAnterior = stockAnterior * costoPromedioAnterior;
+  const valorEntrada = cantidadEntrada * costoUnitarioEntrada;
+  return Number(((valorAnterior + valorEntrada) / (stockAnterior + cantidadEntrada)).toFixed(2));
+}
 
 /**
  * Execute single inventory movement inside transactional scope.
@@ -568,12 +588,10 @@ async function executeRegistrarMovimiento(
     costoUnitarioMovimiento = costoUnitarioEntrada;
 
     // Recalculate PMP per warehouse:
-    if (cleanCodigo === "INV_INICIAL" || stockAnterior <= 0 || costoPromedioAnterior <= 0) {
+    if (cleanCodigo === "INV_INICIAL") {
       costoPromedioNuevo = costoUnitarioEntrada;
     } else {
-      const valorAnterior = stockAnterior * costoPromedioAnterior;
-      const valorEntrada = cantidadNum * costoUnitarioEntrada;
-      costoPromedioNuevo = Number(((valorAnterior + valorEntrada) / (stockAnterior + cantidadNum)).toFixed(2));
+      costoPromedioNuevo = calcularNuevoPMP(stockAnterior, costoPromedioAnterior, cantidadNum, costoUnitarioEntrada);
     }
   }
 
