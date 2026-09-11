@@ -242,13 +242,18 @@ export async function GET(
       `, [srvIds]);
     }
 
-    allProductos = await query<any>(`
+    allProductos = await query<Record<string, unknown>>(`
       SELECT
         op.orden_producto_id,
         op.orden_producto_id AS id,
         op.orden_trabajo_id,
         op.orden_servicio_id,
         op.producto_id,
+        op.almacen_id,
+        alm.codigo AS almacen_codigo,
+        COALESCE(alm.nombre, 'Almacén #' || op.almacen_id::text) AS almacen_nombre,
+        op.utilizado,
+        CASE WHEN op.utilizado = true THEN 'Consumido' ELSE 'Reservado' END AS estado_inventario,
         COALESCE(p.codigo_producto, 'PRD-' || LPAD(op.producto_id::text, 3, '0')) AS codigo,
         COALESCE(p.nombre, 'Producto #' || op.producto_id::text) AS producto_nombre,
         COALESCE(p.nombre, 'Producto #' || op.producto_id::text) AS nombre,
@@ -262,6 +267,7 @@ export async function GET(
         op.observacion
       FROM admin.orden_productos op
       LEFT JOIN admin.productos p ON op.producto_id = p.producto_id
+      LEFT JOIN admin.almacenes alm ON op.almacen_id = alm.almacen_id
       WHERE op.orden_trabajo_id = $1
       ORDER BY op.orden_producto_id ASC
     `, [ordenId]);
@@ -1203,6 +1209,27 @@ export async function PUT(
           { status: 409 }
         );
       }
+
+      // Check unconsumed products (INV-TALLER-3)
+      const pendingProductsRes = await client.query(`
+        SELECT COUNT(*)::int AS total_pendientes
+        FROM admin.orden_productos
+        WHERE orden_trabajo_id = $1 AND utilizado = false
+      `, [ordenId]);
+
+      const pendingCount = Number(pendingProductsRes.rows[0]?.total_pendientes || 0);
+      if (pendingCount > 0) {
+        await client.query("ROLLBACK");
+        return NextResponse.json(
+          {
+            success: false,
+            error: "PRODUCTOS_PENDIENTES_CONSUMO",
+            title: "Repuestos pendientes de resolver",
+            message: `No puedes marcar la orden como lista para entrega mientras existan ${pendingCount} repuesto(s) reservado(s) sin consumir o liberar. Debe consumir cada repuesto o eliminar la línea antes de completar la orden.`
+          },
+          { status: 409 }
+        );
+      }
     } else {
       if (!perms.puede_mover && !perms.puede_editar) {
         await client.query("ROLLBACK");
@@ -1274,6 +1301,27 @@ export async function PUT(
             title: "Orden con servicios pendientes",
             message: "La orden tiene servicios sin completar y no puede entregarse al cliente.",
             data: { servicios_incompletos: combinedIncompleteDelivery }
+          },
+          { status: 409 }
+        );
+      }
+
+      // Check unconsumed products before delivery (INV-TALLER-3)
+      const pendingProductsDelivRes = await client.query(`
+        SELECT COUNT(*)::int AS total_pendientes
+        FROM admin.orden_productos
+        WHERE orden_trabajo_id = $1 AND utilizado = false
+      `, [ordenId]);
+
+      const pendingDelivCount = Number(pendingProductsDelivRes.rows[0]?.total_pendientes || 0);
+      if (pendingDelivCount > 0) {
+        await client.query("ROLLBACK");
+        return NextResponse.json(
+          {
+            success: false,
+            error: "PRODUCTOS_PENDIENTES_CONSUMO",
+            title: "Repuestos pendientes de resolver",
+            message: `No puedes entregar la orden mientras existan ${pendingDelivCount} repuesto(s) reservado(s) sin consumir o liberar. Debe consumir cada repuesto o eliminar la línea antes de realizar la entrega.`
           },
           { status: 409 }
         );
