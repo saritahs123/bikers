@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
 
     // Build WHERE clause
     const conditions: string[] = ["mi.empresa_id = $1", "p.empresa_id = $1", "a.empresa_id = $1"];
-    const params: any[] = [empresaId];
+    const params: unknown[] = [empresaId];
     let paramIndex = 2;
 
     if (search) {
@@ -72,7 +72,6 @@ export async function GET(req: NextRequest) {
       params.push(`%${codigoMovimiento}%`);
       paramIndex++;
     }
-
     if (almacenId && !isNaN(almacenId)) {
       conditions.push(`mi.almacen_id = $${paramIndex}`);
       params.push(almacenId);
@@ -182,7 +181,7 @@ export async function GET(req: NextRequest) {
       )
     ]);
 
-    const items = rows.map((r: any) => ({
+    const items = (rows as Record<string, unknown>[]).map((r) => ({
       movimiento_inventario_id: r.movimiento_inventario_id,
       codigo_movimiento: r.codigo_movimiento || null,
       fecha_movimiento: r.fecha_movimiento,
@@ -234,7 +233,7 @@ export async function GET(req: NextRequest) {
     response.headers.set("x-perm-exportar", String(perms.puede_exportar));
 
     return response;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error en GET /api/inventario/movimientos:", error);
     return NextResponse.json(
       { error: "INTERNAL_ERROR", message: "Error interno al obtener movimientos de inventario." },

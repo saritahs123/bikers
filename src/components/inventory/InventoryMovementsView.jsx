@@ -17,13 +17,7 @@ import {
   ArrowDownRight,
   Eye,
   X,
-  AlertCircle,
   FileText,
-  User,
-  Hash,
-  Clock,
-  Layers,
-  DollarSign,
   Copy,
   Check
 } from "lucide-react";
@@ -107,6 +101,7 @@ export default function InventoryMovementsView() {
   }, [search, almacenId, tipoMovimientoId, fechaDesde, fechaHasta, page, pageSize, sortBy, sortDirection]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchMovements();
   }, [fetchMovements]);
 
@@ -609,7 +604,6 @@ export default function InventoryMovementsView() {
                   </button>
                 </div>
               )}
-
               {/* Type and Nature Banner */}
               <div className="bg-surface-subtle p-3 rounded-md border border-border flex items-center justify-between">
                 <div>
