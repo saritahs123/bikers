@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
 import { recordUserActivity, recordUserAudit, sanitizeAuditPayload } from "@/lib/auditLogger";
+import { upsertProductoProveedor } from "@/lib/inventory/productSupplierService";
 
 // GET /api/taller/productos
 export async function GET() {
@@ -51,25 +52,41 @@ export async function GET() {
           SELECT COUNT(*)::int 
           FROM admin.orden_productos 
           WHERE producto_id = p.producto_id
-        ) AS orden_productos_count
+        ) AS orden_productos_count,
+        (
+          SELECT pr.proveedor_id
+          FROM admin.producto_proveedor pp
+          JOIN admin.proveedores pr ON pr.proveedor_id = pp.proveedor_id
+          WHERE pp.producto_id = p.producto_id AND pp.proveedor_principal = true AND (pp.estado = 'ACTIVO' OR pp.estado IS NULL)
+          LIMIT 1
+        ) AS proveedor_principal_id,
+        (
+          SELECT pr.nombre_comercial
+          FROM admin.producto_proveedor pp
+          JOIN admin.proveedores pr ON pr.proveedor_id = pp.proveedor_id
+          WHERE pp.producto_id = p.producto_id AND pp.proveedor_principal = true AND (pp.estado = 'ACTIVO' OR pp.estado IS NULL)
+          LIMIT 1
+        ) AS proveedor_principal_nombre
       FROM admin.productos p
       LEFT JOIN admin.tipo_producto tp ON p.tipo_producto_id = tp.tipo_producto_id
       LEFT JOIN admin.categoria_producto cp ON p.categoria_producto_id = cp.categoria_producto_id
       LEFT JOIN admin.marca_producto mp ON p.marca_producto_id = mp.marca_producto_id
       LEFT JOIN admin.unidad_medida um ON p.unidad_medida_id = um.unidad_medida_id
       LEFT JOIN admin.existencias_producto ep ON p.producto_id = ep.producto_id AND (ep.estado = 'ACTIVO' OR ep.estado IS NULL)
+      WHERE (p.empresa_id = $1 OR p.empresa_id IS NULL)
       GROUP BY p.producto_id, tp.nombre, tp.codigo, cp.nombre, cp.codigo, mp.nombre, um.codigo, um.nombre
       ORDER BY p.producto_id DESC
     `;
 
-    const rows = await query(sql);
+    const rows = await query(sql, [session.empresa_id]);
 
     // Fetch related active lookups for drawer forms
-    const [tipos, categorias, marcas, unidades] = await Promise.all([
+    const [tipos, categorias, marcas, unidades, proveedores] = await Promise.all([
       query(`SELECT tipo_producto_id AS id, tipo_producto_id, codigo, nombre FROM admin.tipo_producto WHERE (estado = 'ACTIVO' OR estado IS NULL) ORDER BY nombre ASC`),
       query(`SELECT categoria_producto_id AS id, categoria_producto_id, codigo, nombre FROM admin.categoria_producto WHERE (estado = 'ACTIVO' OR estado IS NULL) ORDER BY nombre ASC`),
       query(`SELECT marca_producto_id AS id, marca_producto_id, codigo, nombre FROM admin.marca_producto WHERE (estado = 'ACTIVO' OR estado IS NULL) ORDER BY nombre ASC`),
-      query(`SELECT unidad_medida_id AS id, unidad_medida_id, codigo, nombre FROM admin.unidad_medida WHERE (estado = 'ACTIVO' OR estado IS NULL) ORDER BY nombre ASC`)
+      query(`SELECT unidad_medida_id AS id, unidad_medida_id, codigo, nombre FROM admin.unidad_medida WHERE (estado = 'ACTIVO' OR estado IS NULL) ORDER BY nombre ASC`),
+      query(`SELECT proveedor_id, codigo_proveedor, nombre_comercial FROM admin.proveedores WHERE empresa_id = $1 AND (estado = 'ACTIVO' OR estado IS NULL) ORDER BY nombre_comercial ASC`, [session.empresa_id])
     ]);
 
     const mapped = (rows || []).map((r: any) => ({
@@ -101,6 +118,8 @@ export async function GET() {
       estado: r.estado || 'ACTIVO',
       activo: (r.estado || 'ACTIVO').toUpperCase() === 'ACTIVO',
       orden_productos_count: Number(r.orden_productos_count || 0),
+      proveedor_principal_id: r.proveedor_principal_id ? Number(r.proveedor_principal_id) : null,
+      proveedor_principal_nombre: r.proveedor_principal_nombre || null,
       fecha_registro: r.fecha_registro ? String(r.fecha_registro) : null
     }));
 
@@ -111,7 +130,8 @@ export async function GET() {
         tipos: tipos || [],
         categorias: categorias || [],
         marcas: marcas || [],
-        unidades: unidades || []
+        unidades: unidades || [],
+        proveedores: proveedores || []
       }
     }, {
       headers: {
@@ -146,6 +166,7 @@ export async function POST(req: Request) {
     const codigo_producto = (body.codigo_producto || body.codigo || '').trim().toUpperCase();
     const codigo_barra = (body.codigo_barra || '').trim();
     const nombre = (body.nombre || '').trim();
+    const proveedor_id = body.proveedor_id ? parseInt(body.proveedor_id, 10) : null;
     const descripcion = (body.descripcion || '').trim();
     const tipo_producto_id = body.tipo_producto_id ? parseInt(body.tipo_producto_id, 10) : null;
     const categoria_producto_id = body.categoria_producto_id ? parseInt(body.categoria_producto_id, 10) : null;
@@ -197,26 +218,26 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "VALIDATION_ERROR", message: "El Stock Máximo no puede ser menor al Stock Mínimo.", field: "stock_maximo" }, { status: 400 });
     }
 
-    // Uniqueness Checks
+    // Uniqueness Checks within the company
     const checkCodigo = await query(`
       SELECT producto_id FROM admin.productos
-      WHERE UPPER(codigo_producto) = $1
-    `, [codigo_producto]);
+      WHERE UPPER(codigo_producto) = $1 AND (empresa_id = $2 OR empresa_id IS NULL)
+    `, [codigo_producto, session.empresa_id]);
     if (checkCodigo && checkCodigo.length > 0) {
-      return NextResponse.json({ error: "PRODUCT_ALREADY_EXISTS", message: "Ya existe un producto registrado con este Código.", field: "codigo_producto" }, { status: 409 });
+      return NextResponse.json({ error: "PRODUCT_ALREADY_EXISTS", message: "Ya existe un producto registrado con este Código en su empresa.", field: "codigo_producto" }, { status: 409 });
     }
 
     if (codigo_barra) {
       const checkBarra = await query(`
         SELECT producto_id FROM admin.productos
-        WHERE codigo_barra = $1
-      `, [codigo_barra]);
+        WHERE codigo_barra = $1 AND (empresa_id = $2 OR empresa_id IS NULL)
+      `, [codigo_barra, session.empresa_id]);
       if (checkBarra && checkBarra.length > 0) {
-        return NextResponse.json({ error: "PRODUCT_ALREADY_EXISTS", message: "Ya existe un producto registrado con este Código de Barra.", field: "codigo_barra" }, { status: 409 });
+        return NextResponse.json({ error: "PRODUCT_ALREADY_EXISTS", message: "Ya existe un producto registrado con este Código de Barra en su empresa.", field: "codigo_barra" }, { status: 409 });
       }
     }
 
-    // Insert utilizing PostgreSQL Sequence DEFAULT nextval
+    // Insert utilizing PostgreSQL Sequence DEFAULT nextval + empresa_id
     const sql = `
       INSERT INTO admin.productos (
         codigo_producto,
@@ -235,9 +256,10 @@ export async function POST(req: Request) {
         requiere_serial,
         estado,
         fecha_registro,
-        usuario_registro
+        usuario_registro,
+        empresa_id
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW(), $16)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW(), $16, $17)
       RETURNING *
     `;
 
@@ -257,10 +279,31 @@ export async function POST(req: Request) {
       stock_maximo,
       requiere_serial,
       estado === 'INACTIVO' ? 'INACTIVO' : 'ACTIVO',
-      session.usuario_id
+      session.usuario_id,
+      session.empresa_id
     ]);
 
     const created = result[0];
+
+    // If a primary supplier was selected during creation, associate it
+    if (proveedor_id && !isNaN(proveedor_id)) {
+      try {
+        await upsertProductoProveedor({
+          empresaId: session.empresa_id,
+          usuarioId: session.usuario_id,
+          productoId: created.producto_id,
+          proveedorId: proveedor_id,
+          costoCompra: costo_actual,
+          moneda: "DOP",
+          tiempoEntregaDias: 3,
+          proveedorPrincipal: true,
+          estado: "ACTIVO",
+          observacion: "Proveedor principal asignado al crear el producto"
+        });
+      } catch (provErr) {
+        console.error("Warning: could not assign primary supplier during product creation:", provErr);
+      }
+    }
 
     // Forensic Activity & Audit Logging
     await recordUserActivity({
