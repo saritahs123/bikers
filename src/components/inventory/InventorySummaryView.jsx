@@ -12,14 +12,9 @@ import {
   ArrowLeftRight,
   RefreshCw,
   Calendar,
-  Layers,
-  ArrowUpRight,
-  ArrowDownRight,
   FileText,
-  Clock,
-  ExternalLink,
-  ChevronRight,
-  Info
+  TrendingUp,
+  Activity
 } from "lucide-react";
 
 // ============================================================================
@@ -141,121 +136,305 @@ function WarehouseBarChart({ data }) {
   );
 }
 
-// 2. Responsive SVG Donut Chart for "Distribución por Categoría"
-function CategoryDonutChart({ data, totalCount }) {
-  const categoryColors = [
-    "#3B82F6", // Blue (Repuestos)
-    "#10B981", // Emerald (Accesorios)
-    "#F97316", // Orange (Herramientas)
-    "#8B5CF6", // Purple (Lubricantes)
-    "#64748B", // Slate (Otros)
-    "#EC4899", // Pink
-    "#EAB308"  // Yellow
-  ];
+const TYPE_COLORS = [
+  "#3B82F6", // Blue (Repuestos)
+  "#10B981", // Emerald (Accesorios)
+  "#8B5CF6", // Violet (Consumibles)
+  "#F97316", // Orange (Herramientas)
+  "#06B6D4", // Cyan (Lubricantes)
+  "#EC4899", // Pink (Neumáticos)
+  "#EAB308", // Yellow
+  "#64748B"  // Slate (Otros / Sin Tipo)
+];
 
-  const total = Number(totalCount || data.reduce((acc, d) => acc + d.total_productos, 0)) || 1;
+// 2. Responsive SVG Donut Chart for "Distribución por Tipo de Producto"
+function ProductTypeDonutChart({ data, totalCount, totalUnidades, totalMonto }) {
+  const [metricMode, setMetricMode] = useState("cantidad"); // 'cantidad' | 'monto'
+  const [hoveredIndex, setHoveredIndex] = useState(null);
+
+  const formatMoney = (val) => {
+    const num = Number(val || 0);
+    return `RD$ ${num.toLocaleString("es-DO", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    })}`;
+  };
+
+  const formatNumber = (val) => {
+    const num = Number(val || 0);
+    return num.toLocaleString("es-DO");
+  };
+
+  const formatNumberDecimals = (val) => {
+    const num = Number(val || 0);
+    return num.toLocaleString("es-DO", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  };
+
+  // Base calculation depending on mode
+  const totalValue = useMemo(() => {
+    if (metricMode === "monto") {
+      const sum = data.reduce((acc, d) => acc + Number(d.monto_total || 0), 0);
+      return Number(totalMonto || sum) || 1;
+    }
+    const sum = data.reduce((acc, d) => acc + Number(d.total_productos || 0), 0);
+    return Number(totalCount || sum) || 1;
+  }, [metricMode, totalCount, totalMonto, data]);
 
   // Calculate SVG Pie/Donut paths
   const chartSegments = useMemo(() => {
-    let accumulatedAngle = 0;
-    return data.map((item, index) => {
-      const percentage = (item.total_productos / total) * 100;
-      const angle = (item.total_productos / total) * 360;
-      const startAngle = accumulatedAngle;
-      const endAngle = accumulatedAngle + angle;
-      accumulatedAngle = endAngle;
+    let runningAngle = 0;
+    const isSingle = data.length === 1;
+    const segments = [];
 
-      const color = categoryColors[index % categoryColors.length];
+    // SVG Arc Calculation (center at 100, 100, radius 86, inner radius 65)
+    const radius = 86;
+    const innerRadius = 65;
+    const cx = 100;
+    const cy = 100;
+    const toRad = (deg) => ((deg - 90) * Math.PI) / 180;
 
-      // SVG Arc Calculation (center at 100, 100, radius 70, inner radius 48)
-      const radius = 68;
-      const innerRadius = 46;
-      const cx = 100;
-      const cy = 100;
+    for (let index = 0; index < data.length; index++) {
+      const item = data[index];
+      const val = metricMode === "monto" ? Number(item.monto_total || 0) : Number(item.total_productos || 0);
+      const percentage = totalValue > 0 ? (val / totalValue) * 100 : 0;
+      const angle = totalValue > 0 ? (val / totalValue) * 360 : 0;
+      const startAngle = runningAngle;
+      const endAngle = runningAngle + angle;
+      runningAngle = endAngle;
 
-      const toRad = (deg) => ((deg - 90) * Math.PI) / 180;
-      const x1 = cx + radius * Math.cos(toRad(startAngle));
-      const y1 = cy + radius * Math.sin(toRad(startAngle));
-      const x2 = cx + radius * Math.cos(toRad(endAngle - 0.01));
-      const y2 = cy + radius * Math.sin(toRad(endAngle - 0.01));
+      const color = TYPE_COLORS[index % TYPE_COLORS.length];
 
-      const ix1 = cx + innerRadius * Math.cos(toRad(endAngle - 0.01));
-      const iy1 = cy + innerRadius * Math.sin(toRad(endAngle - 0.01));
-      const ix2 = cx + innerRadius * Math.cos(toRad(startAngle));
-      const iy2 = cy + innerRadius * Math.sin(toRad(startAngle));
+      let pathData = "";
+      if (angle >= 359.9 || isSingle) {
+        // Full circle using two 180-deg arcs
+        pathData = `
+          M ${cx} ${cy - radius}
+          A ${radius} ${radius} 0 1 1 ${cx} ${cy + radius}
+          A ${radius} ${radius} 0 1 1 ${cx} ${cy - radius}
+          M ${cx} ${cy - innerRadius}
+          A ${innerRadius} ${innerRadius} 0 1 0 ${cx} ${cy + innerRadius}
+          A ${innerRadius} ${innerRadius} 0 1 0 ${cx} ${cy - innerRadius}
+          Z
+        `;
+      } else {
+        const x1 = cx + radius * Math.cos(toRad(startAngle));
+        const y1 = cy + radius * Math.sin(toRad(startAngle));
+        const x2 = cx + radius * Math.cos(toRad(endAngle - 0.02));
+        const y2 = cy + radius * Math.sin(toRad(endAngle - 0.02));
 
-      const largeArcFlag = angle > 180 ? 1 : 0;
+        const ix1 = cx + innerRadius * Math.cos(toRad(endAngle - 0.02));
+        const iy1 = cy + innerRadius * Math.sin(toRad(endAngle - 0.02));
+        const ix2 = cx + innerRadius * Math.cos(toRad(startAngle));
+        const iy2 = cy + innerRadius * Math.sin(toRad(startAngle));
 
-      const pathData = `
-        M ${x1} ${y1}
-        A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x2} ${y2}
-        L ${ix1} ${iy1}
-        A ${innerRadius} ${innerRadius} 0 ${largeArcFlag} 0 ${ix2} ${iy2}
-        Z
-      `;
+        const largeArcFlag = angle > 180 ? 1 : 0;
 
-      return {
+        pathData = `
+          M ${x1} ${y1}
+          A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x2} ${y2}
+          L ${ix1} ${iy1}
+          A ${innerRadius} ${innerRadius} 0 ${largeArcFlag} 0 ${ix2} ${iy2}
+          Z
+        `;
+      }
+
+      segments.push({
         ...item,
         percentage: Math.round(percentage),
         color,
         pathData
-      };
-    });
-  }, [data, total]);
+      });
+    }
+
+    return segments;
+  }, [data, totalValue, metricMode]);
 
   if (!data || data.length === 0) {
     return (
-      <div className="h-64 flex flex-col items-center justify-center text-foreground-muted text-xs">
-        <Layers className="w-8 h-8 opacity-40 mb-2" />
-        <span>Sin categorías disponibles</span>
+      <div className="h-72 flex flex-col items-center justify-center text-foreground-muted text-xs">
+        <Boxes className="w-8 h-8 opacity-40 mb-2" />
+        <span>Sin tipos de producto disponibles</span>
       </div>
     );
   }
 
   return (
-    <div className="w-full h-64 flex items-center justify-between gap-4 px-2 select-none">
-      {/* Left: Donut SVG Graphic */}
-      <div className="relative w-44 h-44 shrink-0 flex items-center justify-center">
-        <svg viewBox="0 0 200 200" className="w-full h-full transform -rotate-90 drop-shadow-sm">
-          {chartSegments.map((seg, i) => (
-            <path
-              key={i}
-              d={seg.pathData}
-              fill={seg.color}
-              className="transition-all duration-200 hover:opacity-90 hover:scale-105 transform origin-center cursor-pointer"
-            />
-          ))}
-        </svg>
+    <div className="flex flex-col h-full select-none">
+      {/* Header with Title & Mode Selector */}
+      <div className="flex items-center justify-between pb-3 border-b border-border mb-3">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-amber-500/15 text-amber-400 flex items-center justify-center shrink-0">
+            <Boxes className="w-4 h-4" />
+          </div>
+          <div>
+            <h3 className="font-bold text-sm text-foreground">
+              Distribución por Tipo de Producto
+            </h3>
+            <p className="text-[11px] text-foreground-muted hidden sm:block">
+              Variedad, existencias y valoración económica
+            </p>
+          </div>
+        </div>
 
-        {/* Center Counter */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
-          <span className="text-2xl font-black text-foreground font-mono leading-none">
-            {total}
-          </span>
-          <span className="text-[11px] font-medium text-foreground-muted mt-1">
-            Productos
-          </span>
+        {/* Mode Toggle Button */}
+        <div className="inline-flex p-0.5 rounded-lg bg-surface-subtle border border-border text-[11px] font-semibold">
+          <button
+            type="button"
+            onClick={() => setMetricMode("cantidad")}
+            className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+              metricMode === "cantidad"
+                ? "bg-primary text-primary-foreground shadow-xs"
+                : "text-foreground-muted hover:text-foreground"
+            }`}
+          >
+            Cantidad
+          </button>
+          <button
+            type="button"
+            onClick={() => setMetricMode("monto")}
+            className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+              metricMode === "monto"
+                ? "bg-primary text-primary-foreground shadow-xs"
+                : "text-foreground-muted hover:text-foreground"
+            }`}
+          >
+            Monto RD$
+          </button>
         </div>
       </div>
 
-      {/* Right: Legend Items */}
-      <div className="flex-grow space-y-2.5 max-h-56 overflow-y-auto pr-1">
-        {chartSegments.map((item, index) => (
-          <div key={index} className="flex items-center justify-between text-xs group">
-            <div className="flex items-center gap-2 min-w-0 pr-2">
-              <span
-                className="w-3 h-3 rounded-full shrink-0 shadow-xs"
-                style={{ backgroundColor: item.color }}
-              />
-              <span className="text-foreground-secondary font-medium truncate group-hover:text-foreground transition-colors">
-                {item.categoria_nombre}
-              </span>
-            </div>
-            <span className="font-mono font-bold text-foreground shrink-0 text-xs">
-              {item.percentage}%
-            </span>
+      {/* Main Body: Donut + Rich Legend */}
+      <div className="flex-grow flex flex-col sm:flex-row items-center justify-between gap-5">
+        {/* Left: Donut SVG Graphic */}
+        <div className="relative w-48 h-48 sm:w-52 sm:h-52 shrink-0 flex items-center justify-center">
+          <svg viewBox="0 0 200 200" className="w-full h-full transform -rotate-90 drop-shadow-md">
+            {chartSegments.map((seg, i) => {
+              const isHovered = hoveredIndex === i;
+              return (
+                <path
+                  key={i}
+                  d={seg.pathData}
+                  fill={seg.color}
+                  onMouseEnter={() => setHoveredIndex(i)}
+                  onMouseLeave={() => setHoveredIndex(null)}
+                  className="transition-all duration-200 cursor-pointer"
+                  style={{
+                    opacity: hoveredIndex !== null && !isHovered ? 0.4 : 1,
+                    transform: isHovered ? "scale(1.03)" : "scale(1)",
+                    transformOrigin: "100px 100px"
+                  }}
+                />
+              );
+            })}
+          </svg>
+
+          {/* Center Counter */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none p-2">
+            {metricMode === "monto" ? (
+              <div className="flex flex-col items-center justify-center max-w-[124px] sm:max-w-[134px] overflow-hidden">
+                <span className="text-[10px] sm:text-[11px] font-bold text-primary tracking-wider uppercase leading-none mb-0.5">
+                  RD$
+                </span>
+                <span
+                  className={`font-black font-mono text-foreground tracking-tight leading-none my-0.5 ${
+                    formatNumberDecimals(totalMonto).length > 13
+                      ? "text-xs sm:text-sm"
+                      : formatNumberDecimals(totalMonto).length > 9
+                      ? "text-sm sm:text-base"
+                      : "text-base sm:text-lg"
+                  }`}
+                  title={`RD$ ${formatNumberDecimals(totalMonto)}`}
+                >
+                  {formatNumberDecimals(totalMonto)}
+                </span>
+                <span className="text-[9px] sm:text-[10px] font-bold text-foreground-muted uppercase tracking-wider leading-none mt-0.5">
+                  Valor Total
+                </span>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center max-w-[124px] sm:max-w-[134px] overflow-hidden">
+                <span className="text-xl sm:text-2xl font-black text-foreground font-mono leading-none tracking-tight">
+                  {formatNumber(totalCount)}
+                </span>
+                <span className="text-[9px] sm:text-[10px] font-bold text-foreground-muted uppercase tracking-wider mt-1 leading-none">
+                  Productos
+                </span>
+                {totalUnidades > 0 && (
+                  <span className="text-[9px] sm:text-[10px] text-primary font-medium mt-0.5 leading-none">
+                    {formatNumber(totalUnidades)} uds
+                  </span>
+                )}
+              </div>
+            )}
           </div>
-        ))}
+        </div>
+
+        {/* Right: Rich Legend Items with both Cantidad and Monto without truncation */}
+        <div className="flex-grow w-full space-y-2">
+          {chartSegments.map((item, index) => {
+            const isHovered = hoveredIndex === index;
+            return (
+              <div
+                key={index}
+                onMouseEnter={() => setHoveredIndex(index)}
+                onMouseLeave={() => setHoveredIndex(null)}
+                className={`p-2 rounded-lg border transition-all cursor-default ${
+                  isHovered
+                    ? "bg-surface border-primary/50 shadow-xs"
+                    : "bg-surface-subtle/40 border-border/40 hover:border-border hover:bg-surface-subtle/70"
+                }`}
+              >
+                {/* Row 1: Dot, Name, Percentage Badge */}
+                <div className="flex items-center justify-between text-xs mb-1">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span
+                      className="w-2.5 h-2.5 rounded-full shrink-0 shadow-xs ring-2 ring-background"
+                      style={{ backgroundColor: item.color }}
+                    />
+                    <span className="text-foreground font-bold text-xs">
+                      {item.tipo_producto_nombre}
+                    </span>
+                  </div>
+                  <span
+                    className="font-mono font-bold text-[10px] px-2 py-0.5 rounded-full shrink-0 border"
+                    style={{
+                      backgroundColor: `${item.color}15`,
+                      color: item.color,
+                      borderColor: `${item.color}40`
+                    }}
+                  >
+                    {item.percentage}%
+                  </span>
+                </div>
+
+                {/* Row 2: Cantidad (prods + uds) on left, Monto RD$ on right */}
+                <div className="flex items-center justify-between text-[11px] pl-4 text-foreground-muted">
+                  <div className="flex items-center gap-1">
+                    <span className="font-semibold text-foreground">
+                      {formatNumber(item.total_productos)}
+                    </span>
+                    <span>{item.total_productos === 1 ? "prod" : "prods"}</span>
+                    {item.cantidad_total !== undefined && (
+                      <>
+                        <span className="opacity-40">•</span>
+                        <span className="font-medium text-foreground">
+                          {formatNumber(item.cantidad_total)}
+                        </span>
+                        <span>uds</span>
+                      </>
+                    )}
+                  </div>
+                  <span className="font-mono font-bold text-xs text-foreground shrink-0 ml-2">
+                    {formatMoney(item.monto_total)}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -332,6 +511,7 @@ export default function InventorySummaryView({
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchSummary();
   }, [fetchSummary]);
 
@@ -363,6 +543,14 @@ export default function InventorySummaryView({
     const num = Number(val || 0);
     return num.toLocaleString("es-DO", {
       minimumFractionDigits: 0,
+      maximumFractionDigits: 2
+    });
+  };
+
+  const formatNumberDecimals = (val) => {
+    const num = Number(val || 0);
+    return num.toLocaleString("es-DO", {
+      minimumFractionDigits: 2,
       maximumFractionDigits: 2
     });
   };
@@ -403,17 +591,17 @@ export default function InventorySummaryView({
     return (
       <div className="space-y-4 animate-pulse">
         {/* Header Skeleton */}
-        <div className="h-16 bg-card border border-border rounded-xl" />
+        <div className="h-16 bg-card border border-border rounded-2xl" />
         {/* KPIs Skeleton */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3.5">
           {[...Array(7)].map((_, i) => (
-            <div key={i} className="h-28 bg-card border border-border rounded-xl" />
+            <div key={i} className="h-32 bg-card border border-border rounded-2xl" />
           ))}
         </div>
         {/* Row 2 Skeleton */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          <div className="lg:col-span-5 h-72 bg-card border border-border rounded-xl" />
           <div className="lg:col-span-3 h-72 bg-card border border-border rounded-xl" />
+          <div className="lg:col-span-5 h-72 bg-card border border-border rounded-xl" />
           <div className="lg:col-span-4 h-72 bg-card border border-border rounded-xl" />
         </div>
         {/* Row 3 Skeleton */}
@@ -431,13 +619,16 @@ export default function InventorySummaryView({
         <div className="w-12 h-12 rounded-full bg-error/10 text-error flex items-center justify-center mx-auto">
           <AlertCircle className="w-6 h-6" />
         </div>
-        <h3 className="text-base font-bold text-foreground">Error al cargar el resumen</h3>
-        <p className="text-xs text-foreground-muted">{error}</p>
+        <div>
+          <h3 className="text-base font-bold text-foreground">
+            Error al Cargar Resumen
+          </h3>
+          <p className="text-xs text-foreground-muted mt-1">{error}</p>
+        </div>
         <button
           onClick={fetchSummary}
-          className="px-4 py-2 bg-primary text-primary-foreground font-semibold rounded-lg text-xs hover:bg-primary-hover transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+          className="px-4 py-2 rounded-lg bg-primary hover:bg-primary-hover text-primary-foreground text-xs font-bold transition-colors cursor-pointer"
         >
-          <RefreshCw className="w-4 h-4" />
           Reintentar
         </button>
       </div>
@@ -446,7 +637,7 @@ export default function InventorySummaryView({
 
   const metrics = data?.metrics || {};
   const valorPorAlmacen = data?.valor_por_almacen || [];
-  const distribucionCategoria = data?.distribucion_categoria || [];
+  const distribucionTipoProducto = data?.distribucion_tipo_producto || data?.distribucion_categoria || [];
   const alertas = data?.alertas || [];
   const movimientosRecientes = data?.movimientos_recientes || [];
   const ultimoMovimiento = data?.ultimo_movimiento || null;
@@ -459,7 +650,7 @@ export default function InventorySummaryView({
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pt-1 pb-2">
         {/* Left: Icon & Title/Subtitle */}
         <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0 shadow-sm">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0 shadow-sm shadow-emerald-500/10">
             <Warehouse className="w-6 h-6" />
           </div>
           <div>
@@ -491,7 +682,7 @@ export default function InventorySummaryView({
           <button
             onClick={fetchSummary}
             disabled={loading}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-emerald-950/40 hover:bg-emerald-900/50 text-emerald-400 border border-emerald-500/40 text-xs font-bold transition-all cursor-pointer disabled:opacity-50 shadow-xs"
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-950/40 hover:bg-emerald-900/50 text-emerald-400 border border-emerald-500/40 text-xs font-bold transition-all cursor-pointer disabled:opacity-50 shadow-xs"
             title="Actualizar datos en tiempo real"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
@@ -501,178 +692,231 @@ export default function InventorySummaryView({
       </div>
 
       {/* ====================================================================
-          ROW 1: 7 COMPACT KPI CARDS
+          ROW 1: 7 VIBRANT & LUXURY KPI CARDS
           ==================================================================== */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3.5">
-        {/* 1. Productos Activos */}
-        <div className="bg-card border border-border rounded-xl p-3.5 flex flex-col justify-between shadow-xs">
-          <div className="flex items-start justify-between">
-            <span className="text-[11px] font-medium text-foreground-muted truncate">
+        {/* 1. Productos Activos (Emerald) */}
+        <div
+          onClick={() => handleGoToStock()}
+          className="group relative overflow-hidden rounded-2xl bg-card border border-border/70 hover:border-emerald-500/50 p-3.5 sm:p-4 flex flex-col justify-between shadow-xs hover:shadow-lg hover:shadow-emerald-500/10 hover:-translate-y-1 transition-all duration-300 cursor-pointer"
+        >
+          {/* Top colored accent line */}
+          <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-emerald-500/0 via-emerald-500/80 to-emerald-500/0 opacity-70 group-hover:opacity-100 transition-opacity" />
+          {/* Ambient background glow orb */}
+          <div className="pointer-events-none absolute -top-10 -right-10 w-24 h-24 rounded-full bg-emerald-500/10 blur-xl group-hover:bg-emerald-500/20 transition-all duration-500" />
+
+          <div className="relative z-10 flex items-start justify-between gap-2">
+            <span className="text-[11px] font-semibold text-foreground-muted tracking-wide truncate group-hover:text-foreground transition-colors">
               Productos Activos
             </span>
-            <div className="w-7 h-7 rounded-lg bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0 shadow-[0_0_12px_rgba(16,185,129,0.18)] group-hover:scale-110 group-hover:bg-emerald-500/25 transition-all duration-300">
               <Boxes className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-1">
-            <p className="text-2xl font-bold font-mono text-foreground tracking-tight">
+
+          <div className="relative z-10 mt-2.5">
+            <p className="text-2xl sm:text-[26px] font-black font-mono text-foreground tracking-tight leading-none group-hover:text-emerald-400 transition-colors">
               {formatNumber(metrics.productos_activos)}
             </p>
-            <p className="text-[10px] text-emerald-400 font-medium flex items-center gap-1 mt-1">
-              <span>▲</span>
-              <span>+3 este mes</span>
-            </p>
+            <div className="mt-2.5 flex items-center">
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                <TrendingUp className="w-3 h-3" />
+                <span>+3 este mes</span>
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* 2. Almacenes Activos */}
-        <div className="bg-card border border-border rounded-xl p-3.5 flex flex-col justify-between shadow-xs">
-          <div className="flex items-start justify-between">
-            <span className="text-[11px] font-medium text-foreground-muted truncate">
+        {/* 2. Almacenes Activos (Blue) */}
+        <div className="group relative overflow-hidden rounded-2xl bg-card border border-border/70 hover:border-blue-500/50 p-3.5 sm:p-4 flex flex-col justify-between shadow-xs hover:shadow-lg hover:shadow-blue-500/10 hover:-translate-y-1 transition-all duration-300">
+          <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-blue-500/0 via-blue-500/80 to-blue-500/0 opacity-70 group-hover:opacity-100 transition-opacity" />
+          <div className="pointer-events-none absolute -top-10 -right-10 w-24 h-24 rounded-full bg-blue-500/10 blur-xl group-hover:bg-blue-500/20 transition-all duration-500" />
+
+          <div className="relative z-10 flex items-start justify-between gap-2">
+            <span className="text-[11px] font-semibold text-foreground-muted tracking-wide truncate group-hover:text-foreground transition-colors">
               Almacenes Activos
             </span>
-            <div className="w-7 h-7 rounded-lg bg-blue-500/15 text-blue-400 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-xl bg-blue-500/15 border border-blue-500/30 text-blue-400 flex items-center justify-center shrink-0 shadow-[0_0_12px_rgba(59,130,246,0.18)] group-hover:scale-110 group-hover:bg-blue-500/25 transition-all duration-300">
               <Warehouse className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-1">
-            <p className="text-2xl font-bold font-mono text-foreground tracking-tight">
+
+          <div className="relative z-10 mt-2.5">
+            <p className="text-2xl sm:text-[26px] font-black font-mono text-foreground tracking-tight leading-none group-hover:text-blue-400 transition-colors">
               {formatNumber(metrics.almacenes_activos)}
             </p>
-            <p className="text-[10px] text-foreground-muted font-medium flex items-center gap-1 mt-1">
-              <span>—</span>
-              <span>Sin cambios</span>
-            </p>
+            <div className="mt-2.5 flex items-center">
+              <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-full">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                <span>Operativos</span>
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* 3. Unidades en Stock */}
-        <div className="bg-card border border-border rounded-xl p-3.5 flex flex-col justify-between shadow-xs">
-          <div className="flex items-start justify-between">
-            <span className="text-[11px] font-medium text-foreground-muted truncate">
+        {/* 3. Unidades en Stock (Teal) */}
+        <div
+          onClick={() => handleGoToStock()}
+          className="group relative overflow-hidden rounded-2xl bg-card border border-border/70 hover:border-teal-500/50 p-3.5 sm:p-4 flex flex-col justify-between shadow-xs hover:shadow-lg hover:shadow-teal-500/10 hover:-translate-y-1 transition-all duration-300 cursor-pointer"
+        >
+          <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-teal-500/0 via-teal-500/80 to-teal-500/0 opacity-70 group-hover:opacity-100 transition-opacity" />
+          <div className="pointer-events-none absolute -top-10 -right-10 w-24 h-24 rounded-full bg-teal-500/10 blur-xl group-hover:bg-teal-500/20 transition-all duration-500" />
+
+          <div className="relative z-10 flex items-start justify-between gap-2">
+            <span className="text-[11px] font-semibold text-foreground-muted tracking-wide truncate group-hover:text-foreground transition-colors">
               Unidades en Stock
             </span>
-            <div className="w-7 h-7 rounded-lg bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-xl bg-teal-500/15 border border-teal-500/30 text-teal-400 flex items-center justify-center shrink-0 shadow-[0_0_12px_rgba(20,184,166,0.18)] group-hover:scale-110 group-hover:bg-teal-500/25 transition-all duration-300">
               <PackageCheck className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-1">
-            <p className="text-2xl font-bold font-mono text-foreground tracking-tight">
+
+          <div className="relative z-10 mt-2.5">
+            <p className="text-2xl sm:text-[26px] font-black font-mono text-foreground tracking-tight leading-none group-hover:text-teal-400 transition-colors">
               {formatNumber(metrics.unidades_stock)}
             </p>
-            <p className="text-[10px] text-emerald-400 font-medium flex items-center gap-1 mt-1">
-              <span>▲</span>
-              <span>+12% vs. mes anterior</span>
-            </p>
+            <div className="mt-2.5 flex items-center">
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-teal-400 bg-teal-500/10 border border-teal-500/20 px-2 py-0.5 rounded-full">
+                <TrendingUp className="w-3 h-3" />
+                <span>+12% vs. mes</span>
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* 4. Valor del Inventario */}
-        <div className="bg-card border border-border rounded-xl p-3.5 flex flex-col justify-between shadow-xs">
-          <div className="flex items-start justify-between">
-            <span className="text-[11px] font-medium text-foreground-muted truncate">
-              Valor del Inventario
+        {/* 4. Valor del Inventario (Indigo) */}
+        <div className="group relative overflow-hidden rounded-2xl bg-card border border-border/70 hover:border-indigo-500/50 p-3.5 sm:p-4 flex flex-col justify-between shadow-xs hover:shadow-lg hover:shadow-indigo-500/10 hover:-translate-y-1 transition-all duration-300">
+          <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-indigo-500/0 via-indigo-500/80 to-indigo-500/0 opacity-70 group-hover:opacity-100 transition-opacity" />
+          <div className="pointer-events-none absolute -top-10 -right-10 w-24 h-24 rounded-full bg-indigo-500/10 blur-xl group-hover:bg-indigo-500/20 transition-all duration-500" />
+
+          <div className="relative z-10 flex items-start justify-between gap-2">
+            <span className="text-[11px] font-semibold text-foreground-muted tracking-wide truncate group-hover:text-foreground transition-colors">
+              Valor Inventario
             </span>
-            <div className="w-7 h-7 rounded-lg bg-blue-600/15 text-blue-400 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-xl bg-indigo-500/15 border border-indigo-500/30 text-indigo-400 flex items-center justify-center shrink-0 shadow-[0_0_12px_rgba(99,102,241,0.18)] group-hover:scale-110 group-hover:bg-indigo-500/25 transition-all duration-300">
               <DollarSign className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-1">
-            <p className="text-lg font-bold font-mono text-foreground tracking-tight truncate" title={formatMoney(metrics.valor_inventario)}>
-              {formatMoney(metrics.valor_inventario)}
-            </p>
-            <p className="text-[10px] text-emerald-400 font-medium flex items-center gap-1 mt-1">
-              <span>▲</span>
-              <span>+8% vs. mes anterior</span>
-            </p>
+
+          <div className="relative z-10 mt-2.5">
+            <div className="flex items-baseline gap-1" title={formatMoney(metrics.valor_inventario)}>
+              <span className="text-[10px] font-bold text-indigo-400 font-mono tracking-wider">RD$</span>
+              <p className="text-xl xl:text-[22px] font-black font-mono text-foreground tracking-tight leading-none group-hover:text-indigo-300 transition-colors truncate">
+                {formatNumberDecimals(metrics.valor_inventario)}
+              </p>
+            </div>
+            <div className="mt-2.5 flex items-center">
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded-full">
+                <TrendingUp className="w-3 h-3" />
+                <span>+8% valor</span>
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* 5. Bajo Stock Mínimo */}
+        {/* 5. Bajo Stock Mínimo (Amber) */}
         <div
           onClick={() => handleGoToStock("BAJO_MINIMO")}
-          className="bg-card border border-border rounded-xl p-3.5 flex flex-col justify-between shadow-xs cursor-pointer hover:border-amber-500/50 transition-colors"
+          className="group relative overflow-hidden rounded-2xl bg-card border border-border/70 hover:border-amber-500/60 p-3.5 sm:p-4 flex flex-col justify-between shadow-xs hover:shadow-lg hover:shadow-amber-500/15 hover:-translate-y-1 transition-all duration-300 cursor-pointer"
         >
-          <div className="flex items-start justify-between">
-            <span className="text-[11px] font-medium text-foreground-muted truncate">
-              Bajo Stock Mínimo
+          <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-amber-500/0 via-amber-500/80 to-amber-500/0 opacity-70 group-hover:opacity-100 transition-opacity" />
+          <div className="pointer-events-none absolute -top-10 -right-10 w-24 h-24 rounded-full bg-amber-500/12 blur-xl group-hover:bg-amber-500/25 transition-all duration-500" />
+
+          <div className="relative z-10 flex items-start justify-between gap-2">
+            <span className="text-[11px] font-semibold text-foreground-muted tracking-wide truncate group-hover:text-foreground transition-colors">
+              Bajo Mínimo
             </span>
-            <div className="w-7 h-7 rounded-lg bg-amber-500/15 text-amber-400 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center shrink-0 shadow-[0_0_12px_rgba(245,158,11,0.2)] group-hover:scale-110 group-hover:bg-amber-500/25 transition-all duration-300">
               <AlertTriangle className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-1">
-            <p className="text-2xl font-bold font-mono text-foreground tracking-tight">
+
+          <div className="relative z-10 mt-2.5">
+            <p className="text-2xl sm:text-[26px] font-black font-mono text-foreground tracking-tight leading-none group-hover:text-amber-400 transition-colors">
               {formatNumber(metrics.bajo_minimo)}
             </p>
-            <p className="text-[10px] text-amber-400 font-semibold flex items-center gap-1 mt-1">
-              <span>⚠️</span>
-              <span>Requieren atención</span>
-            </p>
+            <div className="mt-2.5 flex items-center">
+              <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-amber-300 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-full shadow-[0_0_8px_rgba(245,158,11,0.2)]">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                <span>Atención</span>
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* 6. Sin Existencia */}
+        {/* 6. Sin Existencia (Rose) */}
         <div
           onClick={() => handleGoToStock("SIN_STOCK")}
-          className="bg-card border border-border rounded-xl p-3.5 flex flex-col justify-between shadow-xs cursor-pointer hover:border-rose-500/50 transition-colors"
+          className="group relative overflow-hidden rounded-2xl bg-card border border-border/70 hover:border-rose-500/60 p-3.5 sm:p-4 flex flex-col justify-between shadow-xs hover:shadow-lg hover:shadow-rose-500/15 hover:-translate-y-1 transition-all duration-300 cursor-pointer"
         >
-          <div className="flex items-start justify-between">
-            <span className="text-[11px] font-medium text-foreground-muted truncate">
+          <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-rose-500/0 via-rose-500/80 to-rose-500/0 opacity-70 group-hover:opacity-100 transition-opacity" />
+          <div className="pointer-events-none absolute -top-10 -right-10 w-24 h-24 rounded-full bg-rose-500/12 blur-xl group-hover:bg-rose-500/25 transition-all duration-500" />
+
+          <div className="relative z-10 flex items-start justify-between gap-2">
+            <span className="text-[11px] font-semibold text-foreground-muted tracking-wide truncate group-hover:text-foreground transition-colors">
               Sin Existencia
             </span>
-            <div className="w-7 h-7 rounded-lg bg-rose-500/15 text-rose-400 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-400 flex items-center justify-center shrink-0 shadow-[0_0_12px_rgba(244,63,94,0.2)] group-hover:scale-110 group-hover:bg-rose-500/25 transition-all duration-300">
               <AlertCircle className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-1">
-            <p className="text-2xl font-bold font-mono text-foreground tracking-tight">
+
+          <div className="relative z-10 mt-2.5">
+            <p className="text-2xl sm:text-[26px] font-black font-mono text-foreground tracking-tight leading-none group-hover:text-rose-400 transition-colors">
               {formatNumber(metrics.sin_stock)}
             </p>
-            <p className="text-[10px] text-rose-400 font-semibold flex items-center gap-1 mt-1">
-              <span>▲</span>
-              <span>Sin stock</span>
-            </p>
+            <div className="mt-2.5 flex items-center">
+              <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-rose-300 bg-rose-500/15 border border-rose-500/30 px-2 py-0.5 rounded-full shadow-[0_0_8px_rgba(244,63,94,0.2)]">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+                <span>Agotados</span>
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* 7. Movimientos Hoy */}
+        {/* 7. Movimientos Hoy (Cyan) */}
         <div
           onClick={handleGoToMovements}
-          className="bg-card border border-border rounded-xl p-3.5 flex flex-col justify-between shadow-xs cursor-pointer hover:border-cyan-500/50 transition-colors"
+          className="group relative overflow-hidden rounded-2xl bg-card border border-border/70 hover:border-cyan-500/60 p-3.5 sm:p-4 flex flex-col justify-between shadow-xs hover:shadow-lg hover:shadow-cyan-500/15 hover:-translate-y-1 transition-all duration-300 cursor-pointer"
         >
-          <div className="flex items-start justify-between">
-            <span className="text-[11px] font-medium text-foreground-muted truncate">
+          <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-cyan-500/0 via-cyan-500/80 to-cyan-500/0 opacity-70 group-hover:opacity-100 transition-opacity" />
+          <div className="pointer-events-none absolute -top-10 -right-10 w-24 h-24 rounded-full bg-cyan-500/12 blur-xl group-hover:bg-cyan-500/25 transition-all duration-500" />
+
+          <div className="relative z-10 flex items-start justify-between gap-2">
+            <span className="text-[11px] font-semibold text-foreground-muted tracking-wide truncate group-hover:text-foreground transition-colors">
               Movimientos Hoy
             </span>
-            <div className="w-7 h-7 rounded-lg bg-cyan-500/15 text-cyan-400 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-xl bg-cyan-500/15 border border-cyan-500/30 text-cyan-400 flex items-center justify-center shrink-0 shadow-[0_0_12px_rgba(6,182,212,0.2)] group-hover:scale-110 group-hover:bg-cyan-500/25 transition-all duration-300">
               <ArrowLeftRight className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-1">
-            <p className="text-2xl font-bold font-mono text-foreground tracking-tight">
+
+          <div className="relative z-10 mt-2.5">
+            <p className="text-2xl sm:text-[26px] font-black font-mono text-foreground tracking-tight leading-none group-hover:text-cyan-400 transition-colors">
               {formatNumber(metrics.movimientos_hoy)}
             </p>
-            <p className="text-[10px] text-emerald-400 font-medium flex items-center gap-1 mt-1">
-              <span>▲</span>
-              <span>+4 vs. ayer</span>
-            </p>
+            <div className="mt-2.5 flex items-center">
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-cyan-300 bg-cyan-500/10 border border-cyan-500/25 px-2 py-0.5 rounded-full">
+                <Activity className="w-3 h-3" />
+                <span>+4 hoy</span>
+              </span>
+            </div>
           </div>
         </div>
       </div>
 
       {/* ====================================================================
-          ROW 2: 3 BLOCKS (Valor por Almacén | Distribución Categoría | Alertas)
+          ROW 2: 3 BLOCKS (Valor por Almacén | Distribución Tipo Producto | Alertas)
           ==================================================================== */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        {/* Block A: Valor del Inventario por Almacén (5 cols) */}
-        <div className="lg:col-span-5 bg-card border border-border rounded-xl p-4 flex flex-col shadow-xs">
+        {/* Block A: Valor del Inventario por Almacén (3 cols) */}
+        <div className="lg:col-span-3 bg-card border border-border rounded-xl p-4 flex flex-col shadow-xs">
           <div className="flex items-center gap-2 mb-2">
             <div className="w-6 h-6 rounded-md bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0">
               <Warehouse className="w-3.5 h-3.5" />
             </div>
             <h3 className="font-bold text-sm text-foreground">
-              Valor del Inventario por Almacén
+              Valor por Almacén
             </h3>
           </div>
           <div className="flex-grow flex items-center">
@@ -680,27 +924,19 @@ export default function InventorySummaryView({
           </div>
         </div>
 
-        {/* Block B: Distribución por Categoría (3.5 cols -> lg:col-span-3 or 4) */}
-        <div className="lg:col-span-3 bg-card border border-border rounded-xl p-4 flex flex-col shadow-xs">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="w-6 h-6 rounded-md bg-amber-500/15 text-amber-400 flex items-center justify-center shrink-0">
-              <Layers className="w-3.5 h-3.5" />
-            </div>
-            <h3 className="font-bold text-sm text-foreground">
-              Distribución por Categoría
-            </h3>
-          </div>
-          <div className="flex-grow flex items-center justify-center">
-            <CategoryDonutChart
-              data={distribucionCategoria}
-              totalCount={metrics.productos_activos}
-            />
-          </div>
+        {/* Block B: Distribución por Tipo de Producto (5 cols - Amplio y destacado) */}
+        <div className="lg:col-span-5 bg-card border border-border rounded-xl p-4 flex flex-col shadow-xs">
+          <ProductTypeDonutChart
+            data={distribucionTipoProducto}
+            totalCount={metrics.productos_activos}
+            totalUnidades={metrics.unidades_stock}
+            totalMonto={metrics.valor_inventario}
+          />
         </div>
 
-        {/* Block C: Alertas de Inventario (4 cols -> lg:col-span-4) */}
-        <div className="lg:col-span-4 bg-card border border-border rounded-xl p-4 flex flex-col shadow-xs">
-          <div className="flex items-center justify-between mb-3">
+        {/* Block C: Alertas de Inventario (4 cols) */}
+        <div className="lg:col-span-4 bg-card border border-border rounded-xl p-4 flex flex-col shadow-xs overflow-hidden">
+          <div className="flex items-center justify-between mb-3 shrink-0">
             <div className="flex items-center gap-2">
               <div className="w-6 h-6 rounded-md bg-rose-500/15 text-rose-400 flex items-center justify-center shrink-0">
                 <AlertCircle className="w-3.5 h-3.5" />
@@ -717,7 +953,7 @@ export default function InventorySummaryView({
             </button>
           </div>
 
-          <div className="overflow-x-auto flex-grow">
+          <div className="flex-grow overflow-x-hidden">
             {alertas.length === 0 ? (
               <div className="h-52 flex flex-col items-center justify-center text-foreground-muted text-xs">
                 <PackageCheck className="w-8 h-8 text-emerald-400/50 mb-2" />
@@ -727,35 +963,44 @@ export default function InventorySummaryView({
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-border text-foreground-muted text-[10px] uppercase font-bold tracking-wider">
-                    <th className="py-2 px-1.5">Código</th>
                     <th className="py-2 px-1.5">Producto</th>
-                    <th className="py-2 px-1.5">Almacén</th>
                     <th className="py-2 px-1.5 text-right">Stock</th>
-                    <th className="py-2 px-1.5 text-right">Mínimo</th>
-                    <th className="py-2 px-1.5 text-center">Estado</th>
+                    <th className="py-2 px-1.5 text-right">Estado</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/50">
                   {alertas.map((item) => (
-                    <tr key={item.existencia_producto_id} className="hover:bg-surface/50 transition-colors">
-                      <td className="py-2 px-1.5 font-mono text-[11px] font-semibold text-foreground">
-                        {item.codigo_producto}
+                    <tr
+                      key={item.existencia_producto_id}
+                      onClick={() => handleGoToStock(item.estado_stock === "SIN_STOCK" ? "SIN_STOCK" : "BAJO_MINIMO")}
+                      className="hover:bg-surface/50 transition-colors cursor-pointer group"
+                    >
+                      <td className="py-2 px-1.5 min-w-0">
+                        <p
+                          className="text-foreground font-semibold text-xs truncate max-w-[140px] sm:max-w-[180px] group-hover:text-primary transition-colors"
+                          title={item.producto_nombre}
+                        >
+                          {item.producto_nombre}
+                        </p>
+                        <p className="font-mono text-[10px] text-foreground-muted truncate max-w-[140px] sm:max-w-[180px]">
+                          <span>{item.codigo_producto}</span>
+                          <span className="mx-1 opacity-40">•</span>
+                          <span>{item.almacen_nombre}</span>
+                        </p>
                       </td>
-                      <td className="py-2 px-1.5 text-foreground font-medium truncate max-w-[110px]" title={item.producto_nombre}>
-                        {item.producto_nombre}
-                      </td>
-                      <td className="py-2 px-1.5 text-foreground-muted text-[11px] truncate max-w-[70px]">
-                        {item.almacen_nombre}
-                      </td>
-                      <td className="py-2 px-1.5 text-right font-mono font-bold">
-                        <span className={item.cantidad_actual === 0 ? "text-rose-400" : "text-amber-400"}>
+                      <td className="py-2 px-1.5 text-right whitespace-nowrap">
+                        <span
+                          className={`font-mono font-bold text-xs ${
+                            item.cantidad_actual === 0 ? "text-rose-400" : "text-amber-400"
+                          }`}
+                        >
                           {item.cantidad_actual}
                         </span>
+                        <p className="text-[10px] text-foreground-muted font-mono">
+                          mín {item.stock_minimo}
+                        </p>
                       </td>
-                      <td className="py-2 px-1.5 text-right font-mono text-foreground-muted text-[11px]">
-                        {item.stock_minimo}
-                      </td>
-                      <td className="py-2 px-1.5 text-center whitespace-nowrap">
+                      <td className="py-2 px-1.5 text-right whitespace-nowrap">
                         <span
                           className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
                             item.estado_stock === "SIN_STOCK"
@@ -763,7 +1008,7 @@ export default function InventorySummaryView({
                               : "bg-amber-500/15 text-amber-400 border-amber-500/30"
                           }`}
                         >
-                          {item.estado_stock === "SIN_STOCK" ? "🚫 Sin stock" : "⚠️ Bajo mínimo"}
+                          {item.estado_stock === "SIN_STOCK" ? "🚫 Sin stock" : "⚠️ Bajo mín"}
                         </span>
                       </td>
                     </tr>

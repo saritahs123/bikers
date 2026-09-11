@@ -25,6 +25,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
 
     const search = (searchParams.get("search") || "").trim();
+    const codigoMovimiento = (searchParams.get("codigo_movimiento") || "").trim();
     const almacenId = searchParams.get("almacen_id") ? parseInt(searchParams.get("almacen_id")!, 10) : null;
     const productoId = searchParams.get("producto_id") ? parseInt(searchParams.get("producto_id")!, 10) : null;
     const tipoMovimientoId = searchParams.get("tipo_movimiento_id") ? parseInt(searchParams.get("tipo_movimiento_id")!, 10) : null;
@@ -40,6 +41,7 @@ export async function GET(req: NextRequest) {
     // Whitelist for sort columns
     const sortMapping: Record<string, string> = {
       fecha_movimiento: "mi.fecha_movimiento",
+      codigo_movimiento: "mi.codigo_movimiento",
       cantidad: "mi.cantidad",
       costo_unitario: "mi.costo_unitario",
       costo_total: "mi.costo_total",
@@ -54,17 +56,22 @@ export async function GET(req: NextRequest) {
 
     // Build WHERE clause
     const conditions: string[] = ["mi.empresa_id = $1", "p.empresa_id = $1", "a.empresa_id = $1"];
-    const params: any[] = [empresaId];
+    const params: unknown[] = [empresaId];
     let paramIndex = 2;
 
     if (search) {
       conditions.push(
-        `(p.codigo_producto ILIKE $${paramIndex} OR p.nombre ILIKE $${paramIndex} OR a.nombre ILIKE $${paramIndex} OR mi.referencia ILIKE $${paramIndex} OR mi.observacion ILIKE $${paramIndex} OR CONCAT(ui.nombre, ' ', ui.apellido) ILIKE $${paramIndex})`
+        `(p.codigo_producto ILIKE $${paramIndex} OR p.nombre ILIKE $${paramIndex} OR a.nombre ILIKE $${paramIndex} OR mi.referencia ILIKE $${paramIndex} OR mi.observacion ILIKE $${paramIndex} OR mi.codigo_movimiento ILIKE $${paramIndex} OR CONCAT(ui.nombre, ' ', ui.apellido) ILIKE $${paramIndex})`
       );
       params.push(`%${search}%`);
       paramIndex++;
     }
 
+    if (codigoMovimiento) {
+      conditions.push(`mi.codigo_movimiento ILIKE $${paramIndex}`);
+      params.push(`%${codigoMovimiento}%`);
+      paramIndex++;
+    }
     if (almacenId && !isNaN(almacenId)) {
       conditions.push(`mi.almacen_id = $${paramIndex}`);
       params.push(almacenId);
@@ -138,11 +145,15 @@ export async function GET(req: NextRequest) {
         mi.observacion,
         mi.usuario_movimiento,
         COALESCE(CONCAT(ui.nombre, ' ', ui.apellido), 'Sistema') AS usuario_nombre,
-        mi.transferencia_uuid
+        mi.transferencia_uuid,
+        mi.codigo_movimiento,
+        mi.proveedor_id,
+        prov.nombre_comercial AS proveedor_nombre
       FROM admin.movimientos_inventario mi
       JOIN admin.productos p ON mi.producto_id = p.producto_id AND p.empresa_id = mi.empresa_id
       JOIN admin.almacenes a ON mi.almacen_id = a.almacen_id AND a.empresa_id = mi.empresa_id
       JOIN admin.tipo_movimiento_inventario tmi ON mi.tipo_movimiento_id = tmi.tipo_movimiento_id
+      LEFT JOIN admin.proveedores prov ON mi.proveedor_id = prov.proveedor_id
       LEFT JOIN admin.usuario u ON mi.usuario_movimiento = u.usuario_id
       LEFT JOIN admin.usuario_identidad ui ON u.usuario_id = ui.usuario_id
       WHERE ${whereSql}
@@ -170,8 +181,9 @@ export async function GET(req: NextRequest) {
       )
     ]);
 
-    const items = rows.map((r: any) => ({
+    const items = (rows as Record<string, unknown>[]).map((r) => ({
       movimiento_inventario_id: r.movimiento_inventario_id,
+      codigo_movimiento: r.codigo_movimiento || null,
       fecha_movimiento: r.fecha_movimiento,
       tipo_movimiento_id: r.tipo_movimiento_id,
       tipo_codigo: r.tipo_codigo,
@@ -194,7 +206,9 @@ export async function GET(req: NextRequest) {
       observacion: r.observacion,
       usuario_movimiento: r.usuario_movimiento,
       usuario_nombre: r.usuario_nombre,
-      transferencia_uuid: r.transferencia_uuid
+      transferencia_uuid: r.transferencia_uuid,
+      proveedor_id: r.proveedor_id || null,
+      proveedor_nombre: r.proveedor_nombre || null
     }));
 
     const response = NextResponse.json({
@@ -219,7 +233,7 @@ export async function GET(req: NextRequest) {
     response.headers.set("x-perm-exportar", String(perms.puede_exportar));
 
     return response;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error en GET /api/inventario/movimientos:", error);
     return NextResponse.json(
       { error: "INTERNAL_ERROR", message: "Error interno al obtener movimientos de inventario." },

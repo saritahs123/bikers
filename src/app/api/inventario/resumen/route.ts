@@ -108,26 +108,45 @@ export async function GET() {
       [empresaId]
     );
 
-    // 9. Distribución por Categoría
-    const distribucionCatRes = await query(
+    // 9. Distribución por Tipo de Producto (variedad de productos, cantidad física y monto total)
+    const distribucionTipoRes = await query(
       `SELECT 
-         COALESCE(cp.nombre, 'Otros') AS categoria_nombre,
-         COUNT(p.producto_id)::int AS total_productos
+         COALESCE(tp.nombre, 'Sin Tipo') AS tipo_producto_nombre,
+         tp.tipo_producto_id,
+         COUNT(DISTINCT p.producto_id)::int AS total_productos,
+         COALESCE(SUM(ep.cantidad_actual), 0)::numeric AS cantidad_total,
+         COALESCE(SUM(ep.cantidad_actual * ep.costo_promedio), 0)::numeric AS monto_total
        FROM admin.productos p
-       LEFT JOIN admin.categoria_producto cp ON p.categoria_producto_id = cp.categoria_producto_id
+       LEFT JOIN admin.tipo_producto tp ON p.tipo_producto_id = tp.tipo_producto_id
+       LEFT JOIN admin.existencias_producto ep ON p.producto_id = ep.producto_id AND ep.empresa_id = p.empresa_id AND (ep.estado = 'ACTIVO' OR ep.estado IS NULL)
        WHERE p.empresa_id = $1 AND (p.estado = 'ACTIVO' OR p.estado IS NULL)
-       GROUP BY cp.categoria_producto_id, cp.nombre
-       ORDER BY total_productos DESC`,
+       GROUP BY tp.tipo_producto_id, tp.nombre
+       ORDER BY total_productos DESC, monto_total DESC`,
       [empresaId]
     );
 
-    // Calculate percentage per category
-    const catTotalSum = distribucionCatRes.reduce((acc: number, c: any) => acc + Number(c.total_productos || 0), 0) || 1;
-    const distribucionCategoria = distribucionCatRes.map((c: any) => ({
-      categoria_nombre: c.categoria_nombre,
-      total_productos: Number(c.total_productos),
-      porcentaje: Math.round((Number(c.total_productos) / catTotalSum) * 100)
-    }));
+    // Calculate totals for percentages
+    const prodsTotalSum = distribucionTipoRes.reduce((acc: number, c: Record<string, unknown>) => acc + Number(c.total_productos || 0), 0) || 1;
+    const montoTotalSum = distribucionTipoRes.reduce((acc: number, c: Record<string, unknown>) => acc + Number(c.monto_total || 0), 0) || 1;
+    const unidadesTotalSum = distribucionTipoRes.reduce((acc: number, c: Record<string, unknown>) => acc + Number(c.cantidad_total || 0), 0) || 1;
+
+    const distribucionTipoProducto = distribucionTipoRes.map((c: Record<string, unknown>) => {
+      const totalProds = Number(c.total_productos || 0);
+      const montoTotal = Number(c.monto_total || 0);
+      const cantidadTotal = Number(c.cantidad_total || 0);
+      return {
+        tipo_producto_id: c.tipo_producto_id,
+        tipo_producto_nombre: String(c.tipo_producto_nombre || "Sin Tipo"),
+        categoria_nombre: String(c.tipo_producto_nombre || "Sin Tipo"), // retro-compatibility alias
+        total_productos: totalProds,
+        cantidad_total: cantidadTotal,
+        monto_total: montoTotal,
+        porcentaje_productos: Math.round((totalProds / prodsTotalSum) * 100),
+        porcentaje_monto: Math.round((montoTotal / montoTotalSum) * 100),
+        porcentaje_unidades: Math.round((cantidadTotal / unidadesTotalSum) * 100),
+        porcentaje: Math.round((totalProds / prodsTotalSum) * 100)
+      };
+    });
 
     // 10. Alertas de Inventario (Top 5)
     const alertasRes = await query(
@@ -209,15 +228,16 @@ export async function GET() {
           sin_stock: sinStockCount,
           movimientos_hoy: movimientosHoyCount
         },
-        valor_por_almacen: valorPorAlmacenRes.map((a: any) => ({
+        valor_por_almacen: (valorPorAlmacenRes as Record<string, unknown>[]).map((a) => ({
           almacen_id: a.almacen_id,
           almacen_codigo: a.almacen_codigo,
           almacen_nombre: a.almacen_nombre,
           valor_inventario: Number(a.valor_inventario || 0),
           total_unidades: Number(a.total_unidades || 0)
         })),
-        distribucion_categoria: distribucionCategoria,
-        alertas: alertasRes.map((r: any) => ({
+        distribucion_tipo_producto: distribucionTipoProducto,
+        distribucion_categoria: distribucionTipoProducto,
+        alertas: (alertasRes as Record<string, unknown>[]).map((r) => ({
           existencia_producto_id: r.existencia_producto_id,
           producto_id: r.producto_id,
           codigo_producto: r.codigo_producto,
@@ -229,7 +249,7 @@ export async function GET() {
           costo_promedio: Number(r.costo_promedio || 0),
           estado_stock: r.estado_stock
         })),
-        movimientos_recientes: movimientosRecientesRes.map((r: any) => ({
+        movimientos_recientes: (movimientosRecientesRes as Record<string, unknown>[]).map((r) => ({
           movimiento_inventario_id: r.movimiento_inventario_id,
           fecha_movimiento: r.fecha_movimiento,
           cantidad: Number(r.cantidad),
@@ -283,7 +303,7 @@ export async function GET() {
     response.headers.set("x-perm-exportar", String(perms.puede_exportar));
 
     return response;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error en GET /api/inventario/resumen:", error);
     return NextResponse.json(
       { error: "INTERNAL_ERROR", message: "Error interno al obtener el resumen de inventario." },
