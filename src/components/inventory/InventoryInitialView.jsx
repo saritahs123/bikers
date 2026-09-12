@@ -51,29 +51,27 @@ export default function InventoryInitialView() {
   const [feedback, setFeedback] = useState(null);
   const [processedResult, setProcessedResult] = useState(null);
 
-  // Load catalogs
+  // Load catalogs on mount
   const loadCatalogos = useCallback(async () => {
     try {
       setLoadingCatalogos(true);
       const res = await fetch("/api/inventario/catalogos");
-      if (!res.ok) throw new Error("Error al cargar catálogos");
-      const data = await res.json();
-      const alms = data.almacenes || [];
+      if (!res.ok) throw new Error("Error al obtener catálogos.");
+      const json = await res.json();
+      const alms = json.almacenes || [];
       setAlmacenes(alms);
-      setProductos(data.productos || []);
-
-      if (alms.length > 0 && !almacenId) {
-        setAlmacenId(String(alms[0].almacen_id));
-      }
+      setProductos(json.productos || []);
+      setAlmacenId((prev) => prev || (alms.length > 0 ? String(alms[0].almacen_id) : ""));
     } catch (err) {
       console.error(err);
-      setFeedback({ type: "error", message: "No se pudieron cargar los catálogos." });
+      setFeedback({ type: "error", message: "No se pudieron cargar los datos de catálogos." });
     } finally {
       setLoadingCatalogos(false);
     }
-  }, [almacenId]);
+  }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadCatalogos();
   }, [loadCatalogos]);
 
@@ -261,9 +259,7 @@ export default function InventoryInitialView() {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 text-xs text-foreground-muted mb-1">
-            <Link href="/inventory/summary" className="hover:text-foreground transition-colors">
-              Inventario
-            </Link>
+            <span>Configuración</span>
             <span>&gt;</span>
             <span className="text-foreground-secondary font-medium">Inventario Inicial</span>
           </div>
@@ -669,7 +665,7 @@ export default function InventoryInitialView() {
               </div>
               <ul className="text-foreground-secondary space-y-1 list-disc pl-4 text-[11px]">
                 <li>Crea los registros en existencias_producto si todavía no existen.</li>
-                <li>Registra un movimiento de tipo "INV_INICIAL" por cada producto.</li>
+                <li>Registra un movimiento de tipo &quot;INV_INICIAL&quot; por cada producto.</li>
                 <li>Actualiza las cantidades y el costo promedio de cada producto por almacén.</li>
                 <li>Deja un historial completo y auditable.</li>
               </ul>

@@ -38,6 +38,25 @@ const STATUS_FILTERS = {
   ENTREGADAS: "ENTREGADA"
 };
 
+const formatCreationDate = (dateValue) => {
+  if (!dateValue) return { datePart: "—", timePart: "" };
+  const d = new Date(dateValue);
+  if (isNaN(d.getTime())) return { datePart: "—", timePart: "" };
+  const datePart = d.toLocaleDateString("es-DO", {
+    timeZone: "America/Santo_Domingo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric"
+  });
+  const timePart = d.toLocaleTimeString("en-US", {
+    timeZone: "America/Santo_Domingo",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true
+  });
+  return { datePart, timePart };
+};
+
 export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onToggleKanban }) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -88,6 +107,7 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
 
   // Sync state with URL search params on mount & when URL params change
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDateFrom(urlFrom);
     setDateTo(urlTo);
     setSearch(urlSearch);
@@ -195,6 +215,7 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
   }, [dateFrom, dateTo, search, selectedEstado, selectedPrioridad, selectedMecanico, sortBy, sortOrder, page, urlFrom, urlTo, urlSearch, urlEstado, urlPrioridad, urlMecanico, urlSortBy, urlSortOrder]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchOrders();
   }, [fetchOrders]);
 
@@ -565,7 +586,7 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
             {search && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-500/15 border border-sky-500/30 text-sky-400 font-bold">
                 <Search size={12} />
-                Búsqueda: "{search}"
+                Búsqueda: &ldquo;{search}&rdquo;
                 <button onClick={() => removeFilter("search")} className="hover:text-white ml-0.5">
                   <X size={12} />
                 </button>
@@ -657,6 +678,16 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
                     </div>
                   </th>
                   <th
+                    onClick={() => handleSort("fecha")}
+                    aria-sort={sortBy === "fecha" ? (sortOrder === "asc" ? "ascending" : "descending") : "none"}
+                    className="py-3 px-4 cursor-pointer hover:text-white transition-colors group whitespace-nowrap"
+                  >
+                    <div className="inline-flex items-center gap-1.5">
+                      <span>FECHA CREACIÓN</span>
+                      {renderSortIcon("fecha")}
+                    </div>
+                  </th>
+                  <th
                     onClick={() => handleSort("cliente")}
                     aria-sort={sortBy === "cliente" ? (sortOrder === "asc" ? "ascending" : "descending") : "none"}
                     className="py-3 px-4 cursor-pointer hover:text-white transition-colors group"
@@ -704,6 +735,7 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
               <tbody className="divide-y divide-[#2d3748]">
                 {orders.map((order) => {
                   const targetId = order.orden_trabajo_id || order.orden_id;
+                  const { datePart, timePart } = formatCreationDate(order.fecha_creacion || order.fecha_registro || order.fecha_ingreso || order.fecha_recepcion);
                   return (
                     <tr
                       key={targetId}
@@ -715,6 +747,14 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
                           <span>{order.codigo_orden}</span>
                           {order.codigo_recepcion && (
                             <span className="text-[10px] text-slate-500">Rec: {order.codigo_recepcion}</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4 whitespace-nowrap font-mono text-xs">
+                        <div className="flex flex-col">
+                          <span className="font-semibold text-slate-200">{datePart}</span>
+                          {timePart && (
+                            <span className="text-[10px] text-slate-500">{timePart}</span>
                           )}
                         </div>
                       </td>

@@ -37,6 +37,7 @@ import {
   Calendar
 } from "lucide-react";
 import { validateRequiredText } from "@/lib/validations";
+import ProductCreateModal from "@/components/products/ProductCreateModal";
 
 export default function ProductsView() {
   const [data, setData] = useState([]);
@@ -69,6 +70,7 @@ export default function ProductsView() {
 
   // Drawer / Modal states
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [formData, setFormData] = useState({
     codigo_producto: "",
@@ -256,52 +258,31 @@ export default function ProductsView() {
   };
 
   const handleOpenDrawer = (item = null) => {
-    if (item) {
-      setEditingItem(item);
-      setProductDrawerTab("general");
-      setFormData({
-        codigo_producto: item.codigo_producto || "",
-        codigo_barra: item.codigo_barra || "",
-        nombre: item.nombre || "",
-        proveedor_id: item.proveedor_principal_id ? String(item.proveedor_principal_id) : "",
-        descripcion: item.descripcion || "",
-        tipo_producto_id: item.tipo_producto_id ? String(item.tipo_producto_id) : "",
-        categoria_producto_id: item.categoria_producto_id ? String(item.categoria_producto_id) : "",
-        marca_producto_id: item.marca_producto_id ? String(item.marca_producto_id) : "",
-        unidad_medida_id: item.unidad_medida_id ? String(item.unidad_medida_id) : "",
-        imagen_url: item.imagen_url || "",
-        costo_actual: item.costo_actual !== undefined ? item.costo_actual : 0,
-        precio_venta: item.precio_venta !== undefined ? item.precio_venta : 0,
-        stock_minimo: item.stock_minimo !== undefined ? item.stock_minimo : 0,
-        stock_maximo: item.stock_maximo !== null && item.stock_maximo !== undefined ? item.stock_maximo : "",
-        requiere_serial: Boolean(item.requiere_serial),
-        activo: item.activo !== false
-      });
-      loadProductSuppliers(item.id);
-    } else {
-      setEditingItem(null);
-      setProductDrawerTab("general");
-      setFormData({
-        codigo_producto: "",
-        codigo_barra: "",
-        nombre: "",
-        proveedor_id: "",
-        descripcion: "",
-        tipo_producto_id: lookups.tipos.length > 0 ? String(lookups.tipos[0].id) : "",
-        categoria_producto_id: lookups.categorias.length > 0 ? String(lookups.categorias[0].id) : "",
-        marca_producto_id: lookups.marcas.length > 0 ? String(lookups.marcas[0].id) : "",
-        unidad_medida_id: lookups.unidades.length > 0 ? String(lookups.unidades[0].id) : "",
-        imagen_url: "",
-        costo_actual: 0,
-        precio_venta: 0,
-        stock_minimo: 5,
-        stock_maximo: "",
-        requiere_serial: false,
-        activo: true
-      });
-      setProductSuppliers([]);
-      setAvailableSuppliers([]);
+    if (!item) {
+      setIsCreateModalOpen(true);
+      return;
     }
+    setEditingItem(item);
+    setProductDrawerTab("general");
+    setFormData({
+      codigo_producto: item.codigo_producto || "",
+      codigo_barra: item.codigo_barra || "",
+      nombre: item.nombre || "",
+      proveedor_id: item.proveedor_principal_id ? String(item.proveedor_principal_id) : "",
+      descripcion: item.descripcion || "",
+      tipo_producto_id: item.tipo_producto_id ? String(item.tipo_producto_id) : "",
+      categoria_producto_id: item.categoria_producto_id ? String(item.categoria_producto_id) : "",
+      marca_producto_id: item.marca_producto_id ? String(item.marca_producto_id) : "",
+      unidad_medida_id: item.unidad_medida_id ? String(item.unidad_medida_id) : "",
+      imagen_url: item.imagen_url || "",
+      costo_actual: item.costo_actual !== undefined ? item.costo_actual : 0,
+      precio_venta: item.precio_venta !== undefined ? item.precio_venta : 0,
+      stock_minimo: item.stock_minimo !== undefined ? item.stock_minimo : 0,
+      stock_maximo: item.stock_maximo !== null && item.stock_maximo !== undefined ? item.stock_maximo : "",
+      requiere_serial: Boolean(item.requiere_serial),
+      activo: item.activo !== false
+    });
+    loadProductSuppliers(item.id);
     setErrors({});
     setIsDrawerOpen(true);
   };
@@ -726,7 +707,7 @@ export default function ProductsView() {
 
         {permissions.puede_crear && (
           <button
-            onClick={() => handleOpenDrawer()}
+            onClick={() => setIsCreateModalOpen(true)}
             className="bg-primary hover:opacity-90 text-primary-foreground font-mono text-xs font-bold px-5 py-3 rounded-xl shadow-lg flex items-center gap-2 transition-all cursor-pointer self-start md:self-auto"
           >
             <Plus size={18} />
@@ -891,7 +872,7 @@ export default function ProductsView() {
             </p>
             {permissions.puede_crear && (
               <button
-                onClick={() => handleOpenDrawer()}
+                onClick={() => setIsCreateModalOpen(true)}
                 className="mt-3 px-4 py-2 bg-primary text-primary-foreground rounded-xl font-bold inline-flex items-center gap-2 cursor-pointer shadow"
               >
                 <Plus size={16} />
@@ -1160,10 +1141,10 @@ export default function ProductsView() {
                     </div>
                     <div>
                       <h2 className="font-mono text-base font-bold text-foreground">
-                        {editingItem ? "Editar Producto" : "Nuevo Producto en Catálogo"}
+                        Editar Producto
                       </h2>
                       <p className="font-mono text-xs text-foreground-muted">
-                        {editingItem ? `ID: ${editingItem.id} • SKU: ${editingItem.codigo_producto}` : "Maestro central de productos"}
+                        {editingItem ? `ID: ${editingItem.id} • SKU: ${editingItem.codigo_producto}` : "Edición integral de producto"}
                       </p>
                     </div>
                   </div>
@@ -1547,7 +1528,7 @@ export default function ProductsView() {
                     className="px-5 py-2.5 bg-primary text-primary-foreground font-bold rounded-xl shadow-lg flex items-center gap-2 cursor-pointer hover:opacity-90 disabled:opacity-50"
                   >
                     {isSaving ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
-                    <span>{isSaving ? "Guardando..." : editingItem ? "Actualizar" : "Crear Producto"}</span>
+                    <span>{isSaving ? "Guardando..." : "Guardar Cambios"}</span>
                   </button>
                 </div>
               </form>
@@ -1585,7 +1566,7 @@ export default function ProductsView() {
                       <div className="p-12 text-center text-foreground-muted flex flex-col items-center gap-2 border border-dashed border-border rounded-2xl">
                         <Truck size={28} className="opacity-30" />
                         <p className="text-xs font-semibold text-foreground">Este producto no tiene proveedores asociados.</p>
-                        <p className="text-[11px]">Haga clic en "+ Asociar Proveedor" para registrar su suplidor comercial.</p>
+                        <p className="text-[11px]">Haga clic en &quot;+ Asociar Proveedor&quot; para registrar su suplidor comercial.</p>
                       </div>
                     ) : (
                       <div className="border border-border rounded-xl overflow-hidden">
@@ -2094,6 +2075,15 @@ export default function ProductsView() {
         document.body
       )}
 
+      {/* Modal Reutilizable de Creación de Producto (Unificado para Catálogo y Entradas) */}
+      <ProductCreateModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onProductCreated={(newProd) => {
+          fetchData();
+          showToast(`Producto '${newProd?.nombre || newProd?.codigo_producto || ""}' registrado exitosamente.`);
+        }}
+      />
     </div>
   );
 }

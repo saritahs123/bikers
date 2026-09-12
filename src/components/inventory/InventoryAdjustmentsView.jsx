@@ -1,12 +1,11 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   Bike,
   Package,
-  TrendingDown,
-  TrendingUp,
   MinusCircle,
   PlusCircle,
   Calendar,
@@ -26,15 +25,36 @@ import {
   BarChart2,
   ExternalLink,
   MoreVertical,
-  Layers,
-  Tag,
-  DollarSign,
   AlertTriangle,
 } from "lucide-react";
 
-export default function InventoryAdjustmentsView() {
+function InventoryAdjustmentsContent() {
+  const searchParams = useSearchParams();
+  const queryTab = searchParams?.get("tab");
+
   // Tabs: "SALIDA" | "AJU_POS" | "AJU_NEG"
-  const [activeTab, setActiveTab] = useState("SALIDA");
+  const [activeTab, setActiveTab] = useState(() => {
+    if (!queryTab) return "SALIDA";
+    const t = queryTab.trim().toLowerCase();
+    if (t === "salida" || t === "sal_manual") return "SALIDA";
+    if (t === "aju_pos" || t === "positivo" || t === "ajuste_positivo") return "AJU_POS";
+    if (t === "aju_neg" || t === "negativo" || t === "ajuste_negativo") return "AJU_NEG";
+    return "SALIDA";
+  });
+
+  const prevQueryTabRef = useRef(queryTab);
+  useEffect(() => {
+    if (queryTab !== prevQueryTabRef.current) {
+      prevQueryTabRef.current = queryTab;
+      if (queryTab) {
+        const t = queryTab.trim().toLowerCase();
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        if (t === "salida" || t === "sal_manual") setActiveTab("SALIDA");
+        else if (t === "aju_pos" || t === "positivo" || t === "ajuste_positivo") setActiveTab("AJU_POS");
+        else if (t === "aju_neg" || t === "negativo" || t === "ajuste_negativo") setActiveTab("AJU_NEG");
+      }
+    }
+  }, [queryTab]);
 
   // Catálogos
   const [almacenes, setAlmacenes] = useState([]);
@@ -1769,5 +1789,19 @@ export default function InventoryAdjustmentsView() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function InventoryAdjustmentsView() {
+  return (
+    <Suspense
+      fallback={
+        <div className="p-8 text-center text-foreground-muted animate-pulse font-mono text-sm">
+          Cargando Salidas y Ajustes de Inventario...
+        </div>
+      }
+    >
+      <InventoryAdjustmentsContent />
+    </Suspense>
   );
 }

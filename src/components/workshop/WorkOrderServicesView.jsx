@@ -22,7 +22,6 @@ import {
   Search,
   ChevronDown,
   Warehouse,
-  PackageCheck,
   RotateCcw,
   History
 } from "lucide-react";
@@ -1281,62 +1280,6 @@ export default function WorkOrderServicesView({
     );
   };
 
-  const handleConsumeProduct = (prod) => {
-    if (!isOrderInRepair) {
-      if (orderStateCode === "LISTA_ENTREGA") {
-        showInfoToast(
-          "La orden está en estado Lista para Entrega. Reabre la reparación para consumir o gestionar repuestos.",
-          "ORDEN EN LISTA PARA ENTREGA",
-          6500
-        );
-      } else {
-        showInfoToast(
-          "La orden debe estar en Reparación para consumir repuestos.",
-          "ORDEN NO ESTÁ EN REPARACIÓN",
-          6500
-        );
-      }
-      return;
-    }
-    if (prod.utilizado === true) {
-      showInfoToast("Este repuesto ya fue consumido físicamente del inventario.", "REPUESTO YA CONSUMIDO", 5000);
-      return;
-    }
-
-    const prodName = prod.nombre || prod.producto_nombre || "Repuesto";
-    const almName = prod.almacen_nombre || `Almacén #${prod.almacen_id}`;
-    const qtyToConsume = parseFloat(prod.cantidad || "0") || 0;
-    const confirmMessage = `¿Confirmas el consumo físico de '${prodName}' (${qtyToConsume} u.) desde ${almName}? Esta acción descontará físicamente el inventario y marcará el repuesto como consumido de forma irreversible.`;
-
-    askConfirmation(
-      "Consumir Repuesto",
-      confirmMessage,
-      async () => {
-        try {
-          const res = await fetch(`/api/taller/ordenes/${ordenId}/productos/${prod.orden_producto_id}/consumir`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" }
-          });
-          const json = await res.json();
-          if (!res.ok) {
-            if (res.status === 409) {
-              showInfoToast(json.message || "No se puede consumir el repuesto en el estado actual.", "RESTRICCIÓN DE PROCESO", 6500);
-            } else {
-              showErrorToast(json.message || json.error || "No se pudo consumir el repuesto.");
-            }
-            return;
-          }
-          showSuccessToast(`Repuesto consumido físicamente del inventario. Movimiento: ${json.data?.codigo_movimiento || 'Registrado'}`);
-          invalidateKardexCache(prod.orden_producto_id);
-          if (onRefresh) onRefresh();
-        } catch (err) {
-          showErrorToast("Error de conexión al consumir el repuesto.");
-        }
-      },
-      "consume"
-    );
-  };
-
   const handleReverseProduct = (prod) => {
     if (!isOrderInRepair) {
       if (orderStateCode === "ENTREGADA") {
@@ -1833,8 +1776,8 @@ export default function WorkOrderServicesView({
                               <History className="w-3.5 h-3.5" />
                             </button>
 
-                            {/* Botón Consumir / Reversar */}
-                            {prod.utilizado === true ? (
+                            {/* Botón Reversar (solo si ya fue consumido y la orden se encuentra en reparación) */}
+                            {prod.utilizado === true && (
                               <button
                                 type="button"
                                 onClick={() => handleReverseProduct(prod)}
@@ -1848,21 +1791,6 @@ export default function WorkOrderServicesView({
                                 aria-label="Reversar consumo"
                               >
                                 <RotateCcw className="w-3.5 h-3.5" />
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => handleConsumeProduct(prod)}
-                                disabled={!isOrderInRepair}
-                                className={`p-1.5 rounded-lg border transition-colors ${
-                                  !isOrderInRepair
-                                    ? "opacity-30 cursor-not-allowed bg-slate-900 border-slate-800 text-slate-600"
-                                    : "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 cursor-pointer"
-                                }`}
-                                title={!isOrderInRepair ? "La orden debe estar en Reparación para consumir repuestos" : "Consumir repuesto físicamente"}
-                                aria-label="Consumir repuesto"
-                              >
-                                <PackageCheck className="w-3.5 h-3.5" />
                               </button>
                             )}
 
@@ -2938,16 +2866,12 @@ export default function WorkOrderServicesView({
               className={`px-5 py-2 font-bold text-slate-950 rounded-xl text-xs font-mono uppercase cursor-pointer ${
                 confirmModalType === "finish"
                   ? "bg-emerald-400 hover:bg-emerald-300"
-                  : confirmModalType === "consume"
-                  ? "bg-emerald-500 hover:bg-emerald-400 text-slate-950"
                   : confirmModalType === "reverse"
                   ? "bg-amber-500 hover:bg-amber-400 text-slate-950"
                   : "bg-rose-500 hover:bg-rose-400 text-white"
               }`}
             >
-              {confirmModalType === "consume"
-                ? "Consumir"
-                : confirmModalType === "reverse"
+              {confirmModalType === "reverse"
                 ? "Reversar"
                 : "Confirmar"}
             </button>
@@ -2956,7 +2880,7 @@ export default function WorkOrderServicesView({
       >
         <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl flex items-center gap-3">
           <div className={`p-2.5 rounded-xl shrink-0 ${
-            confirmModalType === "finish" || confirmModalType === "consume"
+            confirmModalType === "finish"
               ? "bg-emerald-500/20 text-emerald-400"
               : confirmModalType === "reverse"
               ? "bg-amber-500/20 text-amber-400"
@@ -2964,8 +2888,6 @@ export default function WorkOrderServicesView({
           }`}>
             {confirmModalType === "finish" ? (
               <CheckCircle2 className="w-5 h-5" />
-            ) : confirmModalType === "consume" ? (
-              <PackageCheck className="w-5 h-5" />
             ) : confirmModalType === "reverse" ? (
               <RotateCcw className="w-5 h-5" />
             ) : (
