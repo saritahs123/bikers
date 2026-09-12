@@ -48,8 +48,10 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
     estados_checklist: [],
     categorias_componente: [],
     estados_componente: [],
-    productos: []
+    productos: [],
+    almacenes: []
   });
+  const [selectedAlmacenId, setSelectedAlmacenId] = useState("");
   const [clients, setClients] = useState([]);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -184,8 +186,13 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
         estados_checklist: catObj.estados_checklist || [],
         categorias_componente: catObj.categorias_componente || [],
         estados_componente: catObj.estados_componente || [],
-        productos: catObj.productos || []
+        productos: catObj.productos || [],
+        almacenes: catObj.almacenes || []
       });
+
+      if (catObj.almacenes?.length > 0) {
+        setSelectedAlmacenId(String(catObj.almacenes[0].almacen_id));
+      }
 
       if (catObj.prioridades?.length > 0 && !prioridadId) {
         setPrioridadId(
@@ -576,8 +583,13 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
     const unitPriceFormatted = (isNaN(priceNum) || priceNum < 0 ? 0 : priceNum).toFixed(2);
 
     setItemsList((prev) => {
+      const activeAlmId = selectedAlmacenId ? Number(selectedAlmacenId) : (catalogs.almacenes?.[0]?.almacen_id || null);
+      const activeAlm = (catalogs.almacenes || []).find((a) => Number(a.almacen_id) === Number(activeAlmId));
+
       const existingIndex = prev.findIndex(
-        (i) => i.type === "producto" && Number(i.producto_id) === Number(prod.producto_id || prod.id)
+        (i) => i.type === "producto" &&
+               Number(i.producto_id) === Number(prod.producto_id || prod.id) &&
+               Number(i.almacen_id) === Number(activeAlmId)
       );
       if (existingIndex >= 0) {
         const updated = [...prev];
@@ -596,6 +608,9 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
         type: "producto",
         tempId: "prod_" + Date.now() + "_" + Math.random().toString(36).substring(2, 6),
         producto_id: Number(prod.producto_id || prod.id),
+        almacen_id: activeAlmId,
+        almacen_nombre: activeAlm?.nombre || null,
+        almacen_codigo: activeAlm?.codigo || null,
         nombre: prod.nombre || `Producto #${prod.producto_id || prod.id}`,
         codigo: prod.codigo || prod.codigo_producto || null,
         cantidad: 1,
@@ -914,6 +929,7 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
         })),
         productos: currentProductos.map((p) => ({
           producto_id: p.producto_id,
+          almacen_id: p.almacen_id || (selectedAlmacenId ? parseInt(selectedAlmacenId, 10) : undefined),
           cantidad: p.cantidad,
           precio_unitario: parseFloat(p.precio_unitario)
         })),
@@ -1426,13 +1442,33 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
 
                     {/* RIGHT: AGREGAR PRODUCTO */}
                     <div className="p-3.5 bg-surface border border-lime-500/20 rounded-xl space-y-2.5">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-lg bg-lime-500/10 border border-lime-500/30 flex items-center justify-center text-lime-400 shrink-0">
-                          <Package size={13} />
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-lg bg-lime-500/10 border border-lime-500/30 flex items-center justify-center text-lime-400 shrink-0">
+                            <Package size={13} />
+                          </div>
+                          <span className="text-xs font-bold text-foreground">
+                            Agregar Producto
+                          </span>
                         </div>
-                        <span className="text-xs font-bold text-foreground">
-                          Agregar Producto
-                        </span>
+                        {catalogs.almacenes && catalogs.almacenes.length > 1 && (
+                          <div className="flex items-center gap-1.5">
+                            <label className="text-[10px] text-foreground-muted font-mono whitespace-nowrap">
+                              Almacén:
+                            </label>
+                            <select
+                              value={selectedAlmacenId}
+                              onChange={(e) => setSelectedAlmacenId(e.target.value)}
+                              className="px-2 py-0.5 bg-card border border-border rounded-lg text-[11px] text-foreground font-mono focus:outline-none focus:border-primary cursor-pointer"
+                            >
+                              {catalogs.almacenes.map((alm) => (
+                                <option key={alm.almacen_id} value={alm.almacen_id}>
+                                  {alm.codigo} — {alm.nombre}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
                       </div>
 
                       <div className="relative" ref={productComboboxRef}>
@@ -1563,10 +1599,15 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
                                     <p className="font-bold text-foreground text-xs">
                                       {isService ? item.nombre_servicio : item.nombre}
                                     </p>
-                                    <p className="text-[10px] text-foreground-muted font-mono">
+                                    <p className="text-[10px] text-foreground-muted font-mono flex items-center gap-1.5 flex-wrap">
                                       {isService
                                         ? (item.codigo ? `Código: ${item.codigo}` : "Servicio confirmado")
                                         : (item.codigo ? `Código: ${item.codigo}` : "Producto / Repuesto")}
+                                      {!isService && item.almacen_nombre && (
+                                        <span className="text-[9px] px-1.5 py-0.2 bg-surface border border-border rounded text-primary font-bold">
+                                          {item.almacen_codigo || "ALM"}: {item.almacen_nombre}
+                                        </span>
+                                      )}
                                     </p>
                                   </td>
                                   <td className="py-3 px-3 text-center font-mono">
