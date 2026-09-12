@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import {
@@ -21,12 +21,17 @@ import {
   Info,
   Search,
   ChevronDown,
-  Truck,
-  Clock,
-  ShieldCheck,
-  ClipboardCheck
+  Warehouse,
+  PackageCheck,
+  RotateCcw,
+  History
 } from "lucide-react";
 import { getServiceStateRules } from "@/lib/workshop-state-machine";
+
+const emptySubscribe = () => () => {};
+function useIsMounted() {
+  return useSyncExternalStore(emptySubscribe, () => true, () => false);
+}
 
 // PORTAL MODAL SHELL (Directly rendered to document.body)
 function WorkshopItemModalShell({
@@ -38,11 +43,7 @@ function WorkshopItemModalShell({
   footer,
   maxWidth = "760px"
 }) {
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = useIsMounted();
 
   useEffect(() => {
     if (!open) return;
@@ -147,6 +148,8 @@ export default function WorkOrderServicesView({
 
   const [tiposServicio, setTiposServicio] = useState([]);
   const [productosList, setProductosList] = useState([]);
+  const [almacenesList, setAlmacenesList] = useState([]);
+  const [existenciasList, setExistenciasList] = useState([]);
   const [mecanicosCatalog, setMecanicosCatalog] = useState([]);
   const [estadosComponenteCatalog, setEstadosComponenteCatalog] = useState([]);
   const [categoriasComponenteCatalog, setCategoriasComponenteCatalog] = useState([]);
@@ -159,7 +162,7 @@ export default function WorkOrderServicesView({
   ]);
 
   // Global Timer Reference Timestamp (updates every second)
-  const [nowTimestamp, setNowTimestamp] = useState(Date.now());
+  const [nowTimestamp, setNowTimestamp] = useState(() => Date.now());
 
   // Global 1-second Interval Ticker
   useEffect(() => {
@@ -173,6 +176,26 @@ export default function WorkOrderServicesView({
   const [itemModalOpen, setItemModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
+
+  // Kardex History Modal States (INV-TALLER-5)
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [historyProduct, setHistoryProduct] = useState(null);
+  const [historyData, setHistoryData] = useState(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState(null);
+  const kardexCacheRef = useRef(new Map());
+
+  const invalidateKardexCache = (ordenProductoId) => {
+    if (ordenProductoId) {
+      kardexCacheRef.current.delete(Number(ordenProductoId));
+    } else {
+      kardexCacheRef.current.clear();
+    }
+  };
+
+  useEffect(() => {
+    kardexCacheRef.current.clear();
+  }, [ordenId]);
 
   // Unified Item Modal Form States
   const [itemType, setItemType] = useState("SERVICIO"); // "SERVICIO" | "PRODUCTO"
@@ -190,12 +213,62 @@ export default function WorkOrderServicesView({
   const [formBicicletaComponenteId, setFormBicicletaComponenteId] = useState("");
   const [formNuevoEstadoComponenteId, setFormNuevoEstadoComponenteId] = useState("");
   const [formProductoId, setFormProductoId] = useState("");
+  const [formAlmacenId, setFormAlmacenId] = useState("");
   const [formCantidad, setFormCantidad] = useState("1");
   const [formPrecioUnitario, setFormPrecioUnitario] = useState("");
   const [formDescuentoPct, setFormDescuentoPct] = useState("0");
   const [formObservaciones, setFormObservaciones] = useState("");
   const [formConfirmAdicional, setFormConfirmAdicional] = useState(false);
   const [formMotivoAdicional, setFormMotivoAdicional] = useState("");
+
+  // Live warehouse stock calculation strictly per selected warehouse (INV-TALLER-1 & INV-TALLER-2)
+  const currentWarehouseStock = useMemo(() => {
+    if (!formProductoId || !formAlmacenId) return null;
+    const match = (existenciasList || []).find(
+      (e) => String(e.producto_id) === String(formProductoId) && String(e.almacen_id) === String(formAlmacenId)
+    );
+    const stockActual = Number(match?.cantidad_actual ?? 0);
+    const reservado = Number(match?.cantidad_reservada ?? 0);
+    const disponible = Number(match?.cantidad_disponible ?? (stockActual - reservado));
+    const qtySolicitada = parseFloat(formCantidad || "0") || 0;
+
+    let prevQty = 0;
+    let delta = qtySolicitada;
+    let disponibleProyectado = disponible - qtySolicitada;
+    let isInsufficient = qtySolicitada > disponible;
+    let actionType = "CREAR";
+
+    if (isEditing && itemType === "PRODUCTO" && editingItem) {
+      prevQty = parseFloat(editingItem.cantidad || "0") || 0;
+      delta = qtySolicitada - prevQty;
+      if (delta > 0) {
+        actionType = "AUMENTO";
+        disponibleProyectado = disponible - delta;
+        isInsufficient = delta > disponible;
+      } else if (delta < 0) {
+        actionType = "REDUCCION";
+        disponibleProyectado = disponible + Math.abs(delta);
+        isInsufficient = false;
+      } else {
+        actionType = "SIN_CAMBIO";
+        disponibleProyectado = disponible;
+        isInsufficient = false;
+      }
+    }
+
+    return {
+      stockActual,
+      reservado,
+      disponible,
+      qtySolicitada,
+      prevQty,
+      delta,
+      actionType,
+      disponibleProyectado,
+      isInsufficient,
+      hasRecord: Boolean(match)
+    };
+  }, [formProductoId, formAlmacenId, existenciasList, formCantidad, isEditing, itemType, editingItem]);
 
   // Bike Component Loading States
   const [bicycleComponents, setBicycleComponents] = useState([]);
@@ -278,6 +351,8 @@ export default function WorkOrderServicesView({
           const cData = await catalogosRes.json();
           setTiposServicio(cData.tipos_servicio || cData.data?.tipos_servicio || []);
           setProductosList(cData.productos || cData.data?.productos || []);
+          setAlmacenesList(cData.almacenes || cData.data?.almacenes || []);
+          setExistenciasList(cData.existencias || cData.data?.existencias || []);
           setMecanicosCatalog(cData.mecanicos || cData.data?.mecanicos || []);
           setEstadosComponenteCatalog(cData.estados_componente || cData.data?.estados_componente || []);
           setCategoriasComponenteCatalog(cData.categorias_componente || cData.data?.categorias_componente || []);
@@ -397,16 +472,14 @@ export default function WorkOrderServicesView({
   const allCategoriesRegistered = (categoriasComponenteCatalog || []).length > 0 && availableCategoriesCount === 0;
 
   useEffect(() => {
-    if (!itemModalOpen || itemType !== "SERVICIO") {
-      setShowInlineComponentForm(false);
-      setNewComponentErrors({});
-      return;
-    }
+    if (!itemModalOpen || itemType !== "SERVICIO") return;
 
     const controller = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchBikeComponents(controller.signal);
 
     return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemModalOpen, itemType, orderBicycleId]);
 
   // Derived Permission & Visibility Flags
@@ -594,6 +667,7 @@ export default function WorkOrderServicesView({
     setFormBicicletaComponenteId("");
     setFormNuevoEstadoComponenteId("");
     setFormProductoId("");
+    setFormAlmacenId(almacenesList.length > 0 ? String(almacenesList[0].almacen_id) : "");
     setFormCantidad("1");
     setFormPrecioUnitario("");
     setFormDescuentoPct("0");
@@ -612,7 +686,13 @@ export default function WorkOrderServicesView({
   // Open Unified Modal for Edit Item
   const handleOpenEditItem = (item, type = "SERVICIO") => {
     const isService = String(type || "").trim().toUpperCase() === "SERVICIO" || String(type || "").trim().toUpperCase() === "SERVICE";
-    if (!isService && !isOrderInRepair) return;
+    if (!isService) {
+      if (!isOrderInRepair) return;
+      if (item.utilizado === true) {
+        showInfoToast("No se puede editar un repuesto que ya fue consumido.", "REPUESTO YA CONSUMIDO", 5000);
+        return;
+      }
+    }
 
     const normalizedEditingItem = isService ? {
       ...item,
@@ -655,6 +735,7 @@ export default function WorkOrderServicesView({
       setFormObservaciones(item.observacion_tecnica || item.observaciones || "");
     } else {
       setFormProductoId(String(item.producto_id || ""));
+      setFormAlmacenId(item.almacen_id ? String(item.almacen_id) : (almacenesList.length > 0 ? String(almacenesList[0].almacen_id) : ""));
       setFormCantidad(String(item.cantidad || "1"));
       setFormPrecioUnitario(String(item.precio_unitario || ""));
       setFormDescuentoPct(String(item.porcentaje_descuento || "0"));
@@ -849,15 +930,19 @@ export default function WorkOrderServicesView({
           return;
         }
 
-        // Validate stock available
-        const selectedProd = productosList.find(p => String(p.producto_id) === String(formProductoId));
-        if (selectedProd && selectedProd.stock_disponible !== undefined) {
-          const stock = Number(selectedProd.stock_disponible);
-          if (parsedQty > stock) {
-            setModalError(`La cantidad solicitada (${parsedQty}) supera la existencia disponible (${stock} ${selectedProd.unidad_medida || "UND"}).`);
-            setSubmitting(false);
-            return;
-          }
+        if (!formAlmacenId) {
+          setModalError("Debes seleccionar un almacén para reservar el repuesto.");
+          setSubmitting(false);
+          return;
+        }
+
+        // Validate stock available strictly in the selected warehouse (INV-TALLER-1 & INV-TALLER-2)
+        if (currentWarehouseStock?.isInsufficient) {
+          const almName = almacenesList.find(a => String(a.almacen_id) === String(formAlmacenId))?.nombre || "seleccionado";
+          const deltaMsg = currentWarehouseStock.delta > 0 ? ` (+${currentWarehouseStock.delta} adicional)` : "";
+          setModalError(`Stock insuficiente en el almacén ${almName}. Disponible: ${currentWarehouseStock.disponible}, Solicitado${deltaMsg}: ${currentWarehouseStock.qtySolicitada}`);
+          setSubmitting(false);
+          return;
         }
 
         const url = isEditing
@@ -865,11 +950,17 @@ export default function WorkOrderServicesView({
           : `/api/taller/ordenes/${ordenId}/productos`;
         const method = isEditing ? "PUT" : "POST";
 
-        const payload = {
-          producto_id: parseInt(formProductoId, 10),
-          cantidad: parsedQty,
-          observacion: formObservaciones
-        };
+        const payload = isEditing
+          ? {
+              cantidad: parsedQty,
+              observacion: formObservaciones
+            }
+          : {
+              producto_id: parseInt(formProductoId, 10),
+              almacen_id: parseInt(formAlmacenId, 10),
+              cantidad: parsedQty,
+              observacion: formObservaciones
+            };
 
         const res = await fetch(url, {
           method,
@@ -889,7 +980,15 @@ export default function WorkOrderServicesView({
         });
 
         if (!res.ok || json?.success === false) {
-          setModalError(json?.message || json?.error || `No fue posible guardar el repuesto. HTTP ${res.status}`);
+          if (res.status === 409 || json?.error === "STOCK_INSUFICIENTE") {
+            const msg = json?.message || "Stock insuficiente en el almacén seleccionado para autorizar la reserva.";
+            const details = json?.cantidadDisponible !== undefined
+              ? ` (Stock: ${json.stockActual}, Reservado: ${json.cantidadReservada}, Disponible: ${json.cantidadDisponible}, Solicitado: ${json.cantidadSolicitada})`
+              : "";
+            setModalError(`${msg}${details}`);
+          } else {
+            setModalError(json?.message || json?.error || `No fue posible guardar el repuesto. HTTP ${res.status}`);
+          }
           setSubmitting(false);
           return;
         }
@@ -900,6 +999,10 @@ export default function WorkOrderServicesView({
           setModalError("Error contractual: La API no devolvió un ID de repuesto válido.");
           setSubmitting(false);
           return;
+        }
+
+        if (isEditing && itemType === "PRODUCTO" && editingItem?.orden_producto_id) {
+          invalidateKardexCache(editingItem.orden_producto_id);
         }
       }
 
@@ -1136,9 +1239,18 @@ export default function WorkOrderServicesView({
       }
       return;
     }
+    if (prod.utilizado === true) {
+      showInfoToast("No se puede eliminar un repuesto que ya ha sido consumido.", "REPUESTO YA CONSUMIDO", 5000);
+      return;
+    }
+
+    const prodName = prod.nombre || prod.producto_nombre || "Repuesto";
+    const qtyReserved = parseFloat(prod.cantidad || "0") || 0;
+    const confirmMessage = `¿Deseas eliminar el repuesto '${prodName}' de esta orden? Se liberarán ${qtyReserved} unidades reservadas en inventario.`;
+
     askConfirmation(
       "Eliminar Repuesto",
-      `¿Deseas eliminar el repuesto '${prod.nombre || prod.producto_nombre}' de esta orden?`,
+      confirmMessage,
       async () => {
         try {
           const res = await fetch(`/api/taller/ordenes/${ordenId}/productos/${prod.orden_producto_id}`, {
@@ -1154,6 +1266,7 @@ export default function WorkOrderServicesView({
             return;
           }
           showSuccessToast("Repuesto eliminado de la orden.");
+          invalidateKardexCache(prod.orden_producto_id);
           if (onRefresh) onRefresh();
         } catch (err) {
           showErrorToast("Error de conexión al eliminar el repuesto.");
@@ -1161,6 +1274,161 @@ export default function WorkOrderServicesView({
       },
       "delete"
     );
+  };
+
+  const handleConsumeProduct = (prod) => {
+    if (!isOrderInRepair) {
+      if (orderStateCode === "LISTA_ENTREGA") {
+        showInfoToast(
+          "La orden está en estado Lista para Entrega. Reabre la reparación para consumir o gestionar repuestos.",
+          "ORDEN EN LISTA PARA ENTREGA",
+          6500
+        );
+      } else {
+        showInfoToast(
+          "La orden debe estar en Reparación para consumir repuestos.",
+          "ORDEN NO ESTÁ EN REPARACIÓN",
+          6500
+        );
+      }
+      return;
+    }
+    if (prod.utilizado === true) {
+      showInfoToast("Este repuesto ya fue consumido físicamente del inventario.", "REPUESTO YA CONSUMIDO", 5000);
+      return;
+    }
+
+    const prodName = prod.nombre || prod.producto_nombre || "Repuesto";
+    const almName = prod.almacen_nombre || `Almacén #${prod.almacen_id}`;
+    const qtyToConsume = parseFloat(prod.cantidad || "0") || 0;
+    const confirmMessage = `¿Confirmas el consumo físico de '${prodName}' (${qtyToConsume} u.) desde ${almName}? Esta acción descontará físicamente el inventario y marcará el repuesto como consumido de forma irreversible.`;
+
+    askConfirmation(
+      "Consumir Repuesto",
+      confirmMessage,
+      async () => {
+        try {
+          const res = await fetch(`/api/taller/ordenes/${ordenId}/productos/${prod.orden_producto_id}/consumir`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" }
+          });
+          const json = await res.json();
+          if (!res.ok) {
+            if (res.status === 409) {
+              showInfoToast(json.message || "No se puede consumir el repuesto en el estado actual.", "RESTRICCIÓN DE PROCESO", 6500);
+            } else {
+              showErrorToast(json.message || json.error || "No se pudo consumir el repuesto.");
+            }
+            return;
+          }
+          showSuccessToast(`Repuesto consumido físicamente del inventario. Movimiento: ${json.data?.codigo_movimiento || 'Registrado'}`);
+          invalidateKardexCache(prod.orden_producto_id);
+          if (onRefresh) onRefresh();
+        } catch (err) {
+          showErrorToast("Error de conexión al consumir el repuesto.");
+        }
+      },
+      "consume"
+    );
+  };
+
+  const handleReverseProduct = (prod) => {
+    if (!isOrderInRepair) {
+      if (orderStateCode === "ENTREGADA") {
+        showInfoToast(
+          "La orden se encuentra en estado ENTREGADA. Está en modo de solo lectura permanente.",
+          "ORDEN ENTREGADA",
+          6500
+        );
+      } else {
+        showInfoToast(
+          "La orden debe estar en Reparación para reversar consumos de repuestos.",
+          "ORDEN NO ESTÁ EN REPARACIÓN",
+          6500
+        );
+      }
+      return;
+    }
+    if (prod.utilizado !== true) {
+      showInfoToast("Este repuesto no se encuentra en estado consumido.", "REPUESTO NO CONSUMIDO", 5000);
+      return;
+    }
+
+    const prodName = prod.nombre || prod.producto_nombre || "Repuesto";
+    const almName = prod.almacen_nombre || `Almacén #${prod.almacen_id}`;
+    const qty = parseFloat(prod.cantidad || "0") || 0;
+    const refOt = orderCode || `#${ordenId}`;
+
+    const confirmMessage = `Producto: ${prodName}\nAlmacén: ${almName}\nCantidad: ${qty} u.\nReferencia OT: ${refOt}\n\nEsta acción devolverá el repuesto al inventario y restaurará su reserva en la orden.`;
+
+    askConfirmation(
+      "Reversar Consumo de Repuesto",
+      confirmMessage,
+      async () => {
+        try {
+          const res = await fetch(`/api/taller/ordenes/${ordenId}/productos/${prod.orden_producto_id}/reversar`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" }
+          });
+          const json = await res.json();
+          if (!res.ok) {
+            if (res.status === 409) {
+              showInfoToast(json.message || "No se puede reversar el consumo en el estado actual.", "RESTRICCIÓN DE PROCESO", 6500);
+            } else {
+              showErrorToast(json.message || json.error || "No se pudo reversar el consumo.");
+            }
+            return;
+          }
+          showSuccessToast(`Consumo revertido exitosamente. Repuesto reingresado a inventario y reserva restaurada. Movimiento: ${json.data?.codigo_movimiento || 'Registrado'}`);
+          invalidateKardexCache(prod.orden_producto_id);
+          if (onRefresh) onRefresh();
+        } catch (err) {
+          showErrorToast("Error de conexión al reversar el consumo.");
+        }
+      },
+      "reverse"
+    );
+  };
+
+  const fetchProductHistory = async (prod, forceRefresh = false) => {
+    if (!prod?.orden_producto_id) return;
+    const opId = Number(prod.orden_producto_id);
+
+    if (!forceRefresh && kardexCacheRef.current.has(opId)) {
+      setHistoryData(kardexCacheRef.current.get(opId));
+      setHistoryLoading(false);
+      setHistoryError(null);
+      return;
+    }
+
+    setHistoryLoading(true);
+    setHistoryError(null);
+
+    try {
+      const res = await fetch(`/api/taller/ordenes/${ordenId}/productos/${opId}/movimientos`);
+      const json = await res.json();
+
+      if (!res.ok || !json.success) {
+        throw new Error(json.message || json.error || `Error ${res.status}: No se pudo consultar el historial.`);
+      }
+
+      kardexCacheRef.current.set(opId, json.data);
+      setHistoryData(json.data);
+      setHistoryError(null);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Error de conexión al consultar el historial.";
+      setHistoryError(msg);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const handleOpenProductHistory = (prod) => {
+    setHistoryProduct(prod);
+    setHistoryData(null);
+    setHistoryError(null);
+    setHistoryModalOpen(true);
+    fetchProductHistory(prod, false);
   };
 
   const activeServices = (services || []).filter((s) => s.activo !== false);
@@ -1499,10 +1767,16 @@ export default function WorkOrderServicesView({
 
                         {/* Tipo / Descripción */}
                         <td className="p-3.5">
-                          <div className="font-bold text-slate-100 font-sans text-xs flex items-center gap-2">
+                          <div className="font-bold text-slate-100 font-sans text-xs flex items-center gap-2 flex-wrap">
                             <Package className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
                             <span>{prod.nombre || prod.producto_nombre || "Repuesto"}</span>
                             <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 font-mono">REPUESTO</span>
+                            {prod.almacen_nombre && (
+                              <span className="px-1.5 py-0.5 text-[9px] font-medium rounded bg-slate-800 text-slate-300 border border-slate-700 font-mono flex items-center gap-1">
+                                <Warehouse className="w-2.5 h-2.5 text-cyan-400" />
+                                {prod.almacen_nombre}
+                              </span>
+                            )}
                           </div>
                           <div className="text-[11px] text-slate-400 font-sans mt-0.5">
                             Cant: <strong>{prodQty}</strong> • Unit: RD$ {prodPrice.toLocaleString("es-DO", { minimumFractionDigits: 2 })}
@@ -1513,8 +1787,18 @@ export default function WorkOrderServicesView({
                         {/* Componente Afectado */}
                         <td className="p-3.5 whitespace-nowrap text-slate-500 text-xs italic">No aplica</td>
 
-                        {/* Estado del Servicio */}
-                        <td className="p-3.5 whitespace-nowrap text-slate-500 text-xs text-center">—</td>
+                        {/* Estado del Servicio / Repuesto */}
+                        <td className="p-3.5 whitespace-nowrap text-xs text-center">
+                          {prod.utilizado ? (
+                            <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-mono">
+                              Consumido
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded bg-amber-500/10 text-amber-400 border border-amber-500/30 font-mono">
+                              Reservado
+                            </span>
+                          )}
+                        </td>
 
                         {/* Precio Subtotal */}
                         <td className="p-3.5 text-right font-bold text-slate-100 whitespace-nowrap">
@@ -1530,33 +1814,80 @@ export default function WorkOrderServicesView({
                         {/* Tiempo Transcurrido */}
                         <td className="p-3.5 text-center text-slate-500 whitespace-nowrap text-xs">—</td>
 
-                        {/* Actions (Edit / Delete Product) */}
+                        {/* Actions (Consume / Edit / Delete Product) */}
                         <td className="p-3.5 pr-4 text-center whitespace-nowrap">
                           <div className="flex items-center justify-center gap-1.5">
+                            {/* Botón Historial de Inventario (Kardex) */}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenProductHistory(prod)}
+                              className="p-1.5 rounded-lg border transition-colors bg-cyan-500/10 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 cursor-pointer"
+                              title="Ver historial de inventario (Kardex)"
+                              aria-label="Ver historial de inventario"
+                            >
+                              <History className="w-3.5 h-3.5" />
+                            </button>
+
+                            {/* Botón Consumir / Reversar */}
+                            {prod.utilizado === true ? (
+                              <button
+                                type="button"
+                                onClick={() => handleReverseProduct(prod)}
+                                disabled={!isOrderInRepair}
+                                className={`p-1.5 rounded-lg border transition-colors ${
+                                  !isOrderInRepair
+                                    ? "opacity-30 cursor-not-allowed bg-slate-900 border-slate-800 text-slate-600"
+                                    : "bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20 cursor-pointer"
+                                }`}
+                                title={!isOrderInRepair ? "La orden debe estar en Reparación para reversar consumo" : "Reversar consumo y restaurar reserva"}
+                                aria-label="Reversar consumo"
+                              >
+                                <RotateCcw className="w-3.5 h-3.5" />
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleConsumeProduct(prod)}
+                                disabled={!isOrderInRepair}
+                                className={`p-1.5 rounded-lg border transition-colors ${
+                                  !isOrderInRepair
+                                    ? "opacity-30 cursor-not-allowed bg-slate-900 border-slate-800 text-slate-600"
+                                    : "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 cursor-pointer"
+                                }`}
+                                title={!isOrderInRepair ? "La orden debe estar en Reparación para consumir repuestos" : "Consumir repuesto físicamente"}
+                                aria-label="Consumir repuesto"
+                              >
+                                <PackageCheck className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+
+                            {/* Botón Editar */}
                             <button
                               type="button"
                               onClick={() => handleOpenEditItem(prod, "PRODUCTO")}
-                              disabled={!isOrderInRepair}
-                              className={`p-1.5 bg-slate-800 text-slate-300 rounded-lg border border-slate-700 transition-colors ${
-                                !isOrderInRepair
-                                  ? "opacity-40 cursor-not-allowed"
-                                  : "hover:bg-slate-700 cursor-pointer"
+                              disabled={!isOrderInRepair || prod.utilizado === true}
+                              className={`p-1.5 rounded-lg border transition-colors ${
+                                !isOrderInRepair || prod.utilizado === true
+                                  ? "opacity-30 cursor-not-allowed bg-slate-900 border-slate-800 text-slate-600"
+                                  : "bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700 cursor-pointer"
                               }`}
-                              title="Editar repuesto"
+                              title={prod.utilizado === true ? "Repuesto consumido - No puede ser editado" : !isOrderInRepair ? "La orden debe estar en Reparación" : "Editar repuesto"}
                               aria-label="Editar repuesto"
                             >
                               <Pencil className="w-3.5 h-3.5" />
                             </button>
+
+                            {/* Botón Eliminar */}
                             <button
                               type="button"
                               onClick={() => handleDeleteProduct(prod)}
-                              disabled={!isOrderInRepair}
-                              className={`p-1.5 bg-rose-500/10 border border-rose-500/30 text-rose-400 rounded-lg transition-colors ${
-                                !isOrderInRepair
-                                  ? "opacity-40 cursor-not-allowed"
-                                  : "hover:bg-rose-500/20 cursor-pointer"
+                              disabled={!isOrderInRepair || prod.utilizado === true}
+                              className={`p-1.5 rounded-lg border transition-colors ${
+                                !isOrderInRepair || prod.utilizado === true
+                                  ? "opacity-30 cursor-not-allowed bg-slate-900 border-slate-800 text-slate-600"
+                                  : "bg-rose-500/10 border-rose-500/30 text-rose-400 hover:bg-rose-500/20 cursor-pointer"
                               }`}
-                              title="Eliminar repuesto"
+                              title={prod.utilizado === true ? "Repuesto consumido - No puede ser eliminado" : !isOrderInRepair ? "La orden debe estar en Reparación" : "Eliminar repuesto"}
                               aria-label="Eliminar repuesto"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -1624,7 +1955,7 @@ export default function WorkOrderServicesView({
               <button
                 type="submit"
                 form="workshop-item-form"
-                disabled={submitting}
+                disabled={submitting || (itemType === "PRODUCTO" && (!formAlmacenId || !formProductoId || Boolean(currentWarehouseStock?.isInsufficient)))}
                 className="px-5 py-2 bg-[#bfce7f] hover:bg-[#aab86e] text-slate-950 font-bold rounded-xl text-xs shadow-lg transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 font-mono uppercase"
               >
                 {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -2299,18 +2630,179 @@ export default function WorkOrderServicesView({
                             </p>
                           </div>
                         </div>
-                        <button
-                          type="button"
-                          onClick={handleClearProductCombobox}
-                          className="p-1 text-slate-400 hover:text-rose-400 hover:bg-rose-950/30 rounded-lg transition-colors cursor-pointer shrink-0 ml-1"
-                          title="Cambiar repuesto"
-                        >
-                          <X size={14} />
-                        </button>
+                        {!isEditing ? (
+                          <button
+                            type="button"
+                            onClick={handleClearProductCombobox}
+                            className="p-1 text-slate-400 hover:text-rose-400 hover:bg-rose-950/30 rounded-lg transition-colors cursor-pointer shrink-0 ml-1"
+                            title="Cambiar repuesto"
+                          >
+                            <X size={14} />
+                          </button>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded bg-slate-900 text-slate-400 text-[10px] font-mono border border-slate-800 shrink-0 ml-1">
+                            Fijo en reserva
+                          </span>
+                        )}
                       </div>
                     );
                   })()}
                 </div>
+
+                {/* ALMACÉN SELECTOR (INV-TALLER-1 & INV-TALLER-2) */}
+                <div className="md:col-span-2">
+                  <label className="text-[11px] text-slate-400 block mb-1 font-semibold uppercase flex items-center gap-1.5">
+                    <Warehouse className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Almacén de Reserva *</span>
+                  </label>
+                  <select
+                    disabled={isEditing}
+                    value={formAlmacenId}
+                    onChange={(e) => setFormAlmacenId(e.target.value)}
+                    className={`w-full min-w-0 bg-slate-950 border rounded-xl px-3 py-2 text-xs font-mono transition-colors ${
+                      isEditing
+                        ? "border-slate-800/80 text-slate-400 cursor-not-allowed opacity-80"
+                        : "border-slate-800 text-slate-200 focus:outline-none focus:border-cyan-400"
+                    }`}
+                  >
+                    <option value="">-- Seleccionar almacén --</option>
+                    {almacenesList.map((alm) => (
+                      <option key={alm.almacen_id} value={alm.almacen_id}>
+                        {alm.nombre} ({alm.codigo})
+                      </option>
+                    ))}
+                  </select>
+                  {isEditing && (
+                    <p className="text-[10px] text-slate-500 mt-1 font-mono">El almacén no puede modificarse en una reserva existente.</p>
+                  )}
+                </div>
+
+                {/* LIVE WAREHOUSE STOCK BREAKDOWN PANEL (INV-TALLER-1 & INV-TALLER-2) */}
+                {formProductoId && formAlmacenId && currentWarehouseStock && (
+                  <div className={`md:col-span-2 p-3 rounded-xl border text-xs font-mono transition-all ${
+                    currentWarehouseStock.isInsufficient
+                      ? "bg-rose-950/20 border-rose-500/40 text-rose-300"
+                      : "bg-slate-950/70 border-slate-800 text-slate-300"
+                  }`}>
+                    <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800/80">
+                      <span className="font-semibold text-slate-400 text-[10px] uppercase tracking-wider flex items-center gap-1.5">
+                        <Warehouse className="w-3 h-3 text-cyan-400" />
+                        {isEditing ? "Ajuste de Reserva en Almacén" : "Disponibilidad en Almacén Seleccionado"}
+                      </span>
+                      {isEditing ? (
+                        currentWarehouseStock.actionType === "AUMENTO" ? (
+                          currentWarehouseStock.isInsufficient ? (
+                            <span className="px-2 py-0.5 rounded bg-rose-500/20 text-rose-400 text-[10px] font-bold border border-rose-500/30">
+                              Stock Insuficiente (+{currentWarehouseStock.delta})
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-bold border border-amber-500/30">
+                              Aumento de Reserva (+{currentWarehouseStock.delta})
+                            </span>
+                          )
+                        ) : currentWarehouseStock.actionType === "REDUCCION" ? (
+                          <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[10px] font-bold border border-emerald-500/30">
+                            Liberación de Reserva ({currentWarehouseStock.delta})
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px] font-bold border border-slate-700">
+                            Sin Cambio en Reserva (0)
+                          </span>
+                        )
+                      ) : (
+                        currentWarehouseStock.isInsufficient ? (
+                          <span className="px-2 py-0.5 rounded bg-rose-500/20 text-rose-400 text-[10px] font-bold border border-rose-500/30">
+                            Stock Insuficiente
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[10px] font-bold border border-emerald-500/30">
+                            Disponible
+                          </span>
+                        )
+                      )}
+                    </div>
+
+                    {isEditing ? (
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-[11px]">
+                        <div className="bg-slate-900/60 p-1.5 rounded-lg border border-slate-800">
+                          <p className="text-[9px] text-slate-400 uppercase">Cant. Actual</p>
+                          <p className="font-bold text-slate-200 mt-0.5">{currentWarehouseStock.prevQty}</p>
+                        </div>
+                        <div className="bg-slate-900/60 p-1.5 rounded-lg border border-slate-800">
+                          <p className="text-[9px] text-slate-400 uppercase">Cant. Nueva</p>
+                          <p className="font-bold text-slate-100 mt-0.5">{currentWarehouseStock.qtySolicitada}</p>
+                        </div>
+                        <div className="bg-slate-900/60 p-1.5 rounded-lg border border-slate-800">
+                          <p className="text-[9px] text-slate-400 uppercase">Diferencia</p>
+                          <p className={`font-bold mt-0.5 ${currentWarehouseStock.delta > 0 ? "text-amber-400" : currentWarehouseStock.delta < 0 ? "text-emerald-400" : "text-slate-400"}`}>
+                            {currentWarehouseStock.delta > 0 ? `+${currentWarehouseStock.delta}` : currentWarehouseStock.delta}
+                          </p>
+                        </div>
+                        <div className="bg-slate-900/60 p-1.5 rounded-lg border border-slate-800">
+                          <p className="text-[9px] text-slate-400 uppercase">Disponible</p>
+                          <p className="font-bold text-cyan-400 mt-0.5">{currentWarehouseStock.disponible}</p>
+                        </div>
+                        <div className="bg-slate-900/60 p-1.5 rounded-lg border border-slate-800 col-span-2 sm:col-span-1">
+                          <p className="text-[9px] text-slate-400 uppercase">Disp. Proyectado</p>
+                          <p className={`font-bold mt-0.5 ${currentWarehouseStock.disponibleProyectado < 0 ? "text-rose-400" : "text-emerald-400"}`}>
+                            {currentWarehouseStock.disponibleProyectado}
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-[11px]">
+                        <div className="bg-slate-900/60 p-1.5 rounded-lg border border-slate-800">
+                          <p className="text-[9px] text-slate-400 uppercase">Stock Actual</p>
+                          <p className="font-bold text-slate-200 mt-0.5">{currentWarehouseStock.stockActual}</p>
+                        </div>
+                        <div className="bg-slate-900/60 p-1.5 rounded-lg border border-slate-800">
+                          <p className="text-[9px] text-slate-400 uppercase">Reservado</p>
+                          <p className="font-bold text-amber-400 mt-0.5">{currentWarehouseStock.reservado}</p>
+                        </div>
+                        <div className="bg-slate-900/60 p-1.5 rounded-lg border border-slate-800">
+                          <p className="text-[9px] text-slate-400 uppercase">Disponible</p>
+                          <p className="font-bold text-cyan-400 mt-0.5">{currentWarehouseStock.disponible}</p>
+                        </div>
+                        <div className="bg-slate-900/60 p-1.5 rounded-lg border border-slate-800">
+                          <p className="text-[9px] text-slate-400 uppercase">A Reservar</p>
+                          <p className="font-bold text-indigo-300 mt-0.5">{currentWarehouseStock.qtySolicitada}</p>
+                        </div>
+                        <div className="bg-slate-900/60 p-1.5 rounded-lg border border-slate-800 col-span-2 sm:col-span-1">
+                          <p className="text-[9px] text-slate-400 uppercase">Disp. Proyectado</p>
+                          <p className={`font-bold mt-0.5 ${currentWarehouseStock.disponibleProyectado < 0 ? "text-rose-400" : "text-emerald-400"}`}>
+                            {currentWarehouseStock.disponibleProyectado}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {isEditing && currentWarehouseStock.actionType === "REDUCCION" && (
+                      <p className="text-[10px] text-emerald-400 mt-2 text-center font-sans">
+                        ✓ Se liberarán {Math.abs(currentWarehouseStock.delta)} unidades reservadas al inventario disponible.
+                      </p>
+                    )}
+                    {isEditing && currentWarehouseStock.actionType === "AUMENTO" && currentWarehouseStock.isInsufficient && (
+                      <p className="text-[10px] text-rose-400 mt-2 text-center font-sans">
+                        El incremento solicitado (+{currentWarehouseStock.delta}) supera las existencias disponibles ({currentWarehouseStock.disponible}).
+                      </p>
+                    )}
+                    {isEditing && currentWarehouseStock.actionType === "AUMENTO" && !currentWarehouseStock.isInsufficient && (
+                      <p className="text-[10px] text-cyan-300 mt-2 text-center font-sans">
+                        Se incrementará la reserva en +{currentWarehouseStock.delta} unidades.
+                      </p>
+                    )}
+                    {!isEditing && currentWarehouseStock.isInsufficient && (
+                      <p className="text-[10px] text-rose-400 mt-2 text-center font-sans">
+                        La cantidad a reservar supera las existencias disponibles en el almacén seleccionado.
+                      </p>
+                    )}
+                    {!currentWarehouseStock.hasRecord && (
+                      <p className="text-[10px] text-amber-400 mt-2 text-center font-sans">
+                        No hay existencias registradas para este producto en el almacén seleccionado (Disponible: 0).
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 <div className="md:col-span-1">
                   <label className="text-[11px] text-slate-400 block mb-1 font-semibold uppercase">Cantidad *</label>
@@ -2441,22 +2933,265 @@ export default function WorkOrderServicesView({
               className={`px-5 py-2 font-bold text-slate-950 rounded-xl text-xs font-mono uppercase cursor-pointer ${
                 confirmModalType === "finish"
                   ? "bg-emerald-400 hover:bg-emerald-300"
+                  : confirmModalType === "consume"
+                  ? "bg-emerald-500 hover:bg-emerald-400 text-slate-950"
+                  : confirmModalType === "reverse"
+                  ? "bg-amber-500 hover:bg-amber-400 text-slate-950"
                   : "bg-rose-500 hover:bg-rose-400 text-white"
               }`}
             >
-              Confirmar
+              {confirmModalType === "consume"
+                ? "Consumir"
+                : confirmModalType === "reverse"
+                ? "Reversar"
+                : "Confirmar"}
             </button>
           </div>
         }
       >
         <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl flex items-center gap-3">
-          <div className={`p-2.5 rounded-xl shrink-0 ${confirmModalType === "finish" ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"}`}>
-            {confirmModalType === "finish" ? <CheckCircle2 className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
+          <div className={`p-2.5 rounded-xl shrink-0 ${
+            confirmModalType === "finish" || confirmModalType === "consume"
+              ? "bg-emerald-500/20 text-emerald-400"
+              : confirmModalType === "reverse"
+              ? "bg-amber-500/20 text-amber-400"
+              : "bg-rose-500/20 text-rose-400"
+          }`}>
+            {confirmModalType === "finish" ? (
+              <CheckCircle2 className="w-5 h-5" />
+            ) : confirmModalType === "consume" ? (
+              <PackageCheck className="w-5 h-5" />
+            ) : confirmModalType === "reverse" ? (
+              <RotateCcw className="w-5 h-5" />
+            ) : (
+              <AlertTriangle className="w-5 h-5" />
+            )}
           </div>
-          <p className="text-xs text-slate-200 font-sans leading-relaxed">
+          <p className="text-xs text-slate-200 font-sans leading-relaxed whitespace-pre-line">
             {confirmModalMessage}
           </p>
         </div>
+      </WorkshopItemModalShell>
+
+      {/* KARDEX / INVENTORY HISTORY MODAL */}
+      <WorkshopItemModalShell
+        open={historyModalOpen}
+        title="HISTORIAL DE INVENTARIO (KARDEX)"
+        description="Trazabilidad y movimientos físicos de almacén asociados a esta línea de repuesto."
+        maxWidth="840px"
+        onClose={() => {
+          setHistoryModalOpen(false);
+          setHistoryProduct(null);
+          setHistoryData(null);
+          setHistoryError(null);
+        }}
+        footer={
+          <div className="flex items-center justify-between font-sans">
+            <div className="text-[11px] text-slate-400 font-mono">
+              {historyData?.movimientos?.length > 0
+                ? `${historyData.movimientos.length} movimiento(s) registrado(s)`
+                : "Sin movimientos físicos registrados"}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setHistoryModalOpen(false);
+                setHistoryProduct(null);
+                setHistoryData(null);
+                setHistoryError(null);
+              }}
+              className="px-4 py-2 text-xs font-semibold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl transition-colors cursor-pointer font-mono"
+            >
+              Cerrar
+            </button>
+          </div>
+        }
+      >
+        {/* Cabecera / Info del Repuesto */}
+        {historyProduct && (
+          <div className="mb-5 p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-bold text-slate-100 flex items-center gap-2">
+                  <Package className="w-4 h-4 text-cyan-400 shrink-0" />
+                  <span>{historyData?.linea?.producto_nombre || historyProduct.nombre || historyProduct.producto_nombre || "Repuesto"}</span>
+                </div>
+                <div className="text-xs text-slate-400 font-mono mt-0.5 flex flex-wrap items-center gap-3">
+                  <span>Código: <strong className="text-slate-300">{historyData?.linea?.codigo_producto || historyProduct.codigo_producto || historyProduct.codigo || `PROD-${historyProduct.producto_id}`}</strong></span>
+                  <span>•</span>
+                  <span>Almacén: <strong className="text-slate-300">{historyData?.linea?.almacen_nombre || historyProduct.almacen_nombre || `Almacén #${historyProduct.almacen_id}`}</strong></span>
+                  <span>•</span>
+                  <span>Cantidad línea: <strong className="text-slate-300">{historyData?.linea?.cantidad ?? historyProduct.cantidad} u.</strong></span>
+                </div>
+              </div>
+
+              {/* Estado Actual Badge (fuente de verdad: utilizado) */}
+              <div className="shrink-0 flex items-center gap-2">
+                <span className="text-[11px] text-slate-400 uppercase font-mono tracking-wider">Estado actual:</span>
+                {(historyData?.linea?.utilizado ?? historyProduct.utilizado) === true ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold font-mono uppercase bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    CONSUMIDO
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold font-mono uppercase bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                    <Package className="w-3.5 h-3.5" />
+                    RESERVADO
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Loading State */}
+        {historyLoading && (
+          <div className="p-8 flex flex-col items-center justify-center gap-3 text-slate-400">
+            <Loader2 className="w-6 h-6 animate-spin text-cyan-400" />
+            <p className="text-xs font-mono">Consultando movimientos de inventario...</p>
+          </div>
+        )}
+
+        {/* Error / Retry State */}
+        {!historyLoading && historyError && (
+          <div className="p-4 rounded-xl bg-rose-950/60 border border-rose-500/40 text-rose-200 space-y-3">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 shrink-0 text-rose-400 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold uppercase tracking-wider font-mono">Error al consultar el historial</p>
+                <p className="text-xs font-sans mt-1 text-rose-300">{historyError}</p>
+              </div>
+            </div>
+            <div className="flex justify-end pt-1">
+              <button
+                type="button"
+                onClick={() => fetchProductHistory(historyProduct, true)}
+                className="px-3 py-1.5 text-xs font-bold font-mono uppercase bg-rose-600 hover:bg-rose-500 text-white rounded-lg transition-colors flex items-center gap-2 cursor-pointer shadow"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                Reintentar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Empty State */}
+        {!historyLoading && !historyError && historyData && historyData.movimientos.length === 0 && (
+          <div className="p-8 rounded-xl border border-slate-800 bg-slate-950/50 text-center space-y-2">
+            <div className="w-10 h-10 mx-auto rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+              <Package className="w-5 h-5" />
+            </div>
+            <p className="text-xs font-semibold text-slate-300">
+              No hay movimientos físicos registrados para este repuesto. Actualmente se encuentra reservado.
+            </p>
+            <p className="text-[11px] text-slate-500 font-sans max-w-md mx-auto">
+              La reserva compromete la disponibilidad en el almacén pero no descuenta stock físico hasta que el repuesto sea consumido.
+            </p>
+          </div>
+        )}
+
+        {/* Movements Timeline / Table */}
+        {!historyLoading && !historyError && historyData && historyData.movimientos.length > 0 && (
+          <div className="space-y-3">
+            <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/60">
+              <table className="w-full text-left border-collapse font-sans text-xs">
+                <thead>
+                  <tr className="border-b border-slate-800 bg-slate-900/90 text-slate-400 text-[11px] uppercase font-mono tracking-wider">
+                    <th className="p-3 pl-4">Fecha / Movimiento</th>
+                    <th className="p-3">Tipo</th>
+                    <th className="p-3 text-right">Cantidad</th>
+                    <th className="p-3 text-right">Costo Inventario</th>
+                    <th className="p-3 text-center">Stock Almacén</th>
+                    <th className="p-3 pr-4">Usuario</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {historyData.movimientos.map((m) => {
+                    const isEntrada = m.naturaleza === "ENTRADA";
+                    const isSalida = m.naturaleza === "SALIDA";
+                    const sign = isEntrada ? "+" : isSalida ? "-" : "";
+                    const qtyColor = isEntrada ? "text-emerald-400" : isSalida ? "text-rose-400" : "text-slate-200";
+
+                    return (
+                      <tr key={m.movimiento_inventario_id} className="hover:bg-slate-900/50 transition-colors">
+                        {/* Fecha y Código */}
+                        <td className="p-3 pl-4">
+                          <div className="font-mono text-slate-200 text-xs font-medium">
+                            {formatDate(m.fecha_movimiento)}
+                          </div>
+                          <div className="font-mono text-[11px] text-slate-400 flex items-center gap-1.5 mt-0.5">
+                            <span className="text-cyan-400 font-semibold">{m.codigo_movimiento}</span>
+                            {m.referencia && <span className="text-slate-500">• {m.referencia}</span>}
+                          </div>
+                        </td>
+
+                        {/* Tipo con badge y Reversa */}
+                        <td className="p-3">
+                          <div className="flex flex-col gap-1 items-start">
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold tracking-wider uppercase border ${
+                              m.tipo_movimiento_codigo === "DEV_TALLER"
+                                ? "bg-amber-500/10 text-amber-300 border-amber-500/30"
+                                : m.tipo_movimiento_codigo === "SAL_ORDEN"
+                                ? "bg-rose-500/10 text-rose-300 border-rose-500/30"
+                                : "bg-slate-800 text-slate-300 border-slate-700"
+                            }`}>
+                              {m.tipo_movimiento_nombre || m.tipo_movimiento_codigo}
+                            </span>
+                            {m.es_reverso && (
+                              <span className="text-[10px] text-amber-400 font-mono flex items-center gap-1">
+                                <RotateCcw className="w-2.5 h-2.5 shrink-0" />
+                                Reversa {m.reversa_a || m.codigo_movimiento_origen}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Cantidad (+ / -) */}
+                        <td className="p-3 text-right whitespace-nowrap font-mono text-xs">
+                          <span className={`font-bold ${qtyColor}`}>
+                            {sign}{m.cantidad} u.
+                          </span>
+                        </td>
+
+                        {/* Costo Inventario */}
+                        <td className="p-3 text-right whitespace-nowrap font-mono text-xs">
+                          <div className="text-slate-200">
+                            RD$ {m.costo_total.toLocaleString("es-DO", { minimumFractionDigits: 2 })}
+                          </div>
+                          <div className="text-[10px] text-slate-500">
+                            Unit: RD$ {m.costo_unitario.toLocaleString("es-DO", { minimumFractionDigits: 2 })}
+                          </div>
+                        </td>
+
+                        {/* Stock Almacén: stock_anterior -> stock_nuevo */}
+                        <td className="p-3 text-center whitespace-nowrap font-mono text-[11px] text-slate-400">
+                          <span>{m.stock_anterior}</span>
+                          <span className="text-slate-600 mx-1">→</span>
+                          <span className="text-slate-200 font-semibold">{m.stock_nuevo}</span>
+                        </td>
+
+                        {/* Usuario */}
+                        <td className="p-3 pr-4 text-xs font-sans text-slate-400">
+                          <div className="truncate max-w-[140px]" title={m.usuario_nombre}>
+                            {m.usuario_nombre}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Note banner */}
+            <div className="text-[11px] text-slate-500 font-sans flex items-center gap-1.5 px-1">
+              <Info className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+              <span>
+                Los costos visualizados corresponden a la valuación contable del inventario al momento del movimiento.
+              </span>
+            </div>
+          </div>
+        )}
       </WorkshopItemModalShell>
     </div>
   );

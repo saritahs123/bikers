@@ -4,6 +4,7 @@ import { recalculateWorkOrderTotals } from "@/lib/workshop/recalculateWorkOrderT
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
 import { validateOrderInRepair } from "@/lib/workshop/validateOrderState";
 import { recordUserActivity, recordUserAudit } from "@/lib/auditLogger";
+import { resolveDefaultWarehouse } from "@/lib/workshop/workshopInventoryReservationService";
 
 // POST /api/taller/ordenes/[id]/servicios/[servicioId]/productos
 export async function POST(
@@ -61,20 +62,113 @@ export async function POST(
     }
 
     // Verify product in catalog
+    // Verify product in catalog with decimal check
+    const pId = parseInt(producto_id, 10);
     const prodCatalogRes = await client.query(`
-      SELECT producto_id, nombre, precio_venta
-      FROM admin.productos
-      WHERE producto_id = $1
-    `, [parseInt(producto_id, 10)]);
+      SELECT p.producto_id, p.nombre, p.precio_venta, p.estado, p.empresa_id,
+             COALESCE(um.permite_decimales, false) AS permite_decimales,
+             um.codigo AS unidad_medida
+      FROM admin.productos p
+      LEFT JOIN admin.unidad_medida um ON p.unidad_medida_id = um.unidad_medida_id
+      WHERE p.producto_id = $1
+    `, [pId]);
 
     if (prodCatalogRes.rows.length === 0) {
       await client.query("ROLLBACK");
-      return NextResponse.json({ error: "El repuesto especificado no existe en el catálogo." }, { status: 404 });
+      return NextResponse.json({ success: false, error: "PRODUCT_NOT_FOUND", message: "El repuesto especificado no existe en el catálogo." }, { status: 404 });
     }
 
     const prodInfo = prodCatalogRes.rows[0];
-    const targetAlmacenId = body.almacen_id ? parseInt(body.almacen_id, 10) : 1;
-    const qty = Math.max(1, parseInt(cantidad || "1", 10));
+    if (prodInfo.empresa_id != null && Number(prodInfo.empresa_id) !== Number(session.empresa_id)) {
+      await client.query("ROLLBACK");
+      return NextResponse.json({ success: false, error: "PRODUCT_NOT_FOUND", message: "El producto no pertenece a su empresa." }, { status: 404 });
+    }
+
+    // Resolve warehouse strictly
+    let targetAlmacenId: number;
+    if (body.almacen_id !== undefined && body.almacen_id !== null && String(body.almacen_id).trim() !== "") {
+      const explicitAlmId = parseInt(String(body.almacen_id), 10);
+      const valAlmRes = await client.query(
+        `SELECT almacen_id, estado FROM admin.almacenes WHERE almacen_id = $1 AND empresa_id = $2`,
+        [explicitAlmId, session.empresa_id]
+      );
+      if (!valAlmRes.rows.length) {
+        await client.query("ROLLBACK");
+        return NextResponse.json({ success: false, error: "ALMACEN_NOT_FOUND", message: "El almacén no existe o no pertenece a su empresa." }, { status: 404 });
+      }
+      if (String(valAlmRes.rows[0].estado || "").toUpperCase() !== "ACTIVO") {
+        await client.query("ROLLBACK");
+        return NextResponse.json({ success: false, error: "ALMACEN_INACTIVO", message: "El almacén se encuentra inactivo." }, { status: 400 });
+      }
+      targetAlmacenId = explicitAlmId;
+    } else {
+      try {
+        const defAlm = await resolveDefaultWarehouse(client, session.empresa_id, prodInfo.nombre || pId);
+        targetAlmacenId = defAlm.almacen_id;
+      } catch (e: unknown) {
+        const err = e as { code?: string; message?: string; status?: number };
+        await client.query("ROLLBACK");
+        return NextResponse.json({ success: false, error: err.code || "ALMACEN_ERROR", message: err.message || "Error al resolver almacén" }, { status: err.status || 400 });
+      }
+    }
+
+    const qty = parseFloat(String(cantidad || "1"));
+    if (isNaN(qty) || qty <= 0) {
+      await client.query("ROLLBACK");
+      return NextResponse.json({ success: false, error: "INVALID_QUANTITY", message: "La cantidad debe ser mayor a 0." }, { status: 400 });
+    }
+    if (!prodInfo.permite_decimales && !Number.isInteger(qty)) {
+      await client.query("ROLLBACK");
+      return NextResponse.json({ success: false, error: "DECIMALS_NOT_ALLOWED", message: "La unidad de medida no permite decimales." }, { status: 400 });
+    }
+
+    // Lock existence FOR UPDATE
+    const exRes = await client.query(`
+      SELECT existencia_producto_id, cantidad_actual, cantidad_reservada
+      FROM admin.existencias_producto
+      WHERE empresa_id = $1 AND producto_id = $2 AND almacen_id = $3
+      FOR UPDATE
+    `, [session.empresa_id, pId, targetAlmacenId]);
+
+    if (exRes.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return NextResponse.json({
+        success: false,
+        error: "STOCK_INSUFICIENTE",
+        message: `No existe registro de inventario para "${prodInfo.nombre}" en el almacén seleccionado.`,
+        stockActual: 0,
+        cantidadReservada: 0,
+        cantidadDisponible: 0,
+        cantidadSolicitada: qty
+      }, { status: 409 });
+    }
+
+    const ex = exRes.rows[0];
+    const stockActual = parseFloat(ex.cantidad_actual || "0");
+    const cantRes = parseFloat(ex.cantidad_reservada || "0");
+    const disponible = Math.round((stockActual - cantRes) * 100) / 100;
+
+    if (qty > disponible) {
+      await client.query("ROLLBACK");
+      return NextResponse.json({
+        success: false,
+        error: "STOCK_INSUFICIENTE",
+        message: `Stock insuficiente para "${prodInfo.nombre}". Disponible: ${disponible}, Solicitado: ${qty}.`,
+        stockActual,
+        cantidadReservada: cantRes,
+        cantidadDisponible: disponible,
+        cantidadSolicitada: qty
+      }, { status: 409 });
+    }
+
+    // Update reservation
+    const newRes = Math.round((cantRes + qty) * 100) / 100;
+    await client.query(`
+      UPDATE admin.existencias_producto
+      SET cantidad_reservada = $1, fecha_actualizacion = NOW()
+      WHERE existencia_producto_id = $2
+    `, [newRes, ex.existencia_producto_id]);
+
     const price = precio_unitario !== undefined ? Math.max(0, parseFloat(precio_unitario)) : parseFloat(prodInfo.precio_venta || 0);
     const descPct = Math.min(100, Math.max(0, parseFloat(porcentaje_descuento || "0")));
     const bruto = qty * price;
@@ -94,10 +188,11 @@ export async function POST(
         valor_descuento,
         subtotal,
         estado_aprobacion_id,
+        utilizado,
         fecha_registro,
         usuario_registro
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, 2, NOW(), $10
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, 2, false, NOW(), $10
       )
       RETURNING orden_producto_id
     `;
@@ -223,7 +318,7 @@ export async function DELETE(
 
     // Lock Spare Part Row for Update
     const prodRes = await client.query(`
-      SELECT orden_producto_id, producto_id, cantidad, precio_unitario, subtotal
+      SELECT orden_producto_id, producto_id, almacen_id, cantidad, precio_unitario, subtotal, utilizado
       FROM admin.orden_productos
       WHERE orden_producto_id = $1 AND orden_servicio_id = $2 AND orden_trabajo_id = $3
       FOR UPDATE OF orden_productos
@@ -232,6 +327,37 @@ export async function DELETE(
     if (prodRes.rows.length === 0) {
       await client.query("ROLLBACK");
       return NextResponse.json({ error: "Repuesto no encontrado en este servicio." }, { status: 404 });
+    }
+
+    const prodToDel = prodRes.rows[0];
+    if (prodToDel.utilizado) {
+      await client.query("ROLLBACK");
+      return NextResponse.json({
+        success: false,
+        error: "PRODUCTO_YA_CONSUMIDO",
+        message: "No se puede anular un repuesto que ya ha sido consumido en taller. Revierta el consumo primero."
+      }, { status: 400 });
+    }
+
+    // Release reservation from existencias
+    if (prodToDel.almacen_id) {
+      const exRes = await client.query(`
+        SELECT existencia_producto_id, cantidad_reservada
+        FROM admin.existencias_producto
+        WHERE empresa_id = $1 AND producto_id = $2 AND almacen_id = $3
+        FOR UPDATE
+      `, [session.empresa_id, prodToDel.producto_id, prodToDel.almacen_id]);
+
+      if (exRes.rows.length > 0) {
+        const curRes = parseFloat(exRes.rows[0].cantidad_reservada || "0");
+        const qty = parseFloat(prodToDel.cantidad || "0");
+        const newRes = Math.max(0, Math.round((curRes - qty) * 100) / 100);
+        await client.query(`
+          UPDATE admin.existencias_producto
+          SET cantidad_reservada = $1, fecha_actualizacion = NOW()
+          WHERE existencia_producto_id = $2
+        `, [newRes, exRes.rows[0].existencia_producto_id]);
+      }
     }
 
     // Perform soft deactivation / deletion
@@ -347,7 +473,73 @@ export async function PUT(
       return NextResponse.json({ error: "NOT_FOUND", message: "Orden de trabajo no encontrada." }, { status: 404 });
     }
 
-    const qty = Math.max(1, parseInt(cantidad || "1", 10));
+    // Lock Spare Part Row for Update
+    const prodRes = await client.query(`
+      SELECT orden_producto_id, producto_id, almacen_id, cantidad, precio_unitario, utilizado
+      FROM admin.orden_productos
+      WHERE orden_producto_id = $1 AND orden_servicio_id = $2 AND orden_trabajo_id = $3
+      FOR UPDATE OF orden_productos
+    `, [opId, servId, ordenId]);
+
+    if (prodRes.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return NextResponse.json({ error: "Repuesto no encontrado en este servicio." }, { status: 404 });
+    }
+
+    const currentLine = prodRes.rows[0];
+    const oldQty = parseFloat(currentLine.cantidad || "0");
+    const qty = parseFloat(String(cantidad || "1"));
+
+    if (currentLine.utilizado) {
+      if (Math.abs(qty - oldQty) > 0.0001) {
+        await client.query("ROLLBACK");
+        return NextResponse.json({
+          success: false,
+          error: "PRODUCTO_YA_CONSUMIDO",
+          message: "No se puede modificar la cantidad de un repuesto que ya ha sido consumido en taller."
+        }, { status: 400 });
+      }
+    } else {
+      const delta = Math.round((qty - oldQty) * 100) / 100;
+      if (delta !== 0 && currentLine.almacen_id) {
+        const exRes = await client.query(`
+          SELECT existencia_producto_id, cantidad_actual, cantidad_reservada
+          FROM admin.existencias_producto
+          WHERE empresa_id = $1 AND producto_id = $2 AND almacen_id = $3
+          FOR UPDATE
+        `, [session.empresa_id, currentLine.producto_id, currentLine.almacen_id]);
+
+        if (exRes.rows.length === 0) {
+          await client.query("ROLLBACK");
+          return NextResponse.json({
+            success: false,
+            error: "STOCK_INSUFICIENTE",
+            message: "No existe existencia registrada para este producto."
+          }, { status: 409 });
+        }
+
+        const curStock = parseFloat(exRes.rows[0].cantidad_actual || "0");
+        const curRes = parseFloat(exRes.rows[0].cantidad_reservada || "0");
+        const curDisp = Math.round((curStock - curRes) * 100) / 100;
+
+        if (delta > 0 && delta > curDisp) {
+          await client.query("ROLLBACK");
+          return NextResponse.json({
+            success: false,
+            error: "STOCK_INSUFICIENTE",
+            message: `Stock insuficiente para aumentar la cantidad. Disponible: ${curDisp}, Adicional requerido: ${delta}.`
+          }, { status: 409 });
+        }
+
+        const newRes = Math.round((curRes + delta) * 100) / 100;
+        await client.query(`
+          UPDATE admin.existencias_producto
+          SET cantidad_reservada = $1, fecha_actualizacion = NOW()
+          WHERE existencia_producto_id = $2
+        `, [newRes, exRes.rows[0].existencia_producto_id]);
+      }
+    }
+
     const price = Math.max(0, parseFloat(precio_unitario || "0"));
     const descPct = Math.min(100, Math.max(0, parseFloat(porcentaje_descuento || "0")));
     const bruto = qty * price;

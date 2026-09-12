@@ -141,6 +141,8 @@ export async function GET(req: NextRequest) {
         COALESCE(mi.stock_nuevo, 0)::numeric AS stock_nuevo,
         mi.orden_trabajo_id,
         mi.orden_servicio_id,
+        mi.orden_producto_id,
+        mi.movimiento_origen_id,
         mi.referencia,
         mi.observacion,
         mi.usuario_movimiento,

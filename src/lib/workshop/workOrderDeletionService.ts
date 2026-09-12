@@ -388,7 +388,7 @@ export async function deleteWorkOrderWithSnapshot(
       };
     }
 
-    const { rawOrder, recepcionId, snapshotRow, evidenciasParaS3 } = snapshotData;
+    const { recepcionId, snapshotRow, evidenciasParaS3 } = snapshotData;
 
     // Tenant check: ensure the order belongs to the user's company
     if (
@@ -577,6 +577,81 @@ export async function deleteWorkOrderWithSnapshot(
       DELETE FROM admin.facturas
       WHERE orden_trabajo_id = $1
     `, [ordenTrabajoId]);
+
+    // 5.5. Release inventory reservations for unconsumed products in deterministic order
+    const unconsumedLinesRes = await client.query(`
+      SELECT
+        op.producto_id,
+        op.almacen_id,
+        SUM(op.cantidad)::numeric AS total_a_liberar
+      FROM admin.orden_productos op
+      WHERE (op.orden_trabajo_id = $1 OR op.orden_servicio_id IN (
+        SELECT orden_servicio_id FROM admin.orden_servicios WHERE orden_trabajo_id = $1
+      ))
+        AND op.utilizado = false
+        AND op.almacen_id IS NOT NULL
+      GROUP BY op.producto_id, op.almacen_id
+      ORDER BY op.producto_id ASC, op.almacen_id ASC
+    `, [ordenTrabajoId]);
+
+    const targetEmpresaId = snapshotRow.empresa_id || actor.empresa_id;
+    const existencesToRelease: { existencia_producto_id: number; total_a_liberar: number }[] = [];
+
+    // Deterministically lock and validate ALL reservations before applying any change
+    for (const group of unconsumedLinesRes.rows) {
+      const prodId = parseInt(group.producto_id, 10);
+      const almId = parseInt(group.almacen_id, 10);
+      const qtyToRelease = parseFloat(group.total_a_liberar || "0");
+
+      if (qtyToRelease <= 0) continue;
+
+      const exRes = await client.query(`
+        SELECT existencia_producto_id, cantidad_actual, cantidad_reservada
+        FROM admin.existencias_producto
+        WHERE empresa_id = $1 AND producto_id = $2 AND almacen_id = $3
+        FOR UPDATE
+      `, [targetEmpresaId, prodId, almId]);
+
+      if (exRes.rows.length === 0) {
+        await client.query("ROLLBACK");
+        return {
+          success: false,
+          error: "INCONSISTENCIA_STOCK_RESERVADO",
+          message: `Inconsistencia de inventario al eliminar orden: no existe existencia registrada para producto #${prodId} en almacén #${almId}.`,
+          status: 409
+        };
+      }
+
+      const ex = exRes.rows[0];
+      const stockActual = parseFloat(ex.cantidad_actual || "0");
+      const cantidadReservada = parseFloat(ex.cantidad_reservada || "0");
+
+      if (cantidadReservada < qtyToRelease || cantidadReservada > stockActual || cantidadReservada < 0) {
+        await client.query("ROLLBACK");
+        return {
+          success: false,
+          error: "INCONSISTENCIA_STOCK_RESERVADO",
+          message: `Inconsistencia de inventario al eliminar orden: el producto #${prodId} en almacén #${almId} tiene reservado ${cantidadReservada} pero se intenta liberar ${qtyToRelease}.`,
+          status: 409
+        };
+      }
+
+      existencesToRelease.push({
+        existencia_producto_id: ex.existencia_producto_id,
+        total_a_liberar: qtyToRelease
+      });
+    }
+
+    // Only if ALL reservations are consistent, execute release without GREATEST
+    for (const item of existencesToRelease) {
+      await client.query(`
+        UPDATE admin.existencias_producto
+        SET cantidad_reservada = cantidad_reservada - $1,
+            fecha_actualizacion = CURRENT_TIMESTAMP,
+            usuario_actualizacion = $2
+        WHERE existencia_producto_id = $3
+      `, [item.total_a_liberar, actor.usuario_id, item.existencia_producto_id]);
+    }
 
     // 6. Delete Workshop child dependencies
     await client.query(`

@@ -4,7 +4,6 @@ import { recalculateWorkOrderTotals } from "@/lib/workshop/recalculateWorkOrderT
 import { syncWorkOrderInvoice } from "@/lib/workshop/syncWorkOrderInvoice";
 import { getCronometroStatus } from "@/lib/workshop/getCronometroStatus";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
-import { validateOrderInRepair } from "@/lib/workshop/validateOrderState";
 import { recordUserActivity, recordUserAudit } from "@/lib/auditLogger";
 
 // GET /api/taller/ordenes/[id]/servicios/[servicioId]
@@ -957,6 +956,61 @@ export async function DELETE(
     }
 
     const serviceToDel = servRes.rows[0];
+
+    // Check if any attached product is already consumed
+    const attachedProds = await client.query(`
+      SELECT orden_producto_id, producto_id, almacen_id, cantidad, utilizado
+      FROM admin.orden_productos
+      WHERE orden_servicio_id = $1
+    `, [servId]);
+
+    for (const p of attachedProds.rows) {
+      if (p.utilizado) {
+        await client.query("ROLLBACK");
+        return NextResponse.json({
+          error: "PRODUCTO_YA_CONSUMIDO",
+          message: `No se puede eliminar el servicio porque contiene el repuesto #${p.producto_id} ya consumido en taller. Revierta el consumo primero.`
+        }, { status: 400 });
+      }
+    }
+
+    // Release reservations deterministically for unconsumed products
+    const unconsumedGroups = new Map<string, { producto_id: number; almacen_id: number; totalQty: number }>();
+    for (const p of attachedProds.rows) {
+      if (!p.utilizado && p.almacen_id) {
+        const k = `${p.producto_id}_${p.almacen_id}`;
+        const prev = unconsumedGroups.get(k);
+        const qty = parseFloat(p.cantidad || "0");
+        if (prev) {
+          prev.totalQty += qty;
+        } else {
+          unconsumedGroups.set(k, { producto_id: Number(p.producto_id), almacen_id: Number(p.almacen_id), totalQty: qty });
+        }
+      }
+    }
+
+    const sortedGroups = Array.from(unconsumedGroups.values()).sort((a, b) =>
+      a.producto_id !== b.producto_id ? a.producto_id - b.producto_id : a.almacen_id - b.almacen_id
+    );
+
+    for (const g of sortedGroups) {
+      const exRes = await client.query(`
+        SELECT existencia_producto_id, cantidad_reservada
+        FROM admin.existencias_producto
+        WHERE empresa_id = $1 AND producto_id = $2 AND almacen_id = $3
+        FOR UPDATE
+      `, [session.empresa_id, g.producto_id, g.almacen_id]);
+
+      if (exRes.rows.length > 0) {
+        const curRes = parseFloat(exRes.rows[0].cantidad_reservada || "0");
+        const newRes = Math.max(0, Math.round((curRes - g.totalQty) * 100) / 100);
+        await client.query(`
+          UPDATE admin.existencias_producto
+          SET cantidad_reservada = $1, fecha_actualizacion = NOW()
+          WHERE existencia_producto_id = $2
+        `, [newRes, exRes.rows[0].existencia_producto_id]);
+      }
+    }
 
     // Delete associated timer sessions & products
     await client.query(`

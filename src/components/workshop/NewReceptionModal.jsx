@@ -48,8 +48,10 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
     estados_checklist: [],
     categorias_componente: [],
     estados_componente: [],
-    productos: []
+    productos: [],
+    almacenes: []
   });
+  const [selectedAlmacenId, setSelectedAlmacenId] = useState("");
   const [clients, setClients] = useState([]);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -103,11 +105,25 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
   const productosList = useMemo(() => itemsList.filter((i) => i.type === "producto"), [itemsList]);
   const totalPresupuesto = useMemo(() => {
     return itemsList.reduce((acc, item) => {
-      const val = item.type === "servicio" ? Number(item.precio_estimado || 0) : Number(item.subtotal || 0);
+      if (item.type === "servicio") {
+        const val = Number(item.precio_estimado || 0);
+        return acc + (isNaN(val) ? 0 : val);
+      }
+      if (editingProductTempId === item.tempId) {
+        const raw = String(editingProductQuantity || "").trim();
+        const parsed = parseFloat(raw);
+        if (!isNaN(parsed) && parsed > 0) {
+          const isValidDecimal = item.permite_decimales || Number.isInteger(parsed);
+          if (isValidDecimal) {
+            const uPrice = Number(item.precio_unitario || 0);
+            return acc + (parsed * uPrice);
+          }
+        }
+      }
+      const val = Number(item.subtotal || 0);
       return acc + (isNaN(val) ? 0 : val);
     }, 0);
-  }, [itemsList]);
-  const presupuestoEstimado = totalPresupuesto.toFixed(2);
+  }, [itemsList, editingProductTempId, editingProductQuantity]);
 
   // General Reception Notes & Budget
   const [observacionesCliente, setObservacionesCliente] = useState("");
@@ -130,41 +146,6 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
 
   // Confirmation Modals State
   const [isCloseConfirmOpen, setIsCloseConfirmOpen] = useState(false);
-
-  useEffect(() => {
-    if (isOpen) {
-      if (!idempotencyKeyRef.current) {
-        idempotencyKeyRef.current =
-          typeof crypto !== "undefined" && crypto.randomUUID
-            ? crypto.randomUUID()
-            : "rec_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9);
-      }
-      discardedStagingKeysRef.current = [];
-      navigationStartedRef.current = false;
-      setGenerarOrdenTrabajo(true);
-      loadInitialData();
-    }
-  }, [isOpen]);
-
-  // Click outside to close client, bike, service & product dropdowns
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (comboboxRef.current && !comboboxRef.current.contains(e.target)) {
-        setIsDropdownOpen(false);
-      }
-      if (bikeComboboxRef.current && !bikeComboboxRef.current.contains(e.target)) {
-        setIsBikeDropdownOpen(false);
-      }
-      if (serviceComboboxRef.current && !serviceComboboxRef.current.contains(e.target)) {
-        setIsServiceDropdownOpen(false);
-      }
-      if (productComboboxRef.current && !productComboboxRef.current.contains(e.target)) {
-        setIsProductDropdownOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
   const loadInitialData = async () => {
     setLoadingInit(true);
@@ -205,8 +186,13 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
         estados_checklist: catObj.estados_checklist || [],
         categorias_componente: catObj.categorias_componente || [],
         estados_componente: catObj.estados_componente || [],
-        productos: catObj.productos || []
+        productos: catObj.productos || [],
+        almacenes: catObj.almacenes || []
       });
+
+      if (catObj.almacenes?.length > 0) {
+        setSelectedAlmacenId(String(catObj.almacenes[0].almacen_id));
+      }
 
       if (catObj.prioridades?.length > 0 && !prioridadId) {
         setPrioridadId(
@@ -220,6 +206,44 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
       setLoadingInit(false);
     }
   };
+
+  useEffect(() => {
+    if (isOpen) {
+      if (!idempotencyKeyRef.current) {
+        idempotencyKeyRef.current =
+          typeof crypto !== "undefined" && crypto.randomUUID
+            ? crypto.randomUUID()
+            : "rec_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9);
+      }
+      discardedStagingKeysRef.current = [];
+      navigationStartedRef.current = false;
+      const init = async () => {
+        setGenerarOrdenTrabajo(true);
+        await loadInitialData();
+      };
+      init();
+    }
+  }, [isOpen]);
+
+  // Click outside to close client, bike, service & product dropdowns
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (comboboxRef.current && !comboboxRef.current.contains(e.target)) {
+        setIsDropdownOpen(false);
+      }
+      if (bikeComboboxRef.current && !bikeComboboxRef.current.contains(e.target)) {
+        setIsBikeDropdownOpen(false);
+      }
+      if (serviceComboboxRef.current && !serviceComboboxRef.current.contains(e.target)) {
+        setIsServiceDropdownOpen(false);
+      }
+      if (productComboboxRef.current && !productComboboxRef.current.contains(e.target)) {
+        setIsProductDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Check if form is dirty (has unsaved modifications)
   const isFormDirty = () => {
@@ -559,8 +583,13 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
     const unitPriceFormatted = (isNaN(priceNum) || priceNum < 0 ? 0 : priceNum).toFixed(2);
 
     setItemsList((prev) => {
+      const activeAlmId = selectedAlmacenId ? Number(selectedAlmacenId) : (catalogs.almacenes?.[0]?.almacen_id || null);
+      const activeAlm = (catalogs.almacenes || []).find((a) => Number(a.almacen_id) === Number(activeAlmId));
+
       const existingIndex = prev.findIndex(
-        (i) => i.type === "producto" && Number(i.producto_id) === Number(prod.producto_id || prod.id)
+        (i) => i.type === "producto" &&
+               Number(i.producto_id) === Number(prod.producto_id || prod.id) &&
+               Number(i.almacen_id) === Number(activeAlmId)
       );
       if (existingIndex >= 0) {
         const updated = [...prev];
@@ -579,6 +608,9 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
         type: "producto",
         tempId: "prod_" + Date.now() + "_" + Math.random().toString(36).substring(2, 6),
         producto_id: Number(prod.producto_id || prod.id),
+        almacen_id: activeAlmId,
+        almacen_nombre: activeAlm?.nombre || null,
+        almacen_codigo: activeAlm?.codigo || null,
         nombre: prod.nombre || `Producto #${prod.producto_id || prod.id}`,
         codigo: prod.codigo || prod.codigo_producto || null,
         cantidad: 1,
@@ -623,7 +655,7 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
     }
   };
 
-  // Product Quantity Editing Handlers
+  // Product Quantity Editing Handlers & Resolvers
   const handleStartEditQuantity = (item) => {
     setEditingProductTempId(item.tempId);
     setEditingProductQuantity(String(item.cantidad));
@@ -636,11 +668,79 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
     setEditingProductError("");
   };
 
+  const applyPendingQuantityEdit = (items) => {
+    if (!editingProductTempId) {
+      return { success: true, items };
+    }
+
+    const targetItem = items.find((i) => i.tempId === editingProductTempId);
+    if (!targetItem || targetItem.type !== "producto") {
+      return { success: true, items };
+    }
+
+    const rawVal = String(editingProductQuantity || "").trim();
+    if (!rawVal) {
+      // Empty input: revert to original valid quantity
+      return { success: true, items, reverted: true };
+    }
+
+    const parsedQty = parseFloat(rawVal);
+    if (isNaN(parsedQty) || parsedQty <= 0) {
+      return {
+        success: false,
+        error: "La cantidad del producto debe ser un número mayor a 0.",
+        fieldError: "Debe ser mayor a 0",
+        items
+      };
+    }
+
+    if (!targetItem.permite_decimales && !Number.isInteger(parsedQty)) {
+      return {
+        success: false,
+        error: `El producto "${targetItem.nombre}" solo admite cantidades enteras.`,
+        fieldError: "Solo enteros",
+        items
+      };
+    }
+
+    const normalizedQty = targetItem.permite_decimales
+      ? Math.round(parsedQty * 100) / 100
+      : Math.floor(parsedQty);
+
+    const unitPrice = Number(targetItem.precio_unitario || 0);
+    const newSubtotal = (normalizedQty * unitPrice).toFixed(2);
+
+    const updatedItems = items.map((i) =>
+      i.tempId === editingProductTempId
+        ? {
+            ...i,
+            cantidad: normalizedQty,
+            subtotal: newSubtotal
+          }
+        : i
+    );
+
+    return {
+      success: true,
+      items: updatedItems,
+      appliedQty: normalizedQty
+    };
+  };
+
   const handleSaveProductQuantity = (tempId) => {
     const item = itemsList.find((i) => i.tempId === tempId);
     if (!item) return;
 
-    const qty = parseFloat(editingProductQuantity);
+    const raw = String(editingProductQuantity || "").trim();
+    if (!raw) {
+      // Revert if empty
+      setEditingProductTempId(null);
+      setEditingProductQuantity("");
+      setEditingProductError("");
+      return;
+    }
+
+    const qty = parseFloat(raw);
     if (isNaN(qty) || qty <= 0) {
       setEditingProductError("Debe ser mayor a 0");
       return;
@@ -651,15 +751,19 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
       return;
     }
 
+    const normalizedQty = item.permite_decimales
+      ? Math.round(qty * 100) / 100
+      : Math.floor(qty);
+
     const unitPrice = Number(item.precio_unitario || 0);
-    const newSubtotal = (qty * unitPrice).toFixed(2);
+    const newSubtotal = (normalizedQty * unitPrice).toFixed(2);
 
     setItemsList((prev) =>
       prev.map((i) =>
         i.tempId === tempId
           ? {
               ...i,
-              cantidad: qty,
+              cantidad: normalizedQty,
               subtotal: newSubtotal
             }
           : i
@@ -672,14 +776,42 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
     setEditingProductError("");
   };
 
-  const handleDeleteItem = (tempId) => {
-    setItemsList((prev) => prev.filter((s) => s.tempId !== tempId));
+  const handleQuickQuantityChange = (tempId, delta) => {
+    setItemsList((prev) =>
+      prev.map((i) => {
+        if (i.tempId === tempId && i.type === "producto") {
+          const currentCant = Number(i.cantidad || 1);
+          const change = delta > 0 ? 1 : -1;
+          const rawNewCant = currentCant + change;
+          const minAllowed = i.permite_decimales ? 0.01 : 1;
+          const newCant = Math.max(minAllowed, i.permite_decimales ? Math.round(rawNewCant * 100) / 100 : Math.round(rawNewCant));
+          if (newCant <= 0) return i;
+          const uPrice = Number(i.precio_unitario || 0);
+          return {
+            ...i,
+            cantidad: newCant,
+            subtotal: (newCant * uPrice).toFixed(2)
+          };
+        }
+        return i;
+      })
+    );
     setSignatureData(null);
     if (editingProductTempId === tempId) {
       setEditingProductTempId(null);
       setEditingProductQuantity("");
       setEditingProductError("");
     }
+  };
+
+  const handleDeleteItem = (tempId) => {
+    if (editingProductTempId === tempId) {
+      setEditingProductTempId(null);
+      setEditingProductQuantity("");
+      setEditingProductError("");
+    }
+    setItemsList((prev) => prev.filter((s) => s.tempId !== tempId));
+    setSignatureData(null);
   };
 
   // Quick Customer Creation Callback
@@ -732,6 +864,24 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
 
     if (submitting || navigationStartedRef.current) return;
 
+    // Resolve any pending quantity edit before validation and payload assembly
+    const resolveResult = applyPendingQuantityEdit(itemsList);
+    if (!resolveResult.success) {
+      setError(resolveResult.error);
+      setEditingProductError(resolveResult.fieldError);
+      return;
+    }
+
+    const currentItems = resolveResult.items;
+
+    // Clear editing state and sync React itemsList
+    if (editingProductTempId) {
+      setItemsList(currentItems);
+      setEditingProductTempId(null);
+      setEditingProductQuantity("");
+      setEditingProductError("");
+    }
+
     if (!selectedClient) {
       setError("Debe seleccionar un cliente.");
       return;
@@ -741,10 +891,19 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
       return;
     }
 
-    if (generarOrdenTrabajo && serviciosList.length === 0) {
+    const currentServicios = currentItems.filter((i) => i.type === "servicio");
+    const currentProductos = currentItems.filter((i) => i.type === "producto");
+
+    if (generarOrdenTrabajo && currentServicios.length === 0) {
       setError("Debe agregar al menos un servicio para generar la Orden de Trabajo.");
       return;
     }
+
+    const currentTotal = currentItems.reduce((acc, item) => {
+      const val = item.type === "servicio" ? Number(item.precio_estimado || 0) : Number(item.subtotal || 0);
+      return acc + (isNaN(val) ? 0 : val);
+    }, 0);
+    const currentPresupuesto = currentTotal.toFixed(2);
 
     setSubmitting(true);
     setError("");
@@ -755,7 +914,7 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
         bicicleta_id: selectedBike.id || selectedBike.bicicleta_id,
         observaciones_cliente: observacionesCliente.trim() || null,
         diagnostico_preliminar: diagnosticoPreliminar.trim() || null,
-        servicios: serviciosList.map((s) => ({
+        servicios: currentServicios.map((s) => ({
           tipo_servicio_id: parseInt(s.tipo_servicio_id, 10),
           precio_estimado: parseFloat(s.precio_estimado || "0"),
           bicicleta_componente_id: s.bicicleta_componente_id ? parseInt(s.bicicleta_componente_id, 10) : null,
@@ -768,12 +927,13 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
               }
             : null
         })),
-        productos: productosList.map((p) => ({
+        productos: currentProductos.map((p) => ({
           producto_id: p.producto_id,
+          almacen_id: p.almacen_id || (selectedAlmacenId ? parseInt(selectedAlmacenId, 10) : undefined),
           cantidad: p.cantidad,
           precio_unitario: parseFloat(p.precio_unitario)
         })),
-        presupuesto_estimado: parseFloat(presupuestoEstimado || "0"),
+        presupuesto_estimado: parseFloat(currentPresupuesto || "0"),
         requiere_aprobacion: requiereAprobacion,
         checklist: checklistState.map((c) => ({
           item_checklist_id: c.item_checklist_id,
@@ -1282,13 +1442,33 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
 
                     {/* RIGHT: AGREGAR PRODUCTO */}
                     <div className="p-3.5 bg-surface border border-lime-500/20 rounded-xl space-y-2.5">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-lg bg-lime-500/10 border border-lime-500/30 flex items-center justify-center text-lime-400 shrink-0">
-                          <Package size={13} />
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-lg bg-lime-500/10 border border-lime-500/30 flex items-center justify-center text-lime-400 shrink-0">
+                            <Package size={13} />
+                          </div>
+                          <span className="text-xs font-bold text-foreground">
+                            Agregar Producto
+                          </span>
                         </div>
-                        <span className="text-xs font-bold text-foreground">
-                          Agregar Producto
-                        </span>
+                        {catalogs.almacenes && catalogs.almacenes.length > 1 && (
+                          <div className="flex items-center gap-1.5">
+                            <label className="text-[10px] text-foreground-muted font-mono whitespace-nowrap">
+                              Almacén:
+                            </label>
+                            <select
+                              value={selectedAlmacenId}
+                              onChange={(e) => setSelectedAlmacenId(e.target.value)}
+                              className="px-2 py-0.5 bg-card border border-border rounded-lg text-[11px] text-foreground font-mono focus:outline-none focus:border-primary cursor-pointer"
+                            >
+                              {catalogs.almacenes.map((alm) => (
+                                <option key={alm.almacen_id} value={alm.almacen_id}>
+                                  {alm.codigo} — {alm.nombre}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
                       </div>
 
                       <div className="relative" ref={productComboboxRef}>
@@ -1386,8 +1566,16 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
                             itemsList.map((item, index) => {
                               const isService = item.type === "servicio";
                               const isEditingThisProduct = !isService && editingProductTempId === item.tempId;
+                              let effectiveQty = item.cantidad;
+                              if (isEditingThisProduct) {
+                                const raw = String(editingProductQuantity || "").trim();
+                                const parsed = parseFloat(raw);
+                                if (!isNaN(parsed) && parsed > 0 && (item.permite_decimales || Number.isInteger(parsed))) {
+                                  effectiveQty = item.permite_decimales ? Math.round(parsed * 100) / 100 : Math.floor(parsed);
+                                }
+                              }
                               const unitPrice = isService ? Number(item.precio_estimado || 0) : Number(item.precio_unitario || 0);
-                              const subtotal = isService ? Number(item.precio_estimado || 0) : Number(item.subtotal || 0);
+                              const subtotal = isService ? Number(item.precio_estimado || 0) : effectiveQty * unitPrice;
 
                               return (
                                 <tr key={item.tempId} className="hover:bg-hover/50 transition-colors">
@@ -1411,10 +1599,15 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
                                     <p className="font-bold text-foreground text-xs">
                                       {isService ? item.nombre_servicio : item.nombre}
                                     </p>
-                                    <p className="text-[10px] text-foreground-muted font-mono">
+                                    <p className="text-[10px] text-foreground-muted font-mono flex items-center gap-1.5 flex-wrap">
                                       {isService
                                         ? (item.codigo ? `Código: ${item.codigo}` : "Servicio confirmado")
                                         : (item.codigo ? `Código: ${item.codigo}` : "Producto / Repuesto")}
+                                      {!isService && item.almacen_nombre && (
+                                        <span className="text-[9px] px-1.5 py-0.2 bg-surface border border-border rounded text-primary font-bold">
+                                          {item.almacen_codigo || "ALM"}: {item.almacen_nombre}
+                                        </span>
+                                      )}
                                     </p>
                                   </td>
                                   <td className="py-3 px-3 text-center font-mono">
@@ -1431,6 +1624,11 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
                                           onChange={(e) => {
                                             setEditingProductQuantity(e.target.value);
                                             setEditingProductError("");
+                                          }}
+                                          onBlur={() => {
+                                            if (editingProductTempId === item.tempId) {
+                                              handleSaveProductQuantity(item.tempId);
+                                            }
                                           }}
                                           onKeyDown={(e) => {
                                             if (e.key === "Enter") {
@@ -1451,7 +1649,33 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
                                         )}
                                       </div>
                                     ) : (
-                                      <span className="text-foreground font-semibold">{item.cantidad}</span>
+                                      <div className="inline-flex items-center justify-center gap-1">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleQuickQuantityChange(item.tempId, -1)}
+                                          disabled={Number(item.cantidad) <= (item.permite_decimales ? 0.01 : 1)}
+                                          className="w-5 h-5 flex items-center justify-center rounded bg-surface-subtle hover:bg-hover border border-border text-foreground-muted hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed text-xs font-bold transition-colors cursor-pointer"
+                                          title="Disminuir cantidad (-1)"
+                                        >
+                                          -
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleStartEditQuantity(item)}
+                                          className="min-w-[28px] px-1.5 py-0.5 rounded text-foreground font-semibold font-mono text-center hover:bg-hover hover:text-primary transition-colors cursor-pointer text-xs"
+                                          title="Haga clic para editar cantidad directamente"
+                                        >
+                                          {item.cantidad}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleQuickQuantityChange(item.tempId, 1)}
+                                          className="w-5 h-5 flex items-center justify-center rounded bg-surface-subtle hover:bg-hover border border-border text-foreground-muted hover:text-foreground text-xs font-bold transition-colors cursor-pointer"
+                                          title="Aumentar cantidad (+1)"
+                                        >
+                                          +
+                                        </button>
+                                      </div>
                                     )}
                                   </td>
                                   <td className="py-3 px-3 text-right font-mono text-foreground">
@@ -1467,6 +1691,7 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
                                           <>
                                             <button
                                               type="button"
+                                              onMouseDown={(e) => e.preventDefault()}
                                               onClick={() => handleSaveProductQuantity(item.tempId)}
                                               className="p-1.5 text-primary hover:bg-primary-muted rounded-lg transition-colors cursor-pointer"
                                               title="Guardar cantidad"
@@ -1475,6 +1700,7 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
                                             </button>
                                             <button
                                               type="button"
+                                              onMouseDown={(e) => e.preventDefault()}
                                               onClick={handleCancelEditQuantity}
                                               className="p-1.5 text-foreground-muted hover:text-foreground hover:bg-hover rounded-lg transition-colors cursor-pointer"
                                               title="Cancelar"
@@ -1495,6 +1721,7 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
                                       )}
                                       <button
                                         type="button"
+                                        onMouseDown={(e) => isEditingThisProduct && e.preventDefault()}
                                         onClick={() => handleDeleteItem(item.tempId)}
                                         className="p-1.5 text-foreground-muted hover:text-error hover:bg-error-muted rounded-lg transition-colors cursor-pointer"
                                         title="Eliminar fila"

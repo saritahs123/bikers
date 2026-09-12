@@ -2,6 +2,8 @@ import { PoolClient } from "pg";
 import { query, withTransaction } from "@/lib/db";
 import { recordUserActivity, recordUserAudit } from "@/lib/auditLogger";
 import { CURRENT_RECEPTION_TERMS_VERSION, isValidReceptionTermsVersion } from "@/lib/workshop/receptionTerms";
+import { resolveDefaultWarehouse, reserveProductsForNewWorkOrder } from "@/lib/workshop/workshopInventoryReservationService";
+import { recalculateWorkOrderTotals } from "@/lib/workshop/recalculateWorkOrderTotals";
 
 export interface ServiceItemInput {
   tipo_servicio_id: number;
@@ -18,6 +20,7 @@ export interface ServiceItemInput {
 
 export interface ProductItemInput {
   producto_id: number | string;
+  almacen_id?: number | string | null;
   cantidad: number | string;
   precio_unitario?: number | string | null;
   observacion?: string | null;
@@ -182,8 +185,8 @@ export async function executeReceptionWithWorkOrder(
   const firma: any = payload.firma || {};
   const idempotency_key = (payload.idempotency_key || "").trim() || null;
 
-  let servicios: ServiceItemInput[] = Array.isArray(payload.servicios) ? payload.servicios : [];
-  let productos: ProductItemInput[] = Array.isArray(payload.productos) ? payload.productos : [];
+  const servicios: ServiceItemInput[] = Array.isArray(payload.servicios) ? payload.servicios : [];
+  const productos: ProductItemInput[] = Array.isArray(payload.productos) ? payload.productos : [];
 
   if (generarOrdenTrabajo && servicios.length === 0) {
     const err: any = new Error("Debe agregar al menos un servicio para generar la Orden de Trabajo.");
@@ -602,24 +605,14 @@ export async function executeReceptionWithWorkOrder(
 
       // 3.1 Process Initial Products (Repuestos)
       if (productos.length > 0) {
-        // Resolve default active warehouse for the workshop
+        // Only resolve default active warehouse if any product lacks an explicit almacen_id
         let defaultAlmacenId: number | null = null;
-        const almRes = await client.query(
-          `SELECT a.almacen_id
-           FROM admin.almacenes a
-           WHERE (a.estado = 'ACTIVO' OR a.estado IS NULL)
-           ORDER BY a.almacen_id ASC
-           LIMIT 1`
+        const needsDefaultAlmacen = productos.some(
+          (p) => p.almacen_id === undefined || p.almacen_id === null || String(p.almacen_id).trim() === ""
         );
-        if (almRes.rows.length > 0) {
-          defaultAlmacenId = almRes.rows[0].almacen_id;
-        }
-
-        if (!defaultAlmacenId) {
-          const anyAlm = await client.query(
-            `SELECT a.almacen_id FROM admin.almacenes a ORDER BY a.almacen_id ASC LIMIT 1`
-          );
-          defaultAlmacenId = anyAlm.rows[0]?.almacen_id || 1;
+        if (needsDefaultAlmacen) {
+          const defaultAlmacen = await resolveDefaultWarehouse(client, session.empresa_id);
+          defaultAlmacenId = defaultAlmacen.almacen_id;
         }
 
         for (let pIdx = 0; pIdx < productos.length; pIdx++) {
@@ -677,9 +670,11 @@ export async function executeReceptionWithWorkOrder(
           const lineSubtotal = Math.round(p_qty * unitPrice * 100) / 100;
           subtotal_productos += lineSubtotal;
 
+          const pAlmId = p.almacen_id ? parseInt(String(p.almacen_id), 10) : defaultAlmacenId;
+
           preparedProductsData.push({
             producto_id: p_id,
-            almacen_id: defaultAlmacenId,
+            almacen_id: pAlmId,
             cantidad: p_qty,
             precio_unitario: unitPrice,
             subtotal: lineSubtotal,
@@ -798,32 +793,16 @@ export async function executeReceptionWithWorkOrder(
         );
       }
 
-      // Insert Products for the Work Order
-      for (let pIdx = 0; pIdx < preparedProductsData.length; pIdx++) {
-        const pData = preparedProductsData[pIdx];
-        await client.query(
-          `INSERT INTO admin.orden_productos (
-            orden_trabajo_id, orden_servicio_id, producto_id, almacen_id,
-            cantidad, precio_unitario, porcentaje_descuento, valor_descuento,
-            subtotal, estado_aprobacion_id, utilizado, observacion,
-            fecha_registro, usuario_registro
-          ) VALUES (
-            $1, NULL, $2, $3,
-            $4, $5, 0, 0,
-            $6, 1, false, $7,
-            NOW(), $8
-          )`,
-          [
-            orden_trabajo_id,
-            pData.producto_id,
-            pData.almacen_id,
-            pData.cantidad,
-            pData.precio_unitario,
-            pData.subtotal,
-            pData.observacion,
-            session.usuario_id
-          ]
-        );
+      // Atomically validate stock, acquire deterministic locks, increment reservations, and insert admin.orden_productos
+      if (preparedProductsData.length > 0) {
+        await reserveProductsForNewWorkOrder({
+          client,
+          ordenTrabajoId: orden_trabajo_id,
+          empresaId: session.empresa_id,
+          usuarioId: session.usuario_id,
+          productos: preparedProductsData
+        });
+        await recalculateWorkOrderTotals(client, orden_trabajo_id, session.usuario_id);
       }
 
       // Mandatory Initial History Record in admin.orden_historial_estado

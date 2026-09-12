@@ -1,26 +1,27 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
   X,
   Edit,
   Edit2,
   Trash2,
   Check,
-  AlertCircle,
   AlertTriangle,
   Wrench,
-  Bike,
   User,
-  Calendar,
-  Clock,
   Loader2,
   Search,
-  ChevronDown,
   Info,
   Package,
   FileText
 } from "lucide-react";
+
+let editWoTempCounter = 0;
+const generateItemTempId = (prefix = "item") => {
+  editWoTempCounter += 1;
+  return `${prefix}_${Date.now()}_${editWoTempCounter}`;
+};
 
 export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess }) {
   const [loadingInit, setLoadingInit] = useState(true);
@@ -29,9 +30,8 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
 
   // Order baseline data
   const [orderCode, setOrderCode] = useState("");
-  const [initialReceptionId, setInitialReceptionId] = useState(null);
-  const [initialReceptionOriginalClient, setInitialReceptionOriginalClient] = useState(null);
-  const [initialReceptionOriginalBike, setInitialReceptionOriginalBike] = useState(null);
+  const [selectedReceptionId, setSelectedReceptionId] = useState("");
+  const [selectedReception, setSelectedReception] = useState(null);
 
   // Catalogs
   const [catalogs, setCatalogs] = useState({
@@ -39,13 +39,13 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
     prioridades: [],
     mecanicos: [],
     tipos_servicio: [],
-    productos: []
+    productos: [],
+    almacenes: []
   });
+  const [selectedAlmacenId, setSelectedAlmacenId] = useState("");
 
   // Receptions
   const [availableReceptions, setAvailableReceptions] = useState([]);
-  const [selectedReceptionId, setSelectedReceptionId] = useState("");
-  const [selectedReception, setSelectedReception] = useState(null);
 
   // Clients & Bicycles Autocomplete States
   const [clients, setClients] = useState([]);
@@ -101,14 +101,7 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Fetch initial data when modal opens
-  useEffect(() => {
-    if (isOpen && ordenId) {
-      loadOrderAndCatalogs();
-    }
-  }, [isOpen, ordenId]);
-
-  const loadOrderAndCatalogs = async () => {
+  const loadOrderAndCatalogs = useCallback(async () => {
     setLoadingInit(true);
     setError("");
     try {
@@ -130,7 +123,6 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
 
       const orderData = orderJson.data || orderJson;
       setOrderCode(orderData.codigo_orden || `OT #${ordenId}`);
-      setInitialReceptionId(orderData.recepcion_id ? String(orderData.recepcion_id) : "");
       setSelectedReceptionId(orderData.recepcion_id ? String(orderData.recepcion_id) : "");
 
       setSelectedEstadoId(orderData.estado_orden_id ? String(orderData.estado_orden_id) : "1");
@@ -149,8 +141,13 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
         prioridades: catObj.prioridades || [],
         mecanicos: catObj.mecanicos || [],
         tipos_servicio: catObj.tipos_servicio || [],
-        productos: catObj.productos || []
+        productos: catObj.productos || [],
+        almacenes: catObj.almacenes || []
       });
+
+      if (catObj.almacenes?.length > 0) {
+        setSelectedAlmacenId(String(catObj.almacenes[0].almacen_id));
+      }
 
       // Setup Clients
       const clientArr = Array.isArray(clientsJson?.data)
@@ -202,8 +199,6 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
           fecha_recepcion: orderData.fecha_ingreso
         };
       setSelectedReception(currentRecObj);
-      setInitialReceptionOriginalClient(currentRecObj.cliente_id || orderData.cliente_id);
-      setInitialReceptionOriginalBike(currentRecObj.bicicleta_id || orderData.bicicleta_id);
 
       // Initialize Selected Client
       const activeCli = clientArr.find(
@@ -251,7 +246,7 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
       rawServices.forEach((s) => {
         if (s.activo !== false) {
           initialItems.push({
-            temp_id: `srv_${s.orden_servicio_id || s.servicio_id || Math.random()}`,
+            temp_id: s.orden_servicio_id ? `srv_${s.orden_servicio_id}` : generateItemTempId("srv"),
             orden_servicio_id: s.orden_servicio_id || s.servicio_id,
             type: "servicio",
             tipo_servicio_id: s.tipo_servicio_id || s.servicio_id,
@@ -269,14 +264,18 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
         const qty = Number(p.cantidad || 1);
         const pu = Number(p.precio_unitario || p.precio_venta || 0);
         initialItems.push({
-          temp_id: `prod_${p.orden_producto_id || p.id || Math.random()}`,
+          temp_id: p.orden_producto_id ? `prod_${p.orden_producto_id}` : generateItemTempId("prod"),
           orden_producto_id: p.orden_producto_id || p.id,
           type: "producto",
           producto_id: p.producto_id,
+          almacen_id: p.almacen_id,
+          almacen_nombre: p.almacen_nombre || catObj.almacenes?.find((a) => Number(a.almacen_id) === Number(p.almacen_id))?.nombre || null,
+          almacen_codigo: p.almacen_codigo || catObj.almacenes?.find((a) => Number(a.almacen_id) === Number(p.almacen_id))?.codigo || null,
           nombre: p.producto_nombre || p.nombre || "Producto / Repuesto",
           cantidad: qty,
           precio_unitario: pu,
           subtotal: Math.round(qty * pu * 100) / 100,
+          permite_decimales: Boolean(p.permite_decimales),
           observacion: p.observacion || ""
         });
       });
@@ -288,7 +287,23 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
     } finally {
       setLoadingInit(false);
     }
-  };
+  }, [ordenId]);
+
+  // Fetch initial data when modal opens
+  useEffect(() => {
+    if (isOpen && ordenId) {
+      let isMounted = true;
+      const init = async () => {
+        if (isMounted) {
+          await loadOrderAndCatalogs();
+        }
+      };
+      init();
+      return () => {
+        isMounted = false;
+      };
+    }
+  }, [isOpen, ordenId, loadOrderAndCatalogs]);
 
   // Handle Reception Change: Pre-loads Client and Bike from reception, but keeps them editable
   const handleReceptionChange = async (e) => {
@@ -445,7 +460,7 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
     if (!serviceObj) return;
     const price = Number(serviceObj.precio_base || serviceObj.precio || 0);
     const newItem = {
-      temp_id: `srv_new_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      temp_id: generateItemTempId("srv_new"),
       type: "servicio",
       tipo_servicio_id: serviceObj.tipo_servicio_id,
       nombre: serviceObj.nombre || "Servicio",
@@ -464,14 +479,20 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
   const handleSelectProduct = (prodObj) => {
     if (!prodObj) return;
     const price = Number(prodObj.precio_venta || prodObj.precio || 0);
+    const activeAlmId = selectedAlmacenId ? Number(selectedAlmacenId) : (catalogs.almacenes?.[0]?.almacen_id || undefined);
+    const activeAlm = (catalogs.almacenes || []).find((a) => Number(a.almacen_id) === Number(activeAlmId));
     const newItem = {
-      temp_id: `prod_new_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      temp_id: generateItemTempId("prod_new"),
       type: "producto",
       producto_id: prodObj.producto_id,
+      almacen_id: activeAlmId,
+      almacen_nombre: activeAlm?.nombre || null,
+      almacen_codigo: activeAlm?.codigo || null,
       nombre: prodObj.nombre || "Producto / Repuesto",
       cantidad: 1,
       precio_unitario: price,
       subtotal: price,
+      permite_decimales: Boolean(prodObj.permite_decimales),
       observacion: ""
     };
     setItemsList((prev) => [...prev, newItem]);
@@ -489,6 +510,47 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
     }
   };
 
+  // Pure snapshot helper: applies any pending quantity edit without mutating input items
+  const applyPendingQuantityEdit = (items) => {
+    if (!editingProductTempId) return items;
+    const targetItem = items.find((it) => it.temp_id === editingProductTempId);
+    if (!targetItem) return items;
+
+    const rawVal = String(editingProductQuantity).trim();
+    if (rawVal === "") {
+      return items;
+    }
+
+    const parsed = Number(rawVal);
+    if (isNaN(parsed) || parsed <= 0) {
+      return items;
+    }
+
+    const allowsDecimals =
+      targetItem.permite_decimales ??
+      catalogs.productos?.find((cp) => cp.producto_id === targetItem.producto_id)?.permite_decimales ??
+      false;
+
+    if (!allowsDecimals && !Number.isInteger(parsed)) {
+      return items;
+    }
+
+    const finalQty = allowsDecimals ? Math.round(parsed * 100) / 100 : Math.round(parsed);
+    const pu = Number(targetItem.precio_unitario || 0);
+    const newSubtotal = Math.round(finalQty * pu * 100) / 100;
+
+    return items.map((it) => {
+      if (it.temp_id === editingProductTempId) {
+        return {
+          ...it,
+          cantidad: finalQty,
+          subtotal: newSubtotal
+        };
+      }
+      return it;
+    });
+  };
+
   const handleStartEditQuantity = (item) => {
     if (item.type !== "producto") return;
     setEditingProductTempId(item.temp_id);
@@ -503,21 +565,44 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
   };
 
   const handleSaveQuantity = (tempId) => {
-    const rawVal = editingProductQuantity.trim();
-    const parsed = Number(rawVal);
-    if (!rawVal || isNaN(parsed) || parsed <= 0 || !Number.isInteger(parsed)) {
-      setEditingProductError("Cantidad inválida. Debe ser entero positivo mayor a 0.");
+    const targetId = tempId || editingProductTempId;
+    if (!targetId) return;
+
+    const rawVal = String(editingProductQuantity).trim();
+    if (rawVal === "") {
+      setEditingProductTempId(null);
+      setEditingProductQuantity("");
+      setEditingProductError("");
       return;
     }
 
+    const parsed = Number(rawVal);
+    if (isNaN(parsed) || parsed <= 0) {
+      setEditingProductError("Cantidad inválida. Debe ser un número mayor a 0.");
+      return;
+    }
+
+    const targetItem = itemsList.find((it) => it.temp_id === targetId);
+    const allowsDecimals =
+      targetItem?.permite_decimales ??
+      catalogs.productos?.find((cp) => cp.producto_id === targetItem?.producto_id)?.permite_decimales ??
+      false;
+
+    if (!allowsDecimals && !Number.isInteger(parsed)) {
+      setEditingProductError("Este producto no permite decimales. Ingrese un entero.");
+      return;
+    }
+
+    const finalQty = allowsDecimals ? Math.round(parsed * 100) / 100 : Math.round(parsed);
+
     setItemsList((prev) =>
       prev.map((item) => {
-        if (item.temp_id === tempId) {
+        if (item.temp_id === targetId) {
           const pu = Number(item.precio_unitario || 0);
           return {
             ...item,
-            cantidad: parsed,
-            subtotal: Math.round(parsed * pu * 100) / 100
+            cantidad: finalQty,
+            subtotal: Math.round(finalQty * pu * 100) / 100
           };
         }
         return item;
@@ -528,9 +613,63 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
     setEditingProductError("");
   };
 
+  const handleCancelEditQuantity = () => {
+    setEditingProductTempId(null);
+    setEditingProductQuantity("");
+    setEditingProductError("");
+  };
+
+  const handleQuickQuantityChange = (tempId, delta) => {
+    setItemsList((prev) =>
+      prev.map((item) => {
+        if (item.temp_id === tempId && item.type === "producto") {
+          const allowsDecimals =
+            item.permite_decimales ??
+            catalogs.productos?.find((cp) => cp.producto_id === item.producto_id)?.permite_decimales ??
+            false;
+          const currentQty = Number(item.cantidad) || 1;
+          const step = allowsDecimals ? (Number.isInteger(currentQty) ? 1 : 0.5) : 1;
+          const rawNew = currentQty + delta * step;
+          const minQty = allowsDecimals ? 0.01 : 1;
+          const finalQty = Math.max(minQty, allowsDecimals ? Math.round(rawNew * 100) / 100 : Math.round(rawNew));
+          const pu = Number(item.precio_unitario || 0);
+
+          if (editingProductTempId === tempId) {
+            setEditingProductQuantity(String(finalQty));
+            setEditingProductError("");
+          }
+
+          return {
+            ...item,
+            cantidad: finalQty,
+            subtotal: Math.round(finalQty * pu * 100) / 100
+          };
+        }
+        return item;
+      })
+    );
+  };
+
+  // Real-time calculated total reflecting ongoing edits safely
   const totalCalculado = useMemo(() => {
-    return itemsList.reduce((acc, it) => acc + (Number(it.subtotal) || 0), 0);
-  }, [itemsList]);
+    return itemsList.reduce((acc, it) => {
+      let subtotal = Number(it.subtotal) || 0;
+      if (it.type === "producto" && editingProductTempId === it.temp_id) {
+        const rawVal = String(editingProductQuantity).trim();
+        const parsed = Number(rawVal);
+        const allowsDecimals =
+          it.permite_decimales ??
+          catalogs.productos?.find((cp) => cp.producto_id === it.producto_id)?.permite_decimales ??
+          false;
+        const isValid = !isNaN(parsed) && parsed > 0 && (allowsDecimals || Number.isInteger(parsed));
+        if (isValid) {
+          const pu = Number(it.precio_unitario) || 0;
+          subtotal = Math.round(parsed * pu * 100) / 100;
+        }
+      }
+      return acc + subtotal;
+    }, 0);
+  }, [itemsList, editingProductTempId, editingProductQuantity, catalogs.productos]);
 
   // Submit full update to backend in atomic transaction
   const handleSubmit = async (e) => {
@@ -548,10 +687,17 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
       return;
     }
 
+    // Canonical local resolution of pending quantity edit before constructing payload
+    const currentItems = applyPendingQuantityEdit(itemsList);
+    setItemsList(currentItems);
+    setEditingProductTempId(null);
+    setEditingProductQuantity("");
+    setEditingProductError("");
+
     setSubmitting(true);
 
     try {
-      const serviciosPayload = itemsList
+      const serviciosPayload = currentItems
         .filter((it) => it.type === "servicio")
         .map((s) => ({
           orden_servicio_id: s.orden_servicio_id || undefined,
@@ -561,11 +707,12 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
           observacion_tecnica: s.observacion_tecnica || ""
         }));
 
-      const productosPayload = itemsList
+      const productosPayload = currentItems
         .filter((it) => it.type === "producto")
         .map((p) => ({
           orden_producto_id: p.orden_producto_id || undefined,
           producto_id: p.producto_id,
+          almacen_id: p.almacen_id || undefined,
           cantidad: p.cantidad,
           precio_unitario: p.precio_unitario,
           observacion: p.observacion || ""
@@ -946,9 +1093,29 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
 
                 {/* Search Product */}
                 <div ref={productComboboxRef} className="relative space-y-1.5">
-                  <label className="block font-mono text-xs font-bold uppercase tracking-wider text-slate-300">
-                    Buscar Producto / Repuesto
-                  </label>
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <label className="block font-mono text-xs font-bold uppercase tracking-wider text-slate-300">
+                      Buscar Producto / Repuesto
+                    </label>
+                    {catalogs.almacenes && catalogs.almacenes.length > 1 && (
+                      <div className="flex items-center gap-1.5">
+                        <label className="text-[10px] text-slate-400 font-mono whitespace-nowrap">
+                          Almacén:
+                        </label>
+                        <select
+                          value={selectedAlmacenId}
+                          onChange={(e) => setSelectedAlmacenId(e.target.value)}
+                          className="px-2 py-0.5 bg-[#0a0c10] border border-[#2d3748] rounded-lg text-[11px] text-slate-200 font-mono focus:outline-none focus:border-[#bfce7f] cursor-pointer"
+                        >
+                          {catalogs.almacenes.map((alm) => (
+                            <option key={alm.almacen_id} value={alm.almacen_id}>
+                              {alm.codigo} — {alm.nombre}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
                   <div className="relative">
                     <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                     <input
@@ -1036,6 +1203,21 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
                         itemsList.map((item, index) => {
                           const isProduct = item.type === "producto";
                           const isEditingThis = editingProductTempId === item.temp_id;
+                          const allowsDecimals =
+                            item.permite_decimales ??
+                            catalogs.productos?.find((cp) => cp.producto_id === item.producto_id)?.permite_decimales ??
+                            false;
+
+                          let rowSubtotal = Number(item.subtotal || 0);
+
+                          if (isProduct && isEditingThis) {
+                            const rawVal = String(editingProductQuantity).trim();
+                            const parsed = Number(rawVal);
+                            const isValid = !isNaN(parsed) && parsed > 0 && (allowsDecimals || Number.isInteger(parsed));
+                            if (isValid) {
+                              rowSubtotal = Math.round(parsed * Number(item.precio_unitario || 0) * 100) / 100;
+                            }
+                          }
 
                           return (
                             <tr key={item.temp_id} className="hover:bg-[#1f242d]/50 transition-colors">
@@ -1055,36 +1237,87 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
                               </td>
                               <td className="py-2.5 px-4 text-slate-100 font-sans">
                                 <span className="font-semibold block">{item.nombre}</span>
+                                {isProduct && (item.almacen_nombre || item.almacen_id) && (
+                                  <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1 mt-0.5">
+                                    <span className="text-[9px] px-1.5 py-0.2 bg-[#1f242d] border border-[#2d3748] rounded text-[#bfce7f] font-bold">
+                                      {item.almacen_codigo || "ALM"}: {item.almacen_nombre || `Almacén #${item.almacen_id}`}
+                                    </span>
+                                  </div>
+                                )}
                               </td>
                               <td className="py-2.5 px-3 text-center">
-                                {isEditingThis ? (
-                                  <div className="flex items-center justify-center gap-1">
-                                    <input
-                                      ref={editingQuantityInputRef}
-                                      type="number"
-                                      min="1"
-                                      step="1"
-                                      value={editingProductQuantity}
-                                      onChange={(e) => setEditingProductQuantity(e.target.value)}
-                                      onKeyDown={(e) => {
-                                        if (e.key === "Enter") {
-                                          e.preventDefault();
-                                          handleSaveQuantity(item.temp_id);
-                                        } else if (e.key === "Escape") {
-                                          setEditingProductTempId(null);
-                                        }
-                                      }}
-                                      className="w-14 bg-[#0a0c10] border border-[#bfce7f] rounded px-1.5 py-0.5 text-center text-xs font-bold text-slate-100 focus:outline-none"
-                                    />
-                                    <button
-                                      type="button"
-                                      onClick={() => handleSaveQuantity(item.temp_id)}
-                                      className="p-1 bg-[#bfce7f] text-slate-950 rounded hover:brightness-110"
-                                      title="Confirmar cantidad"
-                                    >
-                                      <Check size={12} />
-                                    </button>
-                                  </div>
+                                {isProduct ? (
+                                  isEditingThis ? (
+                                    <div className="flex items-center justify-center gap-1">
+                                      <input
+                                        ref={editingQuantityInputRef}
+                                        type="number"
+                                        min={allowsDecimals ? "0.01" : "1"}
+                                        step={allowsDecimals ? "0.01" : "1"}
+                                        value={editingProductQuantity}
+                                        onChange={(e) => {
+                                          setEditingProductQuantity(e.target.value);
+                                          setEditingProductError("");
+                                        }}
+                                        onBlur={() => handleSaveQuantity(item.temp_id)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") {
+                                            e.preventDefault();
+                                            handleSaveQuantity(item.temp_id);
+                                          } else if (e.key === "Escape") {
+                                            handleCancelEditQuantity();
+                                          }
+                                        }}
+                                        className="w-14 bg-[#0a0c10] border border-[#bfce7f] rounded px-1 py-0.5 text-center text-xs font-bold text-slate-100 focus:outline-none"
+                                      />
+                                      <button
+                                        type="button"
+                                        onMouseDown={(e) => e.preventDefault()}
+                                        onClick={() => handleSaveQuantity(item.temp_id)}
+                                        className="p-1 bg-[#bfce7f] text-slate-950 rounded hover:brightness-110 cursor-pointer"
+                                        title="Confirmar cantidad"
+                                      >
+                                        <Check size={12} />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onMouseDown={(e) => e.preventDefault()}
+                                        onClick={handleCancelEditQuantity}
+                                        className="p-1 bg-slate-800 text-slate-300 rounded hover:bg-slate-700 cursor-pointer"
+                                        title="Cancelar edición"
+                                      >
+                                        <X size={12} />
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center justify-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleQuickQuantityChange(item.temp_id, -1)}
+                                        disabled={item.cantidad <= (allowsDecimals ? 0.01 : 1)}
+                                        className="w-5 h-5 flex items-center justify-center rounded bg-[#1f242d] hover:bg-[#2d3748] text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed text-xs font-bold transition-colors cursor-pointer"
+                                        title="Disminuir cantidad"
+                                      >
+                                        -
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleStartEditQuantity(item)}
+                                        className="px-1.5 py-0.5 hover:bg-[#1f242d] rounded cursor-pointer font-bold text-slate-200 hover:text-[#bfce7f] transition-colors"
+                                        title="Click para editar cantidad"
+                                      >
+                                        {item.cantidad}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleQuickQuantityChange(item.temp_id, 1)}
+                                        className="w-5 h-5 flex items-center justify-center rounded bg-[#1f242d] hover:bg-[#2d3748] text-slate-300 text-xs font-bold transition-colors cursor-pointer"
+                                        title="Aumentar cantidad"
+                                      >
+                                        +
+                                      </button>
+                                    </div>
+                                  )
                                 ) : (
                                   <span className="font-bold">{item.cantidad}</span>
                                 )}
@@ -1097,7 +1330,7 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
                               </td>
                               <td className="py-2.5 px-4 text-right font-bold text-emerald-400">
                                 RD${" "}
-                                {Number(item.subtotal || 0).toLocaleString("es-DO", {
+                                {rowSubtotal.toLocaleString("es-DO", {
                                   minimumFractionDigits: 2
                                 })}
                               </td>
@@ -1115,6 +1348,7 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
                                   )}
                                   <button
                                     type="button"
+                                    onMouseDown={(e) => e.preventDefault()}
                                     onClick={() => handleRemoveItem(item.temp_id)}
                                     className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-[#0a0c10] rounded-lg transition-colors cursor-pointer"
                                     title="Eliminar de la orden"
