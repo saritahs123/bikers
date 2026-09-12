@@ -329,6 +329,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
 
   useEffect(() => {
     if (ordenId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       fetchOrderDetail(false);
     }
     return () => {
@@ -755,32 +756,82 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
     );
   }
 
-  // Determine current pipeline step index
-  const currentStepId = Number(order.estado_orden_id || 1);
-  const getPipelineLabel = (id, key, defaultLabel) => {
-    const fromCat = (catalogs.estados || []).find((e) => Number(e.estado_orden_id) === Number(id) || e.codigo === key);
-    if (fromCat?.nombre) return fromCat.nombre;
-    if (Number(order.estado_orden_id) === Number(id) && (order.estado_nombre || order.nombre_estado)) {
-      return order.estado_nombre || order.nombre_estado;
+  // Pipeline Stepper Definitions: mapped strictly by official catalog codes & operational sequence
+  // Visual presentation (completed, active, pending) is 100% decoupled from admin.estado_orden_trabajo.color_estado
+  const PIPELINE_STEPS = [
+    {
+      stepIndex: 1,
+      key: "RECIBIDA",
+      aliases: ["RECIBIDA", "PENDIENTE"],
+      catalogId: 1,
+      label: "PENDIENTE",
+      activeColor: "#3b82f6", // Blue for pending/received
+      icon: Check
+    },
+    {
+      stepIndex: 2,
+      key: "REPARACION",
+      aliases: ["REPARACION", "EN REPARACION", "EN_REPARACION"],
+      catalogId: 5,
+      label: "EN REPARACION",
+      activeColor: "#f97316", // Orange for in-repair
+      icon: Wrench
+    },
+    {
+      stepIndex: 3,
+      key: "LISTA_ENTREGA",
+      aliases: ["LISTA_ENTREGA", "COMPLETADA", "COMPLETADO"],
+      catalogId: 7,
+      label: "COMPLETADA",
+      activeColor: "#10b981", // Emerald green for ready/completed
+      icon: Truck
+    },
+    {
+      stepIndex: 4,
+      key: "ENTREGADA",
+      aliases: ["ENTREGADA", "ENTREGADO"],
+      catalogId: 8,
+      label: "ENTREGADA",
+      activeColor: "#059669", // Deep emerald green for final delivered
+      icon: ShieldCheck
     }
-    return defaultLabel;
-  };
-
-  const getPipelineColor = (id, key, defaultColor) => {
-    const fromCat = (catalogs.estados || []).find((e) => Number(e.estado_orden_id) === Number(id) || e.codigo === key);
-    if (fromCat?.color_estado) return fromCat.color_estado;
-    if (Number(order.estado_orden_id) === Number(id) && (order.estado_color || order.color_estado)) {
-      return order.estado_color || order.color_estado;
-    }
-    return defaultColor;
-  };
-
-  const pipelineSteps = [
-    { id: 1, key: "RECIBIDA", label: getPipelineLabel(1, "RECIBIDA", "Recibida"), color: getPipelineColor(1, "RECIBIDA", "#3b82f6"), icon: Check },
-    { id: 5, key: "REPARACION", label: getPipelineLabel(5, "REPARACION", "En Reparación"), color: getPipelineColor(5, "REPARACION", "#f97316"), icon: Wrench },
-    { id: 7, key: "LISTA_ENTREGA", label: getPipelineLabel(7, "LISTA_ENTREGA", "Lista para Entrega"), color: getPipelineColor(7, "LISTA_ENTREGA", "#10b981"), icon: Truck },
-    { id: 8, key: "ENTREGADA", label: getPipelineLabel(8, "ENTREGADA", "Entregada"), color: getPipelineColor(8, "ENTREGADA", "#059669"), icon: ShieldCheck }
   ];
+
+  // Resolve current step index from order state (code preferred, id fallback)
+  const orderStatusCode = String(order.estado_codigo || "").trim().toUpperCase();
+  const orderStatusId = Number(order.estado_orden_id || 0);
+
+  const isOrderHold = orderStatusCode === "HOLD" || orderStatusId === 2;
+
+  let currentStepIndex = 1;
+  if (isOrderHold) {
+    currentStepIndex = 2; // HOLD is a temporary condition handled within the repair step
+  } else if (orderStatusCode === "ENTREGADA" || orderStatusId === 8) {
+    currentStepIndex = 4;
+  } else if (orderStatusCode === "LISTA_ENTREGA" || orderStatusCode === "COMPLETADA" || orderStatusId === 7) {
+    currentStepIndex = 3;
+  } else if (orderStatusCode === "REPARACION" || orderStatusCode === "EN REPARACION" || orderStatusCode === "EN_REPARACION" || orderStatusId === 5) {
+    currentStepIndex = 2;
+  } else if (orderStatusCode === "RECIBIDA" || orderStatusCode === "PENDIENTE" || orderStatusId === 1) {
+    currentStepIndex = 1;
+  } else {
+    const foundStep = PIPELINE_STEPS.find(s => s.catalogId === orderStatusId);
+    currentStepIndex = foundStep ? foundStep.stepIndex : 1;
+  }
+
+  const getPipelineLabel = (step) => {
+    if (isOrderHold && step.stepIndex === 2) {
+      return "EN HOLD";
+    }
+    return step.label;
+  };
+
+  const getPipelineActiveColor = (step) => {
+    if (isOrderHold && step.stepIndex === 2) {
+      return "#ef4444"; // Red alert for HOLD pause
+    }
+    return step.activeColor;
+  };
 
   // Extract services, labor items, and products from live backend API or order object
   const servicesList = (order.resumen_financiero?.servicios || order.servicios || []).map((s) => ({
@@ -1132,34 +1183,48 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
       {/* Progress Pipeline Stepper */}
       <div className="bg-[#161a21] border border-[#2d3748] rounded-xl p-6 shadow-xl">
         <div className="flex justify-between items-center relative">
-          <div className="absolute left-[5%] right-[5%] top-1/2 h-1 bg-[#2d3748] -z-0 -translate-y-1/2"></div>
-          {pipelineSteps.map((step) => {
-            const isHoldAtRepair = currentStepId === 2 && step.id === 5;
-            const isCompleted = currentStepId === 2 ? step.id === 1 : step.id < currentStepId;
-            const isActive = step.id === currentStepId || isHoldAtRepair;
-            const StepIcon = isHoldAtRepair ? Pause : step.icon;
+          {/* Background Track */}
+          <div className="absolute left-[12%] right-[12%] top-1/2 h-1 bg-[#2d3748] -z-0 -translate-y-1/2">
+            {/* Active Progress Fill */}
+            <div
+              className="h-full bg-emerald-500 transition-all duration-500 rounded-full"
+              style={{
+                width: `${Math.min(100, Math.max(0, ((currentStepIndex - 1) / (PIPELINE_STEPS.length - 1)) * 100))}%`
+              }}
+            />
+          </div>
 
-            const stepColor = isHoldAtRepair
-              ? (order.estado_color || order.color_estado || getPipelineColor(2, "HOLD", "#3b82f6"))
-              : (isActive ? (order.estado_color || order.color_estado || step.color) : step.color);
+          {PIPELINE_STEPS.map((step) => {
+            const isCompleted = step.stepIndex < currentStepIndex;
+            const isActive = step.stepIndex === currentStepIndex || (isOrderHold && step.stepIndex === 2);
+            const isHoldThisStep = isOrderHold && step.stepIndex === 2;
 
-            const stepLabel = isHoldAtRepair
-              ? (order.estado_nombre || getPipelineLabel(2, "HOLD", "EN HOLD"))
-              : step.label;
+            // Step icon: Completed steps always display Check (✓). Hold displays Pause. Active/pending show step icon.
+            let StepIcon = step.icon;
+            if (isHoldThisStep) {
+              StepIcon = Pause;
+            } else if (isCompleted) {
+              StepIcon = Check;
+            } else {
+              StepIcon = step.icon;
+            }
+
+            const activeStepColor = getPipelineActiveColor(step);
+            const stepLabel = getPipelineLabel(step);
 
             return (
-              <div key={step.id} className="flex flex-col items-center gap-2 relative z-10 w-1/6">
+              <div key={step.stepIndex} className="flex flex-col items-center gap-2 relative z-10 w-1/6">
                 <div
                   style={
                     isActive
                       ? {
-                          backgroundColor: stepColor,
-                          color: "#0a0c10",
-                          boxShadow: `0 0 12px ${stepColor}60`
+                          backgroundColor: activeStepColor,
+                          color: "#ffffff",
+                          boxShadow: `0 0 16px ${activeStepColor}80`
                         }
                       : isCompleted
                       ? {
-                          backgroundColor: "#84924a",
+                          backgroundColor: "#10b981",
                           color: "#ffffff"
                         }
                       : undefined
@@ -1175,8 +1240,8 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                   <StepIcon className={isActive ? "w-5 h-5" : "w-4 h-4"} />
                 </div>
                 <span
-                  style={isActive ? { color: stepColor } : undefined}
-                  className={`font-mono text-[10px] tracking-wider uppercase text-center ${
+                  style={isActive ? { color: activeStepColor } : undefined}
+                  className={`font-mono text-[10px] tracking-wider uppercase text-center transition-colors ${
                     isActive
                       ? "font-extrabold"
                       : isCompleted
@@ -2082,7 +2147,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
             <div className="text-xl font-bold font-mono text-slate-900">ORDEN DE TRABAJO</div>
             <div className="text-lg font-bold font-mono text-emerald-800">{order.codigo_orden}</div>
             <div className="text-[11px] text-slate-600 font-mono mt-1">
-              Fecha Emisión: {new Date(order.fecha_ingreso || Date.now()).toLocaleDateString("es-DO")}
+              Fecha Emisión: {order.fecha_ingreso ? new Date(order.fecha_ingreso).toLocaleDateString("es-DO") : "N/A"}
             </div>
             <div className="flex justify-end gap-1.5 mt-1 text-[10px] font-mono">
               <span className="px-2 py-0.5 border border-slate-400 font-bold uppercase">{order.estado_nombre}</span>
@@ -2266,7 +2331,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
           <div>
             <div className="border-b border-slate-400 mb-2 h-12"></div>
             <p className="font-bold text-slate-800">Responsable de Taller</p>
-            <p className="text-slate-500">Biker's Fort Core</p>
+            <p className="text-slate-500">Biker&apos;s Fort Core</p>
           </div>
         </div>
       </div>

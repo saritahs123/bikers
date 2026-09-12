@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
     const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
 
     // Canonical client company isolation condition mandatory
-    const queryParams: any[] = [empresaId];
+    const queryParams: (string | number)[] = [empresaId];
     const whereConditions: string[] = [
       `c.empresa_id = $1`,
       `ot.activo = true`
@@ -139,6 +139,8 @@ export async function GET(req: NextRequest) {
 
     if (sortBy === "codigo") {
       orderBySql = `ot.orden_trabajo_id ${sortDirection}, ot.codigo_orden ${sortDirection}`;
+    } else if (sortBy === "fecha" || sortBy === "fecha_creacion" || sortBy === "fecha_registro") {
+      orderBySql = `ot.fecha_registro ${sortDirection}, ot.orden_trabajo_id ${sortDirection}`;
     } else if (sortBy === "cliente") {
       orderBySql = `LOWER(COALESCE(c.nombre_completo, 'Cliente General')) ${sortDirection}, LOWER(COALESCE(b.marca, '')) ${sortDirection}, LOWER(COALESCE(b.modelo, '')) ${sortDirection}, ot.orden_trabajo_id ${sortDirection}`;
     } else if (sortBy === "estado") {
@@ -178,6 +180,7 @@ export async function GET(req: NextRequest) {
         pot.nombre AS prioridad_nombre,
         pot.color_estado AS prioridad_color,
         ot.fecha_registro,
+        ot.fecha_registro AS fecha_creacion,
         ot.fecha_recepcion AS fecha_ingreso,
         ot.fecha_entrega_estimada AS fecha_prometida,
         ot.fecha_inicio_trabajo AS fecha_inicio,
@@ -257,7 +260,15 @@ export async function GET(req: NextRequest) {
     `, [empresaId]);
 
     // Summary Metrics for company isolation
-    const metricsRes = await query<any>(`
+    const metricsRes = await query<{
+      abiertas: number;
+      recibidas: number;
+      en_proceso: number;
+      en_hold: number;
+      listas_entrega: number;
+      entregadas: number;
+      total: number;
+    }>(`
       SELECT
         COUNT(ot.orden_trabajo_id) FILTER (WHERE (eot.codigo NOT IN ('ENTREGADA', 'CANCELADA') OR eot.codigo IS NULL) AND ot.estado_orden_id NOT IN (8, 9))::int AS abiertas,
         COUNT(ot.orden_trabajo_id) FILTER (WHERE eot.codigo = 'RECIBIDA' OR ot.estado_orden_id = 1)::int AS recibidas,
@@ -314,7 +325,7 @@ export async function GET(req: NextRequest) {
     resPayload.headers.set("x-perm-exportar", perms.puede_exportar ? "true" : "false");
     return resPayload;
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error in GET /api/taller/ordenes:", error);
     return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al consultar las órdenes de trabajo." }, { status: 500 });
   }
@@ -542,9 +553,10 @@ export async function POST(req: NextRequest) {
     } finally {
       client.release();
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error in POST /api/taller/ordenes:", error);
-    if (error?.code === "23505") {
+    const dbErr = error as { code?: string };
+    if (dbErr?.code === "23505") {
       return NextResponse.json({ success: false, error: "DUPLICATE_ENTRY", message: "Ya existe un registro con estos datos." }, { status: 409 });
     }
     return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al crear la orden de trabajo." }, { status: 500 });

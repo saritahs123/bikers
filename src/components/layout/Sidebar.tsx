@@ -79,8 +79,7 @@ function SidebarContent({
         { href: "/inventory/movements", label: "MOVIMIENTOS" },
         { href: "/inventory/entries", label: "ENTRADAS" },
         { href: "/inventory/adjustments", label: "SALIDAS Y AJUSTES" },
-        { href: "/inventory/transfers", label: "TRANSFERENCIAS" },
-        { href: "/inventory/initial", label: "INVENTARIO INICIAL" }
+        { href: "/inventory/transfers", label: "TRANSFERENCIAS" }
       ]
     },
     {
@@ -96,6 +95,7 @@ function SidebarContent({
         { href: "/inventory/product-brands", label: "MARCAS DE PRODUCTO" },
         { href: "/inventory/measurement-units", label: "UNIDADES DE MEDIDA" },
         { href: "/inventory/suppliers", label: "PROVEEDORES" },
+        { href: "/inventory/initial", label: "INVENTARIO INICIAL" },
         { href: "/crm/component-categories", label: "CATEGORÍAS COMPONENTES" },
         { href: "/crm/component-states", label: "ESTADOS COMPONENTES" }
       ]

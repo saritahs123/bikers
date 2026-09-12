@@ -23,8 +23,11 @@ import {
   Eye,
   Check,
 } from "lucide-react";
+import ProductCreateModal from "@/components/products/ProductCreateModal";
 
 export default function InventoryEntriesView() {
+  const [isCreateProductModalOpen, setIsCreateProductModalOpen] = useState(false);
+  const [canCreateProduct, setCanCreateProduct] = useState(false);
   // Catálogos
   const [almacenes, setAlmacenes] = useState([]);
   const [productos, setProductos] = useState([]);
@@ -129,6 +132,22 @@ export default function InventoryEntriesView() {
     loadCatalogos();
     loadUltimasEntradas();
   }, [loadCatalogos, loadUltimasEntradas]);
+
+  // Verificar permiso para crear producto (mismo RBAC del catálogo de productos)
+  useEffect(() => {
+    const checkProductPermissions = async () => {
+      try {
+        const res = await fetch("/api/taller/productos");
+        if (res.ok) {
+          const permCrear = res.headers.get("x-perm-crear") === "true";
+          setCanCreateProduct(permCrear);
+        }
+      } catch (err) {
+        console.warn("No se pudo verificar permiso para crear productos:", err);
+      }
+    };
+    checkProductPermissions();
+  }, []);
 
   // Almacén seleccionado
   const selectedAlmacen = useMemo(() => {
@@ -241,6 +260,48 @@ export default function InventoryEntriesView() {
 
     setLineProveedorId(resolvedProvId);
     setCostoUnitario(suggestedCost > 0 ? String(suggestedCost) : "");
+  };
+
+  // Manejar creación de producto nuevo desde el modal (preserva cabecera, líneas y auto-selecciona el nuevo producto)
+  const handleProductCreated = async (newProduct) => {
+    setIsCreateProductModalOpen(false);
+    if (!newProduct) return;
+
+    try {
+      const res = await fetch("/api/inventario/catalogos");
+      if (res.ok) {
+        const data = await res.json();
+        const freshProducts = data.productos || [];
+        setProductos(freshProducts);
+        if (data.almacenes) setAlmacenes(data.almacenes);
+        if (data.proveedores) setProveedores(data.proveedores);
+
+        const targetId = newProduct.producto_id || newProduct.id;
+        const matched = freshProducts.find((p) => String(p.producto_id) === String(targetId));
+        if (matched) {
+          handleSelectProduct(matched);
+        } else {
+          handleSelectProduct({
+            producto_id: targetId,
+            codigo_producto: newProduct.codigo_producto,
+            nombre: newProduct.nombre,
+            costo_actual: newProduct.costo_actual || 0,
+            precio_venta: newProduct.precio_venta || 0,
+            unidad_medida: {
+              codigo: "UND",
+              permite_decimales: false,
+            },
+            proveedores: newProduct.proveedor_id ? [{ proveedor_id: newProduct.proveedor_id }] : [],
+          });
+        }
+      }
+      setFeedback({
+        type: "success",
+        message: `Producto "${newProduct.nombre || newProduct.codigo_producto}" creado y seleccionado en la entrada.`,
+      });
+    } catch (err) {
+      console.error("Error al refrescar producto post-creación:", err);
+    }
   };
 
   // Reset del formulario de una línea (preserva cabecera: almacén, referencia y proveedor general)
@@ -390,15 +451,39 @@ export default function InventoryEntriesView() {
       return;
     }
 
-    // Si hay un producto en el formulario pero no se ha agregado a la tabla, agregarlo automáticamente
+    // Resolver líneas pendientes o en edición en el formulario antes de enviar el lote
     let batchLines = [...lineas];
-    if (batchLines.length === 0 && selectedProduct && cantidadNum > 0) {
+    if (editingIndex !== null && selectedProduct && cantidadNum > 0) {
+      const permiteDec = Boolean(selectedProduct?.unidad_medida?.permite_decimales);
       const provName = effectiveLineProvider
         ? (effectiveLineProvider.nombre_comercial || effectiveLineProvider.nombre)
         : (proveedorGeneralId ? (proveedores.find(p => String(p.proveedor_id) === String(proveedorGeneralId))?.nombre_comercial || "General") : "—");
-
-      batchLines = [
-        {
+      batchLines[editingIndex] = {
+        productoId: selectedProduct.producto_id,
+        codigoProducto: selectedProduct.codigo_producto,
+        nombreProducto: selectedProduct.nombre,
+        imagenUrl: selectedProduct.imagen_url,
+        marca: selectedProduct.marca_nombre || "Genérico",
+        tipo: selectedProduct.tipo_nombre || selectedProduct.categoria_nombre || "General",
+        unidad: selectedProduct.unidad_medida?.codigo || "pza",
+        permiteDecimales: permiteDec,
+        proveedorId: lineProveedorId ? Number(lineProveedorId) : (proveedorGeneralId ? Number(proveedorGeneralId) : null),
+        proveedorNombre: provName,
+        cantidad: cantidadNum,
+        costoUnitario: costoUnitarioNum,
+        costoTotal: Number((cantidadNum * costoUnitarioNum).toFixed(2)),
+        subtotal: Number((cantidadNum * costoUnitarioNum).toFixed(2)),
+        stockActual: selectedStockInfo.actual,
+        stockProyectado: selectedStockInfo.actual + cantidadNum,
+      };
+    } else if (editingIndex === null && selectedProduct && cantidadNum > 0) {
+      const alreadyInBatch = batchLines.some(l => l.productoId === selectedProduct.producto_id);
+      if (!alreadyInBatch) {
+        const permiteDec = Boolean(selectedProduct?.unidad_medida?.permite_decimales);
+        const provName = effectiveLineProvider
+          ? (effectiveLineProvider.nombre_comercial || effectiveLineProvider.nombre)
+          : (proveedorGeneralId ? (proveedores.find(p => String(p.proveedor_id) === String(proveedorGeneralId))?.nombre_comercial || "General") : "—");
+        batchLines.push({
           productoId: selectedProduct.producto_id,
           codigoProducto: selectedProduct.codigo_producto,
           nombreProducto: selectedProduct.nombre,
@@ -406,7 +491,7 @@ export default function InventoryEntriesView() {
           marca: selectedProduct.marca_nombre || "Genérico",
           tipo: selectedProduct.tipo_nombre || selectedProduct.categoria_nombre || "General",
           unidad: selectedProduct.unidad_medida?.codigo || "pza",
-          permiteDecimales: Boolean(selectedProduct?.unidad_medida?.permite_decimales),
+          permiteDecimales: permiteDec,
           proveedorId: lineProveedorId ? Number(lineProveedorId) : (proveedorGeneralId ? Number(proveedorGeneralId) : null),
           proveedorNombre: provName,
           cantidad: cantidadNum,
@@ -415,8 +500,8 @@ export default function InventoryEntriesView() {
           subtotal: Number((cantidadNum * costoUnitarioNum).toFixed(2)),
           stockActual: selectedStockInfo.actual,
           stockProyectado: selectedStockInfo.actual + cantidadNum,
-        },
-      ];
+        });
+      }
     }
 
     if (batchLines.length === 0) {
@@ -636,12 +721,24 @@ export default function InventoryEntriesView() {
             </div>
 
             {/* Fila 2: Producto * */}
-            <div>
-              <label className="block text-xs font-medium text-foreground-secondary mb-1.5">
-                Producto <span className="text-error">*</span>
-              </label>
+            <div className="relative">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-medium text-foreground-secondary">
+                  Producto <span className="text-error">*</span>
+                </label>
+                {canCreateProduct && (
+                  <button
+                    type="button"
+                    onClick={() => setIsCreateProductModalOpen(true)}
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Crear producto</span>
+                  </button>
+                )}
+              </div>
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-muted pointer-events-none" />
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-foreground-muted pointer-events-none" />
                 <input
                   type="text"
                   value={productSearch}
@@ -867,7 +964,7 @@ export default function InventoryEntriesView() {
               </div>
             </div>
 
-            {/* Barra de Acciones del Formulario (Imagen 1) */}
+            {/* Barra de Acciones del Formulario */}
             <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
               <button
                 type="button"
@@ -887,17 +984,6 @@ export default function InventoryEntriesView() {
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>{editingIndex !== null ? "Actualizar Producto" : "Agregar a la Entrada"}</span>
-              </button>
-
-              {/* Botón Principal: Registrar Entrada (Estilo lime-yellow Imagen 1) */}
-              <button
-                type="button"
-                onClick={handleSubmitBatch}
-                disabled={submitting || (lineas.length === 0 && !selectedProduct)}
-                className="flex items-center gap-2 px-5 py-2.5 text-xs font-bold rounded-lg bg-lime-400 hover:bg-lime-500 text-black shadow-sm transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Check className="w-4 h-4 text-black stroke-[3]" />
-                <span>{submitting ? "Registrando..." : "Registrar Entrada"}</span>
               </button>
             </div>
           </form>
@@ -1089,6 +1175,19 @@ export default function InventoryEntriesView() {
               Selecciona un producto en el formulario para visualizar el impacto proyectado en stock y costo promedio.
             </div>
           )}
+
+          {/* Botón Principal Guardar en Resumen de la Operación */}
+          <div className="pt-3 border-t border-border">
+            <button
+              type="button"
+              onClick={handleSubmitBatch}
+              disabled={submitting || (!almacenId) || (lineas.length === 0 && (!selectedProduct || cantidadNum <= 0))}
+              className="w-full flex items-center justify-center gap-2 px-5 py-3 text-xs font-bold rounded-lg bg-lime-400 hover:bg-lime-500 text-black shadow-sm transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Check className="w-4 h-4 text-black stroke-[3]" />
+              <span>{submitting ? "Guardando..." : "Guardar"}</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1194,6 +1293,13 @@ export default function InventoryEntriesView() {
           </div>
         )}
       </div>
+
+      {/* Modal Reutilizable para Crear Producto */}
+      <ProductCreateModal
+        isOpen={isCreateProductModalOpen}
+        onClose={() => setIsCreateProductModalOpen(false)}
+        onProductCreated={handleProductCreated}
+      />
     </div>
   );
 }
