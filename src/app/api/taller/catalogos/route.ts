@@ -27,6 +27,25 @@ export async function GET() {
     const tiposServicio = await query(
       `SELECT tipo_servicio_id, codigo, nombre, descripcion, duracion_estimada_horas, precio_base FROM admin.tipo_servicio WHERE activo = true ORDER BY orden_visual ASC`
     );
+    const almacenes = await query(
+      `SELECT almacen_id, codigo, nombre, descripcion, estado
+       FROM admin.almacenes
+       WHERE empresa_id = $1 AND UPPER(estado) = 'ACTIVO'
+       ORDER BY almacen_id ASC`,
+      [session.empresa_id]
+    );
+
+    const existencias = await query(
+      `SELECT ep.producto_id, ep.almacen_id, a.nombre AS almacen_nombre,
+              COALESCE(ep.cantidad_actual, 0)::numeric AS cantidad_actual,
+              COALESCE(ep.cantidad_reservada, 0)::numeric AS cantidad_reservada,
+              (COALESCE(ep.cantidad_actual, 0) - COALESCE(ep.cantidad_reservada, 0))::numeric AS cantidad_disponible
+       FROM admin.existencias_producto ep
+       JOIN admin.almacenes a ON ep.almacen_id = a.almacen_id
+       WHERE ep.empresa_id = $1 AND UPPER(a.estado) = 'ACTIVO' AND UPPER(ep.estado) = 'ACTIVO'`,
+      [session.empresa_id]
+    );
+
     const productos = await query(
       `SELECT p.producto_id,
               p.codigo_producto AS codigo,
@@ -34,13 +53,15 @@ export async function GET() {
               COALESCE(p.precio_venta, 0)::numeric AS precio_venta,
               um.codigo AS unidad_medida,
               COALESCE(um.permite_decimales, false) AS permite_decimales,
-              COALESCE(SUM(ep.cantidad_actual), 0)::numeric AS stock_disponible
+              COALESCE(SUM(ep.cantidad_actual - ep.cantidad_reservada), 0)::numeric AS stock_disponible
        FROM admin.productos p
        LEFT JOIN admin.unidad_medida um ON p.unidad_medida_id = um.unidad_medida_id
-       LEFT JOIN admin.existencias_producto ep ON p.producto_id = ep.producto_id
+       LEFT JOIN admin.existencias_producto ep ON p.producto_id = ep.producto_id AND ep.empresa_id = $1 AND UPPER(ep.estado) = 'ACTIVO'
        WHERE (p.estado = 'ACTIVO' OR p.estado IS NULL)
+         AND (p.empresa_id = $1 OR p.empresa_id IS NULL)
        GROUP BY p.producto_id, p.codigo_producto, p.nombre, p.precio_venta, um.codigo, um.permite_decimales
-       ORDER BY p.nombre ASC`
+       ORDER BY p.nombre ASC`,
+      [session.empresa_id]
     );
     const estadosServicio = await query(
       `SELECT estado_orden_servicio_id, codigo, nombre, descripcion FROM admin.estado_orden_servicio WHERE (activo = true OR activo IS NULL) ORDER BY estado_orden_servicio_id ASC`
@@ -75,6 +96,8 @@ export async function GET() {
 
     return NextResponse.json({
       success: true,
+      almacenes: almacenes || [],
+      existencias: existencias || [],
       productos: productos || [],
       estados_servicio: estadosServicio || [],
       estados_orden_trabajo: estadosOrdenTrabajo || [],
@@ -87,6 +110,8 @@ export async function GET() {
         items_checklist: itemsChecklist || [],
         estados_checklist: estadosChecklist || [],
         tipos_servicio: tiposServicio || [],
+        almacenes: almacenes || [],
+        existencias: existencias || [],
         productos: productos || [],
         estados_servicio: estadosServicio || [],
         estados_orden_trabajo: estadosOrdenTrabajo || [],
@@ -96,10 +121,11 @@ export async function GET() {
         categorias_componente: categoriasComponente || []
       }
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error in GET /api/taller/catalogos:", error);
-    const safeMessage = (error?.message && !error.message.includes("Position:") && !error.message.includes("SQLState"))
-      ? error.message
+    const errObj = error as { message?: string };
+    const safeMessage = (errObj?.message && !errObj.message.includes("Position:") && !errObj.message.includes("SQLState"))
+      ? errObj.message
       : "No fue posible cargar los catálogos de taller. Inténtalo nuevamente.";
     return NextResponse.json({ error: safeMessage, message: safeMessage }, { status: 500 });
   }

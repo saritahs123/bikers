@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getPool, query } from "@/lib/db";
+import { getPool } from "@/lib/db";
 import { getWorkshopSession } from "@/lib/workshop-session";
 import { recalculateWorkOrderTotals } from "@/lib/workshop/recalculateWorkOrderTotals";
 import { validateOrderInRepair } from "@/lib/workshop/validateOrderState";
@@ -31,12 +31,20 @@ export async function POST(
 
     const body = await req.json();
     const productoId = parseInt(body.producto_id, 10);
+    const almacenId = parseInt(body.almacen_id, 10);
     const cantidad = parseFloat(body.cantidad);
     const observacion = body.observacion ? String(body.observacion).trim() : null;
 
     if (isNaN(productoId) || productoId <= 0) {
       return NextResponse.json(
         { success: false, error: "BAD_REQUEST", message: "Debes seleccionar un producto válido." },
+        { status: 400 }
+      );
+    }
+
+    if (isNaN(almacenId) || almacenId <= 0) {
+      return NextResponse.json(
+        { success: false, error: "BAD_REQUEST", message: "Debes seleccionar un almacén válido." },
         { status: 400 }
       );
     }
@@ -50,30 +58,68 @@ export async function POST(
 
     await client.query("BEGIN");
 
-    // Enforce order state machine check
+    // 1. Enforce order state machine check & tenant validation
     const orderStateCheck = await validateOrderInRepair(client, ordenId, session.empresa_id, "AGREGAR_PRODUCTO");
     if (!orderStateCheck.isValid) {
       await client.query("ROLLBACK");
-      // Mapear el helper response al formato exacto del endpoint si difiere, pero el helper ya retorna NextResponse.json compatible
       return orderStateCheck.response;
     }
 
-    // Resolve catalog price from DB (ignore client sent price)
+    // 2. Validate warehouse: exists, belongs to session.empresa_id, and is ACTIVO
+    const almRes = await client.query(
+      `SELECT almacen_id, codigo, nombre, estado, empresa_id
+       FROM admin.almacenes
+       WHERE almacen_id = $1 AND empresa_id = $2`,
+      [almacenId, session.empresa_id]
+    );
+
+    if (!almRes.rows || almRes.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return NextResponse.json(
+        { success: false, error: "NOT_FOUND", message: "El almacén seleccionado no existe o no pertenece a su empresa." },
+        { status: 404 }
+      );
+    }
+
+    const alm = almRes.rows[0];
+    if (String(alm.estado || "").toUpperCase() !== "ACTIVO") {
+      await client.query("ROLLBACK");
+      return NextResponse.json(
+        { success: false, error: "ALMACEN_INACTIVO", message: "El almacén seleccionado se encuentra inactivo." },
+        { status: 400 }
+      );
+    }
+
+    // 3. Validate product: exists, usable by tenant, active, and check unit decimal policy
     const prodRes = await client.query(
-      `SELECT producto_id, codigo_producto, nombre, precio_venta, estado FROM admin.productos WHERE producto_id = $1`,
+      `SELECT p.producto_id, p.codigo_producto, p.nombre, p.precio_venta, p.estado, p.empresa_id,
+              COALESCE(um.permite_decimales, false) AS permite_decimales,
+              um.codigo AS unidad_medida
+       FROM admin.productos p
+       LEFT JOIN admin.unidad_medida um ON p.unidad_medida_id = um.unidad_medida_id
+       WHERE p.producto_id = $1`,
       [productoId]
     );
 
     if (!prodRes.rows || prodRes.rows.length === 0) {
       await client.query("ROLLBACK");
       return NextResponse.json(
-        { success: false, error: "NOT_FOUND", message: "El producto seleccionado no existe o está inactivo." },
+        { success: false, error: "NOT_FOUND", message: "El producto seleccionado no existe." },
         { status: 404 }
       );
     }
 
     const prod = prodRes.rows[0];
-    if (prod.estado === false || prod.estado === 0) {
+    if (prod.empresa_id != null && Number(prod.empresa_id) !== Number(session.empresa_id)) {
+      await client.query("ROLLBACK");
+      return NextResponse.json(
+        { success: false, error: "NOT_FOUND", message: "El producto seleccionado no pertenece a su empresa." },
+        { status: 404 }
+      );
+    }
+
+    const isProdActive = String(prod.estado || "").toUpperCase() === "ACTIVO" || prod.estado === true || prod.estado === 1;
+    if (!isProdActive) {
       await client.query("ROLLBACK");
       return NextResponse.json(
         { success: false, error: "BAD_REQUEST", message: "El producto seleccionado se encuentra inactivo." },
@@ -81,28 +127,71 @@ export async function POST(
       );
     }
 
-    const precioUnitario = parseFloat(prod.precio_venta || 0);
-    const subtotal = Math.round(cantidad * precioUnitario * 100) / 100;
-
-    // Check stock in existencias_producto
-    const stockRes = await client.query(
-      `SELECT COALESCE(SUM(cantidad_actual), 0) AS stock_total FROM admin.existencias_producto WHERE producto_id = $1`,
-      [productoId]
-    );
-    const stockTotal = parseFloat(stockRes.rows[0]?.stock_total || "0");
-    if (stockTotal < cantidad) {
+    // Validate decimal allowance
+    if (!prod.permite_decimales && !Number.isInteger(cantidad)) {
       await client.query("ROLLBACK");
       return NextResponse.json(
         {
           success: false,
-          error: "INSUFFICIENT_STOCK",
-          message: `Stock insuficiente. Stock disponible: ${stockTotal}, solicitado: ${cantidad}.`
+          error: "BAD_REQUEST",
+          message: `La unidad de medida (${prod.unidad_medida || "UND"}) no permite cantidades fraccionarias o decimales.`
         },
         { status: 400 }
       );
     }
 
-    // Insert into admin.orden_productos directly linked to order
+    // 4. Lock existence row in existencias_producto with SELECT FOR UPDATE
+    const exRes = await client.query(
+      `SELECT existencia_producto_id, empresa_id, producto_id, almacen_id,
+              cantidad_actual, cantidad_reservada,
+              (cantidad_actual - cantidad_reservada) AS disponible, estado
+       FROM admin.existencias_producto
+       WHERE empresa_id = $1 AND producto_id = $2 AND almacen_id = $3
+       FOR UPDATE`,
+      [session.empresa_id, productoId, almacenId]
+    );
+
+    if (!exRes.rows || exRes.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return NextResponse.json(
+        {
+          success: false,
+          error: "STOCK_INSUFICIENTE",
+          message: "No hay existencia disponible suficiente para reservar este producto.",
+          stockActual: 0,
+          cantidadReservada: 0,
+          cantidadDisponible: 0,
+          cantidadSolicitada: cantidad
+        },
+        { status: 409 }
+      );
+    }
+
+    const ex = exRes.rows[0];
+    const stockActual = parseFloat(ex.cantidad_actual || "0");
+    const cantidadReservada = parseFloat(ex.cantidad_reservada || "0");
+    const cantidadDisponible = stockActual - cantidadReservada;
+
+    if (cantidad > cantidadDisponible) {
+      await client.query("ROLLBACK");
+      return NextResponse.json(
+        {
+          success: false,
+          error: "STOCK_INSUFICIENTE",
+          message: "No hay existencia disponible suficiente para reservar este producto.",
+          stockActual,
+          cantidadReservada,
+          cantidadDisponible,
+          cantidadSolicitada: cantidad
+        },
+        { status: 409 }
+      );
+    }
+
+    const precioUnitario = parseFloat(prod.precio_venta || 0);
+    const subtotal = Math.round(cantidad * precioUnitario * 100) / 100;
+
+    // 5. Insert into admin.orden_productos directly linked to order with validated almacen_id
     const insertRes = await client.query(
       `
       INSERT INTO admin.orden_productos (
@@ -121,18 +210,31 @@ export async function POST(
         fecha_registro,
         usuario_registro
       ) VALUES (
-        $1, NULL, $2, 1, $3, $4, 0, 0, $5, 1, false, $6, NOW(), $7
+        $1, NULL, $2, $3, $4, $5, 0, 0, $6, 1, false, $7, NOW(), $8
       )
-      RETURNING orden_producto_id, producto_id, cantidad, precio_unitario, subtotal
+      RETURNING orden_producto_id, producto_id, almacen_id, cantidad, precio_unitario, subtotal
       `,
-      [ordenId, productoId, cantidad, precioUnitario, subtotal, observacion, session.usuario_id]
+      [ordenId, productoId, almacenId, cantidad, precioUnitario, subtotal, observacion, session.usuario_id]
     );
 
     const newProd = insertRes.rows[0];
 
-    // Recalculate order totals inside transaction
+    // 6. Atomically increment cantidad_reservada in admin.existencias_producto (cantidad_actual is NEVER touched!)
+    await client.query(
+      `
+      UPDATE admin.existencias_producto
+      SET cantidad_reservada = cantidad_reservada + $1,
+          fecha_actualizacion = CURRENT_TIMESTAMP,
+          usuario_actualizacion = $2
+      WHERE existencia_producto_id = $3
+      `,
+      [cantidad, session.usuario_id, ex.existencia_producto_id]
+    );
+
+    // 7. Recalculate order totals inside transaction
     await recalculateWorkOrderTotals(client, ordenId);
 
+    // 8. Record history & audit inside transaction
     await client.query(
       `
       INSERT INTO admin.orden_historial_estado (
@@ -146,7 +248,7 @@ export async function POST(
         ordenId,
         orderStateCheck.order.estado_orden_id,
         session.usuario_id,
-        `Producto agregado a la orden: ${prod.nombre} (Cant: ${cantidad}, Precio Unit: RD$ ${precioUnitario.toLocaleString("es-DO", { minimumFractionDigits: 2 })})`
+        `Repuesto reservado y agregado a la orden: ${prod.nombre} (Cant: ${cantidad}, Almacén: ${alm.nombre}, Precio Unit: RD$ ${precioUnitario.toLocaleString("es-DO", { minimumFractionDigits: 2 })})`
       ]
     );
 
@@ -157,11 +259,13 @@ export async function POST(
         orden_producto_id: newProd.orden_producto_id,
         orden_trabajo_id: ordenId,
         producto_id: productoId,
+        almacen_id: almacenId,
         cantidad,
         precio_unitario: precioUnitario,
-        subtotal
+        subtotal,
+        cantidad_reservada_incremento: cantidad
       },
-      motivo: `Producto agregado a orden #${ordenId}`,
+      motivo: `Repuesto reservado en orden #${ordenId}`,
       resultado: "COMPLETADO",
       client,
       throwOnError: true
@@ -173,28 +277,35 @@ export async function POST(
       userId: session.usuario_id,
       modulo: "TALLER_PRODUCTOS",
       evento: "ORDER_PRODUCT_ADDED",
-      descripcion: `Producto #${productoId} (${prod.nombre}) agregado a la orden #${ordenId}`,
+      descripcion: `Producto #${productoId} (${prod.nombre}) reservado (${cantidad} und) en almacén #${almacenId} y agregado a orden #${ordenId}`,
       resultado: "Exitoso",
       req
     });
 
+    const cantidadDisponiblePosterior = cantidadDisponible - cantidad;
+
     return NextResponse.json(
       {
         success: true,
-        message: "Producto agregado correctamente a la orden.",
+        message: "Producto agregado y reservado correctamente en la orden de trabajo.",
         data: {
-          orden_producto_id: newProd.orden_producto_id,
-          producto_id: newProd.producto_id,
+          ordenProductoId: newProd.orden_producto_id,
+          productoId: newProd.producto_id,
+          almacenId: newProd.almacen_id,
+          cantidad: Number(newProd.cantidad),
+          stockActual: stockActual,
+          cantidadReservada: cantidadReservada + cantidad,
+          cantidadDisponible: cantidadDisponible,
+          cantidadDisponiblePosterior: cantidadDisponiblePosterior,
           codigo: prod.codigo_producto || `PRD-${String(productoId).padStart(3, "0")}`,
           nombre: prod.nombre,
-          cantidad: Number(newProd.cantidad),
           precio_unitario: Number(newProd.precio_unitario),
           subtotal: Number(newProd.subtotal)
         }
       },
       { status: 201 }
     );
-  } catch (err: any) {
+  } catch (err: unknown) {
     await client.query("ROLLBACK").catch(() => {});
     console.error("POST /api/taller/ordenes/[id]/productos error:", err);
     return NextResponse.json(
