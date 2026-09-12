@@ -4,7 +4,7 @@ import { executeReceptionWithWorkOrder } from "@/lib/workshop/receptionOrderServ
 
 // POST /api/taller/ordenes/crear-directa
 export async function POST(req: NextRequest) {
-  let session: any = null;
+  let session: Awaited<ReturnType<typeof getWorkshopSession>> = null;
   try {
     session = await getWorkshopSession();
     if (!session || !session.usuario_id) {
@@ -70,22 +70,44 @@ export async function POST(req: NextRequest) {
       },
       { status: result.is_replay ? 200 : 201 }
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error in POST /api/taller/ordenes/crear-directa:", error);
 
-    const status = error.status || 500;
-    let errorKey = error.code || "SERVER_ERROR";
-    let message = error.message || "Error al procesar la creación directa de la orden de trabajo.";
+    const err = error as Record<string, unknown> & {
+      status?: number;
+      code?: string;
+      message?: string;
+      stockActual?: number;
+      cantidadReservada?: number;
+      cantidadDisponible?: number;
+      cantidadSolicitada?: number;
+    };
 
-    if (status === 500 && (typeof error?.code === "string" && (error.code.startsWith("42") || error.code.startsWith("28") || error.code.startsWith("XX")) || error?.message?.includes("column") || error?.message?.includes("syntax error") || error?.message?.includes("relation"))) {
+    const status = err.status || 500;
+    let errorKey = err.code || "SERVER_ERROR";
+    let message = err.message || "Error al procesar la creación directa de la orden de trabajo.";
+
+    if (
+      status === 500 &&
+      ((typeof err?.code === "string" &&
+        (err.code.startsWith("42") || err.code.startsWith("28") || err.code.startsWith("XX"))) ||
+        err?.message?.includes("column") ||
+        err?.message?.includes("syntax error") ||
+        err?.message?.includes("relation"))
+    ) {
       errorKey = "INTERNAL_ERROR";
       message = "Ocurrió un error interno en el servidor al procesar la orden de trabajo. Por favor, intente nuevamente.";
     }
 
     return NextResponse.json(
       {
+        success: false,
         error: errorKey,
-        message
+        message,
+        stockActual: err.stockActual,
+        cantidadReservada: err.cantidadReservada,
+        cantidadDisponible: err.cantidadDisponible,
+        cantidadSolicitada: err.cantidadSolicitada
       },
       { status }
     );

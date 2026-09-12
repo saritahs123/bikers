@@ -39,8 +39,10 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
     prioridades: [],
     mecanicos: [],
     tipos_servicio: [],
-    productos: []
+    productos: [],
+    almacenes: []
   });
+  const [selectedAlmacenId, setSelectedAlmacenId] = useState("");
 
   // Receptions
   const [availableReceptions, setAvailableReceptions] = useState([]);
@@ -139,8 +141,13 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
         prioridades: catObj.prioridades || [],
         mecanicos: catObj.mecanicos || [],
         tipos_servicio: catObj.tipos_servicio || [],
-        productos: catObj.productos || []
+        productos: catObj.productos || [],
+        almacenes: catObj.almacenes || []
       });
+
+      if (catObj.almacenes?.length > 0) {
+        setSelectedAlmacenId(String(catObj.almacenes[0].almacen_id));
+      }
 
       // Setup Clients
       const clientArr = Array.isArray(clientsJson?.data)
@@ -261,6 +268,9 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
           orden_producto_id: p.orden_producto_id || p.id,
           type: "producto",
           producto_id: p.producto_id,
+          almacen_id: p.almacen_id,
+          almacen_nombre: p.almacen_nombre || catObj.almacenes?.find((a) => Number(a.almacen_id) === Number(p.almacen_id))?.nombre || null,
+          almacen_codigo: p.almacen_codigo || catObj.almacenes?.find((a) => Number(a.almacen_id) === Number(p.almacen_id))?.codigo || null,
           nombre: p.producto_nombre || p.nombre || "Producto / Repuesto",
           cantidad: qty,
           precio_unitario: pu,
@@ -469,10 +479,15 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
   const handleSelectProduct = (prodObj) => {
     if (!prodObj) return;
     const price = Number(prodObj.precio_venta || prodObj.precio || 0);
+    const activeAlmId = selectedAlmacenId ? Number(selectedAlmacenId) : (catalogs.almacenes?.[0]?.almacen_id || undefined);
+    const activeAlm = (catalogs.almacenes || []).find((a) => Number(a.almacen_id) === Number(activeAlmId));
     const newItem = {
       temp_id: generateItemTempId("prod_new"),
       type: "producto",
       producto_id: prodObj.producto_id,
+      almacen_id: activeAlmId,
+      almacen_nombre: activeAlm?.nombre || null,
+      almacen_codigo: activeAlm?.codigo || null,
       nombre: prodObj.nombre || "Producto / Repuesto",
       cantidad: 1,
       precio_unitario: price,
@@ -697,6 +712,7 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
         .map((p) => ({
           orden_producto_id: p.orden_producto_id || undefined,
           producto_id: p.producto_id,
+          almacen_id: p.almacen_id || undefined,
           cantidad: p.cantidad,
           precio_unitario: p.precio_unitario,
           observacion: p.observacion || ""
@@ -1077,9 +1093,29 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
 
                 {/* Search Product */}
                 <div ref={productComboboxRef} className="relative space-y-1.5">
-                  <label className="block font-mono text-xs font-bold uppercase tracking-wider text-slate-300">
-                    Buscar Producto / Repuesto
-                  </label>
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <label className="block font-mono text-xs font-bold uppercase tracking-wider text-slate-300">
+                      Buscar Producto / Repuesto
+                    </label>
+                    {catalogs.almacenes && catalogs.almacenes.length > 1 && (
+                      <div className="flex items-center gap-1.5">
+                        <label className="text-[10px] text-slate-400 font-mono whitespace-nowrap">
+                          Almacén:
+                        </label>
+                        <select
+                          value={selectedAlmacenId}
+                          onChange={(e) => setSelectedAlmacenId(e.target.value)}
+                          className="px-2 py-0.5 bg-[#0a0c10] border border-[#2d3748] rounded-lg text-[11px] text-slate-200 font-mono focus:outline-none focus:border-[#bfce7f] cursor-pointer"
+                        >
+                          {catalogs.almacenes.map((alm) => (
+                            <option key={alm.almacen_id} value={alm.almacen_id}>
+                              {alm.codigo} — {alm.nombre}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
                   <div className="relative">
                     <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                     <input
@@ -1201,6 +1237,13 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
                               </td>
                               <td className="py-2.5 px-4 text-slate-100 font-sans">
                                 <span className="font-semibold block">{item.nombre}</span>
+                                {isProduct && (item.almacen_nombre || item.almacen_id) && (
+                                  <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1 mt-0.5">
+                                    <span className="text-[9px] px-1.5 py-0.2 bg-[#1f242d] border border-[#2d3748] rounded text-[#bfce7f] font-bold">
+                                      {item.almacen_codigo || "ALM"}: {item.almacen_nombre || `Almacén #${item.almacen_id}`}
+                                    </span>
+                                  </div>
+                                )}
                               </td>
                               <td className="py-2.5 px-3 text-center">
                                 {isProduct ? (

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPool, query } from "@/lib/db";
 import { recalculateWorkOrderTotals } from "@/lib/workshop/recalculateWorkOrderTotals";
+import { syncProductsForWorkOrderUpdate } from "@/lib/workshop/workshopInventoryReservationService";
 import { syncWorkOrderInvoice } from "@/lib/workshop/syncWorkOrderInvoice";
 import { getCronometroStatus } from "@/lib/workshop/getCronometroStatus";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
@@ -883,82 +884,15 @@ export async function PUT(
         }
       }
 
-      // Handle Products Sync (NO touching Inventory stock / NO Kardex)
+      // Handle Products Sync with full Inventory Reservation guarantees
       if (Array.isArray(body.productos)) {
-        const existingProdRes = await client.query(`
-          SELECT orden_producto_id, producto_id, cantidad, precio_unitario
-          FROM admin.orden_productos
-          WHERE orden_trabajo_id = $1
-        `, [ordenId]);
-
-        const existingProdMap = new Map<number, any>();
-        existingProdRes.rows.forEach(r => existingProdMap.set(Number(r.orden_producto_id), r));
-        const incomingProdIds = new Set<number>();
-
-        for (const p of body.productos) {
-          const pId = p.orden_producto_id ? Number(p.orden_producto_id) : null;
-          const cant = Math.max(1, Number(p.cantidad || 1));
-
-          if (pId && existingProdMap.has(pId)) {
-            incomingProdIds.add(pId);
-            const pu = p.precio_unitario !== undefined && !isNaN(Number(p.precio_unitario))
-              ? Number(p.precio_unitario)
-              : Number(existingProdMap.get(pId).precio_unitario || 0);
-            const sub = Math.round(cant * pu * 100) / 100;
-
-            await client.query(`
-              UPDATE admin.orden_productos
-              SET cantidad = $1, precio_unitario = $2, subtotal = $3, observacion = $4,
-                  fecha_actualizacion = NOW(), usuario_actualizacion = $5
-              WHERE orden_producto_id = $6 AND orden_trabajo_id = $7
-            `, [cant, pu, sub, p.observacion || null, session.usuario_id, pId, ordenId]);
-          } else {
-            const prodId = Number(p.producto_id);
-            if (!prodId) continue;
-
-            const prodCheck = await client.query(`
-              SELECT producto_id, nombre, precio_venta, estado
-              FROM admin.productos
-              WHERE producto_id = $1
-            `, [prodId]);
-
-            if (!prodCheck.rows.length || prodCheck.rows[0].estado === false || prodCheck.rows[0].estado === 0) {
-              await client.query("ROLLBACK");
-              return NextResponse.json({
-                error: "INVALID_PRODUCT",
-                message: `El producto #${prodId} no existe o está inactivo.`
-              }, { status: 400 });
-            }
-
-            const prod = prodCheck.rows[0];
-            const pu = p.precio_unitario !== undefined && !isNaN(Number(p.precio_unitario))
-              ? Number(p.precio_unitario)
-              : Number(prod.precio_venta || 0);
-            const sub = Math.round(cant * pu * 100) / 100;
-
-            const insPRes = await client.query(`
-              INSERT INTO admin.orden_productos (
-                orden_trabajo_id, orden_servicio_id, producto_id, almacen_id, cantidad,
-                precio_unitario, porcentaje_descuento, valor_descuento, subtotal,
-                estado_aprobacion_id, utilizado, observacion, fecha_registro, usuario_registro
-              ) VALUES (
-                $1, NULL, $2, 1, $3, $4, 0, 0, $5, 1, false, $6, NOW(), $7
-              ) RETURNING orden_producto_id
-            `, [ordenId, prodId, cant, pu, sub, p.observacion || null, session.usuario_id]);
-
-            incomingProdIds.add(Number(insPRes.rows[0].orden_producto_id));
-          }
-        }
-
-        // Delete removed products
-        for (const [existingId] of existingProdMap.entries()) {
-          if (!incomingProdIds.has(existingId)) {
-            await client.query(`
-              DELETE FROM admin.orden_productos
-              WHERE orden_producto_id = $1 AND orden_trabajo_id = $2
-            `, [existingId, ordenId]);
-          }
-        }
+        await syncProductsForWorkOrderUpdate({
+          client,
+          ordenTrabajoId: ordenId,
+          empresaId: session.empresa_id,
+          usuarioId: session.usuario_id,
+          incomingProducts: body.productos
+        });
       }
 
       const updateRes = await client.query(`
@@ -1724,13 +1658,21 @@ export async function PUT(
     await client.query("ROLLBACK").catch(() => {});
     console.error("PUT /api/taller/ordenes/[id] exception:", err);
 
+    const status = err.status || 500;
+    const errorKey = err.code || "SERVER_ERROR";
+    const message = err.message || "Error al procesar la actualización de la orden.";
+
     return NextResponse.json(
       {
         success: false,
-        error: "SERVER_ERROR",
-        message: "Error al actualizar el estado de la orden."
+        error: errorKey,
+        message,
+        stockActual: err.stockActual,
+        cantidadReservada: err.cantidadReservada,
+        cantidadDisponible: err.cantidadDisponible,
+        cantidadSolicitada: err.cantidadSolicitada
       },
-      { status: 500 }
+      { status }
     );
   } finally {
     client.release();
