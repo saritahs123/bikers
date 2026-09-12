@@ -993,9 +993,14 @@ export default function WorkOrderServicesView({
           return;
         }
 
-        // Validate Returned Product ID
-        const returnedProdId = Number(json?.data?.orden_producto_id ?? json?.data?.producto_id ?? json?.orden_producto_id);
-        if (!isEditing && (!returnedProdId || returnedProdId <= 0)) {
+        // Validate Returned Product Line ID (strict: only order line ID, never catalog product_id)
+        const returnedProdId = Number(
+          json?.data?.orden_producto_id ??
+          json?.data?.ordenProductoId ??
+          json?.orden_producto_id ??
+          json?.ordenProductoId
+        );
+        if (!isEditing && (!Number.isInteger(returnedProdId) || returnedProdId <= 0)) {
           setModalError("Error contractual: La API no devolvió un ID de repuesto válido.");
           setSubmitting(false);
           return;
