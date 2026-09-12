@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   Search,
@@ -14,7 +15,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Package,
-  X
+  X,
+  Plus,
+  Minus,
+  ArrowRightLeft
 } from "lucide-react";
 
 export default function InventoryStockView({ initialFilter = "TODOS" } = {}) {
@@ -90,6 +94,7 @@ export default function InventoryStockView({ initialFilter = "TODOS" } = {}) {
   }, [search, almacenId, estadoStock, page, pageSize, sortBy, sortDirection]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchStock();
   }, [fetchStock]);
 
@@ -161,7 +166,28 @@ export default function InventoryStockView({ initialFilter = "TODOS" } = {}) {
             Consulta de stock físico, reservado, disponible y valoraciones por almacén.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/inventory/entries"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-md text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Registrar entrada</span>
+          </Link>
+          <Link
+            href="/inventory/adjustments?tab=salida"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-md text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+          >
+            <Minus className="w-3.5 h-3.5" />
+            <span>Registrar salida</span>
+          </Link>
+          <Link
+            href="/inventory/transfers"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-md text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+          >
+            <ArrowRightLeft className="w-3.5 h-3.5" />
+            <span>Transferir</span>
+          </Link>
           {(search || almacenId || estadoStock !== "TODOS") && (
             <button
               onClick={handleResetFilters}

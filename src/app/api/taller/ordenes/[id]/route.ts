@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPool, query } from "@/lib/db";
+import { PoolClient } from "pg";
 import { recalculateWorkOrderTotals } from "@/lib/workshop/recalculateWorkOrderTotals";
 import { syncProductsForWorkOrderUpdate } from "@/lib/workshop/workshopInventoryReservationService";
 import { syncWorkOrderInvoice } from "@/lib/workshop/syncWorkOrderInvoice";
@@ -8,6 +9,7 @@ import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session
 import { queryIncompleteServicesAndTimers } from "@/lib/workshop/validateOrderState";
 import { recordUserActivity, recordUserAudit, computeDiff } from "@/lib/auditLogger";
 import { deleteWorkOrderWithSnapshot } from "@/lib/workshop/workOrderDeletionService";
+import { generarCodigoMovimiento, INVENTORY_SYSTEM_CODES } from "@/lib/inventory/inventoryConstants";
 
 // Helper for cleaning dates safely
 function cleanFecha(val: any) {
@@ -513,6 +515,188 @@ export async function GET(
       { status: 500 }
     );
   }
+}
+
+/**
+ * Consume automáticamente todos los repuestos pendientes (utilizado = false) de la orden de trabajo.
+ * Descuenta simultáneamente cantidad_actual y cantidad_reservada en existencias_producto,
+ * registra el movimiento físico SAL_ORDEN (tipo 2) en admin.movimientos_inventario con código oficial CRT,
+ * marca orden_productos.utilizado = true y audita cada consumo.
+ */
+async function autoConsumirRepuestosPendientes(
+  client: PoolClient,
+  ordenId: number,
+  currentOrder: Record<string, unknown>,
+  session: { usuario_id: number; empresa_id: number }
+): Promise<number> {
+  const pendingProductsRes = await client.query(`
+    SELECT
+      op.orden_producto_id,
+      op.orden_trabajo_id,
+      op.orden_servicio_id,
+      op.producto_id,
+      op.almacen_id,
+      op.cantidad,
+      op.precio_unitario,
+      op.subtotal,
+      op.utilizado,
+      p.nombre AS producto_nombre,
+      p.codigo_producto
+    FROM admin.orden_productos op
+    JOIN admin.productos p ON op.producto_id = p.producto_id
+    WHERE op.orden_trabajo_id = $1 AND op.utilizado = false
+    ORDER BY op.producto_id ASC, op.almacen_id ASC, op.orden_producto_id ASC
+    FOR UPDATE OF op
+  `, [ordenId]);
+
+  const items = pendingProductsRes.rows;
+  if (items.length === 0) return 0;
+
+  for (const item of items) {
+    const cantidadLinea = parseFloat(item.cantidad || "0");
+    if (isNaN(cantidadLinea) || cantidadLinea <= 0) {
+      throw new Error(`La cantidad del repuesto '${item.producto_nombre}' es inválida o menor o igual a cero.`);
+    }
+
+    if (!item.almacen_id) {
+      throw new Error(`El repuesto '${item.producto_nombre}' no tiene asignado un almacén de procedencia.`);
+    }
+
+    // Bloquear existencia FOR UPDATE
+    const exRes = await client.query(`
+      SELECT
+        existencia_producto_id,
+        cantidad_actual,
+        cantidad_reservada,
+        costo_promedio,
+        (cantidad_actual - cantidad_reservada) AS disponible
+      FROM admin.existencias_producto
+      WHERE empresa_id = $1 AND producto_id = $2 AND almacen_id = $3
+      FOR UPDATE
+    `, [session.empresa_id, item.producto_id, item.almacen_id]);
+
+    if (exRes.rows.length === 0) {
+      throw new Error(`No existe registro de inventario para el repuesto '${item.producto_nombre}' en el almacén asignado.`);
+    }
+
+    const ex = exRes.rows[0];
+    const stockActual = parseFloat(ex.cantidad_actual || "0");
+    const stockReservado = parseFloat(ex.cantidad_reservada || "0");
+    const costoPromedio = parseFloat(ex.costo_promedio || "0");
+
+    if (stockReservado < cantidadLinea || stockReservado > stockActual || stockReservado < 0) {
+      throw new Error(`Inconsistencia en stock reservado para '${item.producto_nombre}': Se intentan consumir ${cantidadLinea} unidades pero la reserva registrada es ${stockReservado} (Stock actual: ${stockActual}).`);
+    }
+
+    if (stockActual < cantidadLinea) {
+      throw new Error(`Inconsistencia de stock físico para '${item.producto_nombre}': La existencia cuenta con ${stockActual} unidades físicas, insuficiente para consumir ${cantidadLinea}.`);
+    }
+
+    // Secuencia oficial de movimiento (CRT)
+    const codigoMovimiento = await generarCodigoMovimiento(
+      client,
+      session.empresa_id,
+      INVENTORY_SYSTEM_CODES.CONSUMO_TALLER
+    );
+
+    const nuevoStockActual = Number((stockActual - cantidadLinea).toFixed(4));
+    const nuevoStockReservado = Number((stockReservado - cantidadLinea).toFixed(4));
+
+    await client.query(`
+      UPDATE admin.existencias_producto
+      SET
+        cantidad_actual = $1,
+        cantidad_reservada = $2,
+        fecha_ultimo_movimiento = NOW(),
+        fecha_actualizacion = NOW(),
+        usuario_actualizacion = $3
+      WHERE existencia_producto_id = $4
+    `, [nuevoStockActual, nuevoStockReservado, session.usuario_id, ex.existencia_producto_id]);
+
+    const costoUnitarioMov = costoPromedio > 0 ? costoPromedio : 0;
+    const costoTotalMov = Number((cantidadLinea * costoUnitarioMov).toFixed(2));
+    const observacionMov = `Consumo automático al marcar lista para entrega: ${item.producto_nombre} (${item.codigo_producto || `PRD-${item.producto_id}`}) en OT #${currentOrder.codigo_orden || ordenId} [Línea #${item.orden_producto_id}]`;
+
+    const insMovRes = await client.query(`
+      INSERT INTO admin.movimientos_inventario (
+        empresa_id,
+        producto_id,
+        almacen_id,
+        tipo_movimiento_id,
+        cantidad,
+        costo_unitario,
+        costo_total,
+        stock_anterior,
+        stock_nuevo,
+        orden_trabajo_id,
+        orden_servicio_id,
+        orden_producto_id,
+        referencia,
+        observacion,
+        codigo_movimiento,
+        fecha_movimiento,
+        usuario_movimiento,
+        fecha_registro,
+        usuario_registro
+      ) VALUES (
+        $1, $2, $3, 2, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), $15, NOW(), $15
+      ) RETURNING movimiento_inventario_id
+    `, [
+      session.empresa_id,
+      item.producto_id,
+      item.almacen_id,
+      cantidadLinea,
+      costoUnitarioMov,
+      costoTotalMov,
+      stockActual,
+      nuevoStockActual,
+      ordenId,
+      item.orden_servicio_id || null,
+      item.orden_producto_id,
+      currentOrder.codigo_orden || `OT-${ordenId}`,
+      observacionMov,
+      codigoMovimiento,
+      session.usuario_id
+    ]);
+
+    const movimientoId = insMovRes.rows[0]?.movimiento_inventario_id;
+
+    await client.query(`
+      UPDATE admin.orden_productos
+      SET
+        utilizado = true,
+        fecha_actualizacion = NOW(),
+        usuario_actualizacion = $1
+      WHERE orden_producto_id = $2
+    `, [session.usuario_id, item.orden_producto_id]);
+
+    await recordUserAudit({
+      userId: session.usuario_id,
+      accion: "CONSUMIR_REPUESTO_ORDEN",
+      valorAnterior: {
+        orden_producto_id: item.orden_producto_id,
+        utilizado: false,
+        cantidad: cantidadLinea,
+        stock_actual_anterior: stockActual,
+        stock_reservado_anterior: stockReservado
+      },
+      valorNuevo: {
+        orden_producto_id: item.orden_producto_id,
+        utilizado: true,
+        cantidad: cantidadLinea,
+        stock_actual_nuevo: nuevoStockActual,
+        stock_reservado_nuevo: nuevoStockReservado,
+        codigo_movimiento: codigoMovimiento,
+        movimiento_inventario_id: movimientoId
+      },
+      motivo: `Consumo automático al marcar OT #${currentOrder.codigo_orden || ordenId} como lista para entrega`,
+      resultado: "COMPLETADO",
+      client,
+      throwOnError: true
+    });
+  }
+
+  return items.length;
 }
 
 // PUT /api/taller/ordenes/[id]
@@ -1144,22 +1328,18 @@ export async function PUT(
         );
       }
 
-      // Check unconsumed products (INV-TALLER-3)
-      const pendingProductsRes = await client.query(`
-        SELECT COUNT(*)::int AS total_pendientes
-        FROM admin.orden_productos
-        WHERE orden_trabajo_id = $1 AND utilizado = false
-      `, [ordenId]);
-
-      const pendingCount = Number(pendingProductsRes.rows[0]?.total_pendientes || 0);
-      if (pendingCount > 0) {
+      // Auto-consumir repuestos reservados pendientes al marcar Lista para Entrega
+      try {
+        await autoConsumirRepuestosPendientes(client, ordenId, currentOrder, session);
+      } catch (consumeErr: unknown) {
         await client.query("ROLLBACK");
+        const msg = consumeErr instanceof Error ? consumeErr.message : "No se pudieron consumir automáticamente los repuestos de la orden.";
         return NextResponse.json(
           {
             success: false,
-            error: "PRODUCTOS_PENDIENTES_CONSUMO",
-            title: "Repuestos pendientes de resolver",
-            message: `No puedes marcar la orden como lista para entrega mientras existan ${pendingCount} repuesto(s) reservado(s) sin consumir o liberar. Debe consumir cada repuesto o eliminar la línea antes de completar la orden.`
+            error: "ERROR_CONSUMO_AUTOMATICO",
+            title: "Error al consumir repuestos",
+            message: msg
           },
           { status: 409 }
         );
@@ -1240,22 +1420,18 @@ export async function PUT(
         );
       }
 
-      // Check unconsumed products before delivery (INV-TALLER-3)
-      const pendingProductsDelivRes = await client.query(`
-        SELECT COUNT(*)::int AS total_pendientes
-        FROM admin.orden_productos
-        WHERE orden_trabajo_id = $1 AND utilizado = false
-      `, [ordenId]);
-
-      const pendingDelivCount = Number(pendingProductsDelivRes.rows[0]?.total_pendientes || 0);
-      if (pendingDelivCount > 0) {
+      // Auto-consumir cualquier repuesto pendiente antes de entregar y facturar
+      try {
+        await autoConsumirRepuestosPendientes(client, ordenId, currentOrder, session);
+      } catch (consumeErr: unknown) {
         await client.query("ROLLBACK");
+        const msg = consumeErr instanceof Error ? consumeErr.message : "No se pudieron consumir automáticamente los repuestos de la orden antes de la entrega.";
         return NextResponse.json(
           {
             success: false,
-            error: "PRODUCTOS_PENDIENTES_CONSUMO",
-            title: "Repuestos pendientes de resolver",
-            message: `No puedes entregar la orden mientras existan ${pendingDelivCount} repuesto(s) reservado(s) sin consumir o liberar. Debe consumir cada repuesto o eliminar la línea antes de realizar la entrega.`
+            error: "ERROR_CONSUMO_AUTOMATICO",
+            title: "Error al consumir repuestos",
+            message: msg
           },
           { status: 409 }
         );
