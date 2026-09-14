@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
@@ -48,6 +49,7 @@ export async function GET() {
         p.usuario_registro,
         p.usuario_actualizacion,
         COALESCE(SUM(ep.cantidad_actual), 0)::numeric AS stock_actual,
+        COALESCE(SUM(ep.cantidad_actual), 0)::numeric AS existencia_total,
         (
           SELECT COUNT(*)::int 
           FROM admin.orden_productos 
@@ -72,7 +74,7 @@ export async function GET() {
       LEFT JOIN admin.categoria_producto cp ON p.categoria_producto_id = cp.categoria_producto_id
       LEFT JOIN admin.marca_producto mp ON p.marca_producto_id = mp.marca_producto_id
       LEFT JOIN admin.unidad_medida um ON p.unidad_medida_id = um.unidad_medida_id
-      LEFT JOIN admin.existencias_producto ep ON p.producto_id = ep.producto_id AND (ep.estado = 'ACTIVO' OR ep.estado IS NULL)
+      LEFT JOIN admin.existencias_producto ep ON p.producto_id = ep.producto_id AND ep.empresa_id = $1 AND (ep.estado = 'ACTIVO' OR ep.estado IS NULL)
       WHERE (p.empresa_id = $1 OR p.empresa_id IS NULL)
       GROUP BY p.producto_id, tp.nombre, tp.codigo, cp.nombre, cp.codigo, mp.nombre, um.codigo, um.nombre
       ORDER BY p.producto_id DESC
@@ -113,6 +115,7 @@ export async function GET() {
       stock_minimo: Number(r.stock_minimo || 0),
       stock_maximo: r.stock_maximo !== null && r.stock_maximo !== undefined ? Number(r.stock_maximo) : null,
       stock_actual: Number(r.stock_actual || 0),
+      existencia_total: Number(r.existencia_total != null ? r.existencia_total : (r.stock_actual || 0)),
       is_stock_critico: (r.estado === 'ACTIVO' || !r.estado) && (Number(r.stock_actual || 0) <= Number(r.stock_minimo || 0)),
       requiere_serial: Boolean(r.requiere_serial),
       estado: r.estado || 'ACTIVO',

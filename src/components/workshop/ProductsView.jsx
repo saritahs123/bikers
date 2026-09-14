@@ -19,21 +19,14 @@ import {
   AlertTriangle,
   Check,
   Ban,
-  Filter,
   Power,
   EyeOff,
-  DollarSign,
   Tag,
   Boxes,
   Barcode,
   Layers,
-  Archive,
-  QrCode,
   Truck,
   Star,
-  Building2,
-  Phone,
-  Mail,
   Calendar
 } from "lucide-react";
 import { validateRequiredText } from "@/lib/validations";
@@ -123,6 +116,7 @@ export default function ProductsView() {
   useEffect(() => {
     setMounted(true);
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchData = async () => {
@@ -599,11 +593,18 @@ export default function ProductsView() {
       sortColumn === "precio_venta" ||
       sortColumn === "costo_actual" ||
       sortColumn === "stock_actual" ||
+      sortColumn === "existencia_total" ||
       sortColumn === "stock_minimo"
     ) {
+      const aValNum = sortColumn === "existencia_total"
+        ? Number(a.existencia_total != null ? a.existencia_total : (a.stock_actual || 0))
+        : Number(aVal || 0);
+      const bValNum = sortColumn === "existencia_total"
+        ? Number(b.existencia_total != null ? b.existencia_total : (b.stock_actual || 0))
+        : Number(bVal || 0);
       return sortDirection === "asc"
-        ? Number(aVal) - Number(bVal)
-        : Number(bVal) - Number(aVal);
+        ? aValNum - bValNum
+        : bValNum - aValNum;
     }
 
     if (sortColumn === "fecha_registro") {
@@ -640,7 +641,7 @@ export default function ProductsView() {
   const activeProducts = data.filter((p) => p.activo !== false).length;
   const deactivatedProducts = data.filter((p) => p.activo === false).length;
   const criticalStockProducts = data.filter(
-    (p) => (p.activo !== false) && Number(p.stock_actual || 0) <= Number(p.stock_minimo || 0)
+    (p) => (p.activo !== false) && Number(p.existencia_total != null ? p.existencia_total : (p.stock_actual || 0)) <= Number(p.stock_minimo || 0)
   ).length;
 
   return (
@@ -887,7 +888,7 @@ export default function ProductsView() {
                 <tr className="border-b border-border bg-surface-subtle text-[11px] text-foreground-muted uppercase tracking-wider">
                   <th
                     onClick={() => handleSort("codigo_producto")}
-                    className="p-4 cursor-pointer hover:text-foreground select-none"
+                    className="p-4 cursor-pointer hover:text-foreground select-none whitespace-nowrap min-w-[130px]"
                   >
                     <div className="flex items-center gap-1.5">
                       <span>Código / Barra</span>
@@ -896,7 +897,7 @@ export default function ProductsView() {
                   </th>
                   <th
                     onClick={() => handleSort("nombre")}
-                    className="p-4 cursor-pointer hover:text-foreground select-none"
+                    className="p-4 cursor-pointer hover:text-foreground select-none min-w-[200px]"
                   >
                     <div className="flex items-center gap-1.5">
                       <span>Producto</span>
@@ -905,7 +906,7 @@ export default function ProductsView() {
                   </th>
                   <th
                     onClick={() => handleSort("categoria_producto_nombre")}
-                    className="p-4 cursor-pointer hover:text-foreground select-none"
+                    className="p-4 cursor-pointer hover:text-foreground select-none whitespace-nowrap min-w-[140px]"
                   >
                     <div className="flex items-center gap-1.5">
                       <span>Categoría / Tipo</span>
@@ -914,7 +915,7 @@ export default function ProductsView() {
                   </th>
                   <th
                     onClick={() => handleSort("proveedor_principal_nombre")}
-                    className="p-4 cursor-pointer hover:text-foreground select-none"
+                    className="p-4 cursor-pointer hover:text-foreground select-none min-w-[140px]"
                   >
                     <div className="flex items-center gap-1.5">
                       <span>Proveedor</span>
@@ -922,8 +923,17 @@ export default function ProductsView() {
                     </div>
                   </th>
                   <th
+                    onClick={() => handleSort("costo_actual")}
+                    className="p-4 cursor-pointer hover:text-foreground select-none text-right whitespace-nowrap min-w-[110px]"
+                  >
+                    <div className="flex items-center justify-end gap-1.5">
+                      <span>Costo</span>
+                      <ArrowUpDown size={12} />
+                    </div>
+                  </th>
+                  <th
                     onClick={() => handleSort("precio_venta")}
-                    className="p-4 cursor-pointer hover:text-foreground select-none text-right"
+                    className="p-4 cursor-pointer hover:text-foreground select-none text-right whitespace-nowrap min-w-[120px]"
                   >
                     <div className="flex items-center justify-end gap-1.5">
                       <span>Precio Venta</span>
@@ -931,8 +941,17 @@ export default function ProductsView() {
                     </div>
                   </th>
                   <th
+                    onClick={() => handleSort("existencia_total")}
+                    className="p-4 cursor-pointer hover:text-foreground select-none text-right whitespace-nowrap min-w-[105px]"
+                  >
+                    <div className="flex items-center justify-end gap-1.5">
+                      <span>Existencia</span>
+                      <ArrowUpDown size={12} />
+                    </div>
+                  </th>
+                  <th
                     onClick={() => handleSort("fecha_registro")}
-                    className="p-4 cursor-pointer hover:text-foreground select-none text-center"
+                    className="p-4 cursor-pointer hover:text-foreground select-none text-center whitespace-nowrap min-w-[120px]"
                   >
                     <div className="flex items-center justify-center gap-1.5">
                       <span>Fecha Creación</span>
@@ -941,14 +960,14 @@ export default function ProductsView() {
                   </th>
                   <th
                     onClick={() => handleSort("activo")}
-                    className="p-4 cursor-pointer hover:text-foreground select-none text-center"
+                    className="p-4 cursor-pointer hover:text-foreground select-none text-center whitespace-nowrap min-w-[95px]"
                   >
                     <div className="flex items-center justify-center gap-1.5">
                       <span>Estado</span>
                       <ArrowUpDown size={12} />
                     </div>
                   </th>
-                  <th className="p-4 text-right select-none">Acciones</th>
+                  <th className="p-4 text-right select-none whitespace-nowrap min-w-[110px]">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -957,7 +976,7 @@ export default function ProductsView() {
                     key={item.id}
                     className="hover:bg-hover/50 transition-colors group"
                   >
-                    <td className="p-4">
+                    <td className="p-4 whitespace-nowrap">
                       <div className="font-bold text-primary">{item.codigo_producto}</div>
                       {item.codigo_barra && (
                         <div className="text-[10px] text-foreground-muted flex items-center gap-1 mt-0.5">
@@ -966,7 +985,7 @@ export default function ProductsView() {
                         </div>
                       )}
                     </td>
-                    <td className="p-4">
+                    <td className="p-4 min-w-[200px]">
                       <div className="font-bold text-foreground font-sans text-sm">
                         {item.nombre}
                       </div>
@@ -985,7 +1004,7 @@ export default function ProductsView() {
                         )}
                       </div>
                     </td>
-                    <td className="p-4">
+                    <td className="p-4 whitespace-nowrap">
                       <div className="flex flex-col gap-1 items-start">
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary/10 border border-primary/20 text-primary whitespace-nowrap">
                           {item.categoria_producto_nombre}
@@ -1009,21 +1028,41 @@ export default function ProductsView() {
                         </span>
                       )}
                     </td>
-                    <td className="p-4 text-right">
-                      <div className="font-bold text-emerald-400">
-                        RD$ {Number(item.precio_venta).toLocaleString("es-DO", { minimumFractionDigits: 2 })}
-                      </div>
-                      <div className="text-[10px] text-foreground-muted mt-0.5">
-                        Costo: RD$ {Number(item.costo_actual).toLocaleString("es-DO", { minimumFractionDigits: 2 })}
+                    <td className="p-4 text-right whitespace-nowrap">
+                      <div className="font-medium text-foreground-secondary font-mono">
+                        RD$ {Number(item.costo_actual || 0).toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
                     </td>
-                    <td className="p-4 text-center">
+                    <td className="p-4 text-right whitespace-nowrap">
+                      <div className="font-bold text-emerald-400 font-mono">
+                        RD$ {Number(item.precio_venta || 0).toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                    </td>
+                    <td className="p-4 text-right whitespace-nowrap">
+                      {(() => {
+                        const rawStock = item.existencia_total != null ? Number(item.existencia_total) : Number(item.stock_actual || 0);
+                        const stockClean = Number.isInteger(rawStock) ? rawStock.toString() : rawStock.toLocaleString("es-DO", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+                        if (rawStock <= 0) {
+                          return (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-md font-mono text-xs font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20">
+                              0
+                            </span>
+                          );
+                        }
+                        return (
+                          <span className="font-mono text-xs font-bold text-foreground">
+                            {stockClean}
+                          </span>
+                        );
+                      })()}
+                    </td>
+                    <td className="p-4 text-center whitespace-nowrap">
                       <div className="text-foreground-secondary font-mono text-[11px] flex items-center justify-center gap-1.5">
                         <Calendar size={12} className="text-foreground-muted shrink-0" />
                         <span>{formatDate(item.fecha_registro)}</span>
                       </div>
                     </td>
-                    <td className="p-4 text-center">
+                    <td className="p-4 text-center whitespace-nowrap">
                       <span
                         className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold border ${
                           item.activo !== false
