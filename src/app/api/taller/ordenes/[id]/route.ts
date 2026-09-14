@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
 import { getPool, query } from "@/lib/db";
 import { PoolClient } from "pg";
@@ -393,7 +394,9 @@ export async function GET(
         cantidad: Number(p.cantidad || 1),
         precio_unitario: Number(p.precio_unitario || 0),
         descuento: Number(p.valor_descuento || 0),
-        subtotal: Number(p.subtotal || 0)
+        subtotal: Number(p.subtotal || 0),
+        utilizado: Boolean(p.utilizado),
+        estado_inventario: p.estado_inventario || (p.utilizado ? "Consumido" : "Reservado")
       }))
     };
 
@@ -488,9 +491,19 @@ export async function GET(
         servicios: serviciosEnriquecidos,
         productos: (allProductos || []).map((p: any) => ({
           orden_producto_id: p.orden_producto_id,
+          id: p.orden_producto_id,
+          orden_trabajo_id: p.orden_trabajo_id,
+          orden_servicio_id: p.orden_servicio_id,
           producto_id: p.producto_id,
+          almacen_id: p.almacen_id,
+          almacen_codigo: p.almacen_codigo,
+          almacen_nombre: p.almacen_nombre,
+          utilizado: Boolean(p.utilizado),
+          estado_inventario: p.estado_inventario || (p.utilizado ? "Consumido" : "Reservado"),
           codigo: p.codigo || p.codigo_producto || `PRD-${String(p.producto_id).padStart(3, "0")}`,
+          codigo_producto: p.codigo_producto || p.codigo,
           nombre: p.producto_nombre || p.nombre || "Producto / Repuesto",
+          producto_nombre: p.producto_nombre || p.nombre || "Producto / Repuesto",
           cantidad: Number(p.cantidad || 1),
           precio_unitario: Number(p.precio_unitario || 0),
           subtotal: Number(p.subtotal || 0),

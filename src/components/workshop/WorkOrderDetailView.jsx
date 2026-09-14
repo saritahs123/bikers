@@ -756,6 +756,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
     );
   }
 
+  // CHECKPOINT: FIX-TALLER-FLUJO-ESTADO-1
   // Pipeline Stepper Definitions: mapped strictly by official catalog codes & operational sequence
   // Visual presentation (completed, active, pending) is 100% decoupled from admin.estado_orden_trabajo.color_estado
   const PIPELINE_STEPS = [
