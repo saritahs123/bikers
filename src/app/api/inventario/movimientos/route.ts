@@ -68,8 +68,8 @@ export async function GET(req: NextRequest) {
     }
 
     if (codigoMovimiento) {
-      conditions.push(`mi.codigo_movimiento ILIKE $${paramIndex}`);
-      params.push(`%${codigoMovimiento}%`);
+      conditions.push(`mi.codigo_movimiento = $${paramIndex}`);
+      params.push(codigoMovimiento);
       paramIndex++;
     }
     if (almacenId && !isNaN(almacenId)) {
@@ -167,7 +167,7 @@ export async function GET(req: NextRequest) {
     const rows = await query(dataSql, dataParams);
 
     // 3. Lookups Query
-    const [almacenesRes, tiposMovRes] = await Promise.all([
+    const [almacenesRes, tiposMovRes, empresaRes] = await Promise.all([
       query(
         `SELECT almacen_id, codigo, nombre
          FROM admin.almacenes
@@ -180,8 +180,25 @@ export async function GET(req: NextRequest) {
          FROM admin.tipo_movimiento_inventario
          WHERE (estado = 'ACTIVO' OR estado IS NULL)
          ORDER BY naturaleza ASC, nombre ASC`
+      ),
+      query(
+        `SELECT nombre_comercial, alias, direccion, telefono, email, rnc, logotipo_url
+         FROM admin.empresa
+         WHERE empresa_id = $1`,
+        [empresaId]
       )
     ]);
+
+    const empRow = (empresaRes && Array.isArray(empresaRes) && empresaRes.length > 0) ? (empresaRes[0] as Record<string, unknown>) : null;
+    const empresaInfo = {
+      nombre_comercial: (empRow?.nombre_comercial as string) || (empRow?.alias as string) || "RIDE LAB",
+      subtitulo: "Tienda y Taller de Bicicletas",
+      direccion: (empRow?.direccion as string) || null,
+      telefono: (empRow?.telefono as string) || null,
+      email: (empRow?.email as string) || null,
+      rnc: (empRow?.rnc as string) || null,
+      logotipo_url: (empRow?.logotipo_url as string) || null
+    };
 
     const items = (rows as Record<string, unknown>[]).map((r) => ({
       movimiento_inventario_id: r.movimiento_inventario_id,
@@ -216,6 +233,8 @@ export async function GET(req: NextRequest) {
     const response = NextResponse.json({
       success: true,
       items,
+      productos: items,
+      empresa: empresaInfo,
       pagination: {
         page,
         page_size: pageSize,

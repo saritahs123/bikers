@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
   Package,
@@ -13,10 +13,17 @@ import {
 
 export default function ProductCreateModal({
   isOpen = false,
+  open,
   onClose = () => {},
   onProductCreated = () => {},
-  initialData = {},
+  initialData,
 }) {
+  const isModalOpen = Boolean(open !== undefined ? open : isOpen);
+  const onCloseRef = useRef(onClose);
+  const onProductCreatedRef = useRef(onProductCreated);
+  const isSavingRef = useRef(false);
+  const initialDataRef = useRef(initialData);
+
   const [mounted, setMounted] = useState(false);
   const [lookups, setLookups] = useState({
     tipos: [],
@@ -50,71 +57,86 @@ export default function ProductCreateModal({
   const [errors, setErrors] = useState({});
 
   useEffect(() => {
+    onCloseRef.current = onClose;
+    onProductCreatedRef.current = onProductCreated;
+    isSavingRef.current = isSaving;
+    initialDataRef.current = initialData;
+  });
+
+  useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
   }, []);
 
-  // Cargar catálogos auxiliares necesarios para el formulario
-  const loadLookups = useCallback(async () => {
-    try {
-      setLoadingLookups(true);
-      const res = await fetch("/api/taller/productos");
-      if (res.ok) {
-        const json = await res.json();
-        if (json.lookups) {
-          setLookups({
-            tipos: json.lookups.tipos || [],
-            categorias: json.lookups.categorias || [],
-            marcas: json.lookups.marcas || [],
-            unidades: json.lookups.unidades || [],
-            proveedores: json.lookups.proveedores || [],
-          });
+  useEffect(() => {
+    if (!isModalOpen) return;
+
+    let isSubscribed = true;
+
+    const fetchLookups = async () => {
+      try {
+        setLoadingLookups(true);
+        const res = await fetch("/api/taller/productos");
+        if (res.ok && isSubscribed) {
+          const json = await res.json();
+          if (json.lookups) {
+            setLookups({
+              tipos: json.lookups.tipos || [],
+              categorias: json.lookups.categorias || [],
+              marcas: json.lookups.marcas || [],
+              unidades: json.lookups.unidades || [],
+              proveedores: json.lookups.proveedores || [],
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Error al cargar lookups de producto:", err);
+      } finally {
+        if (isSubscribed) {
+          setLoadingLookups(false);
         }
       }
-    } catch (err) {
-      console.error("Error al cargar lookups de producto:", err);
-    } finally {
-      setLoadingLookups(false);
-    }
-  }, []);
+    };
 
-  useEffect(() => {
-    if (isOpen) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      loadLookups();
-      setFormData({
-        codigo_producto: initialData.codigo_producto || "",
-        codigo_barra: initialData.codigo_barra || "",
-        nombre: initialData.nombre || "",
-        proveedor_id: initialData.proveedor_id ? String(initialData.proveedor_id) : "",
-        descripcion: initialData.descripcion || "",
-        tipo_producto_id: initialData.tipo_producto_id ? String(initialData.tipo_producto_id) : "",
-        categoria_producto_id: initialData.categoria_producto_id ? String(initialData.categoria_producto_id) : "",
-        marca_producto_id: initialData.marca_producto_id ? String(initialData.marca_producto_id) : "",
-        unidad_medida_id: initialData.unidad_medida_id ? String(initialData.unidad_medida_id) : "",
-        costo_actual: initialData.costo_actual !== undefined ? String(initialData.costo_actual) : "",
-        precio_venta: initialData.precio_venta !== undefined ? String(initialData.precio_venta) : "",
-        stock_minimo: initialData.stock_minimo !== undefined ? String(initialData.stock_minimo) : "0",
-        stock_maximo: initialData.stock_maximo ? String(initialData.stock_maximo) : "",
-        requiere_serial: Boolean(initialData.requiere_serial),
-        activo: true,
-      });
-      setErrors({});
-      setGeneralError("");
-    }
-  }, [isOpen, initialData, loadLookups]);
+    fetchLookups();
+
+    const init = initialDataRef.current || {};
+    setFormData({
+      codigo_producto: init.codigo_producto || "",
+      codigo_barra: init.codigo_barra || "",
+      nombre: init.nombre || "",
+      proveedor_id: init.proveedor_id ? String(init.proveedor_id) : "",
+      descripcion: init.descripcion || "",
+      tipo_producto_id: init.tipo_producto_id ? String(init.tipo_producto_id) : "",
+      categoria_producto_id: init.categoria_producto_id ? String(init.categoria_producto_id) : "",
+      marca_producto_id: init.marca_producto_id ? String(init.marca_producto_id) : "",
+      unidad_medida_id: init.unidad_medida_id ? String(init.unidad_medida_id) : "",
+      costo_actual: init.costo_actual !== undefined ? String(init.costo_actual) : "",
+      precio_venta: init.precio_venta !== undefined ? String(init.precio_venta) : "",
+      stock_minimo: init.stock_minimo !== undefined ? String(init.stock_minimo) : "0",
+      stock_maximo: init.stock_maximo ? String(init.stock_maximo) : "",
+      requiere_serial: Boolean(init.requiere_serial),
+      activo: true,
+    });
+    setErrors({});
+    setGeneralError("");
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [isModalOpen]);
 
   // Cerrar con Escape
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isModalOpen) return;
     const handleKeyDown = (e) => {
-      if (e.key === "Escape" && !isSaving) {
-        onClose();
+      if (e.key === "Escape" && !isSavingRef.current) {
+        onCloseRef.current?.();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, isSaving, onClose]);
+  }, [isModalOpen]);
 
   const validate = () => {
     const errs = {};
@@ -210,8 +232,8 @@ export default function ProductCreateModal({
       }
 
       // Notificar al componente padre con el producto recién creado
-      onProductCreated(json.data || json);
-      onClose();
+      onProductCreatedRef.current?.(json.data || json);
+      onCloseRef.current?.();
     } catch (err) {
       console.error("Error al registrar producto:", err);
       setGeneralError(err.message || "No se pudo crear el producto.");
@@ -220,14 +242,14 @@ export default function ProductCreateModal({
     }
   };
 
-  if (!mounted || !isOpen || typeof document === "undefined") return null;
+  if (!mounted || !isModalOpen || typeof document === "undefined") return null;
 
   return createPortal(
     <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-150">
       {/* Backdrop */}
       <div
         className="fixed inset-0 bg-black/75 backdrop-blur-xs transition-opacity"
-        onClick={() => !isSaving && onClose()}
+        onClick={() => !isSaving && onCloseRef.current?.()}
       />
 
       {/* Modal Dialog */}
@@ -254,7 +276,7 @@ export default function ProductCreateModal({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={() => onCloseRef.current?.()}
             disabled={isSaving}
             className="p-1.5 rounded-lg text-foreground-muted hover:text-foreground hover:bg-hover transition-colors cursor-pointer"
           >
@@ -576,7 +598,7 @@ export default function ProductCreateModal({
           <div className="pt-4 border-t border-border flex items-center justify-end gap-2 shrink-0 font-sans">
             <button
               type="button"
-              onClick={onClose}
+              onClick={() => onCloseRef.current?.()}
               disabled={isSaving}
               className="px-4 py-2 text-xs font-medium rounded-lg bg-surface hover:bg-hover text-foreground border border-border transition-colors cursor-pointer disabled:opacity-50"
             >

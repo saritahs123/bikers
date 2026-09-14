@@ -21,6 +21,7 @@ import {
   Layers,
   FileCheck2,
 } from "lucide-react";
+import ProductCreateModal from "@/components/products/ProductCreateModal";
 
 export default function InventoryInitialView() {
   // Stepper: 1: Carga, 2: Revisión, 3: Procesamiento
@@ -42,6 +43,10 @@ export default function InventoryInitialView() {
   const [productDropdownOpen, setProductDropdownOpen] = useState(false);
   const [cantidad, setCantidad] = useState("");
   const [costoUnitario, setCostoUnitario] = useState("");
+
+  // Modal para Crear Producto y Permisos RBAC (TALLER.puede_crear)
+  const [isCreateProductModalOpen, setIsCreateProductModalOpen] = useState(false);
+  const [canCreateProduct, setCanCreateProduct] = useState(false);
 
   // Batch items collection
   const [items, setItems] = useState([]);
@@ -75,6 +80,22 @@ export default function InventoryInitialView() {
     loadCatalogos();
   }, [loadCatalogos]);
 
+  // Verificar permiso para crear producto (mismo RBAC del catálogo de productos: TALLER.puede_crear)
+  useEffect(() => {
+    const checkProductPermissions = async () => {
+      try {
+        const res = await fetch("/api/taller/productos");
+        if (res.ok) {
+          const permCrear = res.headers.get("x-perm-crear") === "true";
+          setCanCreateProduct(permCrear);
+        }
+      } catch (err) {
+        console.warn("No se pudo verificar permiso para crear productos:", err);
+      }
+    };
+    checkProductPermissions();
+  }, []);
+
   // Selected product object
   const selectedProduct = useMemo(() => {
     if (!productoId) return null;
@@ -89,6 +110,46 @@ export default function InventoryInitialView() {
 
     if (prod.costo_actual > 0) {
       setCostoUnitario(String(prod.costo_actual));
+    }
+  };
+
+  // Manejar creación de producto nuevo desde el modal (preserva formulario y auto-selecciona el nuevo producto)
+  const handleProductCreated = async (newProduct) => {
+    setIsCreateProductModalOpen(false);
+    if (!newProduct) return;
+
+    try {
+      const res = await fetch("/api/inventario/catalogos");
+      if (res.ok) {
+        const data = await res.json();
+        const freshProducts = data.productos || [];
+        setProductos(freshProducts);
+        if (data.almacenes) setAlmacenes(data.almacenes);
+
+        const targetId = newProduct.producto_id || newProduct.id;
+        const matched = freshProducts.find((p) => String(p.producto_id) === String(targetId));
+        if (matched) {
+          handleSelectProduct(matched);
+        } else {
+          handleSelectProduct({
+            producto_id: targetId,
+            codigo_producto: newProduct.codigo_producto,
+            nombre: newProduct.nombre,
+            costo_actual: newProduct.costo_actual || 0,
+            precio_venta: newProduct.precio_venta || 0,
+            unidad_medida: {
+              codigo: "UND",
+              permite_decimales: false,
+            },
+          });
+        }
+      }
+      setFeedback({
+        type: "success",
+        message: `Producto "${newProduct.nombre || newProduct.codigo_producto}" creado y seleccionado en el inventario inicial.`,
+      });
+    } catch (err) {
+      console.error("Error al refrescar producto post-creación:", err);
     }
   };
 
@@ -438,9 +499,21 @@ export default function InventoryInitialView() {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-end">
               {/* Producto */}
               <div className="lg:col-span-5 relative">
-                <label className="block text-xs font-medium text-foreground-secondary mb-1.5">
-                  Producto <span className="text-error">*</span>
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-medium text-foreground-secondary">
+                    Producto <span className="text-error">*</span>
+                  </label>
+                  {canCreateProduct && (
+                    <button
+                      type="button"
+                      onClick={() => setIsCreateProductModalOpen(true)}
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Crear producto</span>
+                    </button>
+                  )}
+                </div>
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-muted pointer-events-none" />
                   <input
@@ -952,6 +1025,12 @@ export default function InventoryInitialView() {
           ) : null}
         </div>
       )}
+      {/* Modal Reutilizable para Crear Producto */}
+      <ProductCreateModal
+        isOpen={isCreateProductModalOpen}
+        onClose={() => setIsCreateProductModalOpen(false)}
+        onProductCreated={handleProductCreated}
+      />
     </div>
   );
 }

@@ -19,8 +19,12 @@ import {
   X,
   FileText,
   Copy,
-  Check
+  Check,
+  Printer,
+  Loader2,
+  AlertCircle
 } from "lucide-react";
+import { downloadInventoryMovementPdf } from "@/lib/inventory/generateInventoryMovementPdf";
 
 export default function InventoryMovementsView() {
   const [data, setData] = useState([]);
@@ -52,7 +56,12 @@ export default function InventoryMovementsView() {
 
   // Detail Modal state
   const [selectedMovement, setSelectedMovement] = useState(null);
+  const [movementProducts, setMovementProducts] = useState([]);
+  const [loadingLines, setLoadingLines] = useState(false);
+  const [empresa, setEmpresa] = useState(null);
   const [copiedUuid, setCopiedUuid] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
+  const [printError, setPrintError] = useState(null);
 
   const fetchMovements = useCallback(async () => {
     setLoading(true);
@@ -89,6 +98,9 @@ export default function InventoryMovementsView() {
         if (result.lookups) {
           setLookups(result.lookups);
         }
+        if (result.empresa) {
+          setEmpresa(result.empresa);
+        }
       } else {
         throw new Error(result.message || "Error al procesar la solicitud.");
       }
@@ -104,6 +116,49 @@ export default function InventoryMovementsView() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchMovements();
   }, [fetchMovements]);
+
+  const handleOpenDetail = (item) => {
+    setSelectedMovement(item);
+    setMovementProducts([item]);
+    setPrintError(null);
+  };
+
+  const handleCloseDetail = () => {
+    setSelectedMovement(null);
+    setMovementProducts([]);
+    setPrintError(null);
+  };
+
+  useEffect(() => {
+    if (!selectedMovement?.codigo_movimiento) return;
+    let isMounted = true;
+    const loadTransactionProducts = async () => {
+      setLoadingLines(true);
+      try {
+        const res = await fetch(
+          `/api/inventario/movimientos?codigo_movimiento=${encodeURIComponent(selectedMovement.codigo_movimiento)}&page_size=100`
+        );
+        const json = await res.json();
+        if (isMounted && json.success) {
+          const lines = json.productos || json.items || [];
+          if (lines.length > 0) {
+            setMovementProducts(lines);
+          }
+          if (json.empresa) {
+            setEmpresa(json.empresa);
+          }
+        }
+      } catch (err) {
+        console.error("Error al cargar productos de transacción:", err);
+      } finally {
+        if (isMounted) setLoadingLines(false);
+      }
+    };
+    loadTransactionProducts();
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedMovement]);
 
   const handleSort = (column) => {
     if (sortBy === column) {
@@ -165,6 +220,43 @@ export default function InventoryMovementsView() {
     navigator.clipboard.writeText(uuid);
     setCopiedUuid(true);
     setTimeout(() => setCopiedUuid(false), 2000);
+  };
+
+  const handlePrintMovement = async () => {
+    if (!selectedMovement || isPrinting) return;
+    setIsPrinting(true);
+    setPrintError(null);
+    try {
+      let lines = movementProducts;
+      let emp = empresa;
+      if ((!lines || lines.length === 0) && selectedMovement.codigo_movimiento) {
+        const res = await fetch(
+          `/api/inventario/movimientos?codigo_movimiento=${encodeURIComponent(selectedMovement.codigo_movimiento)}&page_size=100`
+        );
+        const json = await res.json();
+        if (json.success) {
+          lines = json.productos || json.items || [];
+          if (json.empresa) {
+            emp = json.empresa;
+            setEmpresa(json.empresa);
+          }
+        }
+      }
+      if (!lines || lines.length === 0) {
+        lines = [selectedMovement];
+      }
+
+      downloadInventoryMovementPdf({
+        ...selectedMovement,
+        empresa: emp,
+        productos: lines
+      });
+    } catch (err) {
+      console.error("Error al generar PDF del movimiento:", err);
+      setPrintError(err?.message || "Ocurrió un error al generar el PDF del movimiento.");
+    } finally {
+      setIsPrinting(false);
+    }
   };
 
   const getSortIcon = (column) => {
@@ -419,7 +511,7 @@ export default function InventoryMovementsView() {
                   return (
                     <tr
                       key={item.movimiento_inventario_id}
-                      onClick={() => setSelectedMovement(item)}
+                      onClick={() => handleOpenDetail(item)}
                       className="hover:bg-surface-subtle/60 transition-colors cursor-pointer"
                     >
                       <td className="py-3 px-4 text-foreground-muted whitespace-nowrap font-medium">
@@ -489,7 +581,7 @@ export default function InventoryMovementsView() {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            setSelectedMovement(item);
+                            handleOpenDetail(item);
                           }}
                           className="p-1 rounded bg-surface-subtle hover:bg-surface-elevated text-foreground-muted hover:text-foreground border border-border transition-colors cursor-pointer"
                           title="Ver detalle del movimiento"
@@ -577,7 +669,7 @@ export default function InventoryMovementsView() {
                 </div>
               </div>
               <button
-                onClick={() => setSelectedMovement(null)}
+                onClick={handleCloseDetail}
                 className="p-1 rounded-md text-foreground-muted hover:text-foreground hover:bg-surface-subtle transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
@@ -586,6 +678,22 @@ export default function InventoryMovementsView() {
 
             {/* Modal Body */}
             <div className="p-5 space-y-4 overflow-y-auto text-xs">
+              {/* Print Error Notification */}
+              {printError && (
+                <div className="p-3 bg-error/10 border border-error/30 rounded-md text-error flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{printError}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPrintError(null)}
+                    className="p-0.5 text-error hover:opacity-80 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
               {/* Código de Movimiento Funcional */}
               {selectedMovement.codigo_movimiento && (
                 <div className="bg-primary/5 p-3 rounded-md border border-primary/20 flex items-center justify-between">
@@ -628,73 +736,128 @@ export default function InventoryMovementsView() {
                 </span>
               </div>
 
-              {/* Product and Warehouse Details */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-surface p-3 rounded-md border border-border">
-                  <p className="text-[10px] text-foreground-muted uppercase font-semibold">Producto</p>
-                  <p className="font-bold text-foreground text-xs mt-0.5 truncate" title={selectedMovement.producto_nombre}>
-                    {selectedMovement.producto_nombre}
-                  </p>
-                  <p className="text-[10px] text-foreground-muted font-mono mt-0.5">
-                    SKU: {selectedMovement.codigo_producto}
-                  </p>
+              {/* Product and Warehouse Details / Multiproduct Table */}
+              {loadingLines ? (
+                <div className="bg-surface p-4 rounded-md border border-border flex items-center justify-center gap-2 text-foreground-muted">
+                  <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                  <span>Cargando productos de la operación...</span>
                 </div>
-                <div className="bg-surface p-3 rounded-md border border-border">
-                  <p className="text-[10px] text-foreground-muted uppercase font-semibold">Almacén</p>
-                  <p className="font-bold text-foreground text-xs mt-0.5 truncate">
-                    {selectedMovement.almacen_nombre}
-                  </p>
-                  <p className="text-[10px] text-foreground-muted font-mono mt-0.5">
-                    ID: {selectedMovement.almacen_id}
-                  </p>
+              ) : movementProducts.length > 1 ? (
+                <div className="bg-surface p-3 rounded-md border border-border space-y-2">
+                  <div className="flex justify-between items-center">
+                    <p className="text-[10px] text-foreground-muted uppercase font-semibold">
+                      Productos de la Transacción ({movementProducts.length} líneas)
+                    </p>
+                    <span className="text-[10px] font-mono font-bold text-primary">
+                      Total: {formatMoney(movementProducts.reduce((s, p) => s + (Number(p.costo_total) || (Number(p.cantidad) * Number(p.costo_unitario)) || 0), 0))}
+                    </span>
+                  </div>
+                  <div className="overflow-x-auto border border-border rounded max-h-48 overflow-y-auto">
+                    <table className="w-full text-[11px] text-left">
+                      <thead className="bg-surface-subtle text-foreground-muted text-[10px] uppercase border-b border-border sticky top-0">
+                        <tr>
+                          <th className="py-1.5 px-2">Producto / SKU</th>
+                          <th className="py-1.5 px-2">Almacén</th>
+                          <th className="py-1.5 px-2 text-center">Cant.</th>
+                          <th className="py-1.5 px-2 text-right">Unit.</th>
+                          <th className="py-1.5 px-2 text-right">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {movementProducts.map((p, idx) => (
+                          <tr key={p.movimiento_inventario_id || idx} className="hover:bg-surface-subtle/50">
+                            <td className="py-1.5 px-2">
+                              <p className="font-semibold text-foreground truncate max-w-[140px]">{p.producto_nombre}</p>
+                              <p className="font-mono text-[9px] text-foreground-muted">{p.codigo_producto}</p>
+                            </td>
+                            <td className="py-1.5 px-2 text-foreground-muted truncate max-w-[90px]">{p.almacen_nombre}</td>
+                            <td className="py-1.5 px-2 text-center font-mono font-bold">
+                              <span className={(p.naturaleza || selectedMovement.naturaleza) === "ENTRADA" ? "text-success" : "text-warning"}>
+                                {(p.naturaleza || selectedMovement.naturaleza) === "ENTRADA" ? "+" : "-"}
+                                {formatNumber(p.cantidad)}
+                              </span>
+                            </td>
+                            <td className="py-1.5 px-2 text-right font-mono text-foreground-muted">{formatMoney(p.costo_unitario)}</td>
+                            <td className="py-1.5 px-2 text-right font-mono font-bold text-foreground">
+                              {formatMoney(p.costo_total || (Number(p.cantidad) * Number(p.costo_unitario)))}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <>
+                  {/* Single Product and Warehouse Details */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-surface p-3 rounded-md border border-border">
+                      <p className="text-[10px] text-foreground-muted uppercase font-semibold">Producto</p>
+                      <p className="font-bold text-foreground text-xs mt-0.5 truncate" title={selectedMovement.producto_nombre}>
+                        {selectedMovement.producto_nombre}
+                      </p>
+                      <p className="text-[10px] text-foreground-muted font-mono mt-0.5">
+                        SKU: {selectedMovement.codigo_producto}
+                      </p>
+                    </div>
+                    <div className="bg-surface p-3 rounded-md border border-border">
+                      <p className="text-[10px] text-foreground-muted uppercase font-semibold">Almacén</p>
+                      <p className="font-bold text-foreground text-xs mt-0.5 truncate">
+                        {selectedMovement.almacen_nombre}
+                      </p>
+                      <p className="text-[10px] text-foreground-muted font-mono mt-0.5">
+                        ID: {selectedMovement.almacen_id}
+                      </p>
+                    </div>
+                  </div>
 
-              {/* Balances and Quantities */}
-              <div className="bg-surface p-3 rounded-md border border-border space-y-2">
-                <p className="text-[10px] text-foreground-muted uppercase font-semibold">Impacto en Existencias</p>
-                <div className="grid grid-cols-3 gap-2 text-center pt-1">
-                  <div className="bg-card p-2 rounded border border-border">
-                    <p className="text-[10px] text-foreground-muted">Stock Anterior</p>
-                    <p className="font-mono font-bold text-foreground mt-0.5">
-                      {formatNumber(selectedMovement.stock_anterior)}
-                    </p>
+                  {/* Balances and Quantities */}
+                  <div className="bg-surface p-3 rounded-md border border-border space-y-2">
+                    <p className="text-[10px] text-foreground-muted uppercase font-semibold">Impacto en Existencias</p>
+                    <div className="grid grid-cols-3 gap-2 text-center pt-1">
+                      <div className="bg-card p-2 rounded border border-border">
+                        <p className="text-[10px] text-foreground-muted">Stock Anterior</p>
+                        <p className="font-mono font-bold text-foreground mt-0.5">
+                          {formatNumber(selectedMovement.stock_anterior)}
+                        </p>
+                      </div>
+                      <div className="bg-card p-2 rounded border border-border">
+                        <p className="text-[10px] text-foreground-muted">Cantidad Movida</p>
+                        <p
+                          className={`font-mono font-bold mt-0.5 ${
+                            selectedMovement.naturaleza === "ENTRADA" ? "text-success" : "text-warning"
+                          }`}
+                        >
+                          {selectedMovement.naturaleza === "ENTRADA" ? "+" : "-"}
+                          {formatNumber(selectedMovement.cantidad)}
+                        </p>
+                      </div>
+                      <div className="bg-card p-2 rounded border border-border">
+                        <p className="text-[10px] text-foreground-muted">Stock Resultante</p>
+                        <p className="font-mono font-bold text-foreground mt-0.5">
+                          {formatNumber(selectedMovement.stock_nuevo)}
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                  <div className="bg-card p-2 rounded border border-border">
-                    <p className="text-[10px] text-foreground-muted">Cantidad Movida</p>
-                    <p
-                      className={`font-mono font-bold mt-0.5 ${
-                        selectedMovement.naturaleza === "ENTRADA" ? "text-success" : "text-warning"
-                      }`}
-                    >
-                      {selectedMovement.naturaleza === "ENTRADA" ? "+" : "-"}
-                      {formatNumber(selectedMovement.cantidad)}
-                    </p>
-                  </div>
-                  <div className="bg-card p-2 rounded border border-border">
-                    <p className="text-[10px] text-foreground-muted">Stock Resultante</p>
-                    <p className="font-mono font-bold text-foreground mt-0.5">
-                      {formatNumber(selectedMovement.stock_nuevo)}
-                    </p>
-                  </div>
-                </div>
-              </div>
 
-              {/* Valuation & Costs */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-surface p-3 rounded-md border border-border">
-                  <p className="text-[10px] text-foreground-muted uppercase font-semibold">Costo Unitario</p>
-                  <p className="font-bold font-mono text-foreground text-sm mt-0.5">
-                    {formatMoney(selectedMovement.costo_unitario)}
-                  </p>
-                </div>
-                <div className="bg-surface p-3 rounded-md border border-border">
-                  <p className="text-[10px] text-foreground-muted uppercase font-semibold">Costo Total Valuado</p>
-                  <p className="font-bold font-mono text-primary text-sm mt-0.5">
-                    {formatMoney(selectedMovement.costo_total)}
-                  </p>
-                </div>
-              </div>
+                  {/* Valuation & Costs */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-surface p-3 rounded-md border border-border">
+                      <p className="text-[10px] text-foreground-muted uppercase font-semibold">Costo Unitario</p>
+                      <p className="font-bold font-mono text-foreground text-sm mt-0.5">
+                        {formatMoney(selectedMovement.costo_unitario)}
+                      </p>
+                    </div>
+                    <div className="bg-surface p-3 rounded-md border border-border">
+                      <p className="text-[10px] text-foreground-muted uppercase font-semibold">Costo Total Valuado</p>
+                      <p className="font-bold font-mono text-primary text-sm mt-0.5">
+                        {formatMoney(selectedMovement.costo_total)}
+                      </p>
+                    </div>
+                  </div>
+                </>
+              )}
 
               {/* User, Reference and Observations */}
               <div className="bg-surface p-3 rounded-md border border-border space-y-2">
@@ -741,9 +904,29 @@ export default function InventoryMovementsView() {
             </div>
 
             {/* Modal Footer */}
-            <div className="p-3 bg-surface border-t border-border flex justify-end">
+            <div className="p-3 bg-surface border-t border-border flex justify-end gap-2">
               <button
-                onClick={() => setSelectedMovement(null)}
+                type="button"
+                onClick={handlePrintMovement}
+                disabled={isPrinting}
+                className="px-4 py-1.5 bg-primary hover:bg-primary-hover text-primary-foreground rounded-md text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 shadow-xs"
+                title="Generar y descargar documento PDF"
+              >
+                {isPrinting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Imprimiendo...</span>
+                  </>
+                ) : (
+                  <>
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>Imprimir</span>
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={handleCloseDetail}
                 className="px-4 py-1.5 bg-surface-subtle hover:bg-surface-elevated text-foreground border border-border rounded-md text-xs font-semibold transition-colors cursor-pointer"
               >
                 Cerrar

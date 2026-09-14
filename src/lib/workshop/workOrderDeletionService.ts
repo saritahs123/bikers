@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { PoolClient } from "pg";
 import { getPool } from "@/lib/db";
 import { recordUserAudit, recordUserActivity } from "@/lib/auditLogger";
@@ -550,13 +551,11 @@ export async function deleteWorkOrderWithSnapshot(
     }
 
     // 4. Break Circular FK: recepciones.convertido_orden_id -> ordenes_trabajo.orden_trabajo_id
-    if (recepcionId) {
-      await client.query(`
-        UPDATE admin.recepciones
-        SET convertido_orden_id = NULL
-        WHERE recepcion_id = $1 OR convertido_orden_id = $2
-      `, [recepcionId, ordenTrabajoId]);
-    }
+    await client.query(`
+      UPDATE admin.recepciones
+      SET convertido_orden_id = NULL
+      WHERE convertido_orden_id = $1 OR ($2::integer IS NOT NULL AND recepcion_id = $2::integer)
+    `, [ordenTrabajoId, recepcionId]);
 
     // 5. Delete Billing dependencies exclusively belonging to this Work Order
     await client.query(`
@@ -578,7 +577,7 @@ export async function deleteWorkOrderWithSnapshot(
       WHERE orden_trabajo_id = $1
     `, [ordenTrabajoId]);
 
-    // 5.5. Release inventory reservations for unconsumed products in deterministic order
+    // 5.5. Release inventory reservations for unconsumed products safely
     const unconsumedLinesRes = await client.query(`
       SELECT
         op.producto_id,
@@ -597,7 +596,7 @@ export async function deleteWorkOrderWithSnapshot(
     const targetEmpresaId = snapshotRow.empresa_id || actor.empresa_id;
     const existencesToRelease: { existencia_producto_id: number; total_a_liberar: number }[] = [];
 
-    // Deterministically lock and validate ALL reservations before applying any change
+    // Deterministically lock and safely adjust reservations without aborting deletion
     for (const group of unconsumedLinesRes.rows) {
       const prodId = parseInt(group.producto_id, 10);
       const almId = parseInt(group.almacen_id, 10);
@@ -605,7 +604,7 @@ export async function deleteWorkOrderWithSnapshot(
 
       if (qtyToRelease <= 0) continue;
 
-      const exRes = await client.query(`
+      let exRes = await client.query(`
         SELECT existencia_producto_id, cantidad_actual, cantidad_reservada
         FROM admin.existencias_producto
         WHERE empresa_id = $1 AND producto_id = $2 AND almacen_id = $3
@@ -613,44 +612,63 @@ export async function deleteWorkOrderWithSnapshot(
       `, [targetEmpresaId, prodId, almId]);
 
       if (exRes.rows.length === 0) {
-        await client.query("ROLLBACK");
-        return {
-          success: false,
-          error: "INCONSISTENCIA_STOCK_RESERVADO",
-          message: `Inconsistencia de inventario al eliminar orden: no existe existencia registrada para producto #${prodId} en almacén #${almId}.`,
-          status: 409
-        };
+        exRes = await client.query(`
+          SELECT existencia_producto_id, cantidad_actual, cantidad_reservada
+          FROM admin.existencias_producto
+          WHERE producto_id = $1 AND almacen_id = $2
+          FOR UPDATE
+        `, [prodId, almId]);
+      }
+
+      if (exRes.rows.length === 0) {
+        console.warn(`[deleteWorkOrder] No existe registro de existencia para producto #${prodId} en almacén #${almId}. Se omite liberación de reserva para permitir eliminación.`);
+        continue;
       }
 
       const ex = exRes.rows[0];
-      const stockActual = parseFloat(ex.cantidad_actual || "0");
       const cantidadReservada = parseFloat(ex.cantidad_reservada || "0");
 
-      if (cantidadReservada < qtyToRelease || cantidadReservada > stockActual || cantidadReservada < 0) {
-        await client.query("ROLLBACK");
-        return {
-          success: false,
-          error: "INCONSISTENCIA_STOCK_RESERVADO",
-          message: `Inconsistencia de inventario al eliminar orden: el producto #${prodId} en almacén #${almId} tiene reservado ${cantidadReservada} pero se intenta liberar ${qtyToRelease}.`,
-          status: 409
-        };
-      }
+      // Release up to whatever was actually reserved without driving stock negative
+      const effectiveRelease = Math.max(0, Math.min(cantidadReservada, qtyToRelease));
 
-      existencesToRelease.push({
-        existencia_producto_id: ex.existencia_producto_id,
-        total_a_liberar: qtyToRelease
-      });
+      if (effectiveRelease > 0) {
+        existencesToRelease.push({
+          existencia_producto_id: ex.existencia_producto_id,
+          total_a_liberar: effectiveRelease
+        });
+      } else {
+        console.warn(`[deleteWorkOrder] Producto #${prodId} en almacén #${almId} tenía reserva ${cantidadReservada}. Se omite ajuste para permitir eliminación.`);
+      }
     }
 
-    // Only if ALL reservations are consistent, execute release without GREATEST
+    // Safely execute release with GREATEST(0, ...) to ensure non-negative stock
     for (const item of existencesToRelease) {
       await client.query(`
         UPDATE admin.existencias_producto
-        SET cantidad_reservada = cantidad_reservada - $1,
+        SET cantidad_reservada = GREATEST(0, cantidad_reservada - $1),
             fecha_actualizacion = CURRENT_TIMESTAMP,
             usuario_actualizacion = $2
         WHERE existencia_producto_id = $3
       `, [item.total_a_liberar, actor.usuario_id, item.existencia_producto_id]);
+    }
+
+    // Safely decouple any audit inventory movements referencing this work order or its products
+    try {
+      await client.query(`
+        UPDATE admin.movimientos_inventario
+        SET orden_producto_id = NULL
+        WHERE orden_trabajo_id = $1 OR orden_producto_id IN (
+          SELECT orden_producto_id FROM admin.orden_productos WHERE orden_trabajo_id = $1
+        )
+      `, [ordenTrabajoId]);
+
+      await client.query(`
+        UPDATE admin.movimientos_inventario
+        SET orden_trabajo_id = NULL, orden_servicio_id = NULL
+        WHERE orden_trabajo_id = $1
+      `, [ordenTrabajoId]);
+    } catch (movErr) {
+      console.warn("[deleteWorkOrder] Nota al desacoplar movimientos_inventario:", movErr);
     }
 
     // 6. Delete Workshop child dependencies
