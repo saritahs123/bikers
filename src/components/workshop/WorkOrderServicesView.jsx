@@ -687,7 +687,8 @@ export default function WorkOrderServicesView({
     const isService = String(type || "").trim().toUpperCase() === "SERVICIO" || String(type || "").trim().toUpperCase() === "SERVICE";
     if (!isService) {
       if (!isOrderInRepair) return;
-      if (item.utilizado === true) {
+      const isConsumido = item.utilizado === true || item.utilizado === "true" || item.estado_inventario === "Consumido";
+      if (isConsumido) {
         showInfoToast("No se puede editar un repuesto que ya fue consumido.", "REPUESTO YA CONSUMIDO", 5000);
         return;
       }
@@ -1243,7 +1244,8 @@ export default function WorkOrderServicesView({
       }
       return;
     }
-    if (prod.utilizado === true) {
+    const isConsumido = prod.utilizado === true || prod.utilizado === "true" || prod.estado_inventario === "Consumido";
+    if (isConsumido) {
       showInfoToast("No se puede eliminar un repuesto que ya ha sido consumido.", "REPUESTO YA CONSUMIDO", 5000);
       return;
     }
@@ -1297,7 +1299,8 @@ export default function WorkOrderServicesView({
       }
       return;
     }
-    if (prod.utilizado !== true) {
+    const isConsumido = prod.utilizado === true || prod.utilizado === "true" || prod.estado_inventario === "Consumido";
+    if (!isConsumido) {
       showInfoToast("Este repuesto no se encuentra en estado consumido.", "REPUESTO NO CONSUMIDO", 5000);
       return;
     }
@@ -1700,28 +1703,39 @@ export default function WorkOrderServicesView({
                   })}
 
                   {/* PRODUCTS (REPUESTOS) ROWS */}
-                  {orderProducts.map((prod, idx) => {
-                    const prdCode = prod.codigo || `REP-${String(idx + 1).padStart(3, "0")}`;
+                  {orderProducts.map((prod) => {
+                    const prodId = prod.orden_producto_id || prod.id;
+                    const prodCode = prod.codigo || prod.codigo_producto || `PRD-${String(prod.producto_id).padStart(3, "0")}`;
+                    const prodName = prod.nombre || prod.producto_nombre || "Producto / Repuesto";
                     const prodQty = Number(prod.cantidad || 1);
                     const prodPrice = Number(prod.precio_unitario || 0);
-                    const prodSubtotal = Number(prod.subtotal || (prodQty * prodPrice));
+                    const prodSubtotal = Number(prod.subtotal || prodQty * prodPrice);
+                    const isConsumido = Boolean(
+                      prod.utilizado === true ||
+                      prod.utilizado === "true" ||
+                      prod.estado_inventario === "Consumido" ||
+                      prod.estado_inventario === "CONSUMIDO"
+                    );
 
                     return (
-                      <tr key={`prod-${prod.orden_producto_id || idx}`} className="hover:bg-[#1c2129]/60 transition-colors bg-[#0a0c10]/20">
+                      <tr key={`prod-${prodId}`} className="hover:bg-[#1c2129]/60 transition-colors">
                         {/* Código */}
-                        <td className="p-3.5 pl-4 font-bold text-cyan-400 whitespace-nowrap">
-                          {prdCode}
+                        <td className="p-3.5 pl-4 font-bold text-cyan-400 whitespace-nowrap font-mono">
+                          {prodCode}
                         </td>
 
                         {/* Tipo / Descripción */}
                         <td className="p-3.5">
-                          <div className="font-bold text-slate-100 font-sans text-xs flex items-center gap-2 flex-wrap">
-                            <Package className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                            <span>{prod.nombre || prod.producto_nombre || "Repuesto"}</span>
-                            <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 font-mono">REPUESTO</span>
+                          <div className="font-bold text-slate-100 font-sans text-xs flex items-center gap-2">
+                            <span className="flex items-center gap-1.5">
+                              <Package className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                              {prodName}
+                            </span>
+                            <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
+                              REPUESTO
+                            </span>
                             {prod.almacen_nombre && (
-                              <span className="px-1.5 py-0.5 text-[9px] font-medium rounded bg-slate-800 text-slate-300 border border-slate-700 font-mono flex items-center gap-1">
-                                <Warehouse className="w-2.5 h-2.5 text-cyan-400" />
+                              <span className="px-1.5 py-0.5 text-[9px] font-medium rounded bg-slate-800 text-slate-400 border border-slate-700">
                                 {prod.almacen_nombre}
                               </span>
                             )}
@@ -1737,7 +1751,7 @@ export default function WorkOrderServicesView({
 
                         {/* Estado del Servicio / Repuesto */}
                         <td className="p-3.5 whitespace-nowrap text-xs text-center">
-                          {prod.utilizado ? (
+                          {isConsumido ? (
                             <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-mono">
                               Consumido
                             </span>
@@ -1777,7 +1791,7 @@ export default function WorkOrderServicesView({
                             </button>
 
                             {/* Botón Reversar (solo si ya fue consumido y la orden se encuentra en reparación) */}
-                            {prod.utilizado === true && (
+                            {isConsumido && (
                               <button
                                 type="button"
                                 onClick={() => handleReverseProduct(prod)}
@@ -1798,13 +1812,13 @@ export default function WorkOrderServicesView({
                             <button
                               type="button"
                               onClick={() => handleOpenEditItem(prod, "PRODUCTO")}
-                              disabled={!isOrderInRepair || prod.utilizado === true}
+                              disabled={!isOrderInRepair || isConsumido}
                               className={`p-1.5 rounded-lg border transition-colors ${
-                                !isOrderInRepair || prod.utilizado === true
+                                !isOrderInRepair || isConsumido
                                   ? "opacity-30 cursor-not-allowed bg-slate-900 border-slate-800 text-slate-600"
                                   : "bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700 cursor-pointer"
                               }`}
-                              title={prod.utilizado === true ? "Repuesto consumido - No puede ser editado" : !isOrderInRepair ? "La orden debe estar en Reparación" : "Editar repuesto"}
+                              title={isConsumido ? "Repuesto consumido - No puede ser editado" : !isOrderInRepair ? "La orden debe estar en Reparación" : "Editar repuesto"}
                               aria-label="Editar repuesto"
                             >
                               <Pencil className="w-3.5 h-3.5" />
@@ -1814,13 +1828,13 @@ export default function WorkOrderServicesView({
                             <button
                               type="button"
                               onClick={() => handleDeleteProduct(prod)}
-                              disabled={!isOrderInRepair || prod.utilizado === true}
+                              disabled={!isOrderInRepair || isConsumido}
                               className={`p-1.5 rounded-lg border transition-colors ${
-                                !isOrderInRepair || prod.utilizado === true
+                                !isOrderInRepair || isConsumido
                                   ? "opacity-30 cursor-not-allowed bg-slate-900 border-slate-800 text-slate-600"
                                   : "bg-rose-500/10 border-rose-500/30 text-rose-400 hover:bg-rose-500/20 cursor-pointer"
                               }`}
-                              title={prod.utilizado === true ? "Repuesto consumido - No puede ser eliminado" : !isOrderInRepair ? "La orden debe estar en Reparación" : "Eliminar repuesto"}
+                              title={isConsumido ? "Repuesto consumido - No puede ser eliminado" : !isOrderInRepair ? "La orden debe estar en Reparación" : "Eliminar repuesto"}
                               aria-label="Eliminar repuesto"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
