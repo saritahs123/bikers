@@ -10,6 +10,7 @@ export type TipoMovimientoCodigo =
   | "ENT_COMPRA"
   | "SAL_ORDEN"
   | "SAL_MANUAL"
+  | "SAL_VENTA"
   | "INV_INICIAL"
   | "AJU_POS"
   | "AJU_NEG"

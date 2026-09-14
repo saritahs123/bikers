@@ -3,8 +3,17 @@ import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
+interface BillingInvoiceItem {
+  factura_id: number;
+  numero_factura: string;
+  fecha_factura: string | Date | null;
+  total_factura: number | string;
+  estado: string;
+  cliente_nombre: string | null;
+}
+
 export default async function BillingPage() {
-  const facturas = await query(`
+  const facturasRaw = await query(`
     SELECT 
       f.factura_id,
       f.numero_factura,
@@ -17,11 +26,12 @@ export default async function BillingPage() {
     ORDER BY f.fecha_factura DESC
     LIMIT 50
   `);
+  const facturas = (facturasRaw || []) as unknown as BillingInvoiceItem[];
 
   const formatMoney = (val: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(val);
-  const totalFacturado = facturas.reduce((acc: number, f: any) => acc + Number(f.total_factura), 0);
-  const cuentasCobrar = facturas.filter((f: any) => f.estado !== 'PAGADA' && f.estado !== 'PAGADO').reduce((acc: number, f: any) => acc + Number(f.total_factura), 0);
-  const pagosRecibidos = facturas.filter((f: any) => f.estado === 'PAGADA' || f.estado === 'PAGADO').reduce((acc: number, f: any) => acc + Number(f.total_factura), 0);
+  const totalFacturado = facturas.reduce((acc: number, f: BillingInvoiceItem) => acc + Number(f.total_factura || 0), 0);
+  const cuentasCobrar = facturas.filter((f: BillingInvoiceItem) => f.estado !== 'PAGADA' && f.estado !== 'PAGADO').reduce((acc: number, f: BillingInvoiceItem) => acc + Number(f.total_factura || 0), 0);
+  const pagosRecibidos = facturas.filter((f: BillingInvoiceItem) => f.estado === 'PAGADA' || f.estado === 'PAGADO').reduce((acc: number, f: BillingInvoiceItem) => acc + Number(f.total_factura || 0), 0);
 
   const getStatusBadge = (estado: string) => {
     switch (estado?.toUpperCase()) {
@@ -90,10 +100,13 @@ export default async function BillingPage() {
             </select>
           </div>
         </div>
-        <button className="bg-primary text-[#181e00] px-6 py-3 font-label-caps text-[12px] tracking-[0.1em] font-bold flex items-center gap-2 hover:opacity-90 active:scale-95 transition-all shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] rounded cursor-pointer uppercase">
+        <Link
+          href="/billing/new"
+          className="bg-primary text-[#181e00] px-6 py-3 font-label-caps text-[12px] tracking-[0.1em] font-bold flex items-center gap-2 hover:opacity-90 active:scale-95 transition-all shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] rounded cursor-pointer uppercase"
+        >
           <span className="material-symbols-outlined">add</span>
           Nueva Factura
-        </button>
+        </Link>
       </div>
 
       {/* Data Table */}
@@ -111,7 +124,7 @@ export default async function BillingPage() {
               </tr>
             </thead>
             <tbody className="text-[14px]">
-              {facturas.map((f: any) => (
+              {facturas.map((f: BillingInvoiceItem) => (
                 <tr key={f.factura_id} className="border-b border-[#2d3748] hover:bg-[#35352f]/40 transition-colors">
                   <td className="p-4 font-label-caps text-[12px] font-bold text-on-surface tracking-wider">{f.numero_factura}</td>
                   <td className="p-4 text-on-surface">{f.cliente_nombre || 'Desconocido'}</td>

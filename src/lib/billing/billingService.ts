@@ -63,6 +63,8 @@ import {
   FacturaCompletaResult,
   EstadoFactura
 } from "./billingTypes";
+import { registrarMovimientoInventario } from "@/lib/inventory/inventoryMovementService";
+import { INVENTORY_SYSTEM_CODES, generarCodigoMovimiento } from "@/lib/inventory/inventoryConstants";
 
 /**
  * Asegura de forma idempotente que el código de sistema ID 14 (FACTURA / FAC)
@@ -365,11 +367,66 @@ export async function crearFactura(
     const facturaRow: FacturaRow = facRes.rows[0];
     const facturaId = facturaRow.factura_id;
 
+    // 7.1. Salida física de Inventario en Venta Directa (Secciones 14, 15, 16, 17, 18, 19, 25)
+    if (tipoFactura.codigo === "VENTA_DIRECTA") {
+      const lineasProducto = input.lineas.filter(l => l.tipo_linea === "PRODUCTO");
+      if (lineasProducto.length > 0) {
+        // Validar que cada producto tenga almacén asignado
+        for (let idx = 0; idx < lineasProducto.length; idx++) {
+          const lp = lineasProducto[idx];
+          if (!lp.producto_id || !lp.almacen_id) {
+            throw new Error(`El producto en la línea #${idx + 1} (${lp.descripcion}) debe tener producto y almacén asignados.`);
+          }
+        }
+
+        // Ordenar locks por producto_id ASC, almacen_id ASC para evitar deadlocks (Sección 17)
+        const lineasOrdenadas = [...lineasProducto].sort((a, b) => {
+          if (a.producto_id! !== b.producto_id!) {
+            return a.producto_id! - b.producto_id!;
+          }
+          return (a.almacen_id || 0) - (b.almacen_id || 0);
+        });
+
+        // Generar código de operación único para agrupar movimientos de esta factura (Sección 25)
+        let codigoMovimientoOp: string | null = null;
+        try {
+          codigoMovimientoOp = await generarCodigoMovimiento(
+            client,
+            input.empresa_id,
+            INVENTORY_SYSTEM_CODES.SALIDA_VENTA
+          );
+        } catch (errMov) {
+          console.warn("Could not generate movement code via function:", errMov);
+        }
+
+        for (const lp of lineasOrdenadas) {
+          const movRes = await registrarMovimientoInventario({
+            client,
+            empresaId: input.empresa_id,
+            usuarioId: input.usuario_id,
+            tipoMovimientoCodigo: "SAL_VENTA",
+            productoId: lp.producto_id!,
+            almacenId: lp.almacen_id!,
+            cantidad: Number(lp.cantidad),
+            referencia: codigoFactura,
+            codigoMovimiento: codigoMovimientoOp,
+            observacion: `Venta directa Factura ${codigoFactura}`
+          });
+
+          // Snapshot del costo unitario (PMP del almacén) si no fue provisto
+          if (lp.costo_unitario == null) {
+            lp.costo_unitario = movRes.costoUnitario;
+          }
+        }
+      }
+    }
+
     // 8. Insertar Líneas en admin.detalle_factura (Snapshot Inmutable)
     const insertedDetalles: DetalleFacturaRow[] = [];
     const insertDetSql = `
       INSERT INTO admin.detalle_factura (
         factura_id,
+        almacen_id,
         tipo_linea,
         tipo_detalle,
         producto_id,
@@ -386,7 +443,7 @@ export async function crearFactura(
         usuario_creacion_id,
         fecha_creacion
       ) VALUES (
-        $1, $2, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW()
+        $1, $2, $3, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW()
       )
       RETURNING *;
     `;
@@ -399,6 +456,7 @@ export async function crearFactura(
 
       const detRes = await client.query(insertDetSql, [
         facturaId,
+        linea.almacen_id || null,
         linea.tipo_linea,
         linea.producto_id || null,
         linea.tipo_servicio_id || null,

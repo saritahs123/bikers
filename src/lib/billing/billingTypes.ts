@@ -18,6 +18,7 @@ export type TipoLineaFactura = "PRODUCTO" | "SERVICIO" | "REPUESTO";
 
 export interface LineaFacturaInput {
   tipo_linea: TipoLineaFactura;
+  almacen_id?: number | null;
   producto_id?: number | null;
   tipo_servicio_id?: number | null;
   orden_servicio_id?: number | null;
@@ -101,6 +102,7 @@ export interface FacturaRow {
 export interface DetalleFacturaRow {
   detalle_factura_id: number;
   factura_id: number;
+  almacen_id?: number | null;
   tipo_linea: TipoLineaFactura;
   producto_id: number | null;
   tipo_servicio_id: number | null;

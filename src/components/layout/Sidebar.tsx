@@ -88,6 +88,16 @@ function SidebarContent({
       ]
     },
     {
+      id: "facturacion",
+      icon: "receipt_long",
+      label: "FACTURACIÓN",
+      submenu: [
+        { href: "/billing/new", label: "NUEVA FACTURA" },
+        { href: "/billing/invoices", label: "FACTURAS" },
+        { href: "/billing/payments", label: "PAGOS" }
+      ]
+    },
+    {
       id: "configuracion",
       icon: "settings",
       label: "CONFIGURACIÓN",
