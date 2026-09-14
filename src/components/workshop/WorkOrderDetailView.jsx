@@ -1154,7 +1154,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
               )}
               {Boolean(order.facturado) && (
                 <Link
-                  href={order.factura_id ? `/billing/invoices/${order.factura_id}` : "/billing/invoices"}
+                  href={order.factura_id ? `/billing/invoices?invoice_id=${order.factura_id}` : "/billing/invoices"}
                   className="flex items-center gap-1.5 px-3 py-2 bg-surface hover:bg-hover border border-border text-foreground rounded-xl font-mono text-xs font-bold uppercase tracking-wider transition-all"
                 >
                   <Receipt className="w-3.5 h-3.5 text-primary" />

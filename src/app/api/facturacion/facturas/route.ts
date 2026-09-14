@@ -1,10 +1,264 @@
 import { NextRequest, NextResponse } from "next/server";
+import { query } from "@/lib/db";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
 import { crearFactura } from "@/lib/billing/billingService";
 import { CrearFacturaInput, TipoLineaFactura } from "@/lib/billing/billingTypes";
 import { StockInsuficienteError, InventoryError } from "@/lib/inventory/inventoryMovementService";
 
 export const dynamic = "force-dynamic";
+
+interface FacturaListRow {
+  factura_id: number;
+  empresa_id: number;
+  codigo_factura: string;
+  numero_factura: string | null;
+  tipo_factura_id: number;
+  tipo_factura_codigo: string;
+  tipo_factura_nombre: string;
+  cliente_id: number | null;
+  cliente_nombre: string | null;
+  cliente_identificacion: string | null;
+  cliente_telefono: string | null;
+  cliente_correo: string | null;
+  orden_trabajo_id: number | null;
+  codigo_orden: string | null;
+  fecha_factura: string | Date;
+  subtotal: number | string;
+  descuento: number | string;
+  descuento_total: number | string | null;
+  impuesto: number | string;
+  impuesto_total: number | string | null;
+  total: number | string;
+  total_factura: number | string | null;
+  monto_pagado: number | string;
+  balance_pendiente: number | string;
+  estado: string;
+  observacion: string | null;
+  fecha_creacion: string | Date;
+  total_lineas: number;
+}
+
+interface MetricasRow {
+  total_facturas: number | string;
+  facturado: number | string;
+  pagado: number | string;
+  pendiente: number | string;
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const session = await getWorkshopSession();
+    if (!session || !session.empresa_id) {
+      return NextResponse.json(
+        { error: "UNAUTHORIZED", message: "Sesión no válida o expirada." },
+        { status: 401 }
+      );
+    }
+
+    const perms = await getModulePermissions("FACTURACION", session.usuario_id);
+    if (!perms.puede_ver) {
+      return NextResponse.json(
+        { error: "FORBIDDEN", message: "No tienes permisos para consultar facturación." },
+        { status: 403 }
+      );
+    }
+
+    const empresaId = session.empresa_id;
+    const { searchParams } = new URL(request.url);
+
+    const search = (searchParams.get("search") || "").trim();
+    const estado = (searchParams.get("estado") || "").trim().toUpperCase();
+    const tipoFactura = (searchParams.get("tipo_factura") || "").trim();
+    const fechaDesde = (searchParams.get("fecha_desde") || "").trim();
+    const fechaHasta = (searchParams.get("fecha_hasta") || "").trim();
+
+    const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "15", 10)));
+    const offset = (page - 1) * limit;
+
+    const sortByParam = (searchParams.get("sortBy") || "fecha_factura").toLowerCase();
+    const sortOrderParam = (searchParams.get("sortOrder") || "desc").toUpperCase() === "ASC" ? "ASC" : "DESC";
+
+    const sortColumns: Record<string, string> = {
+      factura_id: "f.factura_id",
+      codigo_factura: "f.codigo_factura",
+      fecha_factura: "f.fecha_factura",
+      fecha_creacion: "f.fecha_creacion",
+      total: "f.total",
+      monto_pagado: "f.monto_pagado",
+      balance_pendiente: "f.balance_pendiente",
+      estado: "f.estado",
+      cliente: "c.nombre_completo"
+    };
+    const sortColumn = sortColumns[sortByParam] || "f.fecha_factura";
+
+    const conditions: string[] = ["f.empresa_id = $1"];
+    const params: (number | string)[] = [empresaId];
+    let paramIndex = 2;
+
+    if (search) {
+      conditions.push(
+        `(f.codigo_factura ILIKE $${paramIndex} OR c.nombre_completo ILIKE $${paramIndex} OR c.identificacion ILIKE $${paramIndex} OR ot.codigo_orden ILIKE $${paramIndex})`
+      );
+      params.push(`%${search}%`);
+      paramIndex++;
+    }
+
+    if (estado && estado !== "TODOS") {
+      conditions.push(`f.estado = $${paramIndex}`);
+      params.push(estado);
+      paramIndex++;
+    }
+
+    if (tipoFactura && tipoFactura !== "TODOS") {
+      if (!isNaN(Number(tipoFactura))) {
+        conditions.push(`f.tipo_factura_id = $${paramIndex}`);
+        params.push(Number(tipoFactura));
+      } else {
+        conditions.push(`tf.codigo = $${paramIndex}`);
+        params.push(tipoFactura);
+      }
+      paramIndex++;
+    }
+
+    if (fechaDesde) {
+      conditions.push(`(f.fecha_factura AT TIME ZONE 'America/Santo_Domingo')::date >= $${paramIndex}::date`);
+      params.push(fechaDesde);
+      paramIndex++;
+    }
+
+    if (fechaHasta) {
+      conditions.push(`(f.fecha_factura AT TIME ZONE 'America/Santo_Domingo')::date <= $${paramIndex}::date`);
+      params.push(fechaHasta);
+      paramIndex++;
+    }
+
+    const whereClause = conditions.join(" AND ");
+
+    // 1. Consulta agregada de métricas y conteo total (Sección 2)
+    const metricasSql = `
+      SELECT
+        COUNT(*)::int AS total_facturas,
+        COALESCE(SUM(CASE WHEN f.estado <> 'ANULADA' THEN f.total ELSE 0 END), 0)::numeric AS facturado,
+        COALESCE(SUM(CASE WHEN f.estado <> 'ANULADA' THEN f.monto_pagado ELSE 0 END), 0)::numeric AS pagado,
+        COALESCE(SUM(CASE WHEN f.estado <> 'ANULADA' THEN f.balance_pendiente ELSE 0 END), 0)::numeric AS pendiente
+      FROM admin.facturas f
+      JOIN admin.tipo_factura tf ON f.tipo_factura_id = tf.tipo_factura_id
+      LEFT JOIN admin.clientes c ON f.cliente_id = c.cliente_id
+      LEFT JOIN admin.ordenes_trabajo ot ON f.orden_trabajo_id = ot.orden_trabajo_id
+      WHERE ${whereClause};
+    `;
+    const metricasRes = await query<MetricasRow>(metricasSql, params);
+    const metricasRow = metricasRes[0] || {
+      total_facturas: 0,
+      facturado: 0,
+      pagado: 0,
+      pendiente: 0
+    };
+
+    const totalRecords = Number(metricasRow.total_facturas || 0);
+    const totalPages = Math.max(1, Math.ceil(totalRecords / limit));
+
+    // 2. Consulta de registros paginados
+    const listParams = [...params, limit, offset];
+    const limitIndex = params.length + 1;
+    const offsetIndex = params.length + 2;
+
+    const listSql = `
+      SELECT
+        f.factura_id,
+        f.empresa_id,
+        f.codigo_factura,
+        f.numero_factura,
+        f.tipo_factura_id,
+        tf.codigo AS tipo_factura_codigo,
+        tf.nombre AS tipo_factura_nombre,
+        f.cliente_id,
+        COALESCE(c.nombre_completo, 'Cliente General') AS cliente_nombre,
+        c.identificacion AS cliente_identificacion,
+        c.telefono_principal AS cliente_telefono,
+        c.correo AS cliente_correo,
+        f.orden_trabajo_id,
+        ot.codigo_orden,
+        f.fecha_factura,
+        f.subtotal,
+        f.descuento,
+        f.descuento_total,
+        f.impuesto,
+        f.impuesto_total,
+        f.total,
+        f.total_factura,
+        f.monto_pagado,
+        f.balance_pendiente,
+        f.estado,
+        f.observacion,
+        f.fecha_creacion,
+        (SELECT COUNT(*)::int FROM admin.detalle_factura df WHERE df.factura_id = f.factura_id) AS total_lineas
+      FROM admin.facturas f
+      JOIN admin.tipo_factura tf ON f.tipo_factura_id = tf.tipo_factura_id
+      LEFT JOIN admin.clientes c ON f.cliente_id = c.cliente_id
+      LEFT JOIN admin.ordenes_trabajo ot ON f.orden_trabajo_id = ot.orden_trabajo_id
+      WHERE ${whereClause}
+      ORDER BY ${sortColumn} ${sortOrderParam}, f.factura_id DESC
+      LIMIT $${limitIndex} OFFSET $${offsetIndex};
+    `;
+
+    const rawRows = await query<FacturaListRow>(listSql, listParams);
+
+    const data = (rawRows || []).map((row) => ({
+      factura_id: Number(row.factura_id),
+      codigo_factura: row.codigo_factura,
+      numero_factura: row.numero_factura || row.codigo_factura,
+      tipo_factura_id: Number(row.tipo_factura_id),
+      tipo_factura_codigo: row.tipo_factura_codigo,
+      tipo_factura_nombre: row.tipo_factura_nombre,
+      cliente_id: row.cliente_id ? Number(row.cliente_id) : null,
+      cliente_nombre: row.cliente_nombre || "Cliente General",
+      cliente_identificacion: row.cliente_identificacion || "",
+      cliente_telefono: row.cliente_telefono || "",
+      cliente_correo: row.cliente_correo || "",
+      orden_trabajo_id: row.orden_trabajo_id ? Number(row.orden_trabajo_id) : null,
+      codigo_orden: row.codigo_orden || null,
+      fecha_factura: row.fecha_factura,
+      subtotal: parseFloat(Number(row.subtotal || 0).toFixed(2)),
+      descuento: parseFloat(Number(row.descuento || row.descuento_total || 0).toFixed(2)),
+      impuesto: parseFloat(Number(row.impuesto || row.impuesto_total || 0).toFixed(2)),
+      total: parseFloat(Number(row.total || row.total_factura || 0).toFixed(2)),
+      monto_pagado: parseFloat(Number(row.monto_pagado || 0).toFixed(2)),
+      balance_pendiente: parseFloat(Number(row.balance_pendiente || 0).toFixed(2)),
+      estado: row.estado,
+      observacion: row.observacion || "",
+      fecha_creacion: row.fecha_creacion,
+      total_lineas: Number(row.total_lineas || 0)
+    }));
+
+    return NextResponse.json({
+      success: true,
+      data,
+      pagination: {
+        page,
+        limit,
+        total: totalRecords,
+        totalPages
+      },
+      metricas: {
+        facturado: parseFloat(Number(metricasRow.facturado || 0).toFixed(2)),
+        pagado: parseFloat(Number(metricasRow.pagado || 0).toFixed(2)),
+        pendiente: parseFloat(Number(metricasRow.pendiente || 0).toFixed(2)),
+        total_facturas: totalRecords
+      }
+    });
+  } catch (err) {
+    console.error("Error en GET /api/facturacion/facturas:", err);
+    return NextResponse.json(
+      {
+        error: "ERROR_LISTADO_FACTURAS",
+        message: "No se pudieron consultar las facturas emitidas."
+      },
+      { status: 500 }
+    );
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
