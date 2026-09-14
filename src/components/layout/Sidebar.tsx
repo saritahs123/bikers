@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useState, useEffect, Suspense } from "react";
-import { PanelLeftClose } from "lucide-react";
+import { Home, PanelLeftClose } from "lucide-react";
 
 interface SubMenuItem {
   href?: string;
@@ -15,7 +15,7 @@ interface SubMenuItem {
 interface NavItem {
   id?: string;
   href?: string;
-  icon: string;
+  icon: string | React.ReactNode;
   label: string;
   submenu?: SubMenuItem[];
 }
@@ -49,11 +49,16 @@ function SidebarContent({
 
   const navItems: NavItem[] = [
     {
+      id: "home",
+      href: "/",
+      icon: <Home className="w-5 h-5" />,
+      label: "HOME"
+    },
+    {
       id: "taller",
       icon: "build",
       label: "TALLER",
       submenu: [
-        { href: "/", label: "DASHBOARD" },
         { href: "/workshop?view=list", label: "RECEPCIONES" },
         { href: "/workshop?view=work_orders", label: "ÓRDENES DE TRABAJO" },
         { href: "/workshop?view=kanban", label: "VISTA KANBAN" },
@@ -169,6 +174,7 @@ function SidebarContent({
         }
       }
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname, currentFullUrl, searchParams]);
 
   const toggleExpand = (id: string) => {
@@ -192,13 +198,23 @@ function SidebarContent({
                 : "bg-surface-subtle/50 border-border text-foreground-secondary hover:bg-surface-subtle hover:border-primary/40 hover:text-foreground"
             }`}
           >
-            <span
-              className={`material-symbols-outlined text-[20px] transition-colors ${
-                isGroupActive ? "text-primary" : "text-foreground-muted group-hover:text-primary"
-              }`}
-            >
-              {item.icon}
-            </span>
+            {typeof item.icon === "string" ? (
+              <span
+                className={`material-symbols-outlined text-[20px] transition-colors ${
+                  isGroupActive ? "text-primary" : "text-foreground-muted group-hover:text-primary"
+                }`}
+              >
+                {item.icon}
+              </span>
+            ) : (
+              <span
+                className={`w-5 h-5 flex items-center justify-center transition-colors ${
+                  isGroupActive ? "text-primary" : "text-foreground-muted group-hover:text-primary"
+                }`}
+              >
+                {item.icon}
+              </span>
+            )}
             <span
               className={`flex-1 text-left tracking-wide font-medium uppercase ${
                 isGroupActive ? "text-foreground font-bold" : "text-foreground-secondary group-hover:text-foreground"
@@ -269,13 +285,23 @@ function SidebarContent({
             : "bg-surface-subtle/50 border-border text-foreground-secondary hover:bg-surface-subtle hover:border-primary/40 hover:text-foreground"
         }`}
       >
-        <span
-          className={`material-symbols-outlined text-[20px] transition-colors ${
-            isActive ? "text-primary" : "text-foreground-muted group-hover:text-primary"
-          }`}
-        >
-          {item.icon}
-        </span>
+        {typeof item.icon === "string" ? (
+          <span
+            className={`material-symbols-outlined text-[20px] transition-colors ${
+              isActive ? "text-primary" : "text-foreground-muted group-hover:text-primary"
+            }`}
+          >
+            {item.icon}
+          </span>
+        ) : (
+          <span
+            className={`w-5 h-5 flex items-center justify-center transition-colors ${
+              isActive ? "text-primary" : "text-foreground-muted group-hover:text-primary"
+            }`}
+          >
+            {item.icon}
+          </span>
+        )}
         <span
           className={`tracking-wide font-medium uppercase ${
             isActive ? "text-foreground font-bold" : "text-foreground-secondary group-hover:text-foreground"
