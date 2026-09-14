@@ -116,6 +116,43 @@ export async function POST(request: NextRequest) {
     const errorCode = err instanceof InventoryError ? err.code : (err as { code?: string })?.code;
     const errorDetails = err instanceof InventoryError ? err.details : (err as { details?: Record<string, unknown> })?.details;
 
+    // Concurrencia y duplicados de OT (Sección 15: 409 OT_YA_FACTURADA)
+    const constraintName = (err as { constraint?: string })?.constraint;
+    if (
+      errorCode === "OT_YA_FACTURADA" ||
+      constraintName === "uq_facturas_empresa_orden_activa" ||
+      (errorCode === "23505" && String(errorObj.message).includes("orden_trabajo"))
+    ) {
+      return NextResponse.json(
+        {
+          error: "OT_YA_FACTURADA",
+          message: errorObj.message || "La orden de trabajo ya cuenta con una factura activa."
+        },
+        { status: 409 }
+      );
+    }
+
+    // Estado no facturable de la OT (Sección 2 y 14)
+    if (errorCode === "OT_ESTADO_INVALIDO") {
+      return NextResponse.json(
+        {
+          error: "OT_ESTADO_INVALIDO",
+          message: errorObj.message
+        },
+        { status: 422 }
+      );
+    }
+
+    if (errorCode === "CLIENTE_OT_INCONSISTENTE") {
+      return NextResponse.json(
+        {
+          error: "CLIENTE_OT_INCONSISTENTE",
+          message: errorObj.message
+        },
+        { status: 400 }
+      );
+    }
+
     if (err instanceof StockInsuficienteError || errorCode === "STOCK_DISPONIBLE_INSUFICIENTE" || errorCode === "STOCK_INSUFICIENTE") {
       return NextResponse.json(
         {

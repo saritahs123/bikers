@@ -2,8 +2,10 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   ArrowLeft,
+  Receipt,
   Wrench,
   User,
   Bike,
@@ -1144,6 +1146,21 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                 )}
                 ENTREGAR A CLIENTE
               </button>
+              {Boolean(order.facturado) && (
+                <span className="px-3 py-2 bg-purple-500/15 border border-purple-500/30 text-purple-400 font-mono text-xs rounded-xl font-bold uppercase tracking-wider flex items-center gap-1.5">
+                  <Receipt className="w-4 h-4" />
+                  FACTURADA
+                </span>
+              )}
+              {Boolean(order.facturado) && (
+                <Link
+                  href={order.factura_id ? `/billing/invoices/${order.factura_id}` : "/billing/invoices"}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-surface hover:bg-hover border border-border text-foreground rounded-xl font-mono text-xs font-bold uppercase tracking-wider transition-all"
+                >
+                  <Receipt className="w-3.5 h-3.5 text-primary" />
+                  VER FACTURA
+                </Link>
+              )}
             </>
           )}
           {Number(order.estado_orden_id) === 8 && (

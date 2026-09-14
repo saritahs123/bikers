@@ -193,11 +193,12 @@ export async function crearFactura(
     }
     const tipoFactura = tfRes.rows[0];
 
-    // 3. Regla OT Facturable (Sección 6, 17 y 18):
-    // Impedir más de una factura activa por OT y validar pertenencia
+    // 3. Regla OT Facturable (Sección 6, 14, 15, 17 y 18):
+    // Impedir más de una factura activa por OT, validar estado LISTA_ENTREGA y pertenencia
     if (input.orden_trabajo_id) {
       const otRes = await client.query(`
         SELECT ot.orden_trabajo_id, ot.codigo_orden, ot.cliente_id, ot.empresa_id,
+               ot.estado_orden_id,
                eot.codigo AS estado_codigo, eot.nombre AS estado_nombre
         FROM admin.ordenes_trabajo ot
         LEFT JOIN admin.estado_orden_trabajo eot ON ot.estado_orden_id = eot.estado_orden_id
@@ -214,7 +215,18 @@ export async function crearFactura(
         throw new Error("La Orden de Trabajo no pertenece a la empresa de la sesión.");
       }
 
-      // Validar factura activa duplicada para esta OT (Preferencia índice UNIQUE condicional)
+      // Validar que la orden esté en estado LISTA_ENTREGA (Sección 2 y 14)
+      const estadoCod = String(ot.estado_codigo || "").toUpperCase();
+      const estadoId = Number(ot.estado_orden_id);
+      if (estadoCod !== "LISTA_ENTREGA" && estadoId !== 7) {
+        const errEstado: Error & { code?: string } = new Error(
+          `La Orden de Trabajo ${ot.codigo_orden || `#${input.orden_trabajo_id}`} no puede facturarse en estado '${ot.estado_nombre || ot.estado_codigo}'. Solo órdenes en estado 'LISTA_ENTREGA' son facturables.`
+        );
+        errEstado.code = "OT_ESTADO_INVALIDO";
+        throw errEstado;
+      }
+
+      // Validar factura activa duplicada para esta OT (Sección 3 y 15)
       const existingFacRes = await client.query(`
         SELECT factura_id, codigo_factura, estado
         FROM admin.facturas
@@ -224,13 +236,22 @@ export async function crearFactura(
 
       if (existingFacRes.rows && existingFacRes.rows.length > 0) {
         const facEx = existingFacRes.rows[0];
-        throw new Error(
+        const errObj: Error & { code?: string } = new Error(
           `La Orden de Trabajo ${ot.codigo_orden || `#${input.orden_trabajo_id}`} ya tiene una factura activa: ${facEx.codigo_factura} (Estado: ${facEx.estado}).`
         );
+        errObj.code = "OT_YA_FACTURADA";
+        throw errObj;
       }
 
-      // Si no se especificó cliente_id, heredar el de la orden
-      if (!input.cliente_id && ot.cliente_id) {
+      // Si la factura proviene de una OT, el cliente DEBE ser el cliente de la OT (Sección 6)
+      if (ot.cliente_id) {
+        if (input.cliente_id && Number(input.cliente_id) !== Number(ot.cliente_id)) {
+          const errCli: Error & { code?: string } = new Error(
+            `No se permite cambiar el cliente. La factura de la OT ${ot.codigo_orden || `#${input.orden_trabajo_id}`} debe permanecer ligada al cliente de la orden.`
+          );
+          errCli.code = "CLIENTE_OT_INCONSISTENTE";
+          throw errCli;
+        }
         input.cliente_id = ot.cliente_id;
       }
     }
@@ -367,56 +388,57 @@ export async function crearFactura(
     const facturaRow: FacturaRow = facRes.rows[0];
     const facturaId = facturaRow.factura_id;
 
-    // 7.1. Salida física de Inventario en Venta Directa (Secciones 14, 15, 16, 17, 18, 19, 25)
-    if (tipoFactura.codigo === "VENTA_DIRECTA") {
-      const lineasProducto = input.lineas.filter(l => l.tipo_linea === "PRODUCTO");
-      if (lineasProducto.length > 0) {
-        // Validar que cada producto tenga almacén asignado
-        for (let idx = 0; idx < lineasProducto.length; idx++) {
-          const lp = lineasProducto[idx];
-          if (!lp.producto_id || !lp.almacen_id) {
-            throw new Error(`El producto en la línea #${idx + 1} (${lp.descripcion}) debe tener producto y almacén asignados.`);
-          }
+    // 7.1. Salida física de Inventario para líneas PRODUCTO (FAC-2, FAC-3, Secciones 9, 10, 11)
+    // - Las líneas REPUESTO de una OT NO generan SAL_VENTA porque ya salieron vía SAL_ORDEN.
+    // - Las líneas SERVICIO NO generan inventario.
+    // - Cualquier línea PRODUCTO (sea de Venta Directa o adicional en OT) SÍ genera SAL_VENTA.
+    const lineasProducto = input.lineas.filter(l => l.tipo_linea === "PRODUCTO");
+    if (lineasProducto.length > 0) {
+      // Validar que cada producto tenga almacén asignado
+      for (let idx = 0; idx < lineasProducto.length; idx++) {
+        const lp = lineasProducto[idx];
+        if (!lp.producto_id || !lp.almacen_id) {
+          throw new Error(`El producto en la línea #${idx + 1} (${lp.descripcion}) debe tener producto y almacén asignados.`);
         }
+      }
 
-        // Ordenar locks por producto_id ASC, almacen_id ASC para evitar deadlocks (Sección 17)
-        const lineasOrdenadas = [...lineasProducto].sort((a, b) => {
-          if (a.producto_id! !== b.producto_id!) {
-            return a.producto_id! - b.producto_id!;
-          }
-          return (a.almacen_id || 0) - (b.almacen_id || 0);
+      // Ordenar locks por producto_id ASC, almacen_id ASC para evitar deadlocks (Sección 17)
+      const lineasOrdenadas = [...lineasProducto].sort((a, b) => {
+        if (a.producto_id! !== b.producto_id!) {
+          return a.producto_id! - b.producto_id!;
+        }
+        return (a.almacen_id || 0) - (b.almacen_id || 0);
+      });
+
+      // Generar código de operación único para agrupar movimientos de esta factura (Sección 25)
+      let codigoMovimientoOp: string | null = null;
+      try {
+        codigoMovimientoOp = await generarCodigoMovimiento(
+          client,
+          input.empresa_id,
+          INVENTORY_SYSTEM_CODES.SALIDA_VENTA
+        );
+      } catch (errMov) {
+        console.warn("Could not generate movement code via function:", errMov);
+      }
+
+      for (const lp of lineasOrdenadas) {
+        const movRes = await registrarMovimientoInventario({
+          client,
+          empresaId: input.empresa_id,
+          usuarioId: input.usuario_id,
+          tipoMovimientoCodigo: "SAL_VENTA",
+          productoId: lp.producto_id!,
+          almacenId: lp.almacen_id!,
+          cantidad: Number(lp.cantidad),
+          referencia: codigoFactura,
+          codigoMovimiento: codigoMovimientoOp,
+          observacion: `Venta Factura ${codigoFactura} (${tipoFactura.codigo})`
         });
 
-        // Generar código de operación único para agrupar movimientos de esta factura (Sección 25)
-        let codigoMovimientoOp: string | null = null;
-        try {
-          codigoMovimientoOp = await generarCodigoMovimiento(
-            client,
-            input.empresa_id,
-            INVENTORY_SYSTEM_CODES.SALIDA_VENTA
-          );
-        } catch (errMov) {
-          console.warn("Could not generate movement code via function:", errMov);
-        }
-
-        for (const lp of lineasOrdenadas) {
-          const movRes = await registrarMovimientoInventario({
-            client,
-            empresaId: input.empresa_id,
-            usuarioId: input.usuario_id,
-            tipoMovimientoCodigo: "SAL_VENTA",
-            productoId: lp.producto_id!,
-            almacenId: lp.almacen_id!,
-            cantidad: Number(lp.cantidad),
-            referencia: codigoFactura,
-            codigoMovimiento: codigoMovimientoOp,
-            observacion: `Venta directa Factura ${codigoFactura}`
-          });
-
-          // Snapshot del costo unitario (PMP del almacén) si no fue provisto
-          if (lp.costo_unitario == null) {
-            lp.costo_unitario = movRes.costoUnitario;
-          }
+        // Snapshot del costo unitario (PMP del almacén) si no fue provisto
+        if (lp.costo_unitario == null) {
+          lp.costo_unitario = movRes.costoUnitario;
         }
       }
     }
@@ -512,13 +534,16 @@ export async function crearFactura(
       }
     }
 
-    // 10. Actualizar bandera facturado en orden de trabajo (si aplica)
+    // 10. Actualizar bandera facturado en orden de trabajo (sincronización legacy)
+    // La OT permanece en LISTA_ENTREGA hasta que el usuario ejecute la entrega en taller (Sección 16 y 17)
     if (input.orden_trabajo_id) {
       await client.query(`
         UPDATE admin.ordenes_trabajo
-        SET facturado = true
+        SET facturado = true,
+            fecha_facturacion = NOW(),
+            usuario_facturacion_id = $3
         WHERE orden_trabajo_id = $1 AND (empresa_id = $2 OR empresa_id IS NULL)
-      `, [input.orden_trabajo_id, input.empresa_id]);
+      `, [input.orden_trabajo_id, input.empresa_id, input.usuario_id]);
     }
 
     if (isInternalTransaction) {

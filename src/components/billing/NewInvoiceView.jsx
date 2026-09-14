@@ -19,14 +19,21 @@ import {
   DollarSign,
   Wrench,
   Package,
-  X
+  X,
+  Lock,
+  Bike
 } from "lucide-react";
 import ProductCreateModal from "@/components/products/ProductCreateModal";
+import SelectWorkOrderModal from "@/components/billing/SelectWorkOrderModal";
 
 export default function NewInvoiceView() {
   // Modal Crear Producto
   const [isCreateProductModalOpen, setIsCreateProductModalOpen] = useState(false);
   const [canCreateProduct, setCanCreateProduct] = useState(false);
+
+  // Modal Traer Orden de Trabajo (FAC-3)
+  const [isSelectWorkOrderModalOpen, setIsSelectWorkOrderModalOpen] = useState(false);
+  const [ordenTrabajo, setOrdenTrabajo] = useState(null);
 
   // Catálogos
   const [tiposFactura, setTiposFactura] = useState([]);
@@ -407,6 +414,88 @@ export default function NewInvoiceView() {
     setPagos((prev) => prev.filter((p) => p.tempId !== tempId));
   };
 
+  // Cargar Orden de Trabajo seleccionada (FAC-3)
+  const handleSelectWorkOrder = (ot) => {
+    setOrdenTrabajo(ot);
+
+    // 1. Cliente vinculado a la OT (Regla 6)
+    if (ot.cliente) {
+      setSelectedClient({
+        cliente_id: ot.cliente.cliente_id,
+        nombre_completo: ot.cliente.nombre_completo,
+        identificacion: ot.cliente.identificacion,
+        telefono_principal: ot.cliente.telefono_principal,
+        correo: ot.cliente.correo,
+      });
+      setClientSearch("");
+      setClientDropdownOpen(false);
+    }
+
+    // 2. Tipo Factura ORDEN_TRABAJO (Regla 5)
+    const otTipo = tiposFactura.find((tf) => tf.codigo === "ORDEN_TRABAJO");
+    if (otTipo) {
+      setTipoFacturaId(String(otTipo.tipo_factura_id));
+    }
+
+    // 3. Servicios facturables (Regla 7)
+    const serviceLines = (ot.servicios || []).map((s) => ({
+      tempId: `SRV-${s.orden_servicio_id}-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+      tipo_linea: "SERVICIO",
+      tipo_servicio_id: s.tipo_servicio_id,
+      orden_servicio_id: s.orden_servicio_id,
+      producto_id: null,
+      almacen_id: null,
+      almacen_nombre: "Taller (Servicio)",
+      codigo: s.codigo,
+      descripcion: s.descripcion,
+      cantidad: Number(s.cantidad),
+      precio_unitario: Number(s.precio_unitario),
+      descuento: Number(s.descuento || 0),
+      subtotal: Number(s.subtotal),
+      costo_unitario: null,
+      permite_decimales: false,
+      isFromOrder: true,
+    }));
+
+    // 4. Repuestos consumidos (utilizado = true) (Regla 8 y 19)
+    const spareLines = (ot.repuestos || []).map((r) => ({
+      tempId: `REP-${r.orden_producto_id}-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+      tipo_linea: "REPUESTO",
+      producto_id: r.producto_id,
+      orden_producto_id: r.orden_producto_id,
+      tipo_servicio_id: null,
+      orden_servicio_id: null,
+      almacen_id: r.almacen_id || null,
+      almacen_nombre: r.almacen_id ? `Almacén #${r.almacen_id}` : "Consumo Taller",
+      codigo: r.codigo,
+      descripcion: r.descripcion,
+      cantidad: Number(r.cantidad),
+      precio_unitario: Number(r.precio_unitario),
+      descuento: Number(r.descuento || 0),
+      subtotal: Number(r.subtotal),
+      costo_unitario: r.costo_unitario != null ? Number(r.costo_unitario) : null,
+      permite_decimales: false,
+      isFromOrder: true,
+    }));
+
+    setLineas([...serviceLines, ...spareLines]);
+    setFeedback({
+      type: "success",
+      message: `Orden de Trabajo ${ot.codigo_orden} cargada con ${serviceLines.length} servicio(s) y ${spareLines.length} repuesto(s) consumido(s).`,
+    });
+  };
+
+  // Desvincular Orden de Trabajo
+  const handleDetachOrder = () => {
+    setOrdenTrabajo(null);
+    setLineas((prev) => prev.filter((l) => !l.isFromOrder));
+    const vdT = tiposFactura.find((tf) => tf.codigo === "VENTA_DIRECTA");
+    if (vdT) {
+      setTipoFacturaId(String(vdT.tipo_factura_id));
+    }
+    setFeedback(null);
+  };
+
   // Submit Guardar Factura
   const handleSubmitFactura = async () => {
     if (submitting) return;
@@ -433,17 +522,21 @@ export default function NewInvoiceView() {
       const payload = {
         tipo_factura_id: Number(tipoFacturaId),
         cliente_id: selectedClient ? selectedClient.cliente_id : null,
+        orden_trabajo_id: ordenTrabajo ? ordenTrabajo.orden_trabajo_id : null,
         observacion: observacion.trim() || null,
         lineas: lineas.map((l) => ({
-          tipo_linea: "PRODUCTO",
-          almacen_id: l.almacen_id,
-          producto_id: l.producto_id,
-          codigo: l.codigo,
+          tipo_linea: l.tipo_linea || "PRODUCTO",
+          almacen_id: l.almacen_id || null,
+          producto_id: l.producto_id || null,
+          tipo_servicio_id: l.tipo_servicio_id || null,
+          orden_servicio_id: l.orden_servicio_id || null,
+          orden_producto_id: l.orden_producto_id || null,
+          codigo: l.codigo || null,
           descripcion: l.descripcion,
-          cantidad: l.cantidad,
-          precio_unitario: l.precio_unitario,
-          descuento: l.descuento || 0,
-          costo_unitario: l.costo_unitario != null ? l.costo_unitario : null,
+          cantidad: Number(l.cantidad),
+          precio_unitario: Number(l.precio_unitario),
+          descuento: Number(l.descuento || 0),
+          costo_unitario: l.costo_unitario != null ? Number(l.costo_unitario) : null,
         })),
         pagos_iniciales: pagos.map((p) => ({
           tipo_pago_id: p.tipo_pago_id,
@@ -461,6 +554,9 @@ export default function NewInvoiceView() {
       const data = await res.json();
 
       if (!res.ok) {
+        if (data.error === "OT_YA_FACTURADA" || (res.status === 409 && data.error !== "STOCK_INSUFICIENTE")) {
+          throw new Error(data.message || "La orden de trabajo ya cuenta con una factura activa.");
+        }
         if (res.status === 409 || data.error === "STOCK_INSUFICIENTE") {
           throw new Error(data.message || "Stock insuficiente en almacén para completar la venta.");
         }
@@ -473,6 +569,7 @@ export default function NewInvoiceView() {
       });
 
       // Limpiar formulario tras éxito
+      setOrdenTrabajo(null);
       setLineas([]);
       setPagos([]);
       setSelectedClient(null);
@@ -525,23 +622,54 @@ export default function NewInvoiceView() {
           </p>
         </div>
 
-        {/* Botón Traer Orden de Trabajo (FAC-3 preparado) */}
+        {/* Botón Traer Orden de Trabajo (FAC-3 habilitado) */}
         <div className="flex items-center gap-3">
-          <div className="relative group">
-            <button
-              type="button"
-              disabled
-              className="flex items-center gap-2 px-3.5 py-2 text-xs font-medium rounded-lg bg-surface/50 text-foreground-muted border border-border/70 cursor-not-allowed opacity-75"
-            >
-              <Wrench className="w-4 h-4 text-foreground-muted" />
-              <span>Traer Orden de Trabajo</span>
-            </button>
-            <div className="absolute right-0 top-full mt-1 hidden group-hover:block z-20 w-52 p-2 bg-surface border border-border rounded-md shadow-lg text-[11px] text-foreground-secondary text-center pointer-events-none font-mono">
-              Disponible en integración con Taller
-            </div>
-          </div>
+          <button
+            type="button"
+            onClick={() => setIsSelectWorkOrderModalOpen(true)}
+            className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-lg bg-surface hover:bg-hover text-foreground border border-border transition-all cursor-pointer shadow-sm hover:border-primary/50"
+          >
+            <Wrench className="w-4 h-4 text-primary" />
+            <span>Traer Orden de Trabajo</span>
+          </button>
         </div>
       </div>
+
+      {/* Banner de OT Vinculada */}
+      {ordenTrabajo && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-primary/10 border border-primary/30 text-xs shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-primary text-primary-foreground">
+              <Wrench className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 font-mono flex-wrap">
+                <span className="font-bold text-foreground">OT {ordenTrabajo.codigo_orden}</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                  {ordenTrabajo.estado?.nombre || "LISTA ENTREGA"}
+                </span>
+                {ordenTrabajo.bicicleta && (
+                  <span className="text-foreground-secondary font-sans flex items-center gap-1">
+                    <Bike className="w-3.5 h-3.5 text-primary" />
+                    {ordenTrabajo.bicicleta.marca} {ordenTrabajo.bicicleta.modelo}
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-foreground-muted mt-0.5 font-sans">
+                Líneas de servicios y repuestos consumidos cargadas desde Taller. Puedes agregar productos adicionales.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleDetachOrder}
+            className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-surface border border-border text-foreground hover:bg-hover hover:text-error transition-colors self-end sm:self-center cursor-pointer"
+            title="Desvincular Orden de Trabajo"
+          >
+            ✕ Desvincular OT
+          </button>
+        </div>
+      )}
 
       {/* Feedback Banner */}
       {feedback && (
@@ -658,7 +786,7 @@ export default function NewInvoiceView() {
             {selectedClient ? (
               <div className="flex items-center justify-between p-3 rounded-lg bg-surface border border-primary/30">
                 <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-xs font-bold text-foreground">
                       {selectedClient.nombre_completo}
                     </span>
@@ -667,8 +795,13 @@ export default function NewInvoiceView() {
                         {selectedClient.identificacion}
                       </span>
                     )}
+                    {ordenTrabajo && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/30">
+                        <Lock className="w-3 h-3" /> OT {ordenTrabajo.codigo_orden}
+                      </span>
+                    )}
                   </div>
-                  <div className="flex items-center gap-3 text-[11px] text-foreground-muted">
+                  <div className="flex items-center gap-3 text-[11px] text-foreground-muted flex-wrap">
                     {selectedClient.telefono_principal && (
                       <span>Tel: {selectedClient.telefono_principal}</span>
                     )}
@@ -677,14 +810,23 @@ export default function NewInvoiceView() {
                     )}
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleClearClient}
-                  className="p-1 rounded text-foreground-muted hover:text-error hover:bg-hover transition-colors cursor-pointer"
-                  title="Cambiar cliente"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+                {ordenTrabajo ? (
+                  <div
+                    className="p-1.5 text-foreground-muted"
+                    title={`El cliente está vinculado a la Orden de Trabajo ${ordenTrabajo.codigo_orden} y no puede modificarse`}
+                  >
+                    <Lock className="w-4 h-4 text-primary" />
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleClearClient}
+                    className="p-1 rounded text-foreground-muted hover:text-error hover:bg-hover transition-colors cursor-pointer"
+                    title="Cambiar cliente"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
               </div>
             ) : (
               <div className="relative" ref={clientSearchRef}>
@@ -903,9 +1045,10 @@ export default function NewInvoiceView() {
                 <table className="w-full text-left text-xs border-collapse">
                   <thead className="bg-surface border-b border-border font-mono text-[11px] text-foreground-muted uppercase tracking-wider">
                     <tr>
+                      <th className="py-2.5 px-3">TIPO</th>
                       <th className="py-2.5 px-3">CÓDIGO</th>
-                      <th className="py-2.5 px-3">PRODUCTO</th>
-                      <th className="py-2.5 px-3">ALMACÉN</th>
+                      <th className="py-2.5 px-3">CONCEPTO / DESCRIPCIÓN</th>
+                      <th className="py-2.5 px-3">ALMACÉN / ORIGEN</th>
                       <th className="py-2.5 px-3 text-right">CANT.</th>
                       <th className="py-2.5 px-3 text-right">PRECIO</th>
                       <th className="py-2.5 px-3 text-right">DESC.</th>
@@ -917,11 +1060,33 @@ export default function NewInvoiceView() {
                     {lineas.length > 0 ? (
                       lineas.map((l) => (
                         <tr key={l.tempId} className="hover:bg-hover/40 transition-colors font-mono">
-                          <td className="py-2 px-3 text-primary font-semibold">{l.codigo}</td>
+                          <td className="py-2 px-3">
+                            {l.tipo_linea === "SERVICIO" && (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-cyan-500/15 text-cyan-400 border border-cyan-500/30">
+                                SERVICIO
+                              </span>
+                            )}
+                            {l.tipo_linea === "REPUESTO" && (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                                REPUESTO OT
+                              </span>
+                            )}
+                            {(!l.tipo_linea || l.tipo_linea === "PRODUCTO") && (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                                PRODUCTO
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2 px-3 text-primary font-semibold">{l.codigo || "—"}</td>
                           <td className="py-2 px-3 font-sans font-medium text-foreground">
                             {l.descripcion}
+                            {l.isFromOrder && ordenTrabajo && (
+                              <span className="ml-2 text-[10px] font-mono text-foreground-muted">
+                                (OT #{ordenTrabajo.codigo_orden})
+                              </span>
+                            )}
                           </td>
-                          <td className="py-2 px-3 text-foreground-muted">{l.almacen_nombre}</td>
+                          <td className="py-2 px-3 text-foreground-muted">{l.almacen_nombre || "—"}</td>
                           <td className="py-2 px-3 text-right">
                             <input
                               type="number"
@@ -969,8 +1134,8 @@ export default function NewInvoiceView() {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={8} className="py-8 text-center text-foreground-muted text-xs font-sans">
-                          No hay productos agregados a la factura todavía.
+                        <td colSpan={9} className="py-8 text-center text-foreground-muted text-xs font-sans">
+                          No hay líneas agregadas a la factura todavía. Puedes traer una Orden de Trabajo o agregar productos directamente.
                         </td>
                       </tr>
                     )}
@@ -1199,6 +1364,13 @@ export default function NewInvoiceView() {
         isOpen={isCreateProductModalOpen}
         onClose={() => setIsCreateProductModalOpen(false)}
         onProductCreated={handleProductCreated}
+      />
+
+      {/* Modal Traer Orden de Trabajo (FAC-3) */}
+      <SelectWorkOrderModal
+        isOpen={isSelectWorkOrderModalOpen}
+        onClose={() => setIsSelectWorkOrderModalOpen(false)}
+        onSelectOrder={handleSelectWorkOrder}
       />
     </div>
   );

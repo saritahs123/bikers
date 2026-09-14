@@ -138,6 +138,22 @@ export async function GET(
         ot.total_orden,
         ot.mecanico_id,
         ot.total_tiempo_transcurrido,
+        COALESCE(ot.facturado, false) OR EXISTS (
+          SELECT 1 FROM admin.facturas f
+          WHERE f.orden_trabajo_id = ot.orden_trabajo_id AND f.estado <> 'ANULADA'
+        ) AS facturado,
+        (
+          SELECT f.factura_id
+          FROM admin.facturas f
+          WHERE f.orden_trabajo_id = ot.orden_trabajo_id AND f.estado <> 'ANULADA'
+          ORDER BY f.factura_id DESC LIMIT 1
+        ) AS factura_id,
+        (
+          SELECT f.codigo_factura
+          FROM admin.facturas f
+          WHERE f.orden_trabajo_id = ot.orden_trabajo_id AND f.estado <> 'ANULADA'
+          ORDER BY f.factura_id DESC LIMIT 1
+        ) AS codigo_factura,
         COALESCE(NULLIF(TRIM(CONCAT_WS(' ', ui_mec.nombre, ui_mec.apellido)), ''), ui_mec.correo_electronico, ('Mecánico #' || u_mec.usuario_id::text)) AS mecanico_nombre,
         c_mec.nombre AS mecanico_cargo,
         tu_mec.nombre AS mecanico_tipo,
