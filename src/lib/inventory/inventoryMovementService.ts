@@ -17,6 +17,7 @@ export type TipoMovimientoCodigo =
   | "DEV_CLIENTE"
   | "DEV_PROVEEDOR"
   | "DEV_TALLER"
+  | "DEV_VENTA"
   | "TRAS_SAL"
   | "TRAS_ENT"
   | string;

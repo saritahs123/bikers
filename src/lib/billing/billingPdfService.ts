@@ -243,6 +243,19 @@ export function generateInvoiceModel1Pdf(data: BillingInvoicePrintData): jsPDF {
 
   currentY = Math.max(compY, badgeY + badgeHeight) + 5;
 
+  // Banner destacado si la factura está ANULADA
+  if (estadoFactura === "ANULADA") {
+    doc.setDrawColor(239, 68, 68);
+    doc.setFillColor(254, 242, 242);
+    doc.setLineWidth(0.5);
+    doc.roundedRect(marginX, currentY, contentWidth, 8, 1.5, 1.5, "FD");
+    doc.setTextColor(185, 28, 28);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.text("*** FACTURA ANULADA — DOCUMENTO SIN VALOR FISCAL NI COMERCIAL ***", pageWidth / 2, currentY + 5.2, { align: "center" });
+    currentY += 12;
+  }
+
   // 2. CLIENT & WORK ORDER / BICYCLE BOXES
   const drawCardBox = (x: number, y: number, width: number, height: number, title: string) => {
     doc.setDrawColor(borderColor[0], borderColor[1], borderColor[2]);
@@ -609,6 +622,14 @@ export function generateInvoiceModel1Pdf(data: BillingInvoicePrintData): jsPDF {
     doc.setFontSize(7);
     doc.text("Documento generado electrónicamente", pageWidth / 2, footerY + 3.5, { align: "center" });
     doc.text(`Página ${i} de ${totalPages}`, pageWidth / 2, footerY + 6.8, { align: "center" });
+
+    // Marca de agua central ANULADA en todas las páginas
+    if (estadoFactura === "ANULADA") {
+      doc.setTextColor(254, 202, 202);
+      doc.setFontSize(54);
+      doc.setFont("helvetica", "bold");
+      doc.text("ANULADA", pageWidth / 2, pageHeight / 2, { align: "center", angle: 45 });
+    }
   }
 
   return doc;
@@ -685,6 +706,19 @@ export function generateInvoiceModel2Pdf(data: BillingInvoicePrintData): jsPDF {
   currentY += 1;
   drawDashedLine(currentY);
   currentY += 3.5;
+
+  // Marca visible ANULADA en Modelo 2 (Ticket POS)
+  if (data.factura.estado.toUpperCase() === "ANULADA") {
+    doc.setDrawColor(220, 38, 38);
+    doc.setFillColor(254, 242, 242);
+    doc.setLineWidth(0.4);
+    doc.rect(marginX, currentY, contentWidth, 7, "FD");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.setTextColor(220, 38, 38);
+    doc.text("*** FACTURA ANULADA ***", pageWidth / 2, currentY + 4.8, { align: "center" });
+    currentY += 9;
+  }
 
   // 2. METADATA DE FACTURA & CLIENTE
   doc.setFont("helvetica", "bold");

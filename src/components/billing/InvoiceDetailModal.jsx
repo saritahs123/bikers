@@ -15,7 +15,8 @@ import {
   Clock,
   AlertTriangle,
   FileText,
-  Loader2
+  Loader2,
+  Ban
 } from "lucide-react";
 import InvoicePrintSelectorModal from "./InvoicePrintSelectorModal";
 import RegisterPaymentModal from "./RegisterPaymentModal";
@@ -24,7 +25,8 @@ export default function InvoiceDetailModal({
   isOpen,
   onClose,
   facturaId,
-  onInvoiceUpdated
+  onInvoiceUpdated,
+  permisos
 }) {
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -33,48 +35,51 @@ export default function InvoiceDetailModal({
   // Modales secundarios
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState(null);
+
+  const fetchDetail = React.useCallback(async () => {
+    if (!facturaId) return;
+    try {
+      setIsLoading(true);
+      setError(null);
+      const res = await fetch(`/api/facturacion/facturas/${facturaId}`);
+      const json = await res.json();
+
+      if (!res.ok) {
+        throw new Error(
+          json.details
+            ? `${json.message || "Error al cargar la factura"}: ${json.details}`
+            : (json.message || json.error || "No se pudo cargar el detalle de la factura.")
+        );
+      }
+
+      setData(json.data);
+    } catch (err) {
+      console.error("Error fetching invoice detail:", err);
+      setError(err.message || "Error al conectar con el servidor.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [facturaId]);
 
   useEffect(() => {
     if (!isOpen || !facturaId) return;
 
     let isMounted = true;
-
-    async function fetchDetail() {
-      try {
-        const res = await fetch(`/api/facturacion/facturas/${facturaId}`);
-        const json = await res.json();
-
-        if (!isMounted) return;
-
-        if (!res.ok) {
-          throw new Error(
-            json.details
-              ? `${json.message || "Error al cargar la factura"}: ${json.details}`
-              : (json.message || json.error || "No se pudo cargar el detalle de la factura.")
-          );
-        }
-
-        setData(json.data);
-      } catch (err) {
-        if (!isMounted) return;
-        console.error("Error fetching invoice detail:", err);
-        setError(err.message || "Error al conectar con el servidor.");
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
-    }
-
     const timer = setTimeout(() => {
-      setIsLoading(true);
-      setError(null);
-      fetchDetail();
+      if (isMounted) {
+        fetchDetail();
+      }
     }, 0);
 
     return () => {
       isMounted = false;
       clearTimeout(timer);
     };
-  }, [isOpen, facturaId]);
+  }, [isOpen, facturaId, fetchDetail]);
 
   if (!isOpen) return null;
 
@@ -175,6 +180,12 @@ export default function InvoiceDetailModal({
     factura.estado !== "ANULADA" &&
     Number(factura.balance_pendiente) > 0;
 
+  const effectivePerms = data?.permisos || permisos;
+  const puedeAnular =
+    factura &&
+    factura.estado !== "ANULADA" &&
+    (!effectivePerms || effectivePerms.puede_eliminar || effectivePerms.puede_inactivar || effectivePerms.puede_editar);
+
   const handlePaymentSuccess = (result) => {
     if (result && result.factura) {
       // Actualizamos estado local
@@ -194,6 +205,47 @@ export default function InvoiceDetailModal({
       if (onInvoiceUpdated) {
         onInvoiceUpdated(result.factura);
       }
+    }
+  };
+
+  const handleConfirmCancel = async (e) => {
+    if (e) e.preventDefault();
+    const trimmedReason = cancelReason.trim();
+    if (!trimmedReason) {
+      setCancelError("El motivo de la anulación es obligatorio.");
+      return;
+    }
+
+    try {
+      setIsCancelling(true);
+      setCancelError(null);
+
+      const res = await fetch(`/api/facturacion/facturas/${facturaId}/anular`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ motivo: trimmedReason })
+      });
+
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(
+          json.details
+            ? `${json.message || "Error al anular la factura"}: ${json.details}`
+            : (json.message || json.error || "No se pudo anular la factura.")
+        );
+      }
+
+      setIsCancelModalOpen(false);
+      setCancelReason("");
+      await fetchDetail();
+      if (onInvoiceUpdated) {
+        onInvoiceUpdated(json.data);
+      }
+    } catch (err) {
+      console.error("Error al anular la factura:", err);
+      setCancelError(err.message || "Error al procesar la anulación de la factura.");
+    } finally {
+      setIsCancelling(false);
     }
   };
 
@@ -251,6 +303,22 @@ export default function InvoiceDetailModal({
                 </button>
               )}
 
+              {puedeAnular && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCancelReason("");
+                    setCancelError(null);
+                    setIsCancelModalOpen(true);
+                  }}
+                  className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-mono font-bold uppercase tracking-wider text-white bg-rose-600 hover:bg-rose-500 rounded-xl transition-all shadow-md shadow-rose-600/20 cursor-pointer"
+                  title="Anular Factura y Revertir Salidas de Inventario"
+                >
+                  <Ban className="w-4 h-4" />
+                  <span className="hidden sm:inline">Anular Factura</span>
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={onClose}
@@ -279,6 +347,30 @@ export default function InvoiceDetailModal({
 
             {!isLoading && !error && factura && (
               <>
+                {/* Banner de Factura Anulada (Regla 22) */}
+                {factura.estado === "ANULADA" && (
+                  <div className="p-4 rounded-xl bg-error-muted/30 border border-error/40 text-error space-y-2">
+                    <div className="flex items-center gap-2 font-mono font-bold text-sm">
+                      <AlertTriangle className="w-4 h-4 text-error shrink-0" />
+                      <span>ESTA FACTURA HA SIDO ANULADA</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-mono pt-2 border-t border-error/20">
+                      <div>
+                        <span className="text-foreground-muted block text-[11px]">Motivo de Anulación:</span>
+                        <span className="font-semibold text-foreground">{factura.motivo_anulacion || "Sin motivo especificado"}</span>
+                      </div>
+                      <div>
+                        <span className="text-foreground-muted block text-[11px]">Fecha de Anulación:</span>
+                        <span className="font-semibold text-foreground">{formatDateTime(factura.fecha_anulacion)}</span>
+                      </div>
+                      <div>
+                        <span className="text-foreground-muted block text-[11px]">Anulado por:</span>
+                        <span className="font-semibold text-foreground">{factura.usuario_anulacion_nombre || "Usuario del sistema"}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* 2.1 Info Cards: Cliente & OT */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Card Cliente */}
@@ -477,15 +569,22 @@ export default function InvoiceDetailModal({
                         <DollarSign className="w-3.5 h-3.5 text-emerald-500" />
                         <span>Historial de Pagos ({pagos.length})</span>
                       </h3>
-                      {puedeRegistrarPago && (
-                        <button
-                          type="button"
-                          onClick={() => setIsPaymentModalOpen(true)}
-                          className="text-[11px] font-mono text-primary hover:underline cursor-pointer"
-                        >
-                          + Agregar pago
-                        </button>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {factura.estado === "ANULADA" && (
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-bold">
+                            Factura anulada • Pagos históricos conservados
+                          </span>
+                        )}
+                        {puedeRegistrarPago && (
+                          <button
+                            type="button"
+                            onClick={() => setIsPaymentModalOpen(true)}
+                            className="text-[11px] font-mono text-primary hover:underline cursor-pointer"
+                          >
+                            + Agregar pago
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     <div className="border border-border rounded-xl overflow-hidden shadow-sm">
@@ -624,6 +723,136 @@ export default function InvoiceDetailModal({
           factura={factura}
           onPaymentSuccess={handlePaymentSuccess}
         />
+      )}
+
+      {/* Modal de Confirmación de Anulación (Reglas 1, 2, 14) */}
+      {isCancelModalOpen && factura && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-card border border-border rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col transition-colors">
+            {/* Header */}
+            <div className="flex items-center justify-between p-5 border-b border-border bg-rose-500/10">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-rose-500/20 border border-rose-500/40 rounded-xl text-rose-600 dark:text-rose-400 shrink-0">
+                  <Ban className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-foreground font-mono">
+                    Anular Factura
+                  </h3>
+                  <p className="text-xs text-foreground-muted font-mono">
+                    {factura.codigo_factura} • Esta acción es destructiva e irreversible
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => !isCancelling && setIsCancelModalOpen(false)}
+                disabled={isCancelling}
+                className="p-1.5 rounded-lg text-foreground-muted hover:text-foreground hover:bg-hover transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleConfirmCancel} className="p-5 space-y-4">
+              {/* Resumen de Factura */}
+              <div className="p-3.5 rounded-xl border border-border bg-surface/50 grid grid-cols-2 gap-3 text-xs font-mono">
+                <div>
+                  <span className="text-foreground-muted block text-[10px]">Código Factura:</span>
+                  <strong className="text-foreground">{factura.codigo_factura}</strong>
+                </div>
+                <div>
+                  <span className="text-foreground-muted block text-[10px]">Total Facturado:</span>
+                  <strong className="text-foreground">{formatMoney(factura.total)}</strong>
+                </div>
+                <div>
+                  <span className="text-foreground-muted block text-[10px]">Estado Actual:</span>
+                  <span className="text-foreground font-bold">{factura.estado}</span>
+                </div>
+                <div>
+                  <span className="text-foreground-muted block text-[10px]">Origen:</span>
+                  <span className="text-foreground">
+                    {factura.tipo_factura_nombre || (factura.orden_trabajo_id ? "Orden de Trabajo" : "Venta Directa")}
+                  </span>
+                </div>
+              </div>
+
+              {/* Advertencia de Pagos Registrados (Regla 14) */}
+              {Number(factura.monto_pagado || 0) > 0 && (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-700 dark:text-amber-300 text-xs flex items-start gap-2.5">
+                  <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="font-semibold">Atención con los cobros registrados:</p>
+                    <p>La anulación no registra automáticamente una devolución de dinero. Los pagos aplicados permanecerán en el historial financiero como evidencia contable.</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Detalle sobre el inventario */}
+              <p className="text-xs text-foreground-secondary leading-relaxed">
+                {factura.tipo_factura_codigo === "VENTA_DIRECTA" || !factura.orden_trabajo_id
+                  ? "Al anular esta factura se generarán movimientos de reversa DEV_VENTA devolviendo las existencias físicas al stock del almacén correspondiente."
+                  : "Los repuestos y mano de obra del taller permanecerán inalterados. Solo se revertirán los productos adicionales facturados."}
+              </p>
+
+              {/* Campo obligatorio: Motivo */}
+              <div>
+                <label className="block text-xs font-mono font-bold text-foreground mb-1.5 uppercase">
+                  Motivo de anulación <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  value={cancelReason}
+                  onChange={(e) => {
+                    setCancelReason(e.target.value);
+                    if (cancelError) setCancelError(null);
+                  }}
+                  disabled={isCancelling}
+                  rows={3}
+                  placeholder="Indique detalladamente el motivo por el cual se anula la factura (obligatorio)..."
+                  className="w-full px-3 py-2 text-xs font-sans rounded-xl border border-border bg-surface focus:outline-none focus:ring-2 focus:ring-rose-500/30 focus:border-rose-500 transition-all resize-none text-foreground placeholder:text-foreground-muted"
+                  autoFocus
+                />
+              </div>
+
+              {cancelError && (
+                <div className="p-2.5 bg-error-muted border border-error/30 rounded-lg text-error text-xs flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{cancelError}</span>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-3 pt-2 border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => setIsCancelModalOpen(false)}
+                  disabled={isCancelling}
+                  className="px-4 py-2 text-xs font-mono font-bold uppercase tracking-wider text-foreground-secondary hover:text-foreground hover:bg-hover rounded-xl border border-border transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCancelling || !cancelReason.trim()}
+                  className="px-4 py-2 text-xs font-mono font-bold uppercase tracking-wider text-white bg-rose-600 hover:bg-rose-500 rounded-xl transition-all shadow-md shadow-rose-600/20 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+                >
+                  {isCancelling ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Anulando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Ban className="w-4 h-4" />
+                      <span>Confirmar Anulación</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </>
   );

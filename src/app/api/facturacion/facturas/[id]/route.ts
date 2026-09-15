@@ -77,6 +77,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
       ? `COALESCE(f.balance_pendiente, ${colTotal})`
       : `GREATEST(0, (${colTotal} - ${colMontoPagado}))`;
     const colEmpresa = facCols.has("empresa_id") ? "COALESCE(f.empresa_id, c.empresa_id, 1)" : "COALESCE(c.empresa_id, 1)";
+    const colMotivoAnulacion = facCols.has("motivo_anulacion") ? "f.motivo_anulacion" : "NULL::text AS motivo_anulacion";
+    const colFechaAnulacion = facCols.has("fecha_anulacion") ? "f.fecha_anulacion" : "NULL::timestamptz AS fecha_anulacion";
+    const colUsuarioAnulacion = facCols.has("usuario_anulacion_id") ? "f.usuario_anulacion_id" : "NULL::int AS usuario_anulacion_id";
 
     // 1. Cabecera de factura con Anti-IDOR estricto (Sección 13)
     const facSql = `
@@ -105,12 +108,18 @@ export async function GET(request: NextRequest, context: RouteContext) {
         ${colObservacion} AS observacion,
         ${colFechaCreacion} AS fecha_creacion,
         ${colFechaMod},
+        ${colMotivoAnulacion},
+        ${colFechaAnulacion},
+        ${colUsuarioAnulacion},
+        COALESCE(NULLIF(TRIM(CONCAT_WS(' ', ui_anul.nombre, ui_anul.apellido)), ''), ui_anul.correo_electronico, ('Usuario #' || u_anul.usuario_id::text), NULL) AS usuario_anulacion_nombre,
         COALESCE(NULLIF(TRIM(CONCAT_WS(' ', ui.nombre, ui.apellido)), ''), ui.correo_electronico, ('Usuario #' || u.usuario_id::text), 'Sistema') AS usuario_creacion_nombre
       FROM admin.facturas f
       LEFT JOIN admin.tipo_factura tf ON f.tipo_factura_id = tf.tipo_factura_id
       LEFT JOIN admin.clientes c ON f.cliente_id = c.cliente_id
       LEFT JOIN admin.usuario u ON ${colUsuarioCreacion} = u.usuario_id
       LEFT JOIN admin.usuario_identidad ui ON u.usuario_id = ui.usuario_id
+      LEFT JOIN admin.usuario u_anul ON ${facCols.has("usuario_anulacion_id") ? "f.usuario_anulacion_id" : "NULL::int"} = u_anul.usuario_id
+      LEFT JOIN admin.usuario_identidad ui_anul ON u_anul.usuario_id = ui_anul.usuario_id
       WHERE f.factura_id = $1
         AND (${facCols.has("empresa_id") ? "(f.empresa_id = $2 OR (f.empresa_id IS NULL AND (c.empresa_id = $2 OR c.empresa_id IS NULL)))" : "(c.empresa_id = $2 OR c.empresa_id IS NULL)"});
     `;
@@ -421,13 +430,17 @@ export async function GET(request: NextRequest, context: RouteContext) {
           estado: factura.estado,
           observacion: factura.observacion || "",
           fecha_creacion: factura.fecha_creacion,
-          usuario_creacion_nombre: factura.usuario_creacion_nombre || "Sistema"
+          usuario_creacion_nombre: factura.usuario_creacion_nombre || "Sistema",
+          motivo_anulacion: (factura.motivo_anulacion as string) || null,
+          fecha_anulacion: (factura.fecha_anulacion as string) || null,
+          usuario_anulacion_nombre: (factura.usuario_anulacion_nombre as string) || null
         },
         cliente,
         orden_trabajo: ordenTrabajo,
         detalle,
         pagos,
-        empresa
+        empresa,
+        permisos: perms
       }
     });
   } catch (err: unknown) {
