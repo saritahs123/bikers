@@ -12,6 +12,7 @@ export default function RegisterPaymentModal({
   const [tiposPago, setTiposPago] = useState([]);
   const [selectedTipoPago, setSelectedTipoPago] = useState("");
   const [monto, setMonto] = useState("");
+  const [montoRecibido, setMontoRecibido] = useState("");
   const [referencia, setReferencia] = useState("");
   const [observacion, setObservacion] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -29,7 +30,11 @@ export default function RegisterPaymentModal({
         const json = await res.json();
         if (json.tipos_pago && json.tipos_pago.length > 0) {
           setTiposPago(json.tipos_pago);
-          setSelectedTipoPago(String(json.tipos_pago[0].tipo_pago_id));
+          // Priorizar EFECTIVO si está disponible
+          const efectivo = json.tipos_pago.find(
+            (tp) => tp.codigo === "EFECTIVO" || tp.nombre?.toUpperCase()?.includes("EFECTIVO")
+          );
+          setSelectedTipoPago(String(efectivo ? efectivo.tipo_pago_id : json.tipos_pago[0].tipo_pago_id));
         }
       } catch (err) {
         console.error("Error al cargar tipos de pago:", err);
@@ -37,7 +42,9 @@ export default function RegisterPaymentModal({
     }
 
     const timer = setTimeout(() => {
-      setMonto(balancePendiente > 0 ? balancePendiente.toFixed(2) : "");
+      const initialMonto = balancePendiente > 0 ? balancePendiente.toFixed(2) : "";
+      setMonto(initialMonto);
+      setMontoRecibido(initialMonto);
       setReferencia("");
       setObservacion("");
       setErrorMsg(null);
@@ -49,13 +56,30 @@ export default function RegisterPaymentModal({
 
   if (!isOpen || !factura) return null;
 
+  const selectedTipo = tiposPago.find((tp) => String(tp.tipo_pago_id) === String(selectedTipoPago));
+  const isEfectivo =
+    selectedTipo?.codigo?.toUpperCase() === "EFECTIVO" ||
+    selectedTipo?.nombre?.toUpperCase()?.includes("EFECTIVO");
+
+  const montoNum = parseFloat(monto) || 0;
+  const montoRecibidoNum = parseFloat(montoRecibido) || 0;
+  const devuelta = Number((montoRecibidoNum - montoNum).toFixed(2));
+
+  const handlePagarTotal = () => {
+    const totalStr = balancePendiente.toFixed(2);
+    setMonto(totalStr);
+    if (isEfectivo) {
+      setMontoRecibido(totalStr);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMsg(null);
 
     const numericMonto = parseFloat(monto);
     if (isNaN(numericMonto) || numericMonto <= 0) {
-      setErrorMsg("Ingrese un monto válido mayor a 0.");
+      setErrorMsg("Ingrese un monto a pagar válido mayor a 0.");
       return;
     }
 
@@ -71,6 +95,24 @@ export default function RegisterPaymentModal({
       return;
     }
 
+    let numericMontoRecibido = numericMonto;
+    let numericDevuelta = 0;
+
+    if (isEfectivo) {
+      numericMontoRecibido = parseFloat(montoRecibido);
+      if (isNaN(numericMontoRecibido) || numericMontoRecibido <= 0) {
+        setErrorMsg("Ingrese el monto recibido en efectivo.");
+        return;
+      }
+      if (numericMontoRecibido < numericMonto - 0.009) {
+        setErrorMsg(
+          `El monto recibido (RD$ ${numericMontoRecibido.toFixed(2)}) es menor al monto a pagar (RD$ ${numericMonto.toFixed(2)}). Faltan RD$ ${(numericMonto - numericMontoRecibido).toFixed(2)}.`
+        );
+        return;
+      }
+      numericDevuelta = Math.max(0, parseFloat((numericMontoRecibido - numericMonto).toFixed(2)));
+    }
+
     try {
       setIsLoading(true);
       const res = await fetch(`/api/facturacion/facturas/${factura.factura_id}/pagos`, {
@@ -79,6 +121,8 @@ export default function RegisterPaymentModal({
         body: JSON.stringify({
           tipo_pago_id: parseInt(selectedTipoPago, 10),
           monto: numericMonto,
+          monto_recibido: isEfectivo ? numericMontoRecibido : numericMonto,
+          monto_devuelta: isEfectivo ? numericDevuelta : 0,
           referencia: referencia.trim() || null,
           observacion: observacion.trim() || null
         })
@@ -164,7 +208,10 @@ export default function RegisterPaymentModal({
             </label>
             <select
               value={selectedTipoPago}
-              onChange={(e) => setSelectedTipoPago(e.target.value)}
+              onChange={(e) => {
+                setSelectedTipoPago(e.target.value);
+                setErrorMsg(null);
+              }}
               className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-input text-foreground text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary cursor-pointer"
               required
             >
@@ -176,7 +223,7 @@ export default function RegisterPaymentModal({
             </select>
           </div>
 
-          {/* Monto */}
+          {/* Monto a Pagar */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="block text-xs font-mono font-bold uppercase tracking-wider text-foreground-secondary">
@@ -184,7 +231,7 @@ export default function RegisterPaymentModal({
               </label>
               <button
                 type="button"
-                onClick={() => setMonto(balancePendiente.toFixed(2))}
+                onClick={handlePagarTotal}
                 className="text-[10px] font-mono text-primary hover:underline cursor-pointer"
               >
                 Pagar total (RD$ {balancePendiente.toFixed(2)})
@@ -200,7 +247,11 @@ export default function RegisterPaymentModal({
                 min="0.01"
                 max={balancePendiente}
                 value={monto}
-                onChange={(e) => setMonto(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setMonto(val);
+                  setErrorMsg(null);
+                }}
                 placeholder="0.00"
                 required
                 className="w-full pl-12 pr-3.5 py-2.5 rounded-xl border border-border bg-input text-foreground text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
@@ -210,6 +261,69 @@ export default function RegisterPaymentModal({
               Máximo aplicable: RD$ {balancePendiente.toFixed(2)}
             </p>
           </div>
+
+          {/* Si Efectivo: Monto Recibido y Devuelta (idéntico a Nueva Factura) */}
+          {isEfectivo && (
+            <div className="space-y-3 pt-1">
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-mono font-bold uppercase tracking-wider text-foreground-secondary">
+                    Monto Recibido (RD$) *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (montoNum > 0) setMontoRecibido(montoNum.toFixed(2));
+                    }}
+                    disabled={montoNum <= 0}
+                    className="text-[10px] font-mono text-primary hover:underline cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Cobro exacto (RD$ {montoNum.toFixed(2)})
+                  </button>
+                </div>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-foreground-muted font-mono text-xs">
+                    RD$
+                  </span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={montoRecibido}
+                    onChange={(e) => {
+                      setMontoRecibido(e.target.value);
+                      setErrorMsg(null);
+                    }}
+                    placeholder="0.00"
+                    required={isEfectivo}
+                    className="w-full pl-12 pr-3.5 py-2.5 rounded-xl border border-border bg-input text-foreground text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  />
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-surface border border-border space-y-1.5 font-mono">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-foreground-secondary font-sans font-medium">Devuelta:</span>
+                  <span
+                    className={`text-base font-bold ${
+                      montoNum <= 0
+                        ? "text-foreground-muted"
+                        : devuelta >= 0
+                        ? "text-emerald-400"
+                        : "text-error"
+                    }`}
+                  >
+                    RD$ {montoNum > 0 && devuelta >= 0 ? devuelta.toFixed(2) : "0.00"}
+                  </span>
+                </div>
+                {montoNum > 0 && montoRecibidoNum > 0 && devuelta < 0 && (
+                  <p className="text-[11px] text-error font-sans">
+                    El monto recibido es menor al monto a pagar (faltan RD$ {Math.abs(devuelta).toFixed(2)})
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Referencia */}
           <div>
@@ -251,7 +365,7 @@ export default function RegisterPaymentModal({
             </button>
             <button
               type="submit"
-              disabled={isLoading || balancePendiente <= 0}
+              disabled={isLoading || balancePendiente <= 0 || (isEfectivo && devuelta < 0)}
               className="flex items-center gap-2 px-4 py-2 text-xs font-mono font-bold uppercase tracking-wider text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl transition-all shadow-md shadow-emerald-600/20 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? (

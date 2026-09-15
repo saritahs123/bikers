@@ -53,12 +53,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
       );
     }
 
+    const montoRecibido = body.monto_recibido != null ? Number(body.monto_recibido) : monto;
+    const montoDevuelta = body.monto_devuelta != null ? Number(body.monto_devuelta) : 0;
+
     // Registrar pago atómicamente con billingService (Sección 23 a 27)
     const result = await registrarPago({
       empresa_id: session.empresa_id,
       factura_id: facturaId,
       tipo_pago_id: tipoPagoId,
       monto,
+      monto_recibido: montoRecibido,
+      monto_devuelta: montoDevuelta,
       referencia: body.referencia ? String(body.referencia).trim() : null,
       observacion: body.observacion ? String(body.observacion).trim() : null,
       fecha_pago: body.fecha_pago || new Date(),
