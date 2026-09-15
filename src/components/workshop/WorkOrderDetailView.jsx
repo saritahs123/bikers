@@ -1131,7 +1131,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
               </button>
               <button
                 onClick={() => handleTransitionState(8)}
-                disabled={loadingStateChange || hasIncompleteServices || Boolean(order.facturado)}
+                disabled={loadingStateChange || hasIncompleteServices}
                 className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white hover:bg-emerald-600 rounded-xl transition-all font-mono text-xs font-extrabold uppercase tracking-wider shadow-lg shadow-emerald-500/20 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                 title={
                   hasIncompleteServices
@@ -1146,13 +1146,13 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                 )}
                 ENTREGAR A CLIENTE
               </button>
-              {Boolean(order.facturado) && (
+              {(Boolean(order.facturado) || Boolean(order.factura_id) || Boolean(order.codigo_factura)) && (
                 <span className="px-3 py-2 bg-purple-500/15 border border-purple-500/30 text-purple-400 font-mono text-xs rounded-xl font-bold uppercase tracking-wider flex items-center gap-1.5">
                   <Receipt className="w-4 h-4" />
-                  FACTURADA
+                  FACTURADA {order.codigo_factura || order.numero_factura ? `• ${order.codigo_factura || order.numero_factura}` : ""}
                 </span>
               )}
-              {Boolean(order.facturado) && (
+              {(Boolean(order.facturado) || Boolean(order.factura_id)) && (
                 <Link
                   href={order.factura_id ? `/billing/invoices?invoice_id=${order.factura_id}` : "/billing/invoices"}
                   className="flex items-center gap-1.5 px-3 py-2 bg-surface hover:bg-hover border border-border text-foreground rounded-xl font-mono text-xs font-bold uppercase tracking-wider transition-all"
@@ -1164,10 +1164,27 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
             </>
           )}
           {Number(order.estado_orden_id) === 8 && (
-            <span className="px-3 py-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono text-xs rounded-xl font-bold uppercase tracking-wider flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4" />
-              ORDEN ENTREGADA
-            </span>
+            <>
+              <span className="px-3 py-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono text-xs rounded-xl font-bold uppercase tracking-wider flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4" />
+                ORDEN ENTREGADA
+              </span>
+              {(Boolean(order.facturado) || Boolean(order.factura_id) || Boolean(order.codigo_factura)) && (
+                <span className="px-3 py-2 bg-purple-500/15 border border-purple-500/30 text-purple-400 font-mono text-xs rounded-xl font-bold uppercase tracking-wider flex items-center gap-1.5">
+                  <Receipt className="w-4 h-4" />
+                  FACTURADA {order.codigo_factura || order.numero_factura ? `• ${order.codigo_factura || order.numero_factura}` : ""}
+                </span>
+              )}
+              {(Boolean(order.facturado) || Boolean(order.factura_id)) && (
+                <Link
+                  href={order.factura_id ? `/billing/invoices?invoice_id=${order.factura_id}` : "/billing/invoices"}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-surface hover:bg-hover border border-border text-foreground rounded-xl font-mono text-xs font-bold uppercase tracking-wider transition-all"
+                >
+                  <Receipt className="w-3.5 h-3.5 text-primary" />
+                  VER FACTURA
+                </Link>
+              )}
+            </>
           )}
 
 

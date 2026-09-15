@@ -82,8 +82,15 @@ export default function NewInvoiceView() {
     try {
       setLoadingCatalogos(true);
       const res = await fetch("/api/facturacion/catalogos");
-      if (!res.ok) throw new Error("Error al cargar catálogos de facturación.");
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        setFeedback({
+          type: "error",
+          message: data.message || "No se pudieron cargar los catálogos del módulo de facturación.",
+        });
+        return;
+      }
 
       setTiposFactura(data.tipos_factura || []);
       setTiposPago(data.tipos_pago || []);
@@ -111,8 +118,7 @@ export default function NewInvoiceView() {
       if ((data.tipos_pago || []).length > 0 && !tipoPagoId) {
         setTipoPagoId(String(data.tipos_pago[0].tipo_pago_id));
       }
-    } catch (err) {
-      console.error(err);
+    } catch {
       setFeedback({
         type: "error",
         message: "No se pudieron cargar los catálogos del módulo de facturación.",

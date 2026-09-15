@@ -510,12 +510,12 @@ export default function BillingOrderDetailView({ ordenId, onBack }) {
                   <button
                     type="button"
                     onClick={handleDeliverToCustomer}
-                    disabled={isDelivering || isReopening || hasIncompleteServices || order.facturado}
+                    disabled={isDelivering || isReopening || hasIncompleteServices}
                     className="flex items-center gap-2 px-4 py-2 text-xs font-mono font-bold uppercase tracking-wider text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl transition-all shadow-md shadow-emerald-600/20 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                     title={
                       hasIncompleteServices
                         ? `La orden tiene ${incompleteServices.length} servicio(s) pendiente(s). Reabre la reparación y complétalo antes de entregar.`
-                        : "Entregar orden y marcar como facturada"
+                        : "Entregar orden al cliente"
                     }
                   >
                     {isDelivering ? (
@@ -527,13 +527,13 @@ export default function BillingOrderDetailView({ ordenId, onBack }) {
                   </button>
 
                   {/* Ver Factura (si está facturada) */}
-                  {Boolean(order.facturado) && (
+                  {(Boolean(order.facturado) || Boolean(order.factura_id)) && (
                     <Link
                       href={order.factura_id ? `/billing/invoices?invoice_id=${order.factura_id}` : "/billing/invoices"}
                       className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-mono font-bold uppercase tracking-wider text-purple-400 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 rounded-xl transition-all cursor-pointer shadow-sm"
                     >
                       <Receipt className="w-3.5 h-3.5" />
-                      <span>Ver Factura</span>
+                      <span>Ver Factura {order.codigo_factura || order.numero_factura ? `• ${order.codigo_factura || order.numero_factura}` : ""}</span>
                     </Link>
                   )}
                 </div>
@@ -552,6 +552,15 @@ export default function BillingOrderDetailView({ ordenId, onBack }) {
             {/* Print Actions when ENTREGADA & FACTURADA */}
             {puedeImprimirFactura && (
               <div className="flex items-center gap-2">
+                {/* Enlace: Ver Factura */}
+                <Link
+                  href={order.factura_id ? `/billing/invoices?invoice_id=${order.factura_id}` : "/billing/invoices"}
+                  className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-mono font-bold uppercase tracking-wider text-purple-400 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 rounded-xl transition-all cursor-pointer shadow-sm"
+                >
+                  <Receipt className="w-3.5 h-3.5" />
+                  <span>Ver Factura {order.codigo_factura || order.numero_factura ? `• ${order.codigo_factura || order.numero_factura}` : ""}</span>
+                </Link>
+
                 {/* Botón 1: Imprimir A4 (PDF) */}
                 <button
                   type="button"

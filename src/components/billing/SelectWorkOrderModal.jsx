@@ -26,13 +26,15 @@ export default function SelectWorkOrderModal({ isOpen, onClose, onSelectOrder })
       const res = await fetch("/api/facturacion/ordenes-facturables");
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.message || "Error al cargar órdenes facturables.");
+        setError(errData.message || "No se pudieron obtener las órdenes facturables.");
+        setOrders([]);
+        return;
       }
       const json = await res.json();
       setOrders(json.data || []);
-    } catch (err) {
-      console.error("Error fetching billable orders:", err);
-      setError(err.message || "No se pudieron obtener las órdenes listas para facturar.");
+    } catch {
+      setError("No se pudieron obtener las órdenes listas para facturar.");
+      setOrders([]);
     } finally {
       setLoading(false);
     }
@@ -132,20 +134,29 @@ export default function SelectWorkOrderModal({ isOpen, onClose, onSelectOrder })
           </button>
         </div>
 
-        {/* Error Banner */}
-        {error && (
-          <div className="mx-6 mt-3 p-3 rounded-lg bg-error/10 border border-error/30 text-error text-xs flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 flex-shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
-
         {/* 3. Tabla de Órdenes */}
         <div className="flex-1 overflow-y-auto px-6 py-3">
           {loading ? (
             <div className="py-16 text-center space-y-3">
               <RefreshCw className="w-8 h-8 mx-auto animate-spin text-primary" />
               <p className="text-xs text-foreground-muted font-mono">Cargando órdenes facturables...</p>
+            </div>
+          ) : error ? (
+            <div className="py-16 text-center space-y-3">
+              <div className="w-12 h-12 rounded-full bg-error/10 border border-error/20 mx-auto flex items-center justify-center text-error">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-foreground">Error al consultar órdenes facturables</p>
+                <p className="text-xs text-foreground-muted max-w-md mx-auto">{error}</p>
+              </div>
+              <button
+                type="button"
+                onClick={fetchOrders}
+                className="mt-2 px-3.5 py-1.5 bg-surface hover:bg-hover border border-border text-foreground rounded-lg text-xs font-semibold cursor-pointer transition-colors"
+              >
+                Reintentar
+              </button>
             </div>
           ) : filteredOrders.length === 0 ? (
             <div className="py-16 text-center space-y-3">

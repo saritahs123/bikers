@@ -61,10 +61,23 @@ import {
   DetalleFacturaRow,
   PagoRow,
   FacturaCompletaResult,
-  EstadoFactura
+  EstadoFactura,
+  GetOrCreateInvoiceForWorkOrderInput,
+  LineaFacturaInput
 } from "./billingTypes";
 import { registrarMovimientoInventario } from "@/lib/inventory/inventoryMovementService";
 import { INVENTORY_SYSTEM_CODES, generarCodigoMovimiento } from "@/lib/inventory/inventoryConstants";
+
+/**
+ * Retorna el conjunto de columnas existentes en una tabla de admin en minúsculas.
+ */
+async function getTableColumns(client: PoolClient, tableName: string): Promise<Set<string>> {
+  const res = await client.query(
+    `SELECT column_name FROM information_schema.columns WHERE table_schema = 'admin' AND table_name = $1`,
+    [tableName]
+  );
+  return new Set((res.rows || []).map((r: { column_name: string }) => String(r.column_name).toLowerCase()));
+}
 
 /**
  * Asegura de forma idempotente que el código de sistema ID 14 (FACTURA / FAC)
@@ -185,7 +198,7 @@ export async function crearFactura(
     const tfRes = await client.query(`
       SELECT tipo_factura_id, codigo, nombre
       FROM admin.tipo_factura
-      WHERE tipo_factura_id = $1 AND activo = true
+      WHERE tipo_factura_id = $1
     `, [input.tipo_factura_id]);
 
     if (!tfRes.rows || tfRes.rows.length === 0) {
@@ -197,10 +210,11 @@ export async function crearFactura(
     // Impedir más de una factura activa por OT, validar estado LISTA_ENTREGA y pertenencia
     if (input.orden_trabajo_id) {
       const otRes = await client.query(`
-        SELECT ot.orden_trabajo_id, ot.codigo_orden, ot.cliente_id, ot.empresa_id,
+        SELECT ot.orden_trabajo_id, ot.codigo_orden, ot.cliente_id, c.empresa_id,
                ot.estado_orden_id,
                eot.codigo AS estado_codigo, eot.nombre AS estado_nombre
         FROM admin.ordenes_trabajo ot
+        JOIN admin.clientes c ON ot.cliente_id = c.cliente_id
         LEFT JOIN admin.estado_orden_trabajo eot ON ot.estado_orden_id = eot.estado_orden_id
         WHERE ot.orden_trabajo_id = $1
         FOR UPDATE OF ot
@@ -228,11 +242,14 @@ export async function crearFactura(
 
       // Validar factura activa duplicada para esta OT (Sección 3 y 15)
       const existingFacRes = await client.query(`
-        SELECT factura_id, codigo_factura, estado
-        FROM admin.facturas
-        WHERE empresa_id = $1 AND orden_trabajo_id = $2 AND estado <> 'ANULADA'
-        FOR UPDATE
-      `, [input.empresa_id, input.orden_trabajo_id]);
+        SELECT f.factura_id,
+               COALESCE(f.numero_factura, f.factura_id::text) AS codigo_factura,
+               f.numero_factura,
+               f.estado
+        FROM admin.facturas f
+        WHERE f.orden_trabajo_id = $1 AND f.estado <> 'ANULADA'
+        FOR UPDATE OF f
+      `, [input.orden_trabajo_id]);
 
       if (existingFacRes.rows && existingFacRes.rows.length > 0) {
         const facEx = existingFacRes.rows[0];
@@ -337,55 +354,48 @@ export async function crearFactura(
     // 6. Generar Código Correlativo Canónico de Factura
     const codigoFactura = await generarCodigoFactura(client, input.empresa_id);
 
-    // 7. Insertar Cabecera en admin.facturas
-    const insertFacSql = `
-      INSERT INTO admin.facturas (
-        empresa_id,
-        codigo_factura,
-        numero_factura,
-        tipo_factura_id,
-        cliente_id,
-        orden_trabajo_id,
-        fecha_factura,
-        subtotal,
-        descuento,
-        descuento_total,
-        impuesto,
-        impuesto_total,
-        total,
-        total_factura,
-        monto_pagado,
-        balance_pendiente,
-        estado,
-        observacion,
-        usuario_creacion_id,
-        fecha_creacion
-      ) VALUES (
-        $1, $2, $2, $3, $4, $5, COALESCE($6, NOW()),
-        $7, $8, $8, $9, $9, $10, $10, $11, $12, $13, $14, $15, NOW()
-      )
-      RETURNING *;
-    `;
+    // 7. Insertar Cabecera en admin.facturas de forma tolerante a columnas
+    const facCols = await getTableColumns(client, "facturas");
 
-    const facRes = await client.query(insertFacSql, [
-      input.empresa_id,
-      codigoFactura,
-      input.tipo_factura_id,
-      input.cliente_id || null,
-      input.orden_trabajo_id || null,
-      input.fecha_factura || null,
-      subtotalGeneral,
-      descuentoGeneral,
-      impuestoGeneral,
-      totalFactura,
-      montoPagadoInicial,
-      balancePendiente,
-      estadoInicial,
-      input.observacion ? input.observacion.trim() : null,
-      input.usuario_id
-    ]);
+    const facData: Record<string, unknown> = {
+      empresa_id: input.empresa_id,
+      codigo_factura: codigoFactura,
+      numero_factura: codigoFactura,
+      tipo_factura_id: input.tipo_factura_id,
+      cliente_id: input.cliente_id || null,
+      orden_trabajo_id: input.orden_trabajo_id || null,
+      fecha_factura: input.fecha_factura || new Date(),
+      subtotal: subtotalGeneral,
+      descuento: descuentoGeneral,
+      descuento_total: descuentoGeneral,
+      impuesto: impuestoGeneral,
+      impuesto_total: impuestoGeneral,
+      total: totalFactura,
+      total_factura: totalFactura,
+      monto_pagado: montoPagadoInicial,
+      balance_pendiente: balancePendiente,
+      estado: estadoInicial,
+      observacion: input.observacion ? input.observacion.trim() : null,
+      usuario_creacion_id: input.usuario_id,
+      usuario_registro: input.usuario_id,
+      fecha_creacion: new Date(),
+      fecha_registro: new Date()
+    };
+
+    const validFacEntries = Object.entries(facData).filter(([col]) => facCols.has(col));
+    const facColNames = validFacEntries.map(([col]) => col).join(", ");
+    const facPlaceholders = validFacEntries.map((_, idx) => `$${idx + 1}`).join(", ");
+    const facValues = validFacEntries.map(([_, val]) => val);
+
+    const facRes = await client.query(
+      `INSERT INTO admin.facturas (${facColNames}) VALUES (${facPlaceholders}) RETURNING *`,
+      facValues
+    );
 
     const facturaRow: FacturaRow = facRes.rows[0];
+    if (!facturaRow.codigo_factura) {
+      facturaRow.codigo_factura = (facturaRow.numero_factura as string) || `FAC-${facturaRow.factura_id}`;
+    }
     const facturaId = facturaRow.factura_id;
 
     // 7.1. Salida física de Inventario para líneas PRODUCTO (FAC-2, FAC-3, Secciones 9, 10, 11)
@@ -445,30 +455,7 @@ export async function crearFactura(
 
     // 8. Insertar Líneas en admin.detalle_factura (Snapshot Inmutable)
     const insertedDetalles: DetalleFacturaRow[] = [];
-    const insertDetSql = `
-      INSERT INTO admin.detalle_factura (
-        factura_id,
-        almacen_id,
-        tipo_linea,
-        tipo_detalle,
-        producto_id,
-        tipo_servicio_id,
-        orden_servicio_id,
-        orden_producto_id,
-        codigo,
-        descripcion,
-        cantidad,
-        precio_unitario,
-        descuento,
-        subtotal,
-        costo_unitario,
-        usuario_creacion_id,
-        fecha_creacion
-      ) VALUES (
-        $1, $2, $3, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW()
-      )
-      RETURNING *;
-    `;
+    const detCols = await getTableColumns(client, "detalle_factura");
 
     for (const linea of input.lineas) {
       const cant = Number(linea.cantidad);
@@ -476,23 +463,38 @@ export async function crearFactura(
       const desc = Number(linea.descuento || 0);
       const sub = parseFloat(((cant * prec) - desc).toFixed(2));
 
-      const detRes = await client.query(insertDetSql, [
-        facturaId,
-        linea.almacen_id || null,
-        linea.tipo_linea,
-        linea.producto_id || null,
-        linea.tipo_servicio_id || null,
-        linea.orden_servicio_id || null,
-        linea.orden_producto_id || null,
-        linea.codigo ? linea.codigo.trim() : null,
-        linea.descripcion.trim(),
-        cant,
-        prec,
-        desc,
-        sub,
-        linea.costo_unitario != null ? Number(linea.costo_unitario) : null,
-        input.usuario_id
-      ]);
+      const detData: Record<string, unknown> = {
+        factura_id: facturaId,
+        almacen_id: linea.almacen_id || null,
+        tipo_linea: linea.tipo_linea,
+        tipo_detalle: linea.tipo_linea === "REPUESTO" ? "PRODUCTO" : linea.tipo_linea,
+        producto_id: linea.producto_id || null,
+        servicio_id: linea.orden_servicio_id || linea.tipo_servicio_id || null,
+        tipo_servicio_id: linea.tipo_servicio_id || null,
+        orden_servicio_id: linea.orden_servicio_id || null,
+        orden_producto_id: linea.orden_producto_id || null,
+        codigo: linea.codigo ? linea.codigo.trim() : null,
+        descripcion: linea.descripcion.trim(),
+        cantidad: cant,
+        precio_unitario: prec,
+        descuento: desc,
+        subtotal: sub,
+        costo_unitario: linea.costo_unitario != null ? Number(linea.costo_unitario) : null,
+        usuario_creacion_id: input.usuario_id,
+        usuario_registro: input.usuario_id,
+        fecha_creacion: new Date(),
+        fecha_registro: new Date()
+      };
+
+      const validDetEntries = Object.entries(detData).filter(([col]) => detCols.has(col));
+      const detColNames = validDetEntries.map(([col]) => col).join(", ");
+      const detPlaceholders = validDetEntries.map((_, idx) => `$${idx + 1}`).join(", ");
+      const detValues = validDetEntries.map(([_, val]) => val);
+
+      const detRes = await client.query(
+        `INSERT INTO admin.detalle_factura (${detColNames}) VALUES (${detPlaceholders}) RETURNING *`,
+        detValues
+      );
 
       insertedDetalles.push(detRes.rows[0]);
     }
@@ -500,36 +502,34 @@ export async function crearFactura(
     // 9. Insertar Pagos Iniciales en admin.pagos (si existen)
     const insertedPagos: PagoRow[] = [];
     if (pagosValidados.length > 0) {
-      const insertPagoSql = `
-        INSERT INTO admin.pagos (
-          empresa_id,
-          factura_id,
-          tipo_pago_id,
-          monto,
-          monto_pago,
-          referencia,
-          observacion,
-          fecha_pago,
-          estado,
-          usuario_id,
-          fecha_creacion
-        ) VALUES (
-          $1, $2, $3, $4, $4, $5, $6, COALESCE($7, NOW()), 'APLICADO', $8, NOW()
-        )
-        RETURNING *;
-      `;
+      const pagoCols = await getTableColumns(client, "pagos");
 
       for (const p of pagosValidados) {
-        const pagoRes = await client.query(insertPagoSql, [
-          input.empresa_id,
-          facturaId,
-          p.tipo_pago_id,
-          Number(p.monto),
-          p.referencia ? p.referencia.trim() : null,
-          p.observacion ? p.observacion.trim() : null,
-          p.fecha_pago || null,
-          input.usuario_id
-        ]);
+        const pagoData: Record<string, unknown> = {
+          empresa_id: input.empresa_id,
+          factura_id: facturaId,
+          tipo_pago_id: p.tipo_pago_id,
+          monto: Number(p.monto),
+          monto_pago: Number(p.monto),
+          referencia: p.referencia ? p.referencia.trim() : null,
+          observacion: p.observacion ? p.observacion.trim() : null,
+          fecha_pago: p.fecha_pago || new Date(),
+          estado: "APLICADO",
+          usuario_id: input.usuario_id,
+          usuario_registro: input.usuario_id,
+          fecha_creacion: new Date(),
+          fecha_registro: new Date()
+        };
+
+        const validPagoEntries = Object.entries(pagoData).filter(([col]) => pagoCols.has(col));
+        const pagoColNames = validPagoEntries.map(([col]) => col).join(", ");
+        const pagoPlaceholders = validPagoEntries.map((_, idx) => `$${idx + 1}`).join(", ");
+        const pagoValues = validPagoEntries.map(([_, val]) => val);
+
+        const pagoRes = await client.query(
+          `INSERT INTO admin.pagos (${pagoColNames}) VALUES (${pagoPlaceholders}) RETURNING *`,
+          pagoValues
+        );
         insertedPagos.push(pagoRes.rows[0]);
       }
     }
@@ -541,9 +541,9 @@ export async function crearFactura(
         UPDATE admin.ordenes_trabajo
         SET facturado = true,
             fecha_facturacion = NOW(),
-            usuario_facturacion_id = $3
-        WHERE orden_trabajo_id = $1 AND (empresa_id = $2 OR empresa_id IS NULL)
-      `, [input.orden_trabajo_id, input.empresa_id, input.usuario_id]);
+            usuario_facturacion_id = $2
+        WHERE orden_trabajo_id = $1
+      `, [input.orden_trabajo_id, input.usuario_id]);
     }
 
     if (isInternalTransaction) {
@@ -564,6 +564,215 @@ export async function crearFactura(
       await client.query("ROLLBACK").catch(() => {});
     }
     console.error("Error en crearFactura:", err);
+    throw err;
+  } finally {
+    if (isInternalTransaction) {
+      client.release();
+    }
+  }
+}
+
+/**
+ * Obtiene la factura activa de una Orden de Trabajo o la crea automáticamente
+ * si aún no existe (FIX-FAC-TALLER-1).
+ * Reutiliza íntegramente crearFactura garantizando:
+ * - 0 movimientos adicionales de inventario para repuestos consumidos (tipo_linea = REPUESTO)
+ * - Mismo motor transaccional
+ * - Manejo robusto de concurrencia e idempotencia
+ */
+export async function getOrCreateInvoiceForWorkOrder(
+  input: GetOrCreateInvoiceForWorkOrderInput,
+  externalClient?: PoolClient
+): Promise<{ factura: FacturaRow; created: boolean }> {
+  const pool = getPool();
+  const client = externalClient || (await pool.connect());
+  const isInternalTransaction = !externalClient;
+
+  try {
+    if (isInternalTransaction) {
+      await client.query("BEGIN");
+    }
+
+    // 1. Verificar si ya existe una factura activa para esta orden (Sección 9)
+    const existingFacRes = await client.query(`
+      SELECT f.factura_id,
+             COALESCE(f.numero_factura, f.factura_id::text) AS codigo_factura,
+             f.numero_factura,
+             f.estado,
+             COALESCE(f.total_factura, 0)::numeric AS total_factura,
+             COALESCE(f.monto_pagado, 0)::numeric AS monto_pagado,
+             COALESCE(f.balance_pendiente, 0)::numeric AS balance_pendiente
+      FROM admin.facturas f
+      WHERE f.orden_trabajo_id = $1 AND f.estado <> 'ANULADA'
+      ORDER BY f.factura_id DESC
+      LIMIT 1
+      FOR UPDATE OF f
+    `, [input.orden_trabajo_id]);
+
+    if (existingFacRes.rows && existingFacRes.rows.length > 0) {
+      const existing = existingFacRes.rows[0] as FacturaRow;
+      if (isInternalTransaction) {
+        await client.query("COMMIT");
+      }
+      return { factura: existing, created: false };
+    }
+
+    // 2. Si no existe factura activa, cargar la OT y bloquearla (Sección 10, 11, 12)
+    const otRes = await client.query(`
+      SELECT ot.orden_trabajo_id, ot.codigo_orden, ot.cliente_id, c.empresa_id,
+             ot.estado_orden_id, eot.codigo AS estado_codigo, eot.nombre AS estado_nombre
+      FROM admin.ordenes_trabajo ot
+      JOIN admin.clientes c ON ot.cliente_id = c.cliente_id
+      LEFT JOIN admin.estado_orden_trabajo eot ON ot.estado_orden_id = eot.estado_orden_id
+      WHERE ot.orden_trabajo_id = $1
+      FOR UPDATE OF ot
+    `, [input.orden_trabajo_id]);
+
+    if (!otRes.rows || otRes.rows.length === 0) {
+      throw new Error(`La Orden de Trabajo #${input.orden_trabajo_id} no existe.`);
+    }
+
+    const ot = otRes.rows[0];
+
+    // 3. Consultar servicios activos
+    const servicesRes = await client.query(`
+      SELECT
+        os.orden_servicio_id,
+        os.tipo_servicio_id,
+        COALESCE(os.codigo_servicio, 'SRV-' || LPAD(os.orden_servicio_id::text, 4, '0')) AS codigo,
+        COALESCE(ts.nombre, 'Servicio de Taller') AS descripcion,
+        COALESCE(os.cantidad, 1)::numeric AS cantidad,
+        COALESCE(os.precio_unitario, 0)::numeric AS precio_unitario,
+        COALESCE(os.valor_descuento, 0)::numeric AS descuento,
+        COALESCE(
+          NULLIF(os.subtotal, 0),
+          ROUND((COALESCE(os.cantidad, 1) * COALESCE(os.precio_unitario, 0)) - COALESCE(os.valor_descuento, 0), 2)
+        )::numeric AS subtotal
+      FROM admin.orden_servicios os
+      LEFT JOIN admin.tipo_servicio ts ON os.tipo_servicio_id = ts.tipo_servicio_id
+      WHERE os.orden_trabajo_id = $1 AND (os.activo IS DISTINCT FROM false)
+      ORDER BY os.orden_servicio_id ASC
+    `, [input.orden_trabajo_id]);
+
+    // 4. Consultar repuestos estrictamente utilizados (utilizado = true) (Sección 6)
+    const partsRes = await client.query(`
+      SELECT
+        op.orden_producto_id,
+        op.producto_id,
+        op.almacen_id,
+        COALESCE(p.codigo_producto, 'PRD-' || LPAD(op.producto_id::text, 4, '0')) AS codigo,
+        COALESCE(p.nombre, 'Repuesto #' || op.producto_id::text) AS descripcion,
+        COALESCE(op.cantidad, 1)::numeric AS cantidad,
+        COALESCE(op.precio_unitario, 0)::numeric AS precio_unitario,
+        COALESCE(op.valor_descuento, 0)::numeric AS descuento,
+        COALESCE(
+          NULLIF(op.subtotal, 0),
+          ROUND((COALESCE(op.cantidad, 1) * COALESCE(op.precio_unitario, 0)) - COALESCE(op.valor_descuento, 0), 2)
+        )::numeric AS subtotal
+      FROM admin.orden_productos op
+      LEFT JOIN admin.productos p ON op.producto_id = p.producto_id
+      WHERE op.orden_trabajo_id = $1
+        AND op.utilizado = true
+      ORDER BY op.orden_producto_id ASC
+    `, [input.orden_trabajo_id]);
+
+    // 5. Construir líneas para el motor central de facturación
+    const lineas: LineaFacturaInput[] = [];
+
+    for (const s of servicesRes.rows || []) {
+      lineas.push({
+        tipo_linea: "SERVICIO",
+        tipo_servicio_id: s.tipo_servicio_id ? Number(s.tipo_servicio_id) : null,
+        orden_servicio_id: Number(s.orden_servicio_id),
+        codigo: s.codigo,
+        descripcion: s.descripcion,
+        cantidad: Number(s.cantidad),
+        precio_unitario: Number(s.precio_unitario),
+        descuento: Number(s.descuento || 0)
+      });
+    }
+
+    for (const r of partsRes.rows || []) {
+      lineas.push({
+        tipo_linea: "REPUESTO",
+        producto_id: Number(r.producto_id),
+        almacen_id: r.almacen_id ? Number(r.almacen_id) : null,
+        orden_producto_id: Number(r.orden_producto_id),
+        codigo: r.codigo,
+        descripcion: r.descripcion,
+        cantidad: Number(r.cantidad),
+        precio_unitario: Number(r.precio_unitario),
+        descuento: Number(r.descuento || 0)
+      });
+    }
+
+    if (lineas.length === 0) {
+      lineas.push({
+        tipo_linea: "SERVICIO",
+        codigo: "SRV-TALLER",
+        descripcion: `Servicio de Taller — Orden ${ot.codigo_orden || `#${input.orden_trabajo_id}`}`,
+        cantidad: 1,
+        precio_unitario: 0,
+        descuento: 0
+      });
+    }
+
+    // 6. Obtener ID de tipo_factura para ORDEN_TRABAJO
+    let tipoFacturaId = 1;
+    const tfRes = await client.query(`
+      SELECT tipo_factura_id FROM admin.tipo_factura WHERE codigo = 'ORDEN_TRABAJO' LIMIT 1
+    `);
+    if (tfRes.rows && tfRes.rows.length > 0) {
+      tipoFacturaId = Number(tfRes.rows[0].tipo_factura_id);
+    }
+
+    // 7. Invocar el motor central crearFactura
+    try {
+      const res = await crearFactura({
+        empresa_id: input.empresa_id || Number(ot.empresa_id || 1),
+        usuario_id: input.usuario_id,
+        cliente_id: ot.cliente_id ? Number(ot.cliente_id) : null,
+        tipo_factura_id: tipoFacturaId,
+        orden_trabajo_id: input.orden_trabajo_id,
+        observacion: input.observacion || `Factura de taller generada en entrega de Orden ${ot.codigo_orden || `#${input.orden_trabajo_id}`}`,
+        lineas
+      }, client);
+
+      if (isInternalTransaction) {
+        await client.query("COMMIT");
+      }
+
+      return { factura: res.factura, created: true };
+    } catch (err: unknown) {
+      const dbErr = err as { code?: string; message?: string };
+      // Concurrencia (Sección 13): Si otra transacción creó la factura simultáneamente
+      if (dbErr.code === "OT_YA_FACTURADA" || dbErr.code === "23505" || String(dbErr.message || "").includes("orden_trabajo")) {
+        const raceCheck = await client.query(`
+          SELECT f.factura_id,
+                 COALESCE(f.numero_factura, f.factura_id::text) AS codigo_factura,
+                 f.numero_factura,
+                 f.estado,
+                 COALESCE(f.total_factura, 0)::numeric AS total_factura,
+                 COALESCE(f.monto_pagado, 0)::numeric AS monto_pagado,
+                 COALESCE(f.balance_pendiente, 0)::numeric AS balance_pendiente
+          FROM admin.facturas f
+          WHERE f.orden_trabajo_id = $1 AND f.estado <> 'ANULADA'
+          ORDER BY f.factura_id DESC LIMIT 1
+        `, [input.orden_trabajo_id]);
+
+        if (raceCheck.rows && raceCheck.rows.length > 0) {
+          if (isInternalTransaction) {
+            await client.query("COMMIT");
+          }
+          return { factura: raceCheck.rows[0] as FacturaRow, created: false };
+        }
+      }
+      throw err;
+    }
+  } catch (err) {
+    if (isInternalTransaction) {
+      await client.query("ROLLBACK").catch(() => {});
+    }
     throw err;
   } finally {
     if (isInternalTransaction) {

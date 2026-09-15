@@ -4,6 +4,24 @@ import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session
 
 export const dynamic = "force-dynamic";
 
+interface TipoFacturaDbRow {
+  tipo_factura_id: number;
+  codigo: string;
+  nombre: string;
+  descripcion?: string | null;
+  activo?: boolean | null;
+  estado?: string | null;
+}
+
+interface TipoPagoDbRow {
+  tipo_pago_id: number;
+  codigo: string;
+  nombre: string;
+  descripcion?: string | null;
+  activo?: boolean | null;
+  estado?: string | null;
+}
+
 export async function GET() {
   try {
     const session = await getWorkshopSession();
@@ -14,7 +32,11 @@ export async function GET() {
       );
     }
 
-    const perms = await getModulePermissions("FACTURACION", session.usuario_id);
+    let perms = await getModulePermissions("FACTURACION", session.usuario_id);
+    if (!perms.puede_ver) {
+      perms = await getModulePermissions("FACTURACIÓN", session.usuario_id);
+    }
+
     if (!perms.puede_ver) {
       return NextResponse.json(
         { error: "FORBIDDEN", message: "No tienes permisos para acceder a Facturación." },
@@ -24,27 +46,91 @@ export async function GET() {
 
     const empresaId = session.empresa_id;
 
-    // 1. Tipos de Factura
-    const tiposFacturaRows = await query(
-      `SELECT tipo_factura_id, codigo, nombre, descripcion, activo
-       FROM admin.tipo_factura
-       WHERE activo = true
-       ORDER BY tipo_factura_id ASC`
-    );
+    // 1. Tipos de Factura (Seguro sin asumir columna activo)
+    interface TipoFacturaItem {
+      tipo_factura_id: number;
+      codigo: string;
+      nombre: string;
+      descripcion: string | null;
+      activo: boolean;
+    }
 
-    // 2. Tipos de Pago
-    const tiposPagoRows = await query(
-      `SELECT tipo_pago_id, codigo, nombre, descripcion, activo
-       FROM admin.tipo_pago
-       WHERE activo = true
-       ORDER BY tipo_pago_id ASC`
-    );
+    const defaultTiposFactura: TipoFacturaItem[] = [
+      { tipo_factura_id: 1, codigo: "VENTA_DIRECTA", nombre: "Venta Directa", descripcion: "Factura por venta directa en mostrador o tienda", activo: true },
+      { tipo_factura_id: 2, codigo: "ORDEN_TRABAJO", nombre: "Orden de Trabajo", descripcion: "Factura generada desde una orden de trabajo de taller", activo: true }
+    ];
+
+    let finalTiposFactura: TipoFacturaItem[] = defaultTiposFactura;
+    try {
+      const tiposFacturaRows = await query<TipoFacturaDbRow>(
+        `SELECT * FROM admin.tipo_factura ORDER BY tipo_factura_id ASC`
+      );
+
+      if (tiposFacturaRows && tiposFacturaRows.length > 0) {
+        const filtered = tiposFacturaRows.filter((tf) => {
+          if (tf.activo !== undefined && tf.activo !== null) return Boolean(tf.activo);
+          if (tf.estado !== undefined && tf.estado !== null) return String(tf.estado).toUpperCase() === "ACTIVO";
+          return true;
+        });
+
+        finalTiposFactura = (filtered.length > 0 ? filtered : tiposFacturaRows).map((tf) => ({
+          tipo_factura_id: Number(tf.tipo_factura_id),
+          codigo: String(tf.codigo || ""),
+          nombre: String(tf.nombre || ""),
+          descripcion: tf.descripcion || null,
+          activo: tf.activo !== undefined && tf.activo !== null ? Boolean(tf.activo) : (tf.estado ? String(tf.estado).toUpperCase() === "ACTIVO" : true)
+        }));
+      }
+    } catch (tfErr) {
+      console.warn("Fallo al consultar admin.tipo_factura, usando fallback:", tfErr);
+    }
+
+    // 2. Tipos de Pago (Seguro sin asumir columna activo)
+    interface TipoPagoItem {
+      tipo_pago_id: number;
+      codigo: string;
+      nombre: string;
+      descripcion: string | null;
+      activo: boolean;
+    }
+
+    const defaultTiposPago: TipoPagoItem[] = [
+      { tipo_pago_id: 1, codigo: "EFECTIVO", nombre: "Efectivo", descripcion: "Pago en efectivo", activo: true },
+      { tipo_pago_id: 2, codigo: "TARJETA", nombre: "Tarjeta", descripcion: "Pago con tarjeta de débito o crédito", activo: true },
+      { tipo_pago_id: 3, codigo: "TRANSFERENCIA", nombre: "Transferencia", descripcion: "Pago mediante transferencia bancaria", activo: true }
+    ];
+
+    let finalTiposPago: TipoPagoItem[] = defaultTiposPago;
+    try {
+      const tiposPagoRows = await query<TipoPagoDbRow>(
+        `SELECT * FROM admin.tipo_pago ORDER BY tipo_pago_id ASC`
+      );
+
+      if (tiposPagoRows && tiposPagoRows.length > 0) {
+        const filtered = tiposPagoRows.filter((tp) => {
+          if (tp.activo !== undefined && tp.activo !== null) return Boolean(tp.activo);
+          if (tp.estado !== undefined && tp.estado !== null) return String(tp.estado).toUpperCase() === "ACTIVO";
+          return true;
+        });
+
+        finalTiposPago = (filtered.length > 0 ? filtered : tiposPagoRows).map((tp) => ({
+          tipo_pago_id: Number(tp.tipo_pago_id),
+          codigo: String(tp.codigo || ""),
+          nombre: String(tp.nombre || ""),
+          descripcion: tp.descripcion || null,
+          activo: tp.activo !== undefined && tp.activo !== null ? Boolean(tp.activo) : (tp.estado ? String(tp.estado).toUpperCase() === "ACTIVO" : true)
+        }));
+      }
+    } catch (tpErr) {
+      console.warn("Fallo al consultar admin.tipo_pago, usando fallback:", tpErr);
+    }
 
     // 3. Almacenes Activos
     const almacenesRows = await query(
       `SELECT almacen_id, codigo, nombre, descripcion, estado
        FROM admin.almacenes
-       WHERE empresa_id = $1 AND UPPER(estado) = 'ACTIVO'
+       WHERE (empresa_id = $1 OR empresa_id IS NULL)
+         AND (UPPER(COALESCE(estado, 'ACTIVO')) = 'ACTIVO')
        ORDER BY codigo ASC, nombre ASC`,
       [empresaId]
     );
@@ -57,8 +143,8 @@ export async function GET() {
          p.codigo_barra,
          p.nombre,
          p.descripcion,
-         p.costo_actual::numeric AS costo_actual,
-         p.precio_venta::numeric AS precio_venta,
+         COALESCE(p.costo_actual, 0)::numeric AS costo_actual,
+         COALESCE(p.precio_venta, 0)::numeric AS precio_venta,
          p.imagen_url,
          p.unidad_medida_id,
          um.codigo AS unidad_codigo,
@@ -72,7 +158,8 @@ export async function GET() {
        LEFT JOIN admin.tipo_producto tp ON p.tipo_producto_id = tp.tipo_producto_id
        LEFT JOIN admin.categoria_producto cp ON p.categoria_producto_id = cp.categoria_producto_id
        LEFT JOIN admin.marca_producto mp ON p.marca_producto_id = mp.marca_producto_id
-       WHERE p.empresa_id = $1 AND UPPER(p.estado) = 'ACTIVO'
+       WHERE (p.empresa_id = $1 OR p.empresa_id IS NULL)
+         AND (UPPER(COALESCE(p.estado, 'ACTIVO')) = 'ACTIVO')
        ORDER BY p.nombre ASC`,
       [empresaId]
     );
@@ -83,13 +170,15 @@ export async function GET() {
          ep.existencia_producto_id,
          ep.producto_id,
          ep.almacen_id,
-         ep.cantidad_actual::numeric AS cantidad_actual,
+         COALESCE(ep.cantidad_actual, 0)::numeric AS cantidad_actual,
          COALESCE(ep.cantidad_reservada, 0)::numeric AS cantidad_reservada,
-         (ep.cantidad_actual - COALESCE(ep.cantidad_reservada, 0))::numeric AS cantidad_disponible,
+         (COALESCE(ep.cantidad_actual, 0) - COALESCE(ep.cantidad_reservada, 0))::numeric AS cantidad_disponible,
          COALESCE(ep.costo_promedio, 0)::numeric AS costo_promedio
        FROM admin.existencias_producto ep
        JOIN admin.almacenes a ON ep.almacen_id = a.almacen_id
-       WHERE ep.empresa_id = $1 AND UPPER(a.estado) = 'ACTIVO' AND UPPER(ep.estado) = 'ACTIVO'`,
+       WHERE (ep.empresa_id = $1 OR ep.empresa_id IS NULL)
+         AND (UPPER(COALESCE(a.estado, 'ACTIVO')) = 'ACTIVO')
+         AND (UPPER(COALESCE(ep.estado, 'ACTIVO')) = 'ACTIVO')`,
       [empresaId]
     );
 
@@ -152,37 +241,42 @@ export async function GET() {
       existencias: existenciasPorProducto[p.producto_id] || [],
     }));
 
-    // 6. Clientes activos (CRM)
+    // 6. Clientes activos (CRM) - Filtro real por fecha_eliminacion IS NULL (sin columna activo)
     const clientesRows = await query(
       `SELECT
          c.cliente_id,
          c.nombre,
          c.apellido,
-         c.nombre_completo,
+         COALESCE(c.nombre_completo, TRIM(CONCAT(c.nombre, ' ', c.apellido))) AS nombre_completo,
          c.identificacion,
          c.telefono_principal,
          c.correo
        FROM admin.clientes c
-       WHERE c.empresa_id = $1 AND c.fecha_eliminacion IS NULL AND (c.activo = true OR c.activo IS NULL)
-       ORDER BY c.nombre_completo ASC
-       LIMIT 300`,
+       WHERE (c.empresa_id = $1 OR c.empresa_id IS NULL)
+         AND c.fecha_eliminacion IS NULL
+       ORDER BY c.nombre_completo ASC NULLS LAST, c.cliente_id DESC
+       LIMIT 500`,
       [empresaId]
     );
 
     return NextResponse.json({
       success: true,
-      tipos_factura: tiposFacturaRows || [],
-      tipos_pago: tiposPagoRows || [],
+      tipos_factura: finalTiposFactura,
+      tipos_pago: finalTiposPago,
       almacenes: almacenesRows || [],
       productos: productosConStock,
       clientes: clientesRows || [],
       permisos: perms
     });
 
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMsg = error instanceof Error ? error.message : "Error desconocido";
     console.error("Error en GET /api/facturacion/catalogos:", error);
     return NextResponse.json(
-      { error: "SERVER_ERROR", message: "Error interno al cargar catálogos de facturación." },
+      {
+        error: "SERVER_ERROR",
+        message: errorMsg ? `Error al cargar catálogos: ${errorMsg}` : "Error interno al cargar catálogos de facturación."
+      },
       { status: 500 }
     );
   }

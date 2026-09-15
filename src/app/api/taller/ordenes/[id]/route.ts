@@ -11,6 +11,7 @@ import { queryIncompleteServicesAndTimers } from "@/lib/workshop/validateOrderSt
 import { recordUserActivity, recordUserAudit, computeDiff } from "@/lib/auditLogger";
 import { deleteWorkOrderWithSnapshot } from "@/lib/workshop/workOrderDeletionService";
 import { generarCodigoMovimiento, INVENTORY_SYSTEM_CODES } from "@/lib/inventory/inventoryConstants";
+import { getOrCreateInvoiceForWorkOrder } from "@/lib/billing/billingService";
 
 // Helper for cleaning dates safely
 function cleanFecha(val: any) {
@@ -149,7 +150,7 @@ export async function GET(
           ORDER BY f.factura_id DESC LIMIT 1
         ) AS factura_id,
         (
-          SELECT f.codigo_factura
+          SELECT f.numero_factura
           FROM admin.facturas f
           WHERE f.orden_trabajo_id = ot.orden_trabajo_id AND f.estado <> 'ANULADA'
           ORDER BY f.factura_id DESC LIMIT 1
@@ -867,6 +868,8 @@ export async function PUT(
       requestedStateId = estadoReparacionId;
     } else if (accion === "PONER_EN_HOLD" || accion === "HOLD") {
       requestedStateId = estadoHoldId;
+    } else if (accion === "ENTREGAR" || accion === "ENTREGAR_A_CLIENTE") {
+      requestedStateId = estadoEntregadaId;
     } else if (estado_orden_id !== undefined && estado_orden_id !== null && estado_orden_id !== "") {
       requestedStateId = parseInt(String(estado_orden_id), 10);
     }
@@ -1402,10 +1405,11 @@ export async function PUT(
     let historyComment = "";
     const isReopening = (targetStateId === estadoReparacionId && currentStateId === estadoListaEntregaId);
     let reopenedServiceCode: string | null = null;
+    let activeInvoiceRecord: any = null;
 
     if (targetStateId === estadoEntregadaId) {
-      // ATOMIC DELIVERY & INVOICING
-      // Validations:
+      // ATOMIC DELIVERY & INVOICING (FIX-FAC-TALLER-1)
+      // 1. Validations:
       if (currentStateId !== estadoListaEntregaId) {
         await client.query("ROLLBACK");
         return NextResponse.json(
@@ -1414,19 +1418,6 @@ export async function PUT(
             error: "ORDER_NOT_READY_FOR_DELIVERY",
             title: "Orden aún no disponible para entrega",
             message: "La orden debe estar lista para entrega antes de entregarla al cliente."
-          },
-          { status: 409 }
-        );
-      }
-
-      if (currentOrder.facturado || currentOrder.fecha_facturacion || currentOrder.usuario_facturacion_id) {
-        await client.query("ROLLBACK");
-        return NextResponse.json(
-          {
-            success: false,
-            error: "ORDER_ALREADY_INVOICED",
-            title: "Orden ya procesada",
-            message: "Esta orden ya fue entregada y facturada."
           },
           { status: 409 }
         );
@@ -1466,34 +1457,46 @@ export async function PUT(
         );
       }
 
-      const totalOrdenVal = parseFloat(currentOrder.total_orden || 0);
-      if (totalOrdenVal <= 0) {
+      // 2. Obtener o crear factura activa atómicamente con el motor central de billingService (Sección 8-13)
+      let invoiceResult: { factura: any; created: boolean };
+      try {
+        const obs = body.observacion_entrega || observacion_cambio_estado || observacion_interna || undefined;
+        invoiceResult = await getOrCreateInvoiceForWorkOrder({
+          orden_trabajo_id: ordenId,
+          empresa_id: session.empresa_id || Number(currentOrder.empresa_id || 1),
+          usuario_id: session.usuario_id,
+          observacion: typeof obs === "string" && obs.trim() ? obs.trim() : undefined
+        }, client);
+      } catch (invErr: any) {
         await client.query("ROLLBACK");
+        console.error("Error al obtener/crear factura en entrega de orden:", invErr);
         return NextResponse.json(
           {
             success: false,
-            error: "INVALID_ORDER_TOTAL",
-            title: "Total inválido",
-            message: "El total de la orden debe ser mayor que cero para realizar la entrega y facturación."
+            error: "INVOICE_CREATION_FAILED",
+            title: "Error de facturación",
+            message: invErr?.message || "No se pudo generar o validar la factura para la orden de trabajo."
           },
           { status: 409 }
         );
       }
 
+      activeInvoiceRecord = invoiceResult.factura;
+
+      // 3. Transición de estado a ENTREGADA y sincronización legacy facturado (Sección 1, 9, 12, 14)
       const updateDelivRes = await client.query(`
         UPDATE admin.ordenes_trabajo
         SET
           estado_orden_id = $1::integer,
           fecha_entrega_real = COALESCE(fecha_entrega_real, NOW()),
           facturado = true,
-          fecha_facturacion = NOW(),
-          usuario_facturacion_id = $2::integer,
+          fecha_facturacion = COALESCE(fecha_facturacion, NOW()),
+          usuario_facturacion_id = COALESCE(usuario_facturacion_id, $2::integer),
           fecha_actualizacion = NOW(),
           usuario_actualizacion = $2::integer,
           observacion_entrega = COALESCE($3, observacion_entrega)
         WHERE orden_trabajo_id = $4::integer
           AND estado_orden_id = $5::integer
-          AND (facturado = false OR facturado IS NULL)
         RETURNING
           orden_trabajo_id,
           codigo_orden,
@@ -1506,7 +1509,7 @@ export async function PUT(
       `, [
         estadoEntregadaId,
         session.usuario_id,
-        observacion_cambio_estado !== undefined ? observacion_cambio_estado : (observacion_interna !== undefined ? observacion_interna : null),
+        body.observacion_entrega !== undefined ? body.observacion_entrega : (observacion_cambio_estado !== undefined ? observacion_cambio_estado : (observacion_interna !== undefined ? observacion_interna : null)),
         ordenId,
         estadoListaEntregaId
       ]);
@@ -1516,16 +1519,17 @@ export async function PUT(
         return NextResponse.json(
           {
             success: false,
-            error: "ORDER_ALREADY_INVOICED",
+            error: "ORDER_STATE_CONFLICT",
             title: "Orden ya procesada",
-            message: "La orden no pudo entregarse porque ya fue procesada o su estado cambió."
+            message: "La orden no pudo entregarse porque su estado cambió simultáneamente."
           },
           { status: 409 }
         );
       }
 
-      const formattedTotal = Number(currentOrder.total_orden || 0).toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      historyComment = `Orden entregada al cliente y marcada como facturada por ${sessionUserName}. Total: RD$ ${formattedTotal}.`;
+      const invoiceCode = activeInvoiceRecord.numero_factura || activeInvoiceRecord.codigo_factura || `FAC-#${activeInvoiceRecord.factura_id}`;
+      const actionDesc = invoiceResult.created ? "facturada automáticamente" : "asociada a factura existente";
+      historyComment = `Orden entregada al cliente y ${actionDesc} (${invoiceCode}) por ${sessionUserName}.`;
 
     } else if (targetStateId === estadoReparacionId && currentStateId === estadoListaEntregaId) {
       // REOPENING FROM LISTA_ENTREGA TO REPARACION (REABRIR REPARACION)
@@ -1833,6 +1837,8 @@ export async function PUT(
       successMessage = "La reparación fue iniciada correctamente.";
     } else if (targetStateId === estadoListaEntregaId) {
       successMessage = "La orden fue marcada como lista para entrega.";
+    } else if (targetStateId === estadoEntregadaId) {
+      successMessage = "La orden fue entregada al cliente exitosamente.";
     }
 
     return NextResponse.json({
@@ -1855,7 +1861,12 @@ export async function PUT(
           usuario_id: effectiveMecanicoId,
           nombre: mecanicoNombre,
           cargo: mecanicoCargo
-        }
+        },
+        factura: activeInvoiceRecord ? {
+          factura_id: activeInvoiceRecord.factura_id,
+          codigo_factura: activeInvoiceRecord.numero_factura || activeInvoiceRecord.codigo_factura,
+          numero_factura: activeInvoiceRecord.numero_factura || activeInvoiceRecord.codigo_factura
+        } : null
       }
     }, { status: 200 });
 

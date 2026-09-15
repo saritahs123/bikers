@@ -69,6 +69,13 @@ export interface AnularFacturaInput {
   usuario_id: number;
 }
 
+export interface GetOrCreateInvoiceForWorkOrderInput {
+  orden_trabajo_id: number;
+  empresa_id: number;
+  usuario_id: number;
+  observacion?: string | null;
+}
+
 export interface FacturaRow {
   factura_id: number;
   empresa_id: number;

@@ -73,7 +73,7 @@ export async function getWorkshopSession(): Promise<WorkshopSession | null> {
       nombre_usuario: `${u.nombre || ''} ${u.apellido || ''}`.trim() || u.email || 'Usuario',
       email: u.email || ''
     };
-  } catch (err) {
+  } catch {
     return null;
   }
 }
@@ -119,7 +119,10 @@ export async function getModulePermissions(
          COALESCE(BOOL_OR(m.puede_eliminar), false) AS puede_eliminar
        FROM admin.matriz_acceso_rol m
        JOIN admin.modulo_sistema mod ON mod.modulo_sistema_id = m.modulo_sistema_id
-       WHERE ${isId ? 'mod.modulo_sistema_id = $1' : 'UPPER(mod.nombre) = UPPER($1)'}
+       WHERE ${isId ? 'mod.modulo_sistema_id = $1' : `(
+           UPPER(mod.nombre) = UPPER($1)
+           OR UPPER(TRANSLATE(mod.nombre, 'ÁÉÍÓÚáéíóú', 'AEIOUaeiou')) = UPPER(TRANSLATE($1, 'ÁÉÍÓÚáéíóú', 'AEIOUaeiou'))
+         )`}
          AND m.rol_funcional_id IN (
            SELECT rol_principal_id FROM admin.usuario WHERE usuario_id = $2 AND rol_principal_id IS NOT NULL
            UNION
@@ -147,7 +150,7 @@ export async function getModulePermissions(
       puede_reabrir: Boolean(r.puede_reabrir),
       puede_eliminar: Boolean(r.puede_eliminar)
     };
-  } catch (err) {
+  } catch {
     return noPerms;
   }
 }

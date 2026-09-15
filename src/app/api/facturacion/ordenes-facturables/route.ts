@@ -104,7 +104,7 @@ export async function GET(request: Request) {
         ot.codigo_orden,
         ot.cliente_id,
         ot.bicicleta_id,
-        ot.empresa_id,
+        c.empresa_id,
         ot.estado_orden_id,
         eot.codigo AS estado_codigo,
         eot.nombre AS estado_nombre,
@@ -126,13 +126,12 @@ export async function GET(request: Request) {
       JOIN admin.clientes c ON ot.cliente_id = c.cliente_id
       LEFT JOIN admin.bicicletas b ON ot.bicicleta_id = b.bicicleta_id
       LEFT JOIN admin.estado_orden_trabajo eot ON ot.estado_orden_id = eot.estado_orden_id
-      WHERE ot.empresa_id = $1
+      WHERE c.empresa_id = $1
         AND (ot.activo IS DISTINCT FROM false)
         AND (eot.codigo = 'LISTA_ENTREGA' OR ot.estado_orden_id = 7)
         AND NOT EXISTS (
           SELECT 1 FROM admin.facturas f
           WHERE f.orden_trabajo_id = ot.orden_trabajo_id
-            AND f.empresa_id = $1
             AND f.estado <> 'ANULADA'
         )
         ${searchCondition}
@@ -196,7 +195,6 @@ export async function GET(request: Request) {
       LEFT JOIN admin.productos p ON op.producto_id = p.producto_id
       LEFT JOIN admin.existencias_producto ep ON (ep.producto_id = op.producto_id AND ep.almacen_id = op.almacen_id)
       WHERE op.orden_trabajo_id = ANY($1::int[])
-        AND (op.activo IS DISTINCT FROM false)
         AND op.utilizado = true
       ORDER BY op.orden_producto_id ASC;
     `;
