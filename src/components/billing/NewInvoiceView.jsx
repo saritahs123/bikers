@@ -4,8 +4,6 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import Link from "next/link";
 import {
   Receipt,
-  FileText,
-  Warehouse,
   User,
   Search,
   ChevronDown,
@@ -23,13 +21,18 @@ import {
   Lock,
   Bike
 } from "lucide-react";
+import CustomerFormDrawer from "@/components/crm/CustomerFormDrawer";
 import ProductCreateModal from "@/components/products/ProductCreateModal";
 import SelectWorkOrderModal from "@/components/billing/SelectWorkOrderModal";
 
 export default function NewInvoiceView() {
   // Modal Crear Producto
   const [isCreateProductModalOpen, setIsCreateProductModalOpen] = useState(false);
-  const [canCreateProduct, setCanCreateProduct] = useState(false);
+  const [canCreateProduct, setCanCreateProduct] = useState(true);
+
+  // Modal Crear Cliente CRM
+  const [isCreateCustomerModalOpen, setIsCreateCustomerModalOpen] = useState(false);
+  const [canCreateClient, setCanCreateClient] = useState(true);
 
   // Modal Traer Orden de Trabajo (FAC-3)
   const [isSelectWorkOrderModalOpen, setIsSelectWorkOrderModalOpen] = useState(false);
@@ -47,18 +50,17 @@ export default function NewInvoiceView() {
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState(null);
 
-  // Cabecera de la factura
+  // Cabecera de la factura (Tipo Factura en Cliente, Almacén y Fecha automáticos)
   const [tipoFacturaId, setTipoFacturaId] = useState("");
-  const [almacenId, setAlmacenId] = useState("");
   const [observacion, setObservacion] = useState("");
 
   // Cliente seleccionado y búsqueda
   const [clientSearch, setClientSearch] = useState("");
   const [clientDropdownOpen, setClientDropdownOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState(null);
-  const clientSearchRef = useRef(null);
+  const clientDropdownRef = useRef(null);
 
-  // Formulario para agregar línea de producto
+  // Formulario para agregar línea de producto (Almacén interno transparente)
   const [productSearch, setProductSearch] = useState("");
   const [productDropdownOpen, setProductDropdownOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
@@ -66,7 +68,44 @@ export default function NewInvoiceView() {
   const [lineCantidad, setLineCantidad] = useState("1");
   const [linePrecio, setLinePrecio] = useState("");
   const [lineDescuento, setLineDescuento] = useState("0");
-  const productSearchRef = useRef(null);
+  const productDropdownRef = useRef(null);
+
+  // Control de dropdowns: cerrar uno al abrir otro (regla 5)
+  const openClientDropdown = useCallback(() => {
+    setProductDropdownOpen(false);
+    setClientDropdownOpen(true);
+  }, []);
+
+  const openProductDropdown = useCallback(() => {
+    setClientDropdownOpen(false);
+    setProductDropdownOpen(true);
+  }, []);
+
+  // Click outside y tecla Escape para cerrar dropdowns de forma segura sin race conditions (reglas 2, 3, 4)
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (clientDropdownRef.current && !clientDropdownRef.current.contains(e.target)) {
+        setClientDropdownOpen(false);
+      }
+      if (productDropdownRef.current && !productDropdownRef.current.contains(e.target)) {
+        setProductDropdownOpen(false);
+      }
+    };
+
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setClientDropdownOpen(false);
+        setProductDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
 
   // Detalle multiproducto
   const [lineas, setLineas] = useState([]);
@@ -99,25 +138,21 @@ export default function NewInvoiceView() {
       setClientes(data.clientes || []);
       setPermisos(data.permisos || null);
 
-      // Tipo Factura VENTA_DIRECTA por defecto
-      const ventaDirecta = (data.tipos_factura || []).find((tf) => tf.codigo === "VENTA_DIRECTA");
-      if (ventaDirecta) {
-        setTipoFacturaId(String(ventaDirecta.tipo_factura_id));
-      } else if ((data.tipos_factura || []).length > 0) {
-        setTipoFacturaId(String(data.tipos_factura[0].tipo_factura_id));
-      }
+      // Tipo Factura VENTA_DIRECTA por defecto (solo si no hay tipo seleccionado)
+      setTipoFacturaId((prev) => {
+        if (prev) return prev;
+        const ventaDirecta = (data.tipos_factura || []).find((tf) => tf.codigo === "VENTA_DIRECTA");
+        if (ventaDirecta) return String(ventaDirecta.tipo_factura_id);
+        if ((data.tipos_factura || []).length > 0) return String(data.tipos_factura[0].tipo_factura_id);
+        return "";
+      });
 
-      // Almacén por defecto
-      if ((data.almacenes || []).length > 0 && !almacenId) {
-        const defaultAlm = String(data.almacenes[0].almacen_id);
-        setAlmacenId(defaultAlm);
-        setLineAlmacenId(defaultAlm);
-      }
-
-      // Tipo de pago por defecto
-      if ((data.tipos_pago || []).length > 0 && !tipoPagoId) {
-        setTipoPagoId(String(data.tipos_pago[0].tipo_pago_id));
-      }
+      // Tipo de pago por defecto (solo si no hay tipo seleccionado)
+      setTipoPagoId((prev) => {
+        if (prev) return prev;
+        if ((data.tipos_pago || []).length > 0) return String(data.tipos_pago[0].tipo_pago_id);
+        return "";
+      });
     } catch {
       setFeedback({
         type: "error",
@@ -126,36 +161,49 @@ export default function NewInvoiceView() {
     } finally {
       setLoadingCatalogos(false);
     }
-  }, [almacenId, tipoPagoId]);
+  }, []);
 
-  // Verificar permisos de productos
+  // Verificar permisos de productos (TALLER.puede_crear)
   useEffect(() => {
     const checkProductPermissions = async () => {
       try {
         const res = await fetch("/api/taller/productos");
-        if (res.ok) {
+        const permCrear = res.headers.get("x-perm-crear");
+        if (permCrear !== null) {
+          setCanCreateProduct(permCrear === "true");
+        } else if (res.ok) {
           const data = await res.json();
           if (data.canCreate !== undefined) {
             setCanCreateProduct(Boolean(data.canCreate));
           }
         }
       } catch {
-        setCanCreateProduct(false);
+        // En caso de error de red mantener fallback
       }
     };
     checkProductPermissions();
+  }, []);
+
+  // Verificar permisos de clientes en CRM (x-perm-crear)
+  useEffect(() => {
+    const checkCrmPermissions = async () => {
+      try {
+        const res = await fetch("/api/crm/clientes");
+        const permCrear = res.headers.get("x-perm-crear");
+        if (permCrear !== null) {
+          setCanCreateClient(permCrear === "true");
+        }
+      } catch {
+        // En caso de error de red mantener fallback
+      }
+    };
+    checkCrmPermissions();
   }, []);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadCatalogos();
   }, [loadCatalogos]);
-
-  // Sincronizar almacén de línea con almacén general si no ha cambiado
-  const handleGeneralAlmacenChange = (newAlmacenId) => {
-    setAlmacenId(newAlmacenId);
-    setLineAlmacenId(newAlmacenId);
-  };
 
   // Filtrar clientes
   const filteredClients = useMemo(() => {
@@ -185,7 +233,82 @@ export default function NewInvoiceView() {
     setClientSearch("");
   };
 
-  // Stock disponible del producto seleccionado en el almacén de línea
+  // Callback cuando se crea cliente nuevo desde CustomerFormDrawer
+  const handleCustomerCreated = useCallback(async (newClient) => {
+    setIsCreateCustomerModalOpen(false);
+
+    try {
+      const res = await fetch("/api/crm/clientes");
+      if (res.ok) {
+        const data = await res.json();
+        const clientList = Array.isArray(data) ? data : (data?.data || []);
+        setClientes(clientList);
+      }
+    } catch (err) {
+      console.error("Error refrescando clientes:", err);
+    }
+
+    if (newClient) {
+      const cid = newClient.cliente_id || newClient.id;
+      const formattedClient = {
+        cliente_id: cid,
+        id: cid,
+        nombre_completo:
+          newClient.nombre_completo ||
+          `${newClient.nombre || ""} ${newClient.apellido || ""}`.trim() ||
+          "Nuevo Cliente",
+        identificacion: newClient.identificacion || "",
+        telefono_principal: newClient.telefono_principal || "",
+        correo: newClient.correo || "",
+      };
+
+      setClientes((prev) => {
+        const exists = prev.some((c) => String(c.cliente_id) === String(cid));
+        return exists ? prev : [formattedClient, ...prev];
+      });
+
+      setSelectedClient(formattedClient);
+      setClientSearch("");
+      setClientDropdownOpen(false);
+    }
+  }, []);
+
+  // Resolver almacén automáticamente usando stock disponible y reglas de inventario
+  const resolveProductAlmacen = useCallback((product) => {
+    if (!product) return null;
+
+    const existenciasConStock = (product.existencias || []).filter(
+      (e) => Number(e.cantidad_disponible || 0) > 0
+    );
+
+    // 1. Si el producto tiene stock en un solo almacén: usar ese
+    if (existenciasConStock.length === 1) {
+      return Number(existenciasConStock[0].almacen_id);
+    }
+
+    // 2. Si tiene stock en varios almacenes: usar el almacén con mayor stock disponible
+    if (existenciasConStock.length > 1) {
+      const sorted = [...existenciasConStock].sort((a, b) => {
+        const diff = Number(b.cantidad_disponible || 0) - Number(a.cantidad_disponible || 0);
+        if (diff !== 0) return diff;
+        return Number(a.almacen_id || 0) - Number(b.almacen_id || 0);
+      });
+      return Number(sorted[0].almacen_id);
+    }
+
+    // 3. Si no tiene stock disponible en ningún almacén: fallback al primer almacén asignado o catálogo general
+    if (product.existencias && product.existencias.length > 0) {
+      return Number(product.existencias[0].almacen_id);
+    }
+
+    if (almacenes && almacenes.length > 0) {
+      return Number(almacenes[0].almacen_id);
+    }
+
+    return null;
+  }, [almacenes]);
+
+  // Stock disponible del producto seleccionado en el almacén resuelto
   const selectedProductStock = useMemo(() => {
     if (!selectedProduct || !lineAlmacenId) return 0;
     const exist = (selectedProduct.existencias || []).find(
@@ -208,34 +331,56 @@ export default function NewInvoiceView() {
       .slice(0, 15);
   }, [productos, productSearch]);
 
-  // Seleccionar producto para el formulario de línea
-  const handleSelectProduct = (product) => {
+  // Seleccionar producto para el formulario de línea (resuelve almacén internamente)
+  const handleSelectProduct = useCallback((product) => {
     setSelectedProduct(product);
     setProductSearch("");
     setProductDropdownOpen(false);
     setLinePrecio(String(product.precio_venta || "0"));
     setLineCantidad("1");
     setLineDescuento("0");
-  };
+    const autoAlmId = resolveProductAlmacen(product);
+    setLineAlmacenId(autoAlmId ? String(autoAlmId) : "");
+  }, [resolveProductAlmacen]);
 
   // Callback cuando se crea producto nuevo desde ProductCreateModal
-  const handleProductCreated = async (newProduct) => {
+  const handleProductCreated = useCallback(async (newProduct) => {
     setIsCreateProductModalOpen(false);
-    await loadCatalogos();
-    if (newProduct) {
-      handleSelectProduct(newProduct);
-    }
-  };
 
-  // Agregar línea a la tabla
+    let freshCatalogProducts = [];
+    try {
+      const res = await fetch("/api/facturacion/catalogos");
+      if (res.ok) {
+        const data = await res.json();
+        freshCatalogProducts = data.productos || [];
+        setProductos(freshCatalogProducts);
+      }
+    } catch (err) {
+      console.error("Error refrescando productos:", err);
+    }
+
+    if (newProduct) {
+      const pid = newProduct.producto_id || newProduct.id;
+      const match = freshCatalogProducts.find((p) => String(p.producto_id) === String(pid));
+      if (match) {
+        handleSelectProduct(match);
+      } else {
+        handleSelectProduct(newProduct);
+      }
+    }
+  }, [handleSelectProduct]);
+
+  // Agregar línea a la tabla (almacén transparente)
   const handleAddLine = (e) => {
     e.preventDefault();
     if (!selectedProduct) {
       setFeedback({ type: "error", message: "Selecciona un producto para agregar a la factura." });
       return;
     }
-    if (!lineAlmacenId) {
-      setFeedback({ type: "error", message: "Selecciona el almacén de origen del producto." });
+
+    const resolvedAlmacenId = lineAlmacenId || resolveProductAlmacen(selectedProduct);
+    if (!resolvedAlmacenId) {
+      setFeedback({ type: "error", message: "No se pudo determinar el almacén para el producto seleccionado." });
       return;
     }
 
@@ -271,24 +416,24 @@ export default function NewInvoiceView() {
       return;
     }
 
-    // Validar disponibilidad previa en el almacén seleccionado
+    // Validar disponibilidad previa en el almacén resuelto
     if (cant > selectedProductStock) {
       setFeedback({
         type: "error",
-        message: `Stock insuficiente: El producto solo tiene ${selectedProductStock} disponible(s) en este almacén. Solicitado: ${cant}.`,
+        message: `Stock insuficiente: El producto solo tiene ${selectedProductStock} disponible(s) en almacén. Solicitado: ${cant}.`,
       });
       return;
     }
 
     const subtotalLinea = parseFloat(((cant * prec) - desc).toFixed(2));
-    const targetAlm = almacenes.find((a) => String(a.almacen_id) === String(lineAlmacenId));
+    const targetAlm = almacenes.find((a) => String(a.almacen_id) === String(resolvedAlmacenId));
 
     const nuevaLinea = {
-      tempId: `${selectedProduct.producto_id}-${lineAlmacenId}-${Date.now()}`,
+      tempId: `${selectedProduct.producto_id}-${resolvedAlmacenId}-${Date.now()}`,
       tipo_linea: "PRODUCTO",
       producto_id: selectedProduct.producto_id,
-      almacen_id: Number(lineAlmacenId),
-      almacen_nombre: targetAlm ? targetAlm.nombre : `Almacén #${lineAlmacenId}`,
+      almacen_id: Number(resolvedAlmacenId),
+      almacen_nombre: targetAlm ? targetAlm.nombre : `Almacén #${resolvedAlmacenId}`,
       codigo: selectedProduct.codigo_producto,
       descripcion: selectedProduct.nombre,
       cantidad: cant,
@@ -302,6 +447,7 @@ export default function NewInvoiceView() {
 
     setLineas((prev) => [...prev, nuevaLinea]);
     setSelectedProduct(null);
+    setLineAlmacenId("");
     setLineCantidad("1");
     setLinePrecio("");
     setLineDescuento("0");
@@ -707,21 +853,29 @@ export default function NewInvoiceView() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* COLUMNA IZQUIERDA (span 8): Datos de Factura, Cliente, Productos y Líneas */}
         <div className="lg:col-span-7 xl:col-span-8 space-y-6">
-          {/* Card: Datos Generales */}
+          {/* Card: Cliente (CRM) y Tipo de Factura */}
           <div className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
-            <div className="flex items-center justify-between border-b border-border/60 pb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/60 pb-3">
               <div className="flex items-center gap-2">
-                <FileText className="w-4 h-4 text-primary" />
-                <h2 className="text-sm font-semibold text-foreground">Datos de la Venta</h2>
+                <User className="w-4 h-4 text-primary" />
+                <h2 className="text-sm font-semibold text-foreground">Cliente (CRM)</h2>
               </div>
               <div className="flex items-center gap-2">
                 {loadingCatalogos && (
                   <span className="text-[10px] text-foreground-muted font-mono animate-pulse">Cargando datos...</span>
                 )}
+                <label className="text-xs text-foreground-secondary font-medium whitespace-nowrap">
+                  Tipo de Factura:
+                </label>
                 <select
                   value={tipoFacturaId}
-                  onChange={(e) => setTipoFacturaId(e.target.value)}
-                  className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-primary/10 text-primary border border-primary/30 focus:outline-none cursor-pointer"
+                  onChange={(e) => {
+                    if (!ordenTrabajo) {
+                      setTipoFacturaId(e.target.value);
+                    }
+                  }}
+                  disabled={Boolean(ordenTrabajo)}
+                  className="px-2.5 py-1 rounded text-xs font-mono font-bold uppercase bg-primary/10 text-primary border border-primary/30 focus:outline-none cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {tiposFactura.map((tf) => (
                     <option key={tf.tipo_factura_id} value={tf.tipo_factura_id} className="bg-surface text-foreground font-sans">
@@ -737,57 +891,6 @@ export default function NewInvoiceView() {
                 Tu rol de usuario no cuenta con permisos para crear facturas.
               </div>
             )}
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Almacén General */}
-              <div>
-                <label className="block text-xs font-medium text-foreground-secondary mb-1.5">
-                  Almacén de Despacho <span className="text-error">*</span>
-                </label>
-                <div className="relative">
-                  <Warehouse className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-muted pointer-events-none" />
-                  <select
-                    value={almacenId}
-                    onChange={(e) => handleGeneralAlmacenChange(e.target.value)}
-                    className="w-full pl-9 pr-8 py-2 text-xs bg-input border border-border rounded-lg text-foreground focus:outline-none focus:border-primary transition-colors cursor-pointer"
-                  >
-                    {almacenes.map((a) => (
-                      <option key={a.almacen_id} value={a.almacen_id}>
-                        {a.codigo} — {a.nombre}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Fecha */}
-              <div>
-                <label className="block text-xs font-medium text-foreground-secondary mb-1.5">
-                  Fecha de Factura
-                </label>
-                <input
-                  type="text"
-                  disabled
-                  value={new Date().toLocaleDateString("es-DO", {
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                  })}
-                  className="w-full px-3.5 py-2 text-xs bg-surface/50 border border-border rounded-lg text-foreground-muted font-mono"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Card: Cliente */}
-          <div className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
-            <div className="flex items-center justify-between border-b border-border/60 pb-3">
-              <div className="flex items-center gap-2">
-                <User className="w-4 h-4 text-primary" />
-                <h2 className="text-sm font-semibold text-foreground">Cliente (CRM)</h2>
-              </div>
-              <span className="text-[11px] text-foreground-muted">Opcional para venta al consumidor</span>
-            </div>
 
             {selectedClient ? (
               <div className="flex items-center justify-between p-3 rounded-lg bg-surface border border-primary/30">
@@ -835,50 +938,67 @@ export default function NewInvoiceView() {
                 )}
               </div>
             ) : (
-              <div className="relative" ref={clientSearchRef}>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-muted pointer-events-none" />
-                  <input
-                    type="text"
-                    value={clientSearch}
-                    onChange={(e) => {
-                      setClientSearch(e.target.value);
-                      setClientDropdownOpen(true);
-                    }}
-                    onFocus={() => setClientDropdownOpen(true)}
-                    placeholder="Buscar cliente por nombre, cédula o teléfono..."
-                    className="w-full pl-9 pr-8 py-2 text-xs bg-input border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-primary transition-colors"
-                  />
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-muted pointer-events-none" />
-                </div>
+              <div className="space-y-1.5">
+                <label className="block text-xs font-medium text-foreground-secondary">
+                  Cliente <span className="text-[11px] text-foreground-muted font-normal">(Opcional para venta al consumidor)</span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1" ref={clientDropdownRef}>
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-muted pointer-events-none" />
+                    <input
+                      type="text"
+                      value={clientSearch}
+                      onChange={(e) => {
+                        setClientSearch(e.target.value);
+                        openClientDropdown();
+                      }}
+                      onFocus={openClientDropdown}
+                      placeholder="Buscar cliente por nombre, cédula o teléfono..."
+                      className="w-full pl-9 pr-8 py-2 text-xs bg-input border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-primary transition-colors"
+                    />
+                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-muted pointer-events-none" />
 
-                {clientDropdownOpen && (
-                  <div className="absolute left-0 right-0 top-full mt-1 bg-surface border border-border rounded-lg shadow-lg z-30 max-h-56 overflow-y-auto font-mono text-xs">
-                    {filteredClients.length > 0 ? (
-                      filteredClients.map((c) => (
-                        <div
-                          key={c.cliente_id}
-                          onClick={() => handleSelectClient(c)}
-                          className="px-3.5 py-2 hover:bg-hover cursor-pointer border-b border-border/40 last:border-0 flex items-center justify-between"
-                        >
-                          <div>
-                            <div className="font-semibold text-foreground font-sans">
-                              {c.nombre_completo}
+                    {clientDropdownOpen && (
+                      <div className="absolute left-0 right-0 top-full mt-1 bg-surface border border-border rounded-lg shadow-lg z-30 max-h-56 overflow-y-auto font-mono text-xs">
+                        {filteredClients.length > 0 ? (
+                          filteredClients.map((c) => (
+                            <div
+                              key={c.cliente_id}
+                              onClick={() => handleSelectClient(c)}
+                              className="px-3.5 py-2 hover:bg-hover cursor-pointer border-b border-border/40 last:border-0 flex items-center justify-between"
+                            >
+                              <div>
+                                <div className="font-semibold text-foreground font-sans">
+                                  {c.nombre_completo}
+                                </div>
+                                <div className="text-[10px] text-foreground-muted">
+                                  {c.identificacion || "Sin RNC/Cédula"} • Tel: {c.telefono_principal || "N/A"}
+                                </div>
+                              </div>
+                              <span className="text-[10px] text-primary">Seleccionar</span>
                             </div>
-                            <div className="text-[10px] text-foreground-muted">
-                              {c.identificacion || "Sin RNC/Cédula"} • Tel: {c.telefono_principal || "N/A"}
-                            </div>
+                          ))
+                        ) : (
+                          <div className="px-3 py-2 text-center text-foreground-muted text-[11px]">
+                            No se encontraron clientes con ese criterio.
                           </div>
-                          <span className="text-[10px] text-primary">Seleccionar</span>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="px-3 py-2 text-center text-foreground-muted text-[11px]">
-                        No se encontraron clientes con ese criterio.
+                        )}
                       </div>
                     )}
                   </div>
-                )}
+
+                  {canCreateClient && (
+                    <button
+                      type="button"
+                      onClick={() => setIsCreateCustomerModalOpen(true)}
+                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-surface hover:bg-hover text-primary border border-primary/30 hover:border-primary transition-all cursor-pointer whitespace-nowrap shadow-sm shrink-0"
+                      title="Crear nuevo cliente"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>+ Nuevo Cliente</span>
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -890,110 +1010,101 @@ export default function NewInvoiceView() {
                 <Package className="w-4 h-4 text-primary" />
                 <h2 className="text-sm font-semibold text-foreground">Agregar Productos</h2>
               </div>
-              {canCreateProduct && (
-                <button
-                  type="button"
-                  onClick={() => setIsCreateProductModalOpen(true)}
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Crear producto</span>
-                </button>
-              )}
             </div>
 
-            {/* Buscador de Producto */}
-            <div className="relative" ref={productSearchRef}>
+            {/* Buscador de Producto con botón Crear Producto */}
+            <div className="space-y-1.5">
               <label className="block text-xs font-medium text-foreground-secondary mb-1">
                 Seleccionar Producto <span className="text-error">*</span>
               </label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-muted pointer-events-none" />
-                <input
-                  type="text"
-                  value={selectedProduct ? `${selectedProduct.codigo_producto} — ${selectedProduct.nombre}` : productSearch}
-                  onChange={(e) => {
-                    setSelectedProduct(null);
-                    setProductSearch(e.target.value);
-                    setProductDropdownOpen(true);
-                  }}
-                  onFocus={() => setProductDropdownOpen(true)}
-                  placeholder="Buscar producto por código, nombre o código de barra..."
-                  className="w-full pl-9 pr-8 py-2 text-xs bg-input border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-primary transition-colors"
-                />
-                {selectedProduct && (
-                  <button
-                    type="button"
-                    onClick={() => {
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1" ref={productDropdownRef}>
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-muted pointer-events-none" />
+                  <input
+                    type="text"
+                    value={selectedProduct ? `${selectedProduct.codigo_producto} — ${selectedProduct.nombre}` : productSearch}
+                    onChange={(e) => {
                       setSelectedProduct(null);
-                      setProductSearch("");
+                      setLineAlmacenId("");
+                      setProductSearch(e.target.value);
+                      openProductDropdown();
                     }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground-muted hover:text-foreground"
-                  >
-                    ✕
-                  </button>
-                )}
-              </div>
+                    onFocus={openProductDropdown}
+                    placeholder="Buscar producto por código, nombre o código de barra..."
+                    className="w-full pl-9 pr-8 py-2 text-xs bg-input border border-border rounded-lg text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-primary transition-colors"
+                  />
+                  {selectedProduct && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedProduct(null);
+                        setLineAlmacenId("");
+                        setProductSearch("");
+                        setProductDropdownOpen(false);
+                      }}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground-muted hover:text-foreground"
+                    >
+                      ✕
+                    </button>
+                  )}
 
-              {productDropdownOpen && !selectedProduct && (
-                <div className="absolute left-0 right-0 top-full mt-1 bg-surface border border-border rounded-lg shadow-lg z-30 max-h-56 overflow-y-auto text-xs font-mono">
-                  {filteredProducts.length > 0 ? (
-                    filteredProducts.map((p) => {
-                      const exist = (p.existencias || []).find(
-                        (e) => String(e.almacen_id) === String(lineAlmacenId)
-                      );
-                      const disp = exist ? Number(exist.cantidad_disponible || 0) : 0;
+                  {productDropdownOpen && !selectedProduct && (
+                    <div className="absolute left-0 right-0 top-full mt-1 bg-surface border border-border rounded-lg shadow-lg z-30 max-h-56 overflow-y-auto text-xs font-mono">
+                      {filteredProducts.length > 0 ? (
+                        filteredProducts.map((p) => {
+                          const autoAlmId = resolveProductAlmacen(p);
+                          const exist = (p.existencias || []).find(
+                            (e) => String(e.almacen_id) === String(autoAlmId)
+                          );
+                          const disp = exist ? Number(exist.cantidad_disponible || 0) : 0;
 
-                      return (
-                        <div
-                          key={p.producto_id}
-                          onClick={() => handleSelectProduct(p)}
-                          className="px-3.5 py-2 hover:bg-hover cursor-pointer border-b border-border/40 last:border-0 flex items-center justify-between"
-                        >
-                          <div className="space-y-0.5">
-                            <div className="font-semibold text-foreground font-sans">
-                              <span className="text-primary mr-2 font-mono">{p.codigo_producto}</span>
-                              {p.nombre}
+                          return (
+                            <div
+                              key={p.producto_id}
+                              onClick={() => handleSelectProduct(p)}
+                              className="px-3.5 py-2 hover:bg-hover cursor-pointer border-b border-border/40 last:border-0 flex items-center justify-between"
+                            >
+                              <div className="space-y-0.5">
+                                <div className="font-semibold text-foreground font-sans">
+                                  <span className="text-primary mr-2 font-mono">{p.codigo_producto}</span>
+                                  {p.nombre}
+                                </div>
+                                <div className="text-[10px] text-foreground-muted">
+                                  Precio: RD$ {Number(p.precio_venta || 0).toFixed(2)} • Disp:{" "}
+                                  <span className={disp > 0 ? "text-emerald-400 font-bold" : "text-error font-bold"}>
+                                    {disp} {p.unidad_codigo || "UND"}
+                                  </span>
+                                </div>
+                              </div>
+                              <span className="text-[10px] text-primary">Elegir</span>
                             </div>
-                            <div className="text-[10px] text-foreground-muted">
-                              Precio: RD$ {Number(p.precio_venta || 0).toFixed(2)} • Disp:{" "}
-                              <span className={disp > 0 ? "text-emerald-400 font-bold" : "text-error font-bold"}>
-                                {disp} {p.unidad_codigo || "UND"}
-                              </span>
-                            </div>
-                          </div>
-                          <span className="text-[10px] text-primary">Elegir</span>
+                          );
+                        })
+                      ) : (
+                        <div className="px-3 py-2 text-center text-foreground-muted text-[11px]">
+                          No se encontraron productos disponibles.
                         </div>
-                      );
-                    })
-                  ) : (
-                    <div className="px-3 py-2 text-center text-foreground-muted text-[11px]">
-                      No se encontraron productos disponibles.
+                      )}
                     </div>
                   )}
                 </div>
-              )}
+
+                {canCreateProduct && (
+                  <button
+                    type="button"
+                    onClick={() => setIsCreateProductModalOpen(true)}
+                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-surface hover:bg-hover text-primary border border-primary/30 hover:border-primary transition-all cursor-pointer whitespace-nowrap shadow-sm shrink-0"
+                    title="Crear nuevo producto"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>+ Crear producto</span>
+                  </button>
+                )}
+              </div>
             </div>
 
-            {/* Inputs de Línea: Cantidad, Precio Venta, Descuento, Almacén */}
-            <form onSubmit={handleAddLine} className="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-2">
-              <div>
-                <label className="block text-[11px] font-medium text-foreground-secondary mb-1">
-                  Almacén Línea
-                </label>
-                <select
-                  value={lineAlmacenId}
-                  onChange={(e) => setLineAlmacenId(e.target.value)}
-                  className="w-full px-2.5 py-1.5 text-xs bg-input border border-border rounded-lg text-foreground focus:outline-none focus:border-primary"
-                >
-                  {almacenes.map((a) => (
-                    <option key={a.almacen_id} value={a.almacen_id}>
-                      {a.codigo}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
+            {/* Inputs de Línea: Cantidad, Precio Venta, Descuento (Almacén transparente) */}
+            <form onSubmit={handleAddLine} className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
               <div>
                 <label className="block text-[11px] font-medium text-foreground-secondary mb-1">
                   Cantidad {selectedProduct && `(Disp: ${selectedProductStock})`}
@@ -1045,7 +1156,7 @@ export default function NewInvoiceView() {
               </div>
             </form>
 
-            {/* Tabla Multiproducto de Detalle */}
+            {/* Tabla Multiproducto de Detalle (Sin columna Almacén) */}
             <div className="border border-border rounded-lg overflow-hidden mt-4">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse">
@@ -1054,7 +1165,6 @@ export default function NewInvoiceView() {
                       <th className="py-2.5 px-3">TIPO</th>
                       <th className="py-2.5 px-3">CÓDIGO</th>
                       <th className="py-2.5 px-3">CONCEPTO / DESCRIPCIÓN</th>
-                      <th className="py-2.5 px-3">ALMACÉN / ORIGEN</th>
                       <th className="py-2.5 px-3 text-right">CANT.</th>
                       <th className="py-2.5 px-3 text-right">PRECIO</th>
                       <th className="py-2.5 px-3 text-right">DESC.</th>
@@ -1092,7 +1202,6 @@ export default function NewInvoiceView() {
                               </span>
                             )}
                           </td>
-                          <td className="py-2 px-3 text-foreground-muted">{l.almacen_nombre || "—"}</td>
                           <td className="py-2 px-3 text-right">
                             <input
                               type="number"
@@ -1140,7 +1249,7 @@ export default function NewInvoiceView() {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={9} className="py-8 text-center text-foreground-muted text-xs font-sans">
+                        <td colSpan={8} className="py-8 text-center text-foreground-muted text-xs font-sans">
                           No hay líneas agregadas a la factura todavía. Puedes traer una Orden de Trabajo o agregar productos directamente.
                         </td>
                       </tr>
@@ -1338,7 +1447,7 @@ export default function NewInvoiceView() {
             </div>
           </div>
 
-          {/* Botón Principal Guardar Factura */}
+          {/* Botón Principal Generar Factura */}
           <button
             type="button"
             onClick={handleSubmitFactura}
@@ -1352,17 +1461,25 @@ export default function NewInvoiceView() {
             {submitting ? (
               <>
                 <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
-                <span>Guardando Factura...</span>
+                <span>Generando...</span>
               </>
             ) : (
               <>
                 <Receipt className="w-4 h-4" />
-                <span>Guardar Factura</span>
+                <span>Generar Factura</span>
               </>
             )}
           </button>
         </div>
       </div>
+
+      {/* Sub-Modal: Crear Cliente CRM */}
+      <CustomerFormDrawer
+        isOpen={isCreateCustomerModalOpen}
+        presentation="modal"
+        onClose={() => setIsCreateCustomerModalOpen(false)}
+        onSuccess={handleCustomerCreated}
+      />
 
       {/* Modal Crear Producto RBAC */}
       <ProductCreateModal
