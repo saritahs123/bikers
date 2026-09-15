@@ -79,7 +79,8 @@ export async function GET(request: NextRequest) {
       codigo_factura: "f.codigo_factura",
       cliente: "COALESCE(c.nombre_completo, 'Consumidor Final')",
       tipo_pago: "tp.nombre",
-      monto: "p.monto",
+      monto: "p.monto_pago",
+      monto_pago: "p.monto_pago",
       pago_id: "p.pago_id"
     };
     const sortColumn = sortColumns[sortByParam] || "p.fecha_pago";
@@ -126,10 +127,10 @@ export async function GET(request: NextRequest) {
     const metricasSql = `
       SELECT
         COUNT(*)::int AS total_pagos,
-        COALESCE(SUM(CASE WHEN p.estado = 'APLICADO' THEN p.monto ELSE 0 END), 0)::numeric AS total_cobrado,
-        COALESCE(SUM(CASE WHEN p.estado = 'APLICADO' AND UPPER(tp.codigo) = 'EFECTIVO' THEN p.monto ELSE 0 END), 0)::numeric AS efectivo,
-        COALESCE(SUM(CASE WHEN p.estado = 'APLICADO' AND UPPER(tp.codigo) = 'TARJETA' THEN p.monto ELSE 0 END), 0)::numeric AS tarjeta,
-        COALESCE(SUM(CASE WHEN p.estado = 'APLICADO' AND UPPER(tp.codigo) = 'TRANSFERENCIA' THEN p.monto ELSE 0 END), 0)::numeric AS transferencia
+        COALESCE(SUM(CASE WHEN p.estado = 'APLICADO' THEN p.monto_pago ELSE 0 END), 0)::numeric AS total_cobrado,
+        COALESCE(SUM(CASE WHEN p.estado = 'APLICADO' AND UPPER(tp.codigo) = 'EFECTIVO' THEN p.monto_pago ELSE 0 END), 0)::numeric AS efectivo,
+        COALESCE(SUM(CASE WHEN p.estado = 'APLICADO' AND UPPER(tp.codigo) = 'TARJETA' THEN p.monto_pago ELSE 0 END), 0)::numeric AS tarjeta,
+        COALESCE(SUM(CASE WHEN p.estado = 'APLICADO' AND UPPER(tp.codigo) = 'TRANSFERENCIA' THEN p.monto_pago ELSE 0 END), 0)::numeric AS transferencia
       FROM admin.pagos p
       JOIN admin.tipo_pago tp ON p.tipo_pago_id = tp.tipo_pago_id
       JOIN admin.facturas f ON p.factura_id = f.factura_id
@@ -170,7 +171,7 @@ export async function GET(request: NextRequest) {
         p.tipo_pago_id,
         tp.codigo AS tipo_pago_codigo,
         tp.nombre AS tipo_pago_nombre,
-        p.monto,
+        p.monto_pago AS monto,
         p.referencia,
         p.observacion,
         p.fecha_pago,
