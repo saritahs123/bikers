@@ -10,6 +10,8 @@ export const CODIGO_SISTEMA_FACTURA = 14;
 
 export type TipoFacturaCodigo = "VENTA_DIRECTA" | "ORDEN_TRABAJO";
 
+export type CondicionVenta = "CONTADO" | "CREDITO";
+
 export type TipoPagoCodigo = "EFECTIVO" | "TARJETA" | "TRANSFERENCIA";
 
 export type EstadoFactura = "BORRADOR" | "PENDIENTE" | "PARCIAL" | "PAGADA" | "ANULADA";
@@ -34,6 +36,8 @@ export interface LineaFacturaInput {
 export interface PagoInicialInput {
   tipo_pago_id: number;
   monto: number;
+  monto_recibido?: number | null;
+  monto_devuelta?: number | null;
   referencia?: string | null;
   observacion?: string | null;
   fecha_pago?: string | Date;
@@ -42,6 +46,7 @@ export interface PagoInicialInput {
 export interface CrearFacturaInput {
   empresa_id: number;
   tipo_factura_id: number;
+  condicion_venta?: CondicionVenta;
   cliente_id?: number | null;
   orden_trabajo_id?: number | null;
   fecha_factura?: string | Date;
@@ -56,6 +61,8 @@ export interface RegistrarPagoInput {
   factura_id: number;
   tipo_pago_id: number;
   monto: number;
+  monto_recibido?: number | null;
+  monto_devuelta?: number | null;
   referencia?: string | null;
   observacion?: string | null;
   fecha_pago?: string | Date;
@@ -82,6 +89,7 @@ export interface FacturaRow {
   codigo_factura: string;
   numero_factura?: string;
   tipo_factura_id: number;
+  condicion_venta?: CondicionVenta;
   tipo_factura_codigo?: string;
   tipo_factura_nombre?: string;
   cliente_id: number | null;
@@ -134,6 +142,8 @@ export interface PagoRow {
   tipo_pago_codigo?: string;
   tipo_pago_nombre?: string;
   monto: number;
+  monto_recibido?: number | null;
+  monto_devuelta?: number | null;
   referencia: string | null;
   observacion: string | null;
   fecha_pago: Date | string;

@@ -11,19 +11,17 @@ import {
   Trash2,
   AlertCircle,
   CheckCircle2,
-  CreditCard,
-  Banknote,
-  ArrowRightLeft,
-  DollarSign,
   Wrench,
   Package,
   X,
   Lock,
-  Bike
+  Bike,
+  Printer
 } from "lucide-react";
 import CustomerFormDrawer from "@/components/crm/CustomerFormDrawer";
 import ProductCreateModal from "@/components/products/ProductCreateModal";
 import SelectWorkOrderModal from "@/components/billing/SelectWorkOrderModal";
+import InvoicePrintSelectorModal from "@/components/billing/InvoicePrintSelectorModal";
 
 export default function NewInvoiceView() {
   // Modal Crear Producto
@@ -37,6 +35,12 @@ export default function NewInvoiceView() {
   // Modal Traer Orden de Trabajo (FAC-3)
   const [isSelectWorkOrderModalOpen, setIsSelectWorkOrderModalOpen] = useState(false);
   const [ordenTrabajo, setOrdenTrabajo] = useState(null);
+
+  // Modal de Impresión Post-Factura (Sección 18-21)
+  const [createdInvoice, setCreatedInvoice] = useState(null); // { factura_id, codigo_factura }
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [printInvoiceData, setPrintInvoiceData] = useState(null);
+  const [loadingPrintData, setLoadingPrintData] = useState(false);
 
   // Catálogos
   const [tiposFactura, setTiposFactura] = useState([]);
@@ -70,6 +74,15 @@ export default function NewInvoiceView() {
   const [lineDescuento, setLineDescuento] = useState("0");
   const productDropdownRef = useRef(null);
 
+  // Detalle multiproducto
+  const [lineas, setLineas] = useState([]);
+
+  // Condición de Venta y Pago Automático (FIX-FAC-NEW-2)
+  const [condicionVenta, setCondicionVenta] = useState("CONTADO"); // CONTADO | CREDITO
+  const [tipoPagoId, setTipoPagoId] = useState("");
+  const [montoRecibido, setMontoRecibido] = useState("");
+  const [pagoReferencia, setPagoReferencia] = useState("");
+
   // Control de dropdowns: cerrar uno al abrir otro (regla 5)
   const openClientDropdown = useCallback(() => {
     setProductDropdownOpen(false);
@@ -81,7 +94,7 @@ export default function NewInvoiceView() {
     setProductDropdownOpen(true);
   }, []);
 
-  // Click outside y tecla Escape para cerrar dropdowns de forma segura sin race conditions (reglas 2, 3, 4)
+  // Click outside y tecla Escape para cerrar dropdowns de forma segura sin race conditions
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (clientDropdownRef.current && !clientDropdownRef.current.contains(e.target)) {
@@ -107,15 +120,6 @@ export default function NewInvoiceView() {
     };
   }, []);
 
-  // Detalle multiproducto
-  const [lineas, setLineas] = useState([]);
-
-  // Pagos múltiples
-  const [tipoPagoId, setTipoPagoId] = useState("");
-  const [pagoMonto, setPagoMonto] = useState("");
-  const [pagoReferencia, setPagoReferencia] = useState("");
-  const [pagos, setPagos] = useState([]);
-
   // Cargar catálogos
   const loadCatalogos = useCallback(async () => {
     try {
@@ -138,7 +142,7 @@ export default function NewInvoiceView() {
       setClientes(data.clientes || []);
       setPermisos(data.permisos || null);
 
-      // Tipo Factura VENTA_DIRECTA por defecto (solo si no hay tipo seleccionado)
+      // Tipo Factura VENTA_DIRECTA por defecto
       setTipoFacturaId((prev) => {
         if (prev) return prev;
         const ventaDirecta = (data.tipos_factura || []).find((tf) => tf.codigo === "VENTA_DIRECTA");
@@ -147,9 +151,11 @@ export default function NewInvoiceView() {
         return "";
       });
 
-      // Tipo de pago por defecto (solo si no hay tipo seleccionado)
+      // Tipo de pago por defecto (priorizar EFECTIVO)
       setTipoPagoId((prev) => {
         if (prev) return prev;
+        const efectivo = (data.tipos_pago || []).find((tp) => tp.codigo === "EFECTIVO");
+        if (efectivo) return String(efectivo.tipo_pago_id);
         if ((data.tipos_pago || []).length > 0) return String(data.tipos_pago[0].tipo_pago_id);
         return "";
       });
@@ -222,6 +228,7 @@ export default function NewInvoiceView() {
 
   // Seleccionar cliente
   const handleSelectClient = (client) => {
+    if (createdInvoice) setCreatedInvoice(null);
     setSelectedClient(client);
     setClientSearch("");
     setClientDropdownOpen(false);
@@ -333,6 +340,7 @@ export default function NewInvoiceView() {
 
   // Seleccionar producto para el formulario de línea (resuelve almacén internamente)
   const handleSelectProduct = useCallback((product) => {
+    if (createdInvoice) setCreatedInvoice(null);
     setSelectedProduct(product);
     setProductSearch("");
     setProductDropdownOpen(false);
@@ -341,7 +349,7 @@ export default function NewInvoiceView() {
     setLineDescuento("0");
     const autoAlmId = resolveProductAlmacen(product);
     setLineAlmacenId(autoAlmId ? String(autoAlmId) : "");
-  }, [resolveProductAlmacen]);
+  }, [resolveProductAlmacen, createdInvoice]);
 
   // Callback cuando se crea producto nuevo desde ProductCreateModal
   const handleProductCreated = useCallback(async (newProduct) => {
@@ -373,6 +381,8 @@ export default function NewInvoiceView() {
   // Agregar línea a la tabla (almacén transparente)
   const handleAddLine = (e) => {
     e.preventDefault();
+    if (createdInvoice) setCreatedInvoice(null);
+
     if (!selectedProduct) {
       setFeedback({ type: "error", message: "Selecciona un producto para agregar a la factura." });
       return;
@@ -443,6 +453,7 @@ export default function NewInvoiceView() {
       costo_unitario: selectedProduct.costo_actual,
       permite_decimales: selectedProduct.permite_decimales,
       stock_disponible: selectedProductStock,
+      isFromOrder: false,
     };
 
     setLineas((prev) => [...prev, nuevaLinea]);
@@ -454,12 +465,25 @@ export default function NewInvoiceView() {
     setFeedback(null);
   };
 
-  // Modificar cantidad o precio en línea existente
+  // Modificar cantidad, precio o descuento en línea editable
   const handleUpdateLineField = (tempId, field, value) => {
     setLineas((prev) =>
       prev.map((l) => {
         if (l.tempId !== tempId) return l;
+        // Si la línea proviene de OT y es SERVICIO o REPUESTO, es inmutable (Sección 13)
+        if (l.isFromOrder && (l.tipo_linea === "SERVICIO" || l.tipo_linea === "REPUESTO")) {
+          return l;
+        }
         const numVal = Number(value);
+        if (field === "cantidad") {
+          if (!l.permite_decimales && (!Number.isInteger(numVal) || numVal % 1 !== 0)) {
+            setFeedback({
+              type: "error",
+              message: `El producto ${l.descripcion} no permite cantidades decimales. Debe ingresar un número entero.`,
+            });
+            return l;
+          }
+        }
         const updated = { ...l, [field]: isNaN(numVal) ? 0 : numVal };
         const sub = Math.max(0, (updated.cantidad * updated.precio_unitario) - (updated.descuento || 0));
         updated.subtotal = parseFloat(sub.toFixed(2));
@@ -468,9 +492,17 @@ export default function NewInvoiceView() {
     );
   };
 
-  // Eliminar línea
+  // Eliminar línea (solo líneas editables, no SERVICIO/REPUESTO de OT)
   const handleRemoveLine = (tempId) => {
-    setLineas((prev) => prev.filter((l) => l.tempId !== tempId));
+    setLineas((prev) =>
+      prev.filter((l) => {
+        if (l.tempId !== tempId) return true;
+        if (l.isFromOrder && (l.tipo_linea === "SERVICIO" || l.tipo_linea === "REPUESTO")) {
+          return true; // No permitir eliminar
+        }
+        return false;
+      })
+    );
   };
 
   // Cálculos de Totales en tiempo real
@@ -490,87 +522,24 @@ export default function NewInvoiceView() {
     return Math.max(0, parseFloat((subtotalGeneral - descuentoGeneral + impuestoGeneral).toFixed(2)));
   }, [subtotalGeneral, descuentoGeneral, impuestoGeneral]);
 
-  // Pagos
-  const totalPagado = useMemo(() => {
-    return parseFloat(pagos.reduce((acc, p) => acc + Number(p.monto || 0), 0).toFixed(2));
-  }, [pagos]);
-
-  const balancePendiente = useMemo(() => {
-    return Math.max(0, parseFloat((totalFactura - totalPagado).toFixed(2)));
-  }, [totalFactura, totalPagado]);
-
-  // Estado financiero de la factura calculado en tiempo real
-  const estadoCalculado = useMemo(() => {
-    if (totalFactura <= 0) {
-      return totalPagado > 0 ? "PAGADA" : "PENDIENTE";
-    }
-    if (totalPagado >= totalFactura) {
-      return "PAGADA";
-    }
-    if (totalPagado > 0) {
-      return "PARCIAL";
-    }
-    return "PENDIENTE";
-  }, [totalFactura, totalPagado]);
-
-  // Agregar pago
-  const handleAddPago = (e) => {
-    e.preventDefault();
-    const montoNum = Number(pagoMonto);
-
-    if (isNaN(montoNum) || montoNum <= 0) {
-      setFeedback({ type: "error", message: "El monto del pago debe ser mayor a 0." });
-      return;
-    }
-
-    if (!tipoPagoId) {
-      setFeedback({ type: "error", message: "Selecciona un tipo de pago." });
-      return;
-    }
-
-    const nuevoTotalPagado = parseFloat((totalPagado + montoNum).toFixed(2));
-    if (nuevoTotalPagado > totalFactura) {
-      setFeedback({
-        type: "error",
-        message: `El pago de RD$ ${montoNum.toFixed(2)} excede el balance pendiente (RD$ ${balancePendiente.toFixed(2)}).`,
-      });
-      return;
-    }
-
+  // Cálculo de devuelta para EFECTIVO (Sección 6 y 7)
+  const isEfectivo = useMemo(() => {
     const tp = tiposPago.find((t) => String(t.tipo_pago_id) === String(tipoPagoId));
+    return tp && String(tp.codigo).toUpperCase() === "EFECTIVO";
+  }, [tiposPago, tipoPagoId]);
 
-    const nuevoPago = {
-      tempId: `PAGO-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
-      tipo_pago_id: Number(tipoPagoId),
-      tipo_pago_codigo: tp ? tp.codigo : "PAGO",
-      tipo_pago_nombre: tp ? tp.nombre : "Pago",
-      monto: montoNum,
-      referencia: pagoReferencia.trim() || null,
-    };
-
-    setPagos((prev) => [...prev, nuevoPago]);
-    setPagoMonto("");
-    setPagoReferencia("");
-    setFeedback(null);
-  };
-
-  // Helper para poner el balance pendiente completo en el input de pago
-  const handleSetMaxPago = () => {
-    if (balancePendiente > 0) {
-      setPagoMonto(String(balancePendiente));
-    }
-  };
-
-  // Eliminar pago
-  const handleRemovePago = (tempId) => {
-    setPagos((prev) => prev.filter((p) => p.tempId !== tempId));
-  };
+  const montoRecibidoNum = parseFloat(montoRecibido) || 0;
+  const devuelta = useMemo(() => {
+    if (!isEfectivo || totalFactura <= 0) return 0;
+    return parseFloat((montoRecibidoNum - totalFactura).toFixed(2));
+  }, [isEfectivo, montoRecibidoNum, totalFactura]);
 
   // Cargar Orden de Trabajo seleccionada (FAC-3)
   const handleSelectWorkOrder = (ot) => {
+    if (createdInvoice) setCreatedInvoice(null);
     setOrdenTrabajo(ot);
 
-    // 1. Cliente vinculado a la OT (Regla 6)
+    // 1. Cliente vinculado a la OT
     if (ot.cliente) {
       setSelectedClient({
         cliente_id: ot.cliente.cliente_id,
@@ -583,13 +552,13 @@ export default function NewInvoiceView() {
       setClientDropdownOpen(false);
     }
 
-    // 2. Tipo Factura ORDEN_TRABAJO (Regla 5)
+    // 2. Tipo Factura ORDEN_TRABAJO
     const otTipo = tiposFactura.find((tf) => tf.codigo === "ORDEN_TRABAJO");
     if (otTipo) {
       setTipoFacturaId(String(otTipo.tipo_factura_id));
     }
 
-    // 3. Servicios facturables (Regla 7)
+    // 3. Servicios facturables (Inmutables)
     const serviceLines = (ot.servicios || []).map((s) => ({
       tempId: `SRV-${s.orden_servicio_id}-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
       tipo_linea: "SERVICIO",
@@ -609,7 +578,7 @@ export default function NewInvoiceView() {
       isFromOrder: true,
     }));
 
-    // 4. Repuestos consumidos (utilizado = true) (Regla 8 y 19)
+    // 4. Repuestos consumidos (Inmutables)
     const spareLines = (ot.repuestos || []).map((r) => ({
       tempId: `REP-${r.orden_producto_id}-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
       tipo_linea: "REPUESTO",
@@ -630,17 +599,21 @@ export default function NewInvoiceView() {
       isFromOrder: true,
     }));
 
-    setLineas([...serviceLines, ...spareLines]);
+    // Conservar líneas de productos manuales adicionales ya agregadas
+    const manualLines = lineas.filter((l) => !l.isFromOrder);
+
+    setLineas([...serviceLines, ...spareLines, ...manualLines]);
     setFeedback({
       type: "success",
       message: `Orden de Trabajo ${ot.codigo_orden} cargada con ${serviceLines.length} servicio(s) y ${spareLines.length} repuesto(s) consumido(s).`,
     });
   };
 
-  // Desvincular Orden de Trabajo
+  // Desvincular Orden de Trabajo (Sección 17)
   const handleDetachOrder = () => {
     setOrdenTrabajo(null);
-    setLineas((prev) => prev.filter((l) => !l.isFromOrder));
+    setSelectedClient(null); // Desvincular cliente bloqueado de OT
+    setLineas((prev) => prev.filter((l) => !l.isFromOrder)); // Conservar productos adicionales manuales
     const vdT = tiposFactura.find((tf) => tf.codigo === "VENTA_DIRECTA");
     if (vdT) {
       setTipoFacturaId(String(vdT.tipo_factura_id));
@@ -648,12 +621,17 @@ export default function NewInvoiceView() {
     setFeedback(null);
   };
 
-  // Submit Guardar Factura
+  // Submit Generar Factura (Sección 11 y 12)
   const handleSubmitFactura = async () => {
     if (submitting) return;
 
     if (lineas.length === 0) {
-      setFeedback({ type: "error", message: "Agrega al menos un producto a la factura antes de guardar." });
+      setFeedback({ type: "error", message: "Agrega al menos un producto o servicio a la factura antes de generar." });
+      return;
+    }
+
+    if (totalFactura <= 0) {
+      setFeedback({ type: "error", message: "El total de la factura debe ser mayor a 0." });
       return;
     }
 
@@ -662,9 +640,19 @@ export default function NewInvoiceView() {
       return;
     }
 
-    if (totalPagado > totalFactura) {
-      setFeedback({ type: "error", message: "El total de pagos no puede ser superior al total de la factura." });
-      return;
+    // Validaciones para CONTADO (Sección 6 y 26)
+    if (condicionVenta === "CONTADO") {
+      if (!tipoPagoId) {
+        setFeedback({ type: "error", message: "Selecciona el tipo de pago para la venta al contado." });
+        return;
+      }
+      if (isEfectivo && montoRecibidoNum < totalFactura) {
+        setFeedback({
+          type: "error",
+          message: `El monto recibido (RD$ ${montoRecibidoNum.toFixed(2)}) no puede ser menor al total de la factura (RD$ ${totalFactura.toFixed(2)}).`,
+        });
+        return;
+      }
     }
 
     setSubmitting(true);
@@ -676,6 +664,15 @@ export default function NewInvoiceView() {
         cliente_id: selectedClient ? selectedClient.cliente_id : null,
         orden_trabajo_id: ordenTrabajo ? ordenTrabajo.orden_trabajo_id : null,
         observacion: observacion.trim() || null,
+        condicion_venta: condicionVenta,
+        pago:
+          condicionVenta === "CONTADO"
+            ? {
+                tipo_pago_id: Number(tipoPagoId),
+                monto_recibido: isEfectivo ? montoRecibidoNum : totalFactura,
+                referencia: pagoReferencia.trim() || null,
+              }
+            : null,
         lineas: lineas.map((l) => ({
           tipo_linea: l.tipo_linea || "PRODUCTO",
           almacen_id: l.almacen_id || null,
@@ -689,11 +686,6 @@ export default function NewInvoiceView() {
           precio_unitario: Number(l.precio_unitario),
           descuento: Number(l.descuento || 0),
           costo_unitario: l.costo_unitario != null ? Number(l.costo_unitario) : null,
-        })),
-        pagos_iniciales: pagos.map((p) => ({
-          tipo_pago_id: p.tipo_pago_id,
-          monto: p.monto,
-          referencia: p.referencia,
         })),
       };
 
@@ -715,41 +707,63 @@ export default function NewInvoiceView() {
         throw new Error(data.message || "Error al procesar la factura.");
       }
 
-      setFeedback({
-        type: "success",
-        message: `Factura ${data.factura?.codigo_factura || ""} guardada exitosamente con salida de inventario y estado ${data.factura?.estado || estadoCalculado}.`,
+      const facturaId = data.factura?.factura_id;
+      const codigoFactura = data.factura?.codigo_factura || `FAC-${facturaId}`;
+
+      // Guardar factura creada para permitir impresión inmediata (Sección 18 y 21)
+      setCreatedInvoice({
+        factura_id: facturaId,
+        codigo_factura: codigoFactura,
       });
 
-      // Limpiar formulario tras éxito
+      setFeedback({
+        type: "success",
+        message: `Factura ${codigoFactura} generada exitosamente con salida de inventario y estado ${data.factura?.estado || (condicionVenta === "CONTADO" ? "PAGADA" : "PENDIENTE")}.`,
+      });
+
+      // Limpiar formulario tras éxito manteniendo createdInvoice
       setOrdenTrabajo(null);
       setLineas([]);
-      setPagos([]);
       setSelectedClient(null);
       setSelectedProduct(null);
       setObservacion("");
+      setMontoRecibido("");
+      setPagoReferencia("");
+      setCondicionVenta("CONTADO");
       await loadCatalogos();
     } catch (err) {
       console.error(err);
       setFeedback({
         type: "error",
-        message: err.message || "Ocurrió un error inesperado al guardar la factura.",
+        message: err.message || "Ocurrió un error inesperado al generar la factura.",
       });
     } finally {
       setSubmitting(false);
     }
   };
 
-  // Icono para tipo de pago
-  const getPagoIcon = (codigo) => {
-    switch (String(codigo).toUpperCase()) {
-      case "EFECTIVO":
-        return <Banknote className="w-4 h-4 text-emerald-400" />;
-      case "TARJETA":
-        return <CreditCard className="w-4 h-4 text-blue-400" />;
-      case "TRANSFERENCIA":
-        return <ArrowRightLeft className="w-4 h-4 text-purple-400" />;
-      default:
-        return <DollarSign className="w-4 h-4 text-primary" />;
+  // Obtener factura recién creada para imprimir con InvoicePrintSelectorModal (Sección 19 y 20)
+  const handlePrintCreatedInvoice = async (facturaId) => {
+    const targetId = facturaId || createdInvoice?.factura_id;
+    if (!targetId) return;
+
+    try {
+      setLoadingPrintData(true);
+      const res = await fetch(`/api/facturacion/facturas/${targetId}`);
+      const json = await res.json();
+      if (!res.ok || !json.data) {
+        throw new Error(json.message || "No se pudo cargar la información de la factura para imprimir.");
+      }
+      setPrintInvoiceData(json.data);
+      setIsPrintModalOpen(true);
+    } catch (err) {
+      console.error("Error al preparar impresión:", err);
+      setFeedback({
+        type: "error",
+        message: err.message || "Error al preparar la impresión de la factura.",
+      });
+    } finally {
+      setLoadingPrintData(false);
     }
   };
 
@@ -787,6 +801,42 @@ export default function NewInvoiceView() {
         </div>
       </div>
 
+      {/* Banner de Factura Recién Generada con Botón Imprimir (Sección 18) */}
+      {createdInvoice && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 shadow-sm animate-in fade-in">
+          <div className="flex items-center gap-3">
+            <CheckCircle2 className="w-5 h-5 flex-shrink-0 text-emerald-400" />
+            <div>
+              <p className="font-bold text-sm text-foreground">
+                ✓ Factura {createdInvoice.codigo_factura} generada exitosamente.
+              </p>
+              <p className="text-xs text-foreground-muted mt-0.5">
+                Puedes imprimir el comprobante fiscal/ticket térmico o continuar con una nueva factura.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2.5 self-end sm:self-center">
+            <button
+              type="button"
+              onClick={() => handlePrintCreatedInvoice(createdInvoice.factura_id)}
+              disabled={loadingPrintData}
+              className="flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-lg bg-primary text-primary-foreground hover:bg-primary-hover shadow-md transition-all cursor-pointer disabled:opacity-50"
+            >
+              <Printer className="w-4 h-4" />
+              <span>{loadingPrintData ? "Preparando..." : "IMPRIMIR"}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setCreatedInvoice(null)}
+              className="p-1.5 rounded-lg text-foreground-muted hover:text-foreground hover:bg-hover transition-colors cursor-pointer"
+              title="Cerrar notificación"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Banner de OT Vinculada */}
       {ordenTrabajo && (
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-primary/10 border border-primary/30 text-xs shadow-sm">
@@ -808,7 +858,7 @@ export default function NewInvoiceView() {
                 )}
               </div>
               <p className="text-[11px] text-foreground-muted mt-0.5 font-sans">
-                Líneas de servicios y repuestos consumidos cargadas desde Taller. Puedes agregar productos adicionales.
+                Líneas de servicios y repuestos consumidos cargadas desde Taller (inmutables). Puedes agregar productos adicionales.
               </p>
             </div>
           </div>
@@ -1112,7 +1162,7 @@ export default function NewInvoiceView() {
                 <input
                   type="number"
                   step={selectedProduct?.permite_decimales ? "0.01" : "1"}
-                  min="0.01"
+                  min={selectedProduct?.permite_decimales ? "0.01" : "1"}
                   value={lineCantidad}
                   onChange={(e) => setLineCantidad(e.target.value)}
                   className="w-full px-2.5 py-1.5 text-xs bg-input border border-border rounded-lg text-foreground font-mono focus:outline-none focus:border-primary"
@@ -1156,7 +1206,7 @@ export default function NewInvoiceView() {
               </div>
             </form>
 
-            {/* Tabla Multiproducto de Detalle (Sin columna Almacén) */}
+            {/* Tabla Multiproducto de Detalle (Líneas OT inmutables, productos editables) */}
             <div className="border border-border rounded-lg overflow-hidden mt-4">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse">
@@ -1174,79 +1224,112 @@ export default function NewInvoiceView() {
                   </thead>
                   <tbody className="divide-y divide-border/60">
                     {lineas.length > 0 ? (
-                      lineas.map((l) => (
-                        <tr key={l.tempId} className="hover:bg-hover/40 transition-colors font-mono">
-                          <td className="py-2 px-3">
-                            {l.tipo_linea === "SERVICIO" && (
-                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-cyan-500/15 text-cyan-400 border border-cyan-500/30">
-                                SERVICIO
-                              </span>
-                            )}
-                            {l.tipo_linea === "REPUESTO" && (
-                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30">
-                                REPUESTO OT
-                              </span>
-                            )}
-                            {(!l.tipo_linea || l.tipo_linea === "PRODUCTO") && (
-                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                                PRODUCTO
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-2 px-3 text-primary font-semibold">{l.codigo || "—"}</td>
-                          <td className="py-2 px-3 font-sans font-medium text-foreground">
-                            {l.descripcion}
-                            {l.isFromOrder && ordenTrabajo && (
-                              <span className="ml-2 text-[10px] font-mono text-foreground-muted">
-                                (OT #{ordenTrabajo.codigo_orden})
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-2 px-3 text-right">
-                            <input
-                              type="number"
-                              step={l.permite_decimales ? "0.01" : "1"}
-                              min="0.01"
-                              value={l.cantidad}
-                              onChange={(e) => handleUpdateLineField(l.tempId, "cantidad", e.target.value)}
-                              className="w-16 px-1.5 py-0.5 text-right text-xs bg-input border border-border rounded text-foreground font-mono focus:outline-none focus:border-primary"
-                            />
-                          </td>
-                          <td className="py-2 px-3 text-right">
-                            <input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              value={l.precio_unitario}
-                              onChange={(e) => handleUpdateLineField(l.tempId, "precio_unitario", e.target.value)}
-                              className="w-20 px-1.5 py-0.5 text-right text-xs bg-input border border-border rounded text-foreground font-mono focus:outline-none focus:border-primary"
-                            />
-                          </td>
-                          <td className="py-2 px-3 text-right">
-                            <input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              value={l.descuento}
-                              onChange={(e) => handleUpdateLineField(l.tempId, "descuento", e.target.value)}
-                              className="w-16 px-1.5 py-0.5 text-right text-xs bg-input border border-border rounded text-foreground font-mono focus:outline-none focus:border-primary"
-                            />
-                          </td>
-                          <td className="py-2 px-3 text-right font-bold text-foreground">
-                            RD$ {Number(l.subtotal || 0).toFixed(2)}
-                          </td>
-                          <td className="py-2 px-3 text-center">
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveLine(l.tempId)}
-                              className="p-1 rounded text-foreground-muted hover:text-error hover:bg-hover transition-colors cursor-pointer"
-                              title="Eliminar línea"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))
+                      lineas.map((l) => {
+                        const isImmutable = Boolean(
+                          l.isFromOrder && (l.tipo_linea === "SERVICIO" || l.tipo_linea === "REPUESTO")
+                        );
+
+                        return (
+                          <tr key={l.tempId} className="hover:bg-hover/40 transition-colors font-mono">
+                            <td className="py-2 px-3">
+                              {l.tipo_linea === "SERVICIO" && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-cyan-500/15 text-cyan-400 border border-cyan-500/30">
+                                  SERVICIO
+                                </span>
+                              )}
+                              {l.tipo_linea === "REPUESTO" && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                                  REPUESTO OT
+                                </span>
+                              )}
+                              {(!l.tipo_linea || l.tipo_linea === "PRODUCTO") && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                                  PRODUCTO
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2 px-3 text-primary font-semibold">{l.codigo || "—"}</td>
+                            <td className="py-2 px-3 font-sans font-medium text-foreground">
+                              {l.descripcion}
+                              {l.isFromOrder && ordenTrabajo && (
+                                <span className="ml-2 text-[10px] font-mono text-foreground-muted">
+                                  (OT #{ordenTrabajo.codigo_orden})
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2 px-3 text-right">
+                              {isImmutable ? (
+                                <span className="text-foreground-secondary font-mono px-2 py-0.5">
+                                  {l.cantidad}
+                                </span>
+                              ) : (
+                                <input
+                                  type="number"
+                                  step={l.permite_decimales ? "0.01" : "1"}
+                                  min={l.permite_decimales ? "0.01" : "1"}
+                                  value={l.cantidad}
+                                  onChange={(e) => handleUpdateLineField(l.tempId, "cantidad", e.target.value)}
+                                  className="w-16 px-1.5 py-0.5 text-right text-xs bg-input border border-border rounded text-foreground font-mono focus:outline-none focus:border-primary"
+                                />
+                              )}
+                            </td>
+                            <td className="py-2 px-3 text-right">
+                              {isImmutable ? (
+                                <span className="text-foreground-secondary font-mono px-2 py-0.5">
+                                  {Number(l.precio_unitario).toFixed(2)}
+                                </span>
+                              ) : (
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  value={l.precio_unitario}
+                                  onChange={(e) => handleUpdateLineField(l.tempId, "precio_unitario", e.target.value)}
+                                  className="w-20 px-1.5 py-0.5 text-right text-xs bg-input border border-border rounded text-foreground font-mono focus:outline-none focus:border-primary"
+                                />
+                              )}
+                            </td>
+                            <td className="py-2 px-3 text-right">
+                              {isImmutable ? (
+                                <span className="text-foreground-secondary font-mono px-2 py-0.5">
+                                  {Number(l.descuento || 0).toFixed(2)}
+                                </span>
+                              ) : (
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  value={l.descuento}
+                                  onChange={(e) => handleUpdateLineField(l.tempId, "descuento", e.target.value)}
+                                  className="w-16 px-1.5 py-0.5 text-right text-xs bg-input border border-border rounded text-foreground font-mono focus:outline-none focus:border-primary"
+                                />
+                              )}
+                            </td>
+                            <td className="py-2 px-3 text-right font-bold text-foreground">
+                              RD$ {Number(l.subtotal || 0).toFixed(2)}
+                            </td>
+                            <td className="py-2 px-3 text-center">
+                              {isImmutable ? (
+                                <span
+                                  className="p-1 inline-flex text-foreground-muted"
+                                  title="Proviene de la Orden de Trabajo"
+                                >
+                                  <Lock className="w-3.5 h-3.5 text-primary" />
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveLine(l.tempId)}
+                                  className="p-1 rounded text-foreground-muted hover:text-error hover:bg-hover transition-colors cursor-pointer"
+                                  title="Eliminar producto"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
                     ) : (
                       <tr>
                         <td colSpan={8} className="py-8 text-center text-foreground-muted text-xs font-sans">
@@ -1275,23 +1358,27 @@ export default function NewInvoiceView() {
           </div>
         </div>
 
-        {/* COLUMNA DERECHA (span 4): Resumen, Pagos, Totales y Guardar */}
+        {/* COLUMNA DERECHA (span 4): Resumen de Totales, Condición de Venta y Generar Factura */}
         <div className="lg:col-span-5 xl:col-span-4 space-y-6">
-          {/* Card: Resumen Financiero y Totales */}
+          {/* Card 1: Resumen de Totales (Sección 9 y 10) */}
           <div className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-4 font-mono">
             <div className="flex items-center justify-between border-b border-border/60 pb-3 font-sans">
               <h3 className="text-sm font-bold text-foreground">Resumen de Totales</h3>
-              <span
-                className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border ${
-                  estadoCalculado === "PAGADA"
-                    ? "bg-success/15 border-success/40 text-success"
-                    : estadoCalculado === "PARCIAL"
-                    ? "bg-amber-500/15 border-amber-500/40 text-amber-400"
-                    : "bg-surface-subtle border-border text-foreground-muted"
-                }`}
-              >
-                {estadoCalculado}
-              </span>
+              {totalFactura > 0 ? (
+                <span
+                  className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border ${
+                    condicionVenta === "CONTADO"
+                      ? "bg-success/15 border-success/40 text-success"
+                      : "bg-surface-subtle border-border text-foreground-muted"
+                  }`}
+                >
+                  {condicionVenta === "CONTADO" ? "PAGADA" : "PENDIENTE"}
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-medium uppercase border bg-surface-subtle border-border text-foreground-muted">
+                  PENDIENTE DE GENERAR
+                </span>
+              )}
             </div>
 
             <div className="space-y-2 text-xs">
@@ -1311,149 +1398,176 @@ export default function NewInvoiceView() {
                 <span>Total Factura:</span>
                 <span className="text-primary font-mono">RD$ {totalFactura.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between text-xs text-emerald-400 font-semibold pt-1">
-                <span>Monto Pagado:</span>
-                <span>RD$ {totalPagado.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-xs text-foreground font-bold">
-                <span>Balance Pendiente:</span>
-                <span className={balancePendiente > 0 ? "text-error" : "text-foreground-muted"}>
-                  RD$ {balancePendiente.toFixed(2)}
-                </span>
-              </div>
             </div>
           </div>
 
-          {/* Card: Pagos Múltiples */}
+          {/* Card 2: Condición de Venta y Cobro (Sección 2, 4, 5, 6, 8) */}
           <div className="bg-card border border-border rounded-xl p-5 shadow-sm space-y-4">
             <div className="flex items-center justify-between border-b border-border/60 pb-3">
-              <div className="flex items-center gap-2">
-                <CreditCard className="w-4 h-4 text-primary" />
-                <h3 className="text-sm font-bold text-foreground">Registro de Pagos</h3>
-              </div>
-              <span className="text-[11px] font-mono text-foreground-muted">Múltiples métodos</span>
+              <h3 className="text-sm font-bold text-foreground">Condición de Venta</h3>
+              <span className="text-[11px] font-mono text-foreground-muted">
+                {condicionVenta}
+              </span>
             </div>
 
-            {/* Formulario Agregar Pago */}
-            <form onSubmit={handleAddPago} className="space-y-3">
-              <div>
-                <label className="block text-[11px] font-medium text-foreground-secondary mb-1">
-                  Tipo de Pago
-                </label>
-                <select
-                  value={tipoPagoId}
-                  onChange={(e) => setTipoPagoId(e.target.value)}
-                  className="w-full px-2.5 py-1.5 text-xs bg-input border border-border rounded-lg text-foreground focus:outline-none focus:border-primary"
+            {/* Selector Segmentado: CONTADO / CRÉDITO */}
+            <div>
+              <label className="block text-xs font-medium text-foreground-secondary mb-2">
+                Modalidad Comercial:
+              </label>
+              <div className="grid grid-cols-2 gap-2 p-1 bg-surface border border-border rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setCondicionVenta("CONTADO")}
+                  className={`py-2 px-3 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                    condicionVenta === "CONTADO"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-foreground-secondary hover:text-foreground hover:bg-hover"
+                  }`}
                 >
-                  {tiposPago.map((tp) => (
-                    <option key={tp.tipo_pago_id} value={tp.tipo_pago_id}>
-                      {tp.nombre} ({tp.codigo})
-                    </option>
-                  ))}
-                </select>
+                  CONTADO
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCondicionVenta("CREDITO")}
+                  className={`py-2 px-3 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                    condicionVenta === "CREDITO"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-foreground-secondary hover:text-foreground hover:bg-hover"
+                  }`}
+                >
+                  CRÉDITO
+                </button>
               </div>
+            </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-[11px] font-medium text-foreground-secondary">
-                    Monto (RD$)
+            {/* Si es CONTADO: Mostrar Tipo de Pago, Monto Recibido y Referencia */}
+            {condicionVenta === "CONTADO" ? (
+              <div className="space-y-3 pt-2">
+                <div>
+                  <label className="block text-[11px] font-medium text-foreground-secondary mb-1">
+                    Tipo de Pago <span className="text-error">*</span>
                   </label>
-                  {balancePendiente > 0 && (
-                    <button
-                      type="button"
-                      onClick={handleSetMaxPago}
-                      className="text-[10px] font-mono text-primary hover:underline cursor-pointer"
-                    >
-                      Pagar pendiente (RD$ {balancePendiente.toFixed(2)})
-                    </button>
-                  )}
+                  <select
+                    value={tipoPagoId}
+                    onChange={(e) => setTipoPagoId(e.target.value)}
+                    className="w-full px-2.5 py-2 text-xs bg-input border border-border rounded-lg text-foreground focus:outline-none focus:border-primary cursor-pointer"
+                  >
+                    {tiposPago.map((tp) => (
+                      <option key={tp.tipo_pago_id} value={tp.tipo_pago_id}>
+                        {tp.nombre} ({tp.codigo})
+                      </option>
+                    ))}
+                  </select>
                 </div>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  value={pagoMonto}
-                  onChange={(e) => setPagoMonto(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full px-2.5 py-1.5 text-xs bg-input border border-border rounded-lg text-foreground font-mono focus:outline-none focus:border-primary"
-                />
-              </div>
 
-              <div>
-                <label className="block text-[11px] font-medium text-foreground-secondary mb-1">
-                  Referencia / Nota (opcional)
-                </label>
-                <input
-                  type="text"
-                  value={pagoReferencia}
-                  onChange={(e) => setPagoReferencia(e.target.value)}
-                  placeholder="Ej. # Voucher, Transf. 9940"
-                  className="w-full px-2.5 py-1.5 text-xs bg-input border border-border rounded-lg text-foreground focus:outline-none focus:border-primary"
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="w-full py-2 text-xs font-semibold rounded-lg bg-surface hover:bg-hover border border-border text-foreground transition-colors cursor-pointer"
-              >
-                + Registrar Pago
-              </button>
-            </form>
-
-            {/* Lista de Pagos Registrados */}
-            <div className="space-y-2 pt-2">
-              <div className="text-[11px] font-semibold text-foreground-secondary">
-                Pagos Aplicados ({pagos.length}):
-              </div>
-              {pagos.length > 0 ? (
-                <div className="space-y-1.5">
-                  {pagos.map((p) => (
-                    <div
-                      key={p.tempId}
-                      className="flex items-center justify-between p-2 rounded-lg bg-surface border border-border text-xs font-mono"
-                    >
-                      <div className="flex items-center gap-2">
-                        {getPagoIcon(p.tipo_pago_codigo)}
-                        <div>
-                          <span className="font-bold text-foreground">{p.tipo_pago_nombre}</span>
-                          {p.referencia && (
-                            <span className="text-[10px] text-foreground-muted ml-2">
-                              Ref: {p.referencia}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-emerald-400">
-                          RD$ {Number(p.monto).toFixed(2)}
-                        </span>
+                {/* Si Efectivo: Monto Recibido y Devuelta */}
+                {isEfectivo ? (
+                  <div className="space-y-3">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[11px] font-medium text-foreground-secondary">
+                          Monto Recibido (RD$) <span className="text-error">*</span>
+                        </label>
                         <button
                           type="button"
-                          onClick={() => handleRemovePago(p.tempId)}
-                          className="p-1 rounded text-foreground-muted hover:text-error cursor-pointer"
-                          title="Eliminar pago"
+                          onClick={() => {
+                            if (totalFactura > 0) setMontoRecibido(String(totalFactura));
+                          }}
+                          disabled={totalFactura <= 0}
+                          className="text-[10px] font-mono text-primary hover:underline cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          Cobro exacto (RD$ {totalFactura.toFixed(2)})
                         </button>
                       </div>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={montoRecibido}
+                        onChange={(e) => setMontoRecibido(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full px-2.5 py-2 text-xs bg-input border border-border rounded-lg text-foreground font-mono focus:outline-none focus:border-primary"
+                      />
                     </div>
-                  ))}
+
+                    <div className="p-3 rounded-lg bg-surface border border-border space-y-1.5 font-mono">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="text-foreground-secondary font-sans">Devuelta:</span>
+                        <span
+                          className={`text-sm font-bold ${
+                            totalFactura <= 0
+                              ? "text-foreground-muted"
+                              : devuelta >= 0
+                              ? "text-emerald-400"
+                              : "text-error"
+                          }`}
+                        >
+                          RD$ {totalFactura > 0 && devuelta >= 0 ? devuelta.toFixed(2) : "0.00"}
+                        </span>
+                      </div>
+                      {totalFactura > 0 && montoRecibidoNum > 0 && devuelta < 0 && (
+                        <p className="text-[11px] text-error font-sans">
+                          El monto recibido es menor al total de la factura (faltan RD$ {Math.abs(devuelta).toFixed(2)})
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-lg bg-surface border border-border text-xs font-mono">
+                    <div className="flex justify-between text-foreground-secondary">
+                      <span>Monto a cobrar:</span>
+                      <span className="font-bold text-foreground">RD$ {totalFactura.toFixed(2)}</span>
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-[11px] font-medium text-foreground-secondary mb-1">
+                    Referencia / Nota (opcional)
+                  </label>
+                  <input
+                    type="text"
+                    value={pagoReferencia}
+                    onChange={(e) => setPagoReferencia(e.target.value)}
+                    placeholder="Ej. # Voucher, Transf. 9940"
+                    className="w-full px-2.5 py-1.5 text-xs bg-input border border-border rounded-lg text-foreground focus:outline-none focus:border-primary"
+                  />
                 </div>
-              ) : (
-                <div className="text-center py-3 text-[11px] text-foreground-muted border border-dashed border-border rounded-lg">
-                  Sin pagos iniciales. La factura se creará en estado PENDIENTE.
+              </div>
+            ) : (
+              /* Si es CRÉDITO */
+              <div className="p-3.5 rounded-lg bg-surface border border-border/80 text-xs space-y-2">
+                <div className="flex items-center gap-2 text-foreground font-semibold">
+                  <Receipt className="w-4 h-4 text-primary" />
+                  <span>Venta a Crédito</span>
                 </div>
-              )}
-            </div>
+                <p className="text-[11px] text-foreground-muted leading-relaxed">
+                  La factura se generará en estado <strong className="text-amber-400">PENDIENTE</strong> con balance total de{" "}
+                  <strong className="text-foreground font-mono">RD$ {totalFactura.toFixed(2)}</strong>. No se registrará pago inicial.
+                </p>
+                <p className="text-[10px] text-foreground-muted border-t border-border/50 pt-1.5">
+                  Los pagos posteriores se registrarán desde Facturas → Registrar Pago (FAC-4).
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Botón Principal Generar Factura */}
           <button
             type="button"
             onClick={handleSubmitFactura}
-            disabled={submitting || lineas.length === 0}
+            disabled={
+              submitting ||
+              lineas.length === 0 ||
+              totalFactura <= 0 ||
+              (condicionVenta === "CONTADO" && isEfectivo && montoRecibidoNum < totalFactura)
+            }
             className={`w-full py-3.5 px-4 rounded-xl text-sm font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-lg ${
-              submitting || lineas.length === 0
+              submitting ||
+              lineas.length === 0 ||
+              totalFactura <= 0 ||
+              (condicionVenta === "CONTADO" && isEfectivo && montoRecibidoNum < totalFactura)
                 ? "bg-surface-subtle text-foreground-muted border border-border cursor-not-allowed opacity-60"
                 : "bg-primary text-primary-foreground hover:bg-primary-hover shadow-primary/20 cursor-pointer"
             }`}
@@ -1495,6 +1609,18 @@ export default function NewInvoiceView() {
         onClose={() => setIsSelectWorkOrderModalOpen(false)}
         onSelectOrder={handleSelectWorkOrder}
       />
+
+      {/* Modal de Impresión de Factura (Sección 19-20: Reutiliza Modelo 1 y Modelo 2) */}
+      {isPrintModalOpen && printInvoiceData && (
+        <InvoicePrintSelectorModal
+          isOpen={isPrintModalOpen}
+          onClose={() => {
+            setIsPrintModalOpen(false);
+            setPrintInvoiceData(null);
+          }}
+          invoiceData={printInvoiceData}
+        />
+      )}
     </div>
   );
 }

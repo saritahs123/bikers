@@ -79,26 +79,81 @@ export async function GET(request: NextRequest) {
     const sortByParam = (searchParams.get("sortBy") || "fecha_factura").toLowerCase();
     const sortOrderParam = (searchParams.get("sortOrder") || "desc").toUpperCase() === "ASC" ? "ASC" : "DESC";
 
+    // Consultar columnas reales de admin.facturas para tolerancia de esquema
+    const facColsRes = await query<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.columns WHERE table_schema = 'admin' AND table_name = 'facturas'`
+    );
+    const facCols = new Set((facColsRes || []).map(r => String(r.column_name).toLowerCase()));
+
+    const colCodigo = facCols.has("codigo_factura")
+      ? (facCols.has("numero_factura") ? "COALESCE(f.codigo_factura, f.numero_factura, 'FAC-' || f.factura_id::text)" : "COALESCE(f.codigo_factura, 'FAC-' || f.factura_id::text)")
+      : (facCols.has("numero_factura") ? "COALESCE(f.numero_factura, 'FAC-' || f.factura_id::text)" : "('FAC-' || f.factura_id::text)");
+
+    const colNumero = facCols.has("numero_factura")
+      ? (facCols.has("codigo_factura") ? "COALESCE(f.numero_factura, f.codigo_factura, 'FAC-' || f.factura_id::text)" : "COALESCE(f.numero_factura, 'FAC-' || f.factura_id::text)")
+      : (facCols.has("codigo_factura") ? "COALESCE(f.codigo_factura, 'FAC-' || f.factura_id::text)" : "('FAC-' || f.factura_id::text)");
+
+    const colTotal = facCols.has("total")
+      ? (facCols.has("total_factura") ? "COALESCE(f.total, f.total_factura, 0)" : "COALESCE(f.total, 0)")
+      : (facCols.has("total_factura") ? "COALESCE(f.total_factura, 0)" : "0");
+
+    const colDescuento = facCols.has("descuento")
+      ? (facCols.has("descuento_total") ? "COALESCE(f.descuento, f.descuento_total, 0)" : "COALESCE(f.descuento, 0)")
+      : (facCols.has("descuento_total") ? "COALESCE(f.descuento_total, 0)" : "0");
+
+    const colImpuesto = facCols.has("impuesto")
+      ? (facCols.has("impuesto_total") ? "COALESCE(f.impuesto, f.impuesto_total, 0)" : "COALESCE(f.impuesto, 0)")
+      : (facCols.has("impuesto_total") ? "COALESCE(f.impuesto_total, 0)" : "0");
+
+    const colFechaCreacion = facCols.has("fecha_creacion")
+      ? "COALESCE(f.fecha_creacion, f.fecha_factura, NOW())"
+      : (facCols.has("fecha_registro") ? "COALESCE(f.fecha_registro, f.fecha_factura, NOW())" : "COALESCE(f.fecha_factura, NOW())");
+
+    const colObservacion = facCols.has("observacion")
+      ? "COALESCE(f.observacion, '')"
+      : "''";
+
+    const colMontoPagado = facCols.has("monto_pagado")
+      ? "COALESCE(f.monto_pagado, 0)"
+      : "0";
+
+    const colBalancePendiente = facCols.has("balance_pendiente")
+      ? `COALESCE(f.balance_pendiente, ${colTotal})`
+      : `GREATEST(0, (${colTotal} - ${colMontoPagado}))`;
+
+    const colEmpresa = facCols.has("empresa_id")
+      ? "COALESCE(f.empresa_id, c.empresa_id, 1)"
+      : "COALESCE(c.empresa_id, 1)";
+
+    const colCondicion = facCols.has("condicion_venta")
+      ? "f.condicion_venta"
+      : "'CONTADO'";
+
     const sortColumns: Record<string, string> = {
       factura_id: "f.factura_id",
-      codigo_factura: "f.codigo_factura",
+      codigo_factura: colCodigo,
+      numero_factura: colNumero,
       fecha_factura: "f.fecha_factura",
-      fecha_creacion: "f.fecha_creacion",
-      total: "f.total",
-      monto_pagado: "f.monto_pagado",
-      balance_pendiente: "f.balance_pendiente",
+      fecha_creacion: colFechaCreacion,
+      total: colTotal,
+      monto_pagado: colMontoPagado,
+      balance_pendiente: colBalancePendiente,
       estado: "f.estado",
       cliente: "c.nombre_completo"
     };
     const sortColumn = sortColumns[sortByParam] || "f.fecha_factura";
 
-    const conditions: string[] = ["f.empresa_id = $1"];
+    const conditions: string[] = [
+      facCols.has("empresa_id")
+        ? "(f.empresa_id = $1 OR (f.empresa_id IS NULL AND (c.empresa_id = $1 OR c.empresa_id IS NULL)))"
+        : "(c.empresa_id = $1 OR c.empresa_id IS NULL)"
+    ];
     const params: (number | string)[] = [empresaId];
     let paramIndex = 2;
 
     if (search) {
       conditions.push(
-        `(f.codigo_factura ILIKE $${paramIndex} OR c.nombre_completo ILIKE $${paramIndex} OR c.identificacion ILIKE $${paramIndex} OR ot.codigo_orden ILIKE $${paramIndex})`
+        `(${colCodigo} ILIKE $${paramIndex} OR c.nombre_completo ILIKE $${paramIndex} OR c.identificacion ILIKE $${paramIndex} OR ot.codigo_orden ILIKE $${paramIndex})`
       );
       params.push(`%${search}%`);
       paramIndex++;
@@ -115,7 +170,7 @@ export async function GET(request: NextRequest) {
         conditions.push(`f.tipo_factura_id = $${paramIndex}`);
         params.push(Number(tipoFactura));
       } else {
-        conditions.push(`tf.codigo = $${paramIndex}`);
+        conditions.push(`COALESCE(tf.codigo, 'VENTA_DIRECTA') = $${paramIndex}`);
         params.push(tipoFactura);
       }
       paramIndex++;
@@ -139,11 +194,11 @@ export async function GET(request: NextRequest) {
     const metricasSql = `
       SELECT
         COUNT(*)::int AS total_facturas,
-        COALESCE(SUM(CASE WHEN f.estado <> 'ANULADA' THEN f.total ELSE 0 END), 0)::numeric AS facturado,
-        COALESCE(SUM(CASE WHEN f.estado <> 'ANULADA' THEN f.monto_pagado ELSE 0 END), 0)::numeric AS pagado,
-        COALESCE(SUM(CASE WHEN f.estado <> 'ANULADA' THEN f.balance_pendiente ELSE 0 END), 0)::numeric AS pendiente
+        COALESCE(SUM(CASE WHEN f.estado <> 'ANULADA' THEN ${colTotal} ELSE 0 END), 0)::numeric AS facturado,
+        COALESCE(SUM(CASE WHEN f.estado <> 'ANULADA' THEN ${colMontoPagado} ELSE 0 END), 0)::numeric AS pagado,
+        COALESCE(SUM(CASE WHEN f.estado <> 'ANULADA' THEN ${colBalancePendiente} ELSE 0 END), 0)::numeric AS pendiente
       FROM admin.facturas f
-      JOIN admin.tipo_factura tf ON f.tipo_factura_id = tf.tipo_factura_id
+      LEFT JOIN admin.tipo_factura tf ON f.tipo_factura_id = tf.tipo_factura_id
       LEFT JOIN admin.clientes c ON f.cliente_id = c.cliente_id
       LEFT JOIN admin.ordenes_trabajo ot ON f.orden_trabajo_id = ot.orden_trabajo_id
       WHERE ${whereClause};
@@ -167,12 +222,13 @@ export async function GET(request: NextRequest) {
     const listSql = `
       SELECT
         f.factura_id,
-        f.empresa_id,
-        f.codigo_factura,
-        f.numero_factura,
+        ${colEmpresa} AS empresa_id,
+        ${colCodigo} AS codigo_factura,
+        ${colNumero} AS numero_factura,
         f.tipo_factura_id,
-        tf.codigo AS tipo_factura_codigo,
-        tf.nombre AS tipo_factura_nombre,
+        ${colCondicion} AS condicion_venta,
+        COALESCE(tf.codigo, 'VENTA_DIRECTA') AS tipo_factura_codigo,
+        COALESCE(tf.nombre, 'Venta Directa') AS tipo_factura_nombre,
         f.cliente_id,
         COALESCE(c.nombre_completo, 'Cliente General') AS cliente_nombre,
         c.identificacion AS cliente_identificacion,
@@ -182,20 +238,20 @@ export async function GET(request: NextRequest) {
         ot.codigo_orden,
         f.fecha_factura,
         f.subtotal,
-        f.descuento,
-        f.descuento_total,
-        f.impuesto,
-        f.impuesto_total,
-        f.total,
-        f.total_factura,
-        f.monto_pagado,
-        f.balance_pendiente,
+        ${colDescuento} AS descuento,
+        ${colDescuento} AS descuento_total,
+        ${colImpuesto} AS impuesto,
+        ${colImpuesto} AS impuesto_total,
+        ${colTotal} AS total,
+        ${colTotal} AS total_factura,
+        ${colMontoPagado} AS monto_pagado,
+        ${colBalancePendiente} AS balance_pendiente,
         f.estado,
-        f.observacion,
-        f.fecha_creacion,
+        ${colObservacion} AS observacion,
+        ${colFechaCreacion} AS fecha_creacion,
         (SELECT COUNT(*)::int FROM admin.detalle_factura df WHERE df.factura_id = f.factura_id) AS total_lineas
       FROM admin.facturas f
-      JOIN admin.tipo_factura tf ON f.tipo_factura_id = tf.tipo_factura_id
+      LEFT JOIN admin.tipo_factura tf ON f.tipo_factura_id = tf.tipo_factura_id
       LEFT JOIN admin.clientes c ON f.cliente_id = c.cliente_id
       LEFT JOIN admin.ordenes_trabajo ot ON f.orden_trabajo_id = ot.orden_trabajo_id
       WHERE ${whereClause}
@@ -203,15 +259,17 @@ export async function GET(request: NextRequest) {
       LIMIT $${limitIndex} OFFSET $${offsetIndex};
     `;
 
-    const rawRows = await query<FacturaListRow>(listSql, listParams);
+    const rawRows = await query<FacturaListRow & { condicion_venta?: string }>(listSql, listParams);
 
     const data = (rawRows || []).map((row) => ({
       factura_id: Number(row.factura_id),
+      empresa_id: Number(row.empresa_id),
       codigo_factura: row.codigo_factura,
       numero_factura: row.numero_factura || row.codigo_factura,
       tipo_factura_id: Number(row.tipo_factura_id),
-      tipo_factura_codigo: row.tipo_factura_codigo,
-      tipo_factura_nombre: row.tipo_factura_nombre,
+      tipo_factura_codigo: row.tipo_factura_codigo || "VENTA_DIRECTA",
+      tipo_factura_nombre: row.tipo_factura_nombre || "Venta Directa",
+      condicion_venta: (row.condicion_venta as "CONTADO" | "CREDITO") || "CONTADO",
       cliente_id: row.cliente_id ? Number(row.cliente_id) : null,
       cliente_nombre: row.cliente_nombre || "Cliente General",
       cliente_identificacion: row.cliente_identificacion || "",
@@ -239,6 +297,7 @@ export async function GET(request: NextRequest) {
         page,
         limit,
         total: totalRecords,
+        totalRecords,
         totalPages
       },
       metricas: {
@@ -312,14 +371,68 @@ export async function POST(request: NextRequest) {
     interface RawPagoInput {
       tipo_pago_id?: number | string;
       monto?: number | string;
+      monto_recibido?: number | string | null;
+      monto_devuelta?: number | string | null;
       referencia?: string | null;
       observacion?: string | null;
       fecha_pago?: string | Date;
     }
 
+    const condicionVenta: "CONTADO" | "CREDITO" = body.condicion_venta === "CREDITO" ? "CREDITO" : "CONTADO";
+
+    let pagosIniciales: {
+      tipo_pago_id: number;
+      monto: number;
+      monto_recibido?: number | null;
+      monto_devuelta?: number | null;
+      referencia?: string | null;
+      observacion?: string | null;
+      fecha_pago?: string | Date;
+    }[] = [];
+
+    if (condicionVenta === "CONTADO") {
+      if (body.pago && body.pago.tipo_pago_id) {
+        pagosIniciales = [{
+          tipo_pago_id: Number(body.pago.tipo_pago_id),
+          monto: Number(body.pago.monto || 0),
+          monto_recibido: body.pago.monto_recibido != null ? Number(body.pago.monto_recibido) : null,
+          monto_devuelta: body.pago.monto_devuelta != null ? Number(body.pago.monto_devuelta) : null,
+          referencia: body.pago.referencia ? String(body.pago.referencia).trim() : null,
+          observacion: body.pago.observacion ? String(body.pago.observacion).trim() : null,
+          fecha_pago: body.pago.fecha_pago || new Date()
+        }];
+      } else if (Array.isArray(body.pagos_iniciales) && body.pagos_iniciales.length > 0) {
+        pagosIniciales = (body.pagos_iniciales as RawPagoInput[]).map((p: RawPagoInput) => ({
+          tipo_pago_id: Number(p.tipo_pago_id || 0),
+          monto: Number(p.monto || 0),
+          monto_recibido: p.monto_recibido != null ? Number(p.monto_recibido) : null,
+          monto_devuelta: p.monto_devuelta != null ? Number(p.monto_devuelta) : null,
+          referencia: p.referencia ? String(p.referencia).trim() : null,
+          observacion: p.observacion ? String(p.observacion).trim() : null,
+          fecha_pago: p.fecha_pago || new Date()
+        }));
+      } else if (body.tipo_pago_id) {
+        pagosIniciales = [{
+          tipo_pago_id: Number(body.tipo_pago_id),
+          monto: Number(body.monto || 0),
+          monto_recibido: body.monto_recibido != null ? Number(body.monto_recibido) : null,
+          monto_devuelta: body.monto_devuelta != null ? Number(body.monto_devuelta) : null,
+          referencia: body.referencia ? String(body.referencia).trim() : null,
+          observacion: body.observacion ? String(body.observacion).trim() : null,
+          fecha_pago: new Date()
+        }];
+      } else {
+        return NextResponse.json(
+          { error: "VALIDATION_ERROR", message: "Debe seleccionar un tipo de pago para ventas al contado." },
+          { status: 400 }
+        );
+      }
+    }
+
     const input: CrearFacturaInput = {
       empresa_id: session.empresa_id,
       tipo_factura_id: Number(body.tipo_factura_id),
+      condicion_venta: condicionVenta,
       cliente_id: body.cliente_id ? Number(body.cliente_id) : null,
       orden_trabajo_id: body.orden_trabajo_id ? Number(body.orden_trabajo_id) : null,
       fecha_factura: body.fecha_factura || new Date(),
@@ -339,15 +452,7 @@ export async function POST(request: NextRequest) {
         descuento: Number(l.descuento || 0),
         costo_unitario: l.costo_unitario != null ? Number(l.costo_unitario) : null
       })),
-      pagos_iniciales: Array.isArray(body.pagos_iniciales)
-        ? (body.pagos_iniciales as RawPagoInput[]).map((p: RawPagoInput) => ({
-            tipo_pago_id: Number(p.tipo_pago_id || 0),
-            monto: Number(p.monto || 0),
-            referencia: p.referencia ? String(p.referencia).trim() : null,
-            observacion: p.observacion ? String(p.observacion).trim() : null,
-            fecha_pago: p.fecha_pago || new Date()
-          }))
-        : []
+      pagos_iniciales: pagosIniciales
     };
 
     const result = await crearFactura(input);

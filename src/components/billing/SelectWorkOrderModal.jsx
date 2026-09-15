@@ -95,7 +95,7 @@ export default function SelectWorkOrderModal({ isOpen, onClose, onSelectOrder })
                 Seleccionar Orden de Trabajo
               </h2>
               <p className="text-xs text-foreground-muted">
-                Solo se listan órdenes en <strong className="text-emerald-400 font-mono">LISTA_ENTREGA</strong> sin factura activa previa
+                Solo se listan órdenes completada y sin factura activa previa
               </p>
             </div>
           </div>

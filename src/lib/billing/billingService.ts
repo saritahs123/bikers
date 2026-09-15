@@ -62,11 +62,14 @@ import {
   PagoRow,
   FacturaCompletaResult,
   EstadoFactura,
+  CondicionVenta,
   GetOrCreateInvoiceForWorkOrderInput,
   LineaFacturaInput
 } from "./billingTypes";
 import { registrarMovimientoInventario } from "@/lib/inventory/inventoryMovementService";
 import { INVENTORY_SYSTEM_CODES, generarCodigoMovimiento } from "@/lib/inventory/inventoryConstants";
+
+const BILLING_ADVISORY_LOCK_ID = 7005;
 
 /**
  * Retorna el conjunto de columnas existentes en una tabla de admin en minúsculas.
@@ -180,6 +183,9 @@ export async function crearFactura(
       await client.query("BEGIN");
     }
 
+    // 0. Concurrencia segura: Lock consultivo a nivel de transacción para facturación
+    await client.query("SELECT pg_advisory_xact_lock($1)", [BILLING_ADVISORY_LOCK_ID]);
+
     // 1. Validaciones básicas de entrada y Multitenancy
     if (!input.empresa_id || input.empresa_id <= 0) {
       throw new Error("El ID de empresa (empresa_id) es obligatorio y debe ser válido.");
@@ -273,6 +279,108 @@ export async function crearFactura(
       }
     }
 
+    // 3.1. Proteger y reconstruir líneas SERVICIO y REPUESTO desde la OT oficial (Sección 13, 14, 15)
+    if (input.orden_trabajo_id) {
+      const srvSql = `
+        SELECT
+          os.orden_servicio_id,
+          os.tipo_servicio_id,
+          COALESCE(os.codigo_servicio, 'SRV-' || LPAD(os.orden_servicio_id::text, 4, '0')) AS codigo,
+          COALESCE(ts.nombre, 'Servicio de Taller') AS descripcion,
+          COALESCE(os.cantidad, 1)::numeric AS cantidad,
+          COALESCE(os.precio_unitario, 0)::numeric AS precio_unitario,
+          COALESCE(os.valor_descuento, 0)::numeric AS descuento,
+          COALESCE(
+            NULLIF(os.subtotal, 0),
+            ROUND((COALESCE(os.cantidad, 1) * COALESCE(os.precio_unitario, 0)) - COALESCE(os.valor_descuento, 0), 2)
+          )::numeric AS subtotal
+        FROM admin.orden_servicios os
+        LEFT JOIN admin.tipo_servicio ts ON os.tipo_servicio_id = ts.tipo_servicio_id
+        WHERE os.orden_trabajo_id = $1 AND (os.activo IS DISTINCT FROM false)
+        ORDER BY os.orden_servicio_id ASC;
+      `;
+      const srvRes = await client.query<{
+        orden_servicio_id: number;
+        tipo_servicio_id: number | null;
+        codigo: string;
+        descripcion: string;
+        cantidad: string | number;
+        precio_unitario: string | number;
+        descuento: string | number;
+        subtotal: string | number;
+      }>(srvSql, [input.orden_trabajo_id]);
+
+      const partSql = `
+        SELECT
+          op.orden_producto_id,
+          op.producto_id,
+          op.almacen_id,
+          COALESCE(p.codigo_producto, 'PRD-' || LPAD(op.producto_id::text, 4, '0')) AS codigo,
+          COALESCE(p.nombre, 'Repuesto #' || op.producto_id::text) AS descripcion,
+          COALESCE(op.cantidad, 1)::numeric AS cantidad,
+          COALESCE(op.precio_unitario, 0)::numeric AS precio_unitario,
+          COALESCE(op.valor_descuento, 0)::numeric AS descuento,
+          COALESCE(
+            NULLIF(op.subtotal, 0),
+            ROUND((COALESCE(op.cantidad, 1) * COALESCE(op.precio_unitario, 0)) - COALESCE(op.valor_descuento, 0), 2)
+          )::numeric AS subtotal,
+          COALESCE(ep.costo_promedio, p.costo_actual, 0)::numeric AS costo_unitario
+        FROM admin.orden_productos op
+        LEFT JOIN admin.productos p ON op.producto_id = p.producto_id
+        LEFT JOIN admin.existencias_producto ep ON (ep.producto_id = op.producto_id AND ep.almacen_id = op.almacen_id)
+        WHERE op.orden_trabajo_id = $1 AND op.utilizado = true
+        ORDER BY op.orden_producto_id ASC;
+      `;
+      const partRes = await client.query<{
+        orden_producto_id: number;
+        producto_id: number;
+        almacen_id: number | null;
+        codigo: string;
+        descripcion: string;
+        cantidad: string | number;
+        precio_unitario: string | number;
+        descuento: string | number;
+        subtotal: string | number;
+        costo_unitario: string | number | null;
+      }>(partSql, [input.orden_trabajo_id]);
+
+      // Extraer productos adicionales manuales ingresados por el usuario
+      const manualProducts = (input.lineas || []).filter(
+        (l) => l.tipo_linea === "PRODUCTO" && !l.orden_servicio_id && !l.orden_producto_id
+      );
+
+      input.lineas = [
+        ...srvRes.rows.map((s) => ({
+          tipo_linea: "SERVICIO" as const,
+          tipo_servicio_id: s.tipo_servicio_id ? Number(s.tipo_servicio_id) : null,
+          orden_servicio_id: Number(s.orden_servicio_id),
+          producto_id: null,
+          almacen_id: null,
+          codigo: s.codigo,
+          descripcion: s.descripcion,
+          cantidad: Number(s.cantidad),
+          precio_unitario: Number(s.precio_unitario),
+          descuento: Number(s.descuento || 0),
+          costo_unitario: null
+        })),
+        ...partRes.rows.map((r) => ({
+          tipo_linea: "REPUESTO" as const,
+          producto_id: Number(r.producto_id),
+          orden_producto_id: Number(r.orden_producto_id),
+          almacen_id: r.almacen_id ? Number(r.almacen_id) : null,
+          tipo_servicio_id: null,
+          orden_servicio_id: null,
+          codigo: r.codigo,
+          descripcion: r.descripcion,
+          cantidad: Number(r.cantidad),
+          precio_unitario: Number(r.precio_unitario),
+          descuento: Number(r.descuento || 0),
+          costo_unitario: r.costo_unitario != null ? Number(r.costo_unitario) : null
+        })),
+        ...manualProducts
+      ];
+    }
+
     // 4. Calcular Totales de Líneas con validación rigurosa
     let subtotalGeneral = 0;
     let descuentoGeneral = 0;
@@ -311,57 +419,90 @@ export async function crearFactura(
     const impuestoGeneral = 0.00;
     const totalFactura = parseFloat((subtotalNeto + impuestoGeneral).toFixed(2));
 
-    // 5. Procesar pagos iniciales si fueron provistos
+    if (totalFactura <= 0) {
+      throw new Error("El total de la factura debe ser mayor a 0.");
+    }
+
+    // 5. Condición de Venta y Procesamiento de Pagos (CONTADO vs CRÉDITO)
+    const condicionVenta: CondicionVenta = input.condicion_venta || (input.pagos_iniciales && input.pagos_iniciales.length > 0 ? "CONTADO" : "CREDITO");
+
     const pagosValidados: PagoInicialInput[] = [];
     let montoPagadoInicial = 0;
 
-    if (input.pagos_iniciales && input.pagos_iniciales.length > 0) {
-      for (let j = 0; j < input.pagos_iniciales.length; j++) {
-        const p = input.pagos_iniciales[j];
-        const monto = Number(p.monto);
-        if (isNaN(monto) || monto <= 0) {
-          throw new Error(`El monto del pago #${j + 1} debe ser mayor a 0.`);
-        }
-        if (!p.tipo_pago_id || p.tipo_pago_id <= 0) {
-          throw new Error(`El tipo de pago del abono #${j + 1} es obligatorio.`);
-        }
-        montoPagadoInicial += monto;
-        pagosValidados.push(p);
+    if (condicionVenta === "CREDITO") {
+      // En venta a crédito: NO se genera pago inicial, estado = PENDIENTE, balance = total
+      montoPagadoInicial = 0;
+    } else {
+      // En venta al CONTADO: se genera el pago completo en la misma transacción
+      if (!input.pagos_iniciales || input.pagos_iniciales.length === 0) {
+        throw new Error("Debe seleccionar un tipo de pago para ventas al contado.");
       }
-    }
 
-    montoPagadoInicial = parseFloat(montoPagadoInicial.toFixed(2));
-    if (montoPagadoInicial > totalFactura) {
-      throw new Error(
-        `El monto total pagado (RD$ ${montoPagadoInicial.toFixed(2)}) no puede exceder el total de la factura (RD$ ${totalFactura.toFixed(2)}).`
+      const rawP = input.pagos_iniciales[0];
+      if (!rawP.tipo_pago_id || rawP.tipo_pago_id <= 0) {
+        throw new Error("Debe seleccionar un tipo de pago válido para ventas al contado.");
+      }
+
+      const tpRes = await client.query<{ codigo: string; nombre: string }>(
+        `SELECT codigo, nombre FROM admin.tipo_pago WHERE tipo_pago_id = $1`,
+        [rawP.tipo_pago_id]
       );
+      const tipoPagoCodigo = tpRes.rows[0]?.codigo || "EFECTIVO";
+
+      let montoRecibido = Number(rawP.monto_recibido != null ? rawP.monto_recibido : (rawP.monto || totalFactura));
+      if (isNaN(montoRecibido) || montoRecibido <= 0) {
+        montoRecibido = totalFactura;
+      }
+
+      let montoDevuelta = 0;
+      if (tipoPagoCodigo === "EFECTIVO") {
+        if (montoRecibido < totalFactura) {
+          throw new Error(
+            `El monto recibido en efectivo (RD$ ${montoRecibido.toFixed(2)}) no puede ser menor al total de la factura (RD$ ${totalFactura.toFixed(2)}).`
+          );
+        }
+        montoDevuelta = parseFloat((montoRecibido - totalFactura).toFixed(2));
+      } else {
+        montoRecibido = totalFactura;
+        montoDevuelta = 0;
+      }
+
+      // En admin.pagos.monto SIEMPRE se guarda el total real de la factura (Sección 7)
+      pagosValidados.push({
+        tipo_pago_id: rawP.tipo_pago_id,
+        monto: totalFactura,
+        monto_recibido: montoRecibido,
+        monto_devuelta: montoDevuelta,
+        referencia: rawP.referencia ? rawP.referencia.trim() : null,
+        observacion: rawP.observacion ? rawP.observacion.trim() : null,
+        fecha_pago: rawP.fecha_pago || new Date()
+      });
+
+      montoPagadoInicial = totalFactura;
     }
 
     const balancePendiente = Math.max(0, parseFloat((totalFactura - montoPagadoInicial).toFixed(2)));
-
-    // Determinar estado financiero inicial de la factura
-    let estadoInicial: EstadoFactura = "PENDIENTE";
-    if (totalFactura <= 0) {
-      estadoInicial = montoPagadoInicial > 0 ? "PAGADA" : "PENDIENTE";
-    } else if (montoPagadoInicial >= totalFactura) {
-      estadoInicial = "PAGADA";
-    } else if (montoPagadoInicial > 0) {
-      estadoInicial = "PARCIAL";
-    } else {
-      estadoInicial = "PENDIENTE";
-    }
+    const estadoInicial: EstadoFactura = condicionVenta === "CONTADO" ? "PAGADA" : "PENDIENTE";
 
     // 6. Generar Código Correlativo Canónico de Factura
     const codigoFactura = await generarCodigoFactura(client, input.empresa_id);
+
+    // 6.1. Generar factura_id seguro bajo lock de transacción
+    const maxFacRes = await client.query(
+      `SELECT COALESCE(MAX(factura_id), 0) + 1 AS next_id FROM admin.facturas`
+    );
+    const facturaId = Number(maxFacRes.rows[0]?.next_id) || 1;
 
     // 7. Insertar Cabecera en admin.facturas de forma tolerante a columnas
     const facCols = await getTableColumns(client, "facturas");
 
     const facData: Record<string, unknown> = {
+      factura_id: facturaId,
       empresa_id: input.empresa_id,
       codigo_factura: codigoFactura,
       numero_factura: codigoFactura,
       tipo_factura_id: input.tipo_factura_id,
+      condicion_venta: condicionVenta,
       cliente_id: input.cliente_id || null,
       orden_trabajo_id: input.orden_trabajo_id || null,
       fecha_factura: input.fecha_factura || new Date(),
@@ -385,18 +526,19 @@ export async function crearFactura(
     const validFacEntries = Object.entries(facData).filter(([col]) => facCols.has(col));
     const facColNames = validFacEntries.map(([col]) => col).join(", ");
     const facPlaceholders = validFacEntries.map((_, idx) => `$${idx + 1}`).join(", ");
-    const facValues = validFacEntries.map(([_, val]) => val);
+    const facValues = validFacEntries.map(([, val]) => val);
 
     const facRes = await client.query(
       `INSERT INTO admin.facturas (${facColNames}) VALUES (${facPlaceholders}) RETURNING *`,
       facValues
     );
 
-    const facturaRow: FacturaRow = facRes.rows[0];
+    const facturaRow: FacturaRow = facRes.rows[0] || {};
     if (!facturaRow.codigo_factura) {
-      facturaRow.codigo_factura = (facturaRow.numero_factura as string) || `FAC-${facturaRow.factura_id}`;
+      facturaRow.codigo_factura = (facturaRow.numero_factura as string) || `FAC-${facturaId}`;
     }
-    const facturaId = facturaRow.factura_id;
+    facturaRow.factura_id = facturaId;
+    facturaRow.condicion_venta = condicionVenta;
 
     // 7.1. Salida física de Inventario para líneas PRODUCTO (FAC-2, FAC-3, Secciones 9, 10, 11)
     // - Las líneas REPUESTO de una OT NO generan SAL_VENTA porque ya salieron vía SAL_ORDEN.
@@ -457,13 +599,20 @@ export async function crearFactura(
     const insertedDetalles: DetalleFacturaRow[] = [];
     const detCols = await getTableColumns(client, "detalle_factura");
 
+    const maxDetRes = await client.query(
+      `SELECT COALESCE(MAX(detalle_factura_id), 0) AS max_id FROM admin.detalle_factura`
+    );
+    let nextDetalleId = Number(maxDetRes.rows[0]?.max_id) || 0;
+
     for (const linea of input.lineas) {
+      nextDetalleId += 1;
       const cant = Number(linea.cantidad);
       const prec = Number(linea.precio_unitario);
       const desc = Number(linea.descuento || 0);
       const sub = parseFloat(((cant * prec) - desc).toFixed(2));
 
       const detData: Record<string, unknown> = {
+        detalle_factura_id: nextDetalleId,
         factura_id: facturaId,
         almacen_id: linea.almacen_id || null,
         tipo_linea: linea.tipo_linea,
@@ -489,7 +638,7 @@ export async function crearFactura(
       const validDetEntries = Object.entries(detData).filter(([col]) => detCols.has(col));
       const detColNames = validDetEntries.map(([col]) => col).join(", ");
       const detPlaceholders = validDetEntries.map((_, idx) => `$${idx + 1}`).join(", ");
-      const detValues = validDetEntries.map(([_, val]) => val);
+      const detValues = validDetEntries.map(([, val]) => val);
 
       const detRes = await client.query(
         `INSERT INTO admin.detalle_factura (${detColNames}) VALUES (${detPlaceholders}) RETURNING *`,
@@ -504,13 +653,22 @@ export async function crearFactura(
     if (pagosValidados.length > 0) {
       const pagoCols = await getTableColumns(client, "pagos");
 
+      const maxPagoRes = await client.query(
+        `SELECT COALESCE(MAX(pago_id), 0) AS max_id FROM admin.pagos`
+      );
+      let nextPagoId = Number(maxPagoRes.rows[0]?.max_id) || 0;
+
       for (const p of pagosValidados) {
+        nextPagoId += 1;
         const pagoData: Record<string, unknown> = {
+          pago_id: nextPagoId,
           empresa_id: input.empresa_id,
           factura_id: facturaId,
           tipo_pago_id: p.tipo_pago_id,
           monto: Number(p.monto),
           monto_pago: Number(p.monto),
+          monto_recibido: p.monto_recibido != null ? Number(p.monto_recibido) : Number(p.monto),
+          monto_devuelta: p.monto_devuelta != null ? Number(p.monto_devuelta) : 0,
           referencia: p.referencia ? p.referencia.trim() : null,
           observacion: p.observacion ? p.observacion.trim() : null,
           fecha_pago: p.fecha_pago || new Date(),
@@ -524,7 +682,7 @@ export async function crearFactura(
         const validPagoEntries = Object.entries(pagoData).filter(([col]) => pagoCols.has(col));
         const pagoColNames = validPagoEntries.map(([col]) => col).join(", ");
         const pagoPlaceholders = validPagoEntries.map((_, idx) => `$${idx + 1}`).join(", ");
-        const pagoValues = validPagoEntries.map(([_, val]) => val);
+        const pagoValues = validPagoEntries.map(([, val]) => val);
 
         const pagoRes = await client.query(
           `INSERT INTO admin.pagos (${pagoColNames}) VALUES (${pagoPlaceholders}) RETURNING *`,
@@ -798,6 +956,9 @@ export async function registrarPago(
       await client.query("BEGIN");
     }
 
+    // 0. Concurrencia segura: Lock consultivo para registro de pagos
+    await client.query("SELECT pg_advisory_xact_lock($1)", [BILLING_ADVISORY_LOCK_ID]);
+
     // 1. Validaciones de entrada
     const monto = Number(input.monto);
     if (isNaN(monto) || monto <= 0) {
@@ -856,36 +1017,41 @@ export async function registrarPago(
       nuevoEstado = "PARCIAL";
     }
 
-    // 4. Insertar registro en admin.pagos
-    const insertPagoSql = `
-      INSERT INTO admin.pagos (
-        empresa_id,
-        factura_id,
-        tipo_pago_id,
-        monto,
-        monto_pago,
-        referencia,
-        observacion,
-        fecha_pago,
-        estado,
-        usuario_id,
-        fecha_creacion
-      ) VALUES (
-        $1, $2, $3, $4, $4, $5, $6, COALESCE($7, NOW()), 'APLICADO', $8, NOW()
-      )
-      RETURNING *;
-    `;
+    // 4. Insertar registro en admin.pagos generando pago_id seguro
+    const maxPagoRes = await client.query(
+      `SELECT COALESCE(MAX(pago_id), 0) + 1 AS next_id FROM admin.pagos`
+    );
+    const nextPagoId = Number(maxPagoRes.rows[0]?.next_id) || 1;
 
-    const pagoInsertRes = await client.query(insertPagoSql, [
-      input.empresa_id,
-      input.factura_id,
-      input.tipo_pago_id,
-      monto,
-      input.referencia ? input.referencia.trim() : null,
-      input.observacion ? input.observacion.trim() : null,
-      input.fecha_pago || null,
-      input.usuario_id
-    ]);
+    const pagoCols = await getTableColumns(client, "pagos");
+    const pagoData: Record<string, unknown> = {
+      pago_id: nextPagoId,
+      empresa_id: input.empresa_id,
+      factura_id: input.factura_id,
+      tipo_pago_id: input.tipo_pago_id,
+      monto: monto,
+      monto_pago: monto,
+      monto_recibido: input.monto_recibido != null ? Number(input.monto_recibido) : monto,
+      monto_devuelta: input.monto_devuelta != null ? Number(input.monto_devuelta) : 0,
+      referencia: input.referencia ? input.referencia.trim() : null,
+      observacion: input.observacion ? input.observacion.trim() : null,
+      fecha_pago: input.fecha_pago || new Date(),
+      estado: "APLICADO",
+      usuario_id: input.usuario_id,
+      usuario_registro: input.usuario_id,
+      fecha_creacion: new Date(),
+      fecha_registro: new Date()
+    };
+
+    const validPagoEntries = Object.entries(pagoData).filter(([col]) => pagoCols.has(col));
+    const pagoColNames = validPagoEntries.map(([col]) => col).join(", ");
+    const pagoPlaceholders = validPagoEntries.map((_, idx) => `$${idx + 1}`).join(", ");
+    const pagoValues = validPagoEntries.map(([, val]) => val);
+
+    const pagoInsertRes = await client.query(
+      `INSERT INTO admin.pagos (${pagoColNames}) VALUES (${pagoPlaceholders}) RETURNING *`,
+      pagoValues
+    );
     const pagoRow: PagoRow = pagoInsertRes.rows[0];
 
     // 5. Actualizar admin.facturas

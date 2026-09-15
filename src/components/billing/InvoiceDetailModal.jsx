@@ -47,7 +47,11 @@ export default function InvoiceDetailModal({
         if (!isMounted) return;
 
         if (!res.ok) {
-          throw new Error(json.message || json.error || "No se pudo cargar el detalle de la factura.");
+          throw new Error(
+            json.details
+              ? `${json.message || "Error al cargar la factura"}: ${json.details}`
+              : (json.message || json.error || "No se pudo cargar el detalle de la factura.")
+          );
         }
 
         setData(json.data);

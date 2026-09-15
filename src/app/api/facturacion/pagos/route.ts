@@ -177,7 +177,7 @@ export async function GET(request: NextRequest) {
         p.estado,
         p.fecha_creacion,
         p.usuario_id,
-        COALESCE(NULLIF(TRIM(CONCAT_WS(' ', ui.nombre, ui.apellido)), ''), u.correo_electronico, 'Usuario no disponible') AS usuario_nombre
+        COALESCE(NULLIF(TRIM(CONCAT_WS(' ', ui.nombre, ui.apellido)), ''), ui.correo_electronico, 'Usuario no disponible') AS usuario_nombre
       FROM admin.pagos p
       JOIN admin.tipo_pago tp ON p.tipo_pago_id = tp.tipo_pago_id
       JOIN admin.facturas f ON p.factura_id = f.factura_id
