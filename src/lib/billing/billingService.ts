@@ -685,10 +685,15 @@ export async function crearFactura(
         const pagoValues = validPagoEntries.map(([, val]) => val);
 
         const pagoRes = await client.query(
-          `INSERT INTO admin.pagos (${pagoColNames}) VALUES (${pagoPlaceholders}) RETURNING *`,
+          `INSERT INTO admin.pagos (${pagoColNames}) VALUES (${pagoPlaceholders}) RETURNING *, monto_pago AS monto`,
           pagoValues
         );
-        insertedPagos.push(pagoRes.rows[0]);
+        const rPago = pagoRes.rows[0] || {};
+        insertedPagos.push({
+          ...rPago,
+          monto: Number(rPago.monto_pago != null ? rPago.monto_pago : p.monto),
+          monto_pago: Number(rPago.monto_pago != null ? rPago.monto_pago : p.monto)
+        });
       }
     }
 
@@ -990,14 +995,21 @@ export async function registrarPago(
 
     // 3. Consultar pagos aplicados actuales para calcular el nuevo acumulado
     const pagosRes = await client.query(`
-      SELECT COALESCE(SUM(COALESCE(p.monto_pago, p.monto, 0)), 0)::numeric AS total_pagado
+      SELECT COALESCE(SUM(p.monto_pago), 0)::numeric AS total_pagado
       FROM admin.pagos p
       JOIN admin.facturas f ON p.factura_id = f.factura_id
       WHERE p.factura_id = $1 AND f.empresa_id = $2 AND (p.estado = 'APLICADO' OR p.estado IS NULL)
     `, [input.factura_id, input.empresa_id]);
 
     const totalPagadoPrevio = parseFloat(pagosRes.rows[0]?.total_pagado || "0");
-    const totalFactura = parseFloat(String(factura.total || factura.total_factura || "0"));
+    const totalFacturaNum = Number(factura.total) > 0
+      ? Number(factura.total)
+      : (Number(factura.total_factura) > 0
+          ? Number(factura.total_factura)
+          : (Number(factura.subtotal) > 0
+              ? Number(factura.subtotal)
+              : Number(factura.balance_pendiente || 0)));
+    const totalFactura = parseFloat(totalFacturaNum.toFixed(2));
     const nuevoTotalPagado = parseFloat((totalPagadoPrevio + monto).toFixed(2));
 
     // Regla: No permitir total de pagos activos mayor que total de factura
@@ -1049,10 +1061,17 @@ export async function registrarPago(
     const pagoValues = validPagoEntries.map(([, val]) => val);
 
     const pagoInsertRes = await client.query(
-      `INSERT INTO admin.pagos (${pagoColNames}) VALUES (${pagoPlaceholders}) RETURNING *`,
+      `INSERT INTO admin.pagos (${pagoColNames}) VALUES (${pagoPlaceholders}) RETURNING *, monto_pago AS monto`,
       pagoValues
     );
-    const pagoRow: PagoRow = pagoInsertRes.rows[0];
+    const rawPagoRow = pagoInsertRes.rows[0] || {};
+    const pagoRow: PagoRow = {
+      ...rawPagoRow,
+      monto: Number(rawPagoRow.monto_pago != null ? rawPagoRow.monto_pago : (rawPagoRow.monto != null ? rawPagoRow.monto : monto)),
+      monto_pago: Number(rawPagoRow.monto_pago != null ? rawPagoRow.monto_pago : (rawPagoRow.monto != null ? rawPagoRow.monto : monto)),
+      monto_recibido: rawPagoRow.monto_recibido != null ? Number(rawPagoRow.monto_recibido) : (input.monto_recibido != null ? Number(input.monto_recibido) : monto),
+      monto_devuelta: rawPagoRow.monto_devuelta != null ? Number(rawPagoRow.monto_devuelta) : (input.monto_devuelta != null ? Number(input.monto_devuelta) : 0)
+    };
 
     // 5. Actualizar admin.facturas
     const updateFacSql = `
@@ -1061,6 +1080,8 @@ export async function registrarPago(
         monto_pagado = $1,
         balance_pendiente = $2,
         estado = $3,
+        total = CASE WHEN total IS NULL OR total = 0 THEN COALESCE(NULLIF(total_factura, 0), $7) ELSE total END,
+        total_factura = CASE WHEN total_factura IS NULL OR total_factura = 0 THEN COALESCE(NULLIF(total, 0), $7) ELSE total_factura END,
         usuario_modificacion_id = $4,
         fecha_modificacion = NOW()
       WHERE factura_id = $5 AND empresa_id = $6
@@ -1073,10 +1094,19 @@ export async function registrarPago(
       nuevoEstado,
       input.usuario_id,
       input.factura_id,
-      input.empresa_id
+      input.empresa_id,
+      totalFactura
     ]);
 
-    const updatedFactura: FacturaRow = facUpdateRes.rows[0];
+    const rawFacturaRow = facUpdateRes.rows[0] || {};
+    const updatedFactura: FacturaRow = {
+      ...rawFacturaRow,
+      total: Number(rawFacturaRow.total) > 0 ? Number(rawFacturaRow.total) : totalFactura,
+      total_factura: Number(rawFacturaRow.total_factura) > 0 ? Number(rawFacturaRow.total_factura) : totalFactura,
+      monto_pagado: nuevoTotalPagado,
+      balance_pendiente: nuevoBalancePendiente,
+      estado: nuevoEstado
+    };
 
     if (isInternalTransaction) {
       await client.query("COMMIT");
@@ -1144,7 +1174,7 @@ export async function recalcularEstadoFactura(
 
   // 3. Sumar pagos
   const pagosRes = await client.query(`
-    SELECT COALESCE(SUM(COALESCE(p.monto_pago, p.monto, 0)), 0)::numeric AS total_pagado
+    SELECT COALESCE(SUM(p.monto_pago), 0)::numeric AS total_pagado
     FROM admin.pagos p
     JOIN admin.facturas f ON p.factura_id = f.factura_id
     WHERE p.factura_id = $1 AND f.empresa_id = $2 AND (p.estado = 'APLICADO' OR p.estado IS NULL)
@@ -1326,7 +1356,18 @@ export async function obtenerFacturaPorId(
       return null;
     }
 
-    const factura: FacturaRow = facRes.rows[0];
+    const rawFactura = facRes.rows[0];
+    const safeTotal = Number(rawFactura.total) > 0
+      ? Number(rawFactura.total)
+      : (Number(rawFactura.total_factura) > 0
+          ? Number(rawFactura.total_factura)
+          : (Number(rawFactura.subtotal) > 0 ? Number(rawFactura.subtotal) : Number(rawFactura.balance_pendiente || 0)));
+
+    const factura: FacturaRow = {
+      ...rawFactura,
+      total: safeTotal,
+      total_factura: safeTotal
+    };
 
     const detRes = await client.query(`
       SELECT *
@@ -1338,6 +1379,7 @@ export async function obtenerFacturaPorId(
     const pagosRes = await client.query(`
       SELECT
         p.*,
+        p.monto_pago AS monto,
         tp.codigo AS tipo_pago_codigo,
         tp.nombre AS tipo_pago_nombre
       FROM admin.pagos p

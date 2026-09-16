@@ -18,7 +18,21 @@ export default function RegisterPaymentModal({
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
 
-  const balancePendiente = factura ? Number(factura.balance_pendiente || 0) : 0;
+  const totalFactura = factura
+    ? (Number(factura.total) > 0
+        ? Number(factura.total)
+        : (Number(factura.total_factura) > 0
+            ? Number(factura.total_factura)
+            : (Number(factura.subtotal) > 0
+                ? Number(factura.subtotal)
+                : Number(factura.balance_pendiente || 0))))
+    : 0;
+
+  const balancePendiente = factura
+    ? (factura.balance_pendiente != null && !isNaN(Number(factura.balance_pendiente)) && Number(factura.balance_pendiente) >= 0
+        ? Number(factura.balance_pendiente)
+        : Math.max(0, totalFactura - Number(factura.monto_pagado || 0)))
+    : 0;
 
   // Cargar catálogo de tipos de pago
   useEffect(() => {
@@ -181,7 +195,7 @@ export default function RegisterPaymentModal({
             <div>
               <span className="text-[11px] text-foreground-muted block font-sans">Total Factura</span>
               <span className="text-sm font-mono font-bold text-foreground">
-                RD$ {Number(factura.total || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })}
+                RD$ {totalFactura.toLocaleString("es-DO", { minimumFractionDigits: 2 })}
               </span>
             </div>
             <div className="text-right">

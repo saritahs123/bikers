@@ -70,10 +70,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
       usuario_id: session.usuario_id
     });
 
+    const pagoObj = result.pago as unknown as Record<string, unknown>;
+    const montoFinal = Number(pagoObj.monto_pago ?? pagoObj.monto ?? monto);
+
     return NextResponse.json({
       success: true,
       message: `Pago de RD$ ${monto.toFixed(2)} registrado exitosamente. Estado actual de la factura: ${result.factura.estado}.`,
-      pago: result.pago,
+      pago: {
+        ...result.pago,
+        monto: montoFinal,
+        monto_pago: montoFinal
+      },
       factura: result.factura
     }, { status: 201 });
 
