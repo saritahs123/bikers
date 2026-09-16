@@ -76,7 +76,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const colBalancePendiente = facCols.has("balance_pendiente")
       ? `COALESCE(f.balance_pendiente, ${colTotal})`
       : `GREATEST(0, (${colTotal} - ${colMontoPagado}))`;
-    const colEmpresa = facCols.has("empresa_id") ? "COALESCE(f.empresa_id, c.empresa_id, 1)" : "COALESCE(c.empresa_id, 1)";
+    const colEmpresa = "f.empresa_id";
     const colMotivoAnulacion = facCols.has("motivo_anulacion") ? "f.motivo_anulacion" : "NULL::text AS motivo_anulacion";
     const colFechaAnulacion = facCols.has("fecha_anulacion") ? "f.fecha_anulacion" : "NULL::timestamptz AS fecha_anulacion";
     const colUsuarioAnulacion = facCols.has("usuario_anulacion_id") ? "f.usuario_anulacion_id" : "NULL::int AS usuario_anulacion_id";
@@ -121,7 +121,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       LEFT JOIN admin.usuario u_anul ON ${facCols.has("usuario_anulacion_id") ? "f.usuario_anulacion_id" : "NULL::int"} = u_anul.usuario_id
       LEFT JOIN admin.usuario_identidad ui_anul ON u_anul.usuario_id = ui_anul.usuario_id
       WHERE f.factura_id = $1
-        AND (${facCols.has("empresa_id") ? "(f.empresa_id = $2 OR (f.empresa_id IS NULL AND (c.empresa_id = $2 OR c.empresa_id IS NULL)))" : "(c.empresa_id = $2 OR c.empresa_id IS NULL)"});
+        AND f.empresa_id = $2;
     `;
     const facRows = await query<Record<string, unknown>>(facSql, [facturaId, empresaId]);
 
@@ -327,11 +327,11 @@ export async function GET(request: NextRequest, context: RouteContext) {
           ${pagoCols.has("fecha_creacion") ? "p.fecha_creacion" : "NOW() AS fecha_creacion"},
           COALESCE(NULLIF(TRIM(CONCAT_WS(' ', ui.nombre, ui.apellido)), ''), ui.correo_electronico, ('Usuario #' || u.usuario_id::text), 'Sistema') AS usuario_nombre
         FROM admin.pagos p
+        JOIN admin.facturas f ON p.factura_id = f.factura_id
         LEFT JOIN admin.tipo_pago tp ON p.tipo_pago_id = tp.tipo_pago_id
         LEFT JOIN admin.usuario u ON ${colPagoUsuario} = u.usuario_id
         LEFT JOIN admin.usuario_identidad ui ON u.usuario_id = ui.usuario_id
-        WHERE p.factura_id = $1
-          ${pagoCols.has("empresa_id") ? "AND (p.empresa_id = $2 OR p.empresa_id IS NULL)" : ""}
+        WHERE p.factura_id = $1 AND f.empresa_id = $2
         ORDER BY p.pago_id ASC;
       `;
       const pagosRows = await query<Record<string, unknown>>(pagosSql, [facturaId, empresaId]);

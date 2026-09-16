@@ -121,9 +121,7 @@ export async function GET(request: NextRequest) {
       ? `COALESCE(f.balance_pendiente, ${colTotal})`
       : `GREATEST(0, (${colTotal} - ${colMontoPagado}))`;
 
-    const colEmpresa = facCols.has("empresa_id")
-      ? "COALESCE(f.empresa_id, c.empresa_id, 1)"
-      : "COALESCE(c.empresa_id, 1)";
+    const colEmpresa = "f.empresa_id";
 
     const colCondicion = facCols.has("condicion_venta")
       ? "f.condicion_venta"
@@ -143,11 +141,7 @@ export async function GET(request: NextRequest) {
     };
     const sortColumn = sortColumns[sortByParam] || "f.fecha_factura";
 
-    const conditions: string[] = [
-      facCols.has("empresa_id")
-        ? "(f.empresa_id = $1 OR (f.empresa_id IS NULL AND (c.empresa_id = $1 OR c.empresa_id IS NULL)))"
-        : "(c.empresa_id = $1 OR c.empresa_id IS NULL)"
-    ];
+    const conditions: string[] = ["f.empresa_id = $1"];
     const params: (number | string)[] = [empresaId];
     let paramIndex = 2;
 

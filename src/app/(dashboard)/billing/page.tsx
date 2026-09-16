@@ -1,4 +1,5 @@
 import { query } from "@/lib/db";
+import { getWorkshopSession } from "@/lib/workshop-session";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +14,10 @@ interface BillingInvoiceItem {
 }
 
 export default async function BillingPage() {
-  const facturasRaw = await query(`
+  const session = await getWorkshopSession();
+  const empresaId = session?.empresa_id;
+
+  const facturasRaw = empresaId ? await query(`
     SELECT 
       f.factura_id,
       f.numero_factura,
@@ -23,9 +27,10 @@ export default async function BillingPage() {
       c.nombre_completo as cliente_nombre
     FROM admin.facturas f
     LEFT JOIN admin.clientes c ON f.cliente_id = c.cliente_id
+    WHERE f.empresa_id = $1
     ORDER BY f.fecha_factura DESC
     LIMIT 50
-  `);
+  `, [empresaId]) : [];
   const facturas = (facturasRaw || []) as unknown as BillingInvoiceItem[];
 
   const formatMoney = (val: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(val);

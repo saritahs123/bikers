@@ -67,10 +67,6 @@ export async function POST(request: NextRequest, context: RouteParams) {
     );
     const facCols = new Set((facColsRes.rows || []).map(r => String(r.column_name).toLowerCase()));
 
-    const colEmpresaCondition = facCols.has("empresa_id")
-      ? "(f.empresa_id = $2 OR (f.empresa_id IS NULL AND (c.empresa_id = $2 OR c.empresa_id IS NULL)))"
-      : "(c.empresa_id = $2 OR c.empresa_id IS NULL)";
-
     // 2. Bloquear fila de factura con FOR UPDATE para concurrencia estricta (Sección 18 y 19)
     const facSql = `
       SELECT
@@ -84,7 +80,7 @@ export async function POST(request: NextRequest, context: RouteParams) {
       FROM admin.facturas f
       JOIN admin.tipo_factura tf ON f.tipo_factura_id = tf.tipo_factura_id
       LEFT JOIN admin.clientes c ON f.cliente_id = c.cliente_id
-      WHERE f.factura_id = $1 AND ${colEmpresaCondition}
+      WHERE f.factura_id = $1 AND f.empresa_id = $2
       FOR UPDATE OF f;
     `;
     const facRows = await client.query(facSql, [facturaId, empresaId]);
@@ -318,8 +314,8 @@ export async function POST(request: NextRequest, context: RouteParams) {
     await client.query(`
       UPDATE admin.facturas
       SET ${updateSet.join(", ")}
-      WHERE factura_id = $1
-    `, updateParams);
+      WHERE factura_id = $1 AND empresa_id = $${updateIdx}
+    `, [...updateParams, empresaId]);
 
     // Regla 3 & 13: NO borrar ni modificar registros de admin.pagos (se conservan como evidencia histórica)
     // Regla 20 & 21: NO modificar el estado de la Orden de Trabajo si pertenecía a una OT

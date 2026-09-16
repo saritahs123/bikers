@@ -132,6 +132,7 @@ export async function GET(request: Request) {
         AND NOT EXISTS (
           SELECT 1 FROM admin.facturas f
           WHERE f.orden_trabajo_id = ot.orden_trabajo_id
+            AND f.empresa_id = $1
             AND f.estado <> 'ANULADA'
         )
         ${searchCondition}

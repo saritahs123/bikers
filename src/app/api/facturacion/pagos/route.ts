@@ -21,6 +21,8 @@ interface PagoListRow {
   tipo_pago_codigo: string;
   tipo_pago_nombre: string;
   monto: number | string;
+  monto_recibido?: number | string | null;
+  monto_devuelta?: number | string | null;
   referencia: string | null;
   observacion: string | null;
   fecha_pago: string | Date;
@@ -86,7 +88,7 @@ export async function GET(request: NextRequest) {
     const sortColumn = sortColumns[sortByParam] || "p.fecha_pago";
 
     // Filtro estricto multitenant (Sección 15)
-    const conditions: string[] = ["p.empresa_id = $1", "f.empresa_id = $1"];
+    const conditions: string[] = ["f.empresa_id = $1"];
     const params: (number | string)[] = [empresaId];
     let paramIndex = 2;
 
@@ -127,10 +129,10 @@ export async function GET(request: NextRequest) {
     const metricasSql = `
       SELECT
         COUNT(*)::int AS total_pagos,
-        COALESCE(SUM(CASE WHEN p.estado = 'APLICADO' THEN p.monto_pago ELSE 0 END), 0)::numeric AS total_cobrado,
-        COALESCE(SUM(CASE WHEN p.estado = 'APLICADO' AND UPPER(tp.codigo) = 'EFECTIVO' THEN p.monto_pago ELSE 0 END), 0)::numeric AS efectivo,
-        COALESCE(SUM(CASE WHEN p.estado = 'APLICADO' AND UPPER(tp.codigo) = 'TARJETA' THEN p.monto_pago ELSE 0 END), 0)::numeric AS tarjeta,
-        COALESCE(SUM(CASE WHEN p.estado = 'APLICADO' AND UPPER(tp.codigo) = 'TRANSFERENCIA' THEN p.monto_pago ELSE 0 END), 0)::numeric AS transferencia
+        COALESCE(SUM(p.monto_pago), 0)::numeric AS total_cobrado,
+        COALESCE(SUM(CASE WHEN UPPER(tp.codigo) = 'EFECTIVO' THEN p.monto_pago ELSE 0 END), 0)::numeric AS efectivo,
+        COALESCE(SUM(CASE WHEN UPPER(tp.codigo) = 'TARJETA' THEN p.monto_pago ELSE 0 END), 0)::numeric AS tarjeta,
+        COALESCE(SUM(CASE WHEN UPPER(tp.codigo) = 'TRANSFERENCIA' THEN p.monto_pago ELSE 0 END), 0)::numeric AS transferencia
       FROM admin.pagos p
       JOIN admin.tipo_pago tp ON p.tipo_pago_id = tp.tipo_pago_id
       JOIN admin.facturas f ON p.factura_id = f.factura_id
@@ -157,7 +159,7 @@ export async function GET(request: NextRequest) {
     const listSql = `
       SELECT
         p.pago_id,
-        p.empresa_id,
+        f.empresa_id,
         p.factura_id,
         f.codigo_factura,
         f.estado AS factura_estado,
@@ -172,18 +174,20 @@ export async function GET(request: NextRequest) {
         tp.codigo AS tipo_pago_codigo,
         tp.nombre AS tipo_pago_nombre,
         p.monto_pago AS monto,
+        p.monto_recibido,
+        p.monto_devuelta,
         p.referencia,
-        p.observacion,
+        COALESCE(f.observacion, '') AS observacion,
         p.fecha_pago,
-        p.estado,
-        p.fecha_creacion,
-        p.usuario_id,
+        'APLICADO' AS estado,
+        p.fecha_pago AS fecha_creacion,
+        f.usuario_creacion_id AS usuario_id,
         COALESCE(NULLIF(TRIM(CONCAT_WS(' ', ui.nombre, ui.apellido)), ''), ui.correo_electronico, 'Usuario no disponible') AS usuario_nombre
       FROM admin.pagos p
       JOIN admin.tipo_pago tp ON p.tipo_pago_id = tp.tipo_pago_id
       JOIN admin.facturas f ON p.factura_id = f.factura_id
       LEFT JOIN admin.clientes c ON f.cliente_id = c.cliente_id
-      LEFT JOIN admin.usuario u ON p.usuario_id = u.usuario_id
+      LEFT JOIN admin.usuario u ON f.usuario_creacion_id = u.usuario_id
       LEFT JOIN admin.usuario_identidad ui ON u.usuario_id = ui.usuario_id
       WHERE ${whereClause}
       ORDER BY ${sortColumn} ${sortOrderParam}, p.pago_id DESC
@@ -208,10 +212,12 @@ export async function GET(request: NextRequest) {
       tipo_pago_codigo: row.tipo_pago_codigo,
       tipo_pago_nombre: row.tipo_pago_nombre,
       monto: parseFloat(Number(row.monto || 0).toFixed(2)),
+      monto_recibido: row.monto_recibido != null ? parseFloat(Number(row.monto_recibido).toFixed(2)) : null,
+      monto_devuelta: row.monto_devuelta != null ? parseFloat(Number(row.monto_devuelta).toFixed(2)) : 0,
       referencia: row.referencia || null,
       observacion: row.observacion || null,
       fecha_pago: row.fecha_pago,
-      estado: row.estado,
+      estado: row.estado || "APLICADO",
       usuario_id: row.usuario_id ? Number(row.usuario_id) : null,
       usuario_nombre: row.usuario_nombre || "Usuario no disponible"
     }));

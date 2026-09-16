@@ -141,18 +141,18 @@ export async function GET(
         ot.total_tiempo_transcurrido,
         COALESCE(ot.facturado, false) OR EXISTS (
           SELECT 1 FROM admin.facturas f
-          WHERE f.orden_trabajo_id = ot.orden_trabajo_id AND f.estado <> 'ANULADA'
+          WHERE f.orden_trabajo_id = ot.orden_trabajo_id AND f.empresa_id = c.empresa_id AND f.estado <> 'ANULADA'
         ) AS facturado,
         (
           SELECT f.factura_id
           FROM admin.facturas f
-          WHERE f.orden_trabajo_id = ot.orden_trabajo_id AND f.estado <> 'ANULADA'
+          WHERE f.orden_trabajo_id = ot.orden_trabajo_id AND f.empresa_id = c.empresa_id AND f.estado <> 'ANULADA'
           ORDER BY f.factura_id DESC LIMIT 1
         ) AS factura_id,
         (
           SELECT f.numero_factura
           FROM admin.facturas f
-          WHERE f.orden_trabajo_id = ot.orden_trabajo_id AND f.estado <> 'ANULADA'
+          WHERE f.orden_trabajo_id = ot.orden_trabajo_id AND f.empresa_id = c.empresa_id AND f.estado <> 'ANULADA'
           ORDER BY f.factura_id DESC LIMIT 1
         ) AS codigo_factura,
         COALESCE(NULLIF(TRIM(CONCAT_WS(' ', ui_mec.nombre, ui_mec.apellido)), ''), ui_mec.correo_electronico, ('Mecánico #' || u_mec.usuario_id::text)) AS mecanico_nombre,

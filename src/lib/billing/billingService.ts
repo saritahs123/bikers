@@ -253,9 +253,9 @@ export async function crearFactura(
                f.numero_factura,
                f.estado
         FROM admin.facturas f
-        WHERE f.orden_trabajo_id = $1 AND f.estado <> 'ANULADA'
+        WHERE f.orden_trabajo_id = $1 AND f.empresa_id = $2 AND f.estado <> 'ANULADA'
         FOR UPDATE OF f
-      `, [input.orden_trabajo_id]);
+      `, [input.orden_trabajo_id, input.empresa_id]);
 
       if (existingFacRes.rows && existingFacRes.rows.length > 0) {
         const facEx = existingFacRes.rows[0];
@@ -495,6 +495,7 @@ export async function crearFactura(
 
     // 7. Insertar Cabecera en admin.facturas de forma tolerante a columnas
     const facCols = await getTableColumns(client, "facturas");
+    facCols.add("empresa_id");
 
     const facData: Record<string, unknown> = {
       factura_id: facturaId,
@@ -662,7 +663,6 @@ export async function crearFactura(
         nextPagoId += 1;
         const pagoData: Record<string, unknown> = {
           pago_id: nextPagoId,
-          empresa_id: input.empresa_id,
           factura_id: facturaId,
           tipo_pago_id: p.tipo_pago_id,
           monto: Number(p.monto),
@@ -761,11 +761,11 @@ export async function getOrCreateInvoiceForWorkOrder(
              COALESCE(f.monto_pagado, 0)::numeric AS monto_pagado,
              COALESCE(f.balance_pendiente, 0)::numeric AS balance_pendiente
       FROM admin.facturas f
-      WHERE f.orden_trabajo_id = $1 AND f.estado <> 'ANULADA'
+      WHERE f.orden_trabajo_id = $1 AND f.empresa_id = $2 AND f.estado <> 'ANULADA'
       ORDER BY f.factura_id DESC
       LIMIT 1
       FOR UPDATE OF f
-    `, [input.orden_trabajo_id]);
+    `, [input.orden_trabajo_id, input.empresa_id]);
 
     if (existingFacRes.rows && existingFacRes.rows.length > 0) {
       const existing = existingFacRes.rows[0] as FacturaRow;
@@ -914,9 +914,9 @@ export async function getOrCreateInvoiceForWorkOrder(
                  COALESCE(f.monto_pagado, 0)::numeric AS monto_pagado,
                  COALESCE(f.balance_pendiente, 0)::numeric AS balance_pendiente
           FROM admin.facturas f
-          WHERE f.orden_trabajo_id = $1 AND f.estado <> 'ANULADA'
+          WHERE f.orden_trabajo_id = $1 AND f.empresa_id = $2 AND f.estado <> 'ANULADA'
           ORDER BY f.factura_id DESC LIMIT 1
-        `, [input.orden_trabajo_id]);
+        `, [input.orden_trabajo_id, input.empresa_id]);
 
         if (raceCheck.rows && raceCheck.rows.length > 0) {
           if (isInternalTransaction) {
@@ -990,9 +990,10 @@ export async function registrarPago(
 
     // 3. Consultar pagos aplicados actuales para calcular el nuevo acumulado
     const pagosRes = await client.query(`
-      SELECT COALESCE(SUM(monto), 0)::numeric AS total_pagado
-      FROM admin.pagos
-      WHERE factura_id = $1 AND empresa_id = $2 AND (estado = 'APLICADO' OR estado IS NULL)
+      SELECT COALESCE(SUM(COALESCE(p.monto_pago, p.monto, 0)), 0)::numeric AS total_pagado
+      FROM admin.pagos p
+      JOIN admin.facturas f ON p.factura_id = f.factura_id
+      WHERE p.factura_id = $1 AND f.empresa_id = $2 AND (p.estado = 'APLICADO' OR p.estado IS NULL)
     `, [input.factura_id, input.empresa_id]);
 
     const totalPagadoPrevio = parseFloat(pagosRes.rows[0]?.total_pagado || "0");
@@ -1026,7 +1027,6 @@ export async function registrarPago(
     const pagoCols = await getTableColumns(client, "pagos");
     const pagoData: Record<string, unknown> = {
       pago_id: nextPagoId,
-      empresa_id: input.empresa_id,
       factura_id: input.factura_id,
       tipo_pago_id: input.tipo_pago_id,
       monto: monto,
@@ -1144,9 +1144,10 @@ export async function recalcularEstadoFactura(
 
   // 3. Sumar pagos
   const pagosRes = await client.query(`
-    SELECT COALESCE(SUM(monto), 0)::numeric AS total_pagado
-    FROM admin.pagos
-    WHERE factura_id = $1 AND empresa_id = $2 AND (estado = 'APLICADO' OR estado IS NULL)
+    SELECT COALESCE(SUM(COALESCE(p.monto_pago, p.monto, 0)), 0)::numeric AS total_pagado
+    FROM admin.pagos p
+    JOIN admin.facturas f ON p.factura_id = f.factura_id
+    WHERE p.factura_id = $1 AND f.empresa_id = $2 AND (p.estado = 'APLICADO' OR p.estado IS NULL)
   `, [facturaId, empresaId]);
 
   const totalPagado = parseFloat(pagosRes.rows[0]?.total_pagado || "0");
@@ -1238,7 +1239,9 @@ export async function anularFactura(
     await client.query(`
       UPDATE admin.pagos
       SET estado = 'ANULADO'
-      WHERE factura_id = $1 AND empresa_id = $2
+      WHERE factura_id IN (
+        SELECT factura_id FROM admin.facturas WHERE factura_id = $1 AND empresa_id = $2
+      )
     `, [input.factura_id, input.empresa_id]);
 
     // Anular factura
@@ -1270,7 +1273,7 @@ export async function anularFactura(
       await client.query(`
         UPDATE admin.ordenes_trabajo
         SET facturado = false
-        WHERE orden_trabajo_id = $1 AND (empresa_id = $2 OR empresa_id IS NULL)
+        WHERE orden_trabajo_id = $1 AND empresa_id = $2
       `, [factura.orden_trabajo_id, input.empresa_id]);
     }
 
@@ -1338,8 +1341,9 @@ export async function obtenerFacturaPorId(
         tp.codigo AS tipo_pago_codigo,
         tp.nombre AS tipo_pago_nombre
       FROM admin.pagos p
+      JOIN admin.facturas f ON p.factura_id = f.factura_id
       JOIN admin.tipo_pago tp ON p.tipo_pago_id = tp.tipo_pago_id
-      WHERE p.factura_id = $1 AND p.empresa_id = $2
+      WHERE p.factura_id = $1 AND f.empresa_id = $2
       ORDER BY p.pago_id ASC
     `, [facturaId, empresaId]);
 

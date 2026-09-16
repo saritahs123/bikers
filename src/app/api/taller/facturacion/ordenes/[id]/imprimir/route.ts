@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
@@ -221,9 +222,9 @@ export async function GET(
       const facturaRes = await query<any>(
         `SELECT factura_id, numero_factura, fecha_factura, subtotal, descuento_total, impuesto_total, total_factura, monto_pagado, balance_pendiente, estado
          FROM admin.facturas
-         WHERE orden_trabajo_id = $1
+         WHERE orden_trabajo_id = $1 AND empresa_id = $2
          ORDER BY factura_id DESC LIMIT 1`,
-        [ordenId]
+        [ordenId, session.empresa_id]
       );
       if (facturaRes && facturaRes.length > 0) {
         persistedFactura = facturaRes[0];
