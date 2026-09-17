@@ -232,9 +232,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
       );
       const detCols = new Set((detColsRes || []).map(r => String(r.column_name).toLowerCase()));
 
-      const colDetTipoLinea = detCols.has("tipo_linea")
+      const exprDetTipoLinea = detCols.has("tipo_linea")
         ? "df.tipo_linea"
-        : (detCols.has("tipo_detalle") ? "COALESCE(df.tipo_detalle, 'PRODUCTO') AS tipo_linea" : "'PRODUCTO' AS tipo_linea");
+        : (detCols.has("tipo_detalle") ? "COALESCE(df.tipo_detalle, 'PRODUCTO')" : "'PRODUCTO'");
+      const colDetTipoLinea = `${exprDetTipoLinea} AS tipo_linea`;
 
       const colDetAlmacenId = detCols.has("almacen_id") ? "df.almacen_id" : "NULL::int AS almacen_id";
       const colDetProductoId = detCols.has("producto_id") ? "df.producto_id" : "NULL::int AS producto_id";
@@ -261,6 +262,18 @@ export async function GET(request: NextRequest, context: RouteContext) {
           ${colDetOrdenServicioId},
           ${colDetOrdenProductoId},
           ${colDetCodigo},
+          COALESCE(
+            NULLIF(TRIM(p.codigo_producto), ''),
+            NULLIF(TRIM(p_op.codigo_producto), ''),
+            NULLIF(TRIM(p.codigo_barra), ''),
+            NULLIF(TRIM(p_op.codigo_barra), '')
+          ) AS rel_codigo_producto,
+          COALESCE(
+            NULLIF(TRIM(ts.codigo), ''),
+            NULLIF(TRIM(ts_os.codigo), ''),
+            NULLIF(TRIM(os.codigo_servicio), ''),
+            NULLIF(TRIM(ts_desc.codigo), '')
+          ) AS rel_codigo_servicio,
           df.descripcion,
           df.cantidad,
           df.precio_unitario,
@@ -268,28 +281,69 @@ export async function GET(request: NextRequest, context: RouteContext) {
           df.subtotal,
           ${colDetCostoUnitario}
         FROM admin.detalle_factura df
+        JOIN admin.facturas f ON df.factura_id = f.factura_id
         ${colAlmacenJoin}
+        LEFT JOIN admin.productos p ON ${detCols.has("producto_id") ? "df.producto_id = p.producto_id" : "1=0"}
+        LEFT JOIN admin.orden_productos op ON (
+          ${detCols.has("orden_producto_id") ? "df.orden_producto_id = op.orden_producto_id" : "1=0"}
+          OR (f.orden_trabajo_id IS NOT NULL AND op.orden_trabajo_id = f.orden_trabajo_id AND ${detCols.has("producto_id") ? "op.producto_id = df.producto_id" : "1=0"})
+        )
+        LEFT JOIN admin.productos p_op ON op.producto_id = p_op.producto_id
+        LEFT JOIN admin.orden_servicios os ON (
+          ${detCols.has("orden_servicio_id") ? "df.orden_servicio_id = os.orden_servicio_id" : "1=0"}
+          OR ${detCols.has("servicio_id") ? "df.servicio_id = os.orden_servicio_id" : "1=0"}
+          OR (f.orden_trabajo_id IS NOT NULL AND os.orden_trabajo_id = f.orden_trabajo_id AND (os.descripcion_servicio = df.descripcion OR ${detCols.has("servicio_id") ? "os.tipo_servicio_id = df.servicio_id" : "1=0"}))
+        )
+        LEFT JOIN admin.tipo_servicio ts_os ON os.tipo_servicio_id = ts_os.tipo_servicio_id
+        LEFT JOIN admin.tipo_servicio ts ON (
+          ${detCols.has("tipo_servicio_id") ? "df.tipo_servicio_id = ts.tipo_servicio_id" : "1=0"}
+          OR ${detCols.has("servicio_id") ? "df.servicio_id = ts.tipo_servicio_id" : "1=0"}
+        )
+        LEFT JOIN admin.tipo_servicio ts_desc ON (
+          COALESCE(${exprDetTipoLinea}, '') = 'SERVICIO' AND ts_desc.nombre = df.descripcion
+        )
         WHERE df.factura_id = $1
         ORDER BY df.detalle_factura_id ASC;
       `;
       const detRows = await query<Record<string, unknown>>(detSql, [facturaId]);
-      detalle = (detRows || []).map((d) => ({
-        detalle_factura_id: Number(d.detalle_factura_id),
-        almacen_id: d.almacen_id ? Number(d.almacen_id) : null,
-        almacen_nombre: d.almacen_nombre || (d.tipo_linea === "SERVICIO" ? "Taller (Servicio)" : "Almacén"),
-        tipo_linea: d.tipo_linea || "PRODUCTO",
-        producto_id: d.producto_id ? Number(d.producto_id) : null,
-        tipo_servicio_id: d.tipo_servicio_id ? Number(d.tipo_servicio_id) : null,
-        orden_servicio_id: d.orden_servicio_id ? Number(d.orden_servicio_id) : null,
-        orden_producto_id: d.orden_producto_id ? Number(d.orden_producto_id) : null,
-        codigo: d.codigo || "",
-        descripcion: d.descripcion,
-        cantidad: parseFloat(Number(d.cantidad || 0).toFixed(2)),
-        precio_unitario: parseFloat(Number(d.precio_unitario || 0).toFixed(2)),
-        descuento: parseFloat(Number(d.descuento || 0).toFixed(2)),
-        subtotal: parseFloat(Number(d.subtotal || 0).toFixed(2)),
-        costo_unitario: d.costo_unitario != null ? parseFloat(Number(d.costo_unitario).toFixed(2)) : null
-      }));
+      detalle = (detRows || []).map((d) => {
+        const snapshotCodigo = d.codigo && String(d.codigo).trim() !== "" ? String(d.codigo).trim() : "";
+        const relCodigoProd = d.rel_codigo_producto ? String(d.rel_codigo_producto).trim() : "";
+        const relCodigoServ = d.rel_codigo_servicio ? String(d.rel_codigo_servicio).trim() : "";
+        const tipoLinea = String(d.tipo_linea || "PRODUCTO").toUpperCase();
+
+        // Prioridad: usar código snapshot guardado en detalle_factura
+        // Fallback: usar relación real del producto/servicio si el snapshot no lo trae
+        let finalCodigo = snapshotCodigo;
+        if (!finalCodigo) {
+          if (tipoLinea === "SERVICIO") {
+            finalCodigo = relCodigoServ || relCodigoProd;
+          } else {
+            // PRODUCTO o REPUESTO
+            finalCodigo = relCodigoProd || relCodigoServ;
+          }
+        }
+
+        return {
+          detalle_factura_id: Number(d.detalle_factura_id),
+          almacen_id: d.almacen_id ? Number(d.almacen_id) : null,
+          almacen_nombre: d.almacen_nombre || (tipoLinea === "SERVICIO" ? "Taller (Servicio)" : "Almacén"),
+          tipo_linea: d.tipo_linea || "PRODUCTO",
+          producto_id: d.producto_id ? Number(d.producto_id) : null,
+          tipo_servicio_id: d.tipo_servicio_id ? Number(d.tipo_servicio_id) : null,
+          orden_servicio_id: d.orden_servicio_id ? Number(d.orden_servicio_id) : null,
+          orden_producto_id: d.orden_producto_id ? Number(d.orden_producto_id) : null,
+          codigo: finalCodigo || "",
+          codigo_producto: relCodigoProd || null,
+          codigo_servicio: relCodigoServ || null,
+          descripcion: d.descripcion,
+          cantidad: parseFloat(Number(d.cantidad || 0).toFixed(2)),
+          precio_unitario: parseFloat(Number(d.precio_unitario || 0).toFixed(2)),
+          descuento: parseFloat(Number(d.descuento || 0).toFixed(2)),
+          subtotal: parseFloat(Number(d.subtotal || 0).toFixed(2)),
+          costo_unitario: d.costo_unitario != null ? parseFloat(Number(d.costo_unitario).toFixed(2)) : null
+        };
+      });
     } catch (detErr) {
       console.warn("Could not query detalle_factura:", detErr);
     }

@@ -61,6 +61,9 @@ export interface BillingInvoicePrintData {
     almacen_nombre?: string;
     tipo_linea: "PRODUCTO" | "SERVICIO" | "REPUESTO" | string;
     codigo: string;
+    codigo_producto?: string | null;
+    codigo_servicio?: string | null;
+    codigo_tipo_servicio?: string | null;
     descripcion: string;
     cantidad: number;
     precio_unitario: number;
@@ -393,8 +396,7 @@ export function generateInvoiceModel1Pdf(data: BillingInvoicePrintData): jsPDF {
 
     const col2 = [
       { label: "Correo:", val: data.cliente?.correo || "No registrado" },
-      { label: "Dirección:", val: data.cliente?.direccion || "No registrada" },
-      { label: "Origen Factura:", val: "Venta Directa de Productos / Tienda" }
+      { label: "Dirección:", val: data.cliente?.direccion || "No registrada" }
     ];
 
     col1.forEach((f) => {
@@ -444,8 +446,22 @@ export function generateInvoiceModel1Pdf(data: BillingInvoicePrintData): jsPDF {
     const desc = Number(item.descuento || 0);
     const sub = Number(item.subtotal || 0);
 
+    // Prioridad: usar código snapshot guardado en detalle_factura
+    // Fallback: usar relación real del producto/servicio si el snapshot no lo trae
+    // Solo mostrar "—" si realmente no existe código
+    const rawCodigo =
+      (item.codigo && item.codigo.trim() !== "" && item.codigo.trim() !== "—")
+        ? item.codigo.trim()
+        : (item.codigo_producto && item.codigo_producto.trim() !== "")
+        ? item.codigo_producto.trim()
+        : (item.codigo_servicio && item.codigo_servicio.trim() !== "")
+        ? item.codigo_servicio.trim()
+        : (item.codigo_tipo_servicio && item.codigo_tipo_servicio.trim() !== "")
+        ? item.codigo_tipo_servicio.trim()
+        : "—";
+
     return [
-      item.codigo || "—",
+      rawCodigo,
       tipo,
       item.descripcion || "Item",
       cantFormatted,
