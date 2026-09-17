@@ -61,8 +61,7 @@ function SidebarContent({
       submenu: [
         { href: "/workshop?view=list", label: "RECEPCIONES" },
         { href: "/workshop?view=work_orders", label: "ÓRDENES DE TRABAJO" },
-        { href: "/workshop?view=kanban", label: "VISTA KANBAN" },
-        { href: "/workshop?view=billing", label: "DESPACHO DE ÓRDENES" }
+        { href: "/workshop?view=kanban", label: "VISTA KANBAN" }
       ]
     },
     {
@@ -94,7 +93,8 @@ function SidebarContent({
       submenu: [
         { href: "/billing/new", label: "NUEVA FACTURA" },
         { href: "/billing/invoices", label: "FACTURAS" },
-        { href: "/billing/payments", label: "PAGOS" }
+        { href: "/billing/payments", label: "PAGOS" },
+        { href: "/workshop?view=billing", label: "DESPACHO DE ÓRDENES" }
       ]
     },
     {
