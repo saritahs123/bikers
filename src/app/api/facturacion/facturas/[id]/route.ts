@@ -461,6 +461,48 @@ export async function GET(request: NextRequest, context: RouteContext) {
       console.warn("Could not query admin.empresa, using fallback metadata:", empErr);
     }
 
+    // 7. Snapshot de Anulación (admin.factura_anulacion) si la factura está anulada (Sección 26)
+    let anulacion: Record<string, unknown> | null = null;
+    if (factura.estado === "ANULADA") {
+      try {
+        const faSql = `
+          SELECT
+            fa.factura_anulacion_id,
+            fa.factura_id,
+            fa.motivo_anulacion_factura_id,
+            fa.motivo_codigo_snapshot,
+            fa.motivo_snapshot,
+            fa.motivo_descripcion_snapshot,
+            fa.genera_movimiento_snapshot,
+            fa.tipo_movimiento_id_snapshot,
+            fa.tipo_movimiento_codigo_snapshot,
+            fa.tipo_movimiento_nombre_snapshot,
+            fa.tipo_movimiento_naturaleza_snapshot,
+            fa.destino_producto,
+            fa.observacion,
+            fa.requiere_autorizacion_snapshot,
+            fa.usuario_autorizacion_id,
+            COALESCE(NULLIF(TRIM(CONCAT_WS(' ', ui_aut.nombre, ui_aut.apellido)), ''), ui_aut.correo_electronico, ('Usuario #' || u_aut.usuario_id::text), NULL) AS usuario_autorizacion_nombre,
+            fa.fecha_anulacion,
+            fa.usuario_anulacion_id,
+            COALESCE(NULLIF(TRIM(CONCAT_WS(' ', ui_anul.nombre, ui_anul.apellido)), ''), ui_anul.correo_electronico, ('Usuario #' || u_anul.usuario_id::text), 'Sistema') AS usuario_anulacion_nombre
+          FROM admin.factura_anulacion fa
+          LEFT JOIN admin.usuario u_aut ON fa.usuario_autorizacion_id = u_aut.usuario_id
+          LEFT JOIN admin.usuario_identidad ui_aut ON u_aut.usuario_id = ui_aut.usuario_id
+          LEFT JOIN admin.usuario u_anul ON fa.usuario_anulacion_id = u_anul.usuario_id
+          LEFT JOIN admin.usuario_identidad ui_anul ON u_anul.usuario_id = ui_anul.usuario_id
+          WHERE fa.factura_id = $1 AND fa.empresa_id = $2
+          LIMIT 1;
+        `;
+        const faRows = await query<Record<string, unknown>>(faSql, [facturaId, empresaId]);
+        if (faRows && faRows.length > 0) {
+          anulacion = faRows[0];
+        }
+      } catch (faErr) {
+        console.warn("Could not query admin.factura_anulacion in invoice detail:", faErr);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       data: {
@@ -494,6 +536,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
         detalle,
         pagos,
         empresa,
+        anulacion,
         permisos: perms
       }
     });

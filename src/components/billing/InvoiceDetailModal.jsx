@@ -14,9 +14,12 @@ import {
   CheckCircle2,
   Clock,
   AlertTriangle,
+  AlertCircle,
   FileText,
   Loader2,
-  Ban
+  Ban,
+  ShieldCheck,
+  PackageCheck
 } from "lucide-react";
 import InvoicePrintSelectorModal from "./InvoicePrintSelectorModal";
 import RegisterPaymentModal from "./RegisterPaymentModal";
@@ -36,9 +39,43 @@ export default function InvoiceDetailModal({
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
-  const [cancelReason, setCancelReason] = useState("");
   const [isCancelling, setIsCancelling] = useState(false);
   const [cancelError, setCancelError] = useState(null);
+
+  // FAC-6.1: Catálogo de Motivos de Anulación y Reglas de Inventario
+  const [motivosList, setMotivosList] = useState([]);
+  const [usuariosAutorizadores, setUsuariosAutorizadores] = useState([]);
+  const [loadingMotivos, setLoadingMotivos] = useState(false);
+  const [selectedMotivoId, setSelectedMotivoId] = useState("");
+  const [cancelObservation, setCancelObservation] = useState("");
+  const [destinoProducto, setDestinoProducto] = useState("DISPONIBLE");
+  const [selectedAutorizadorId, setSelectedAutorizadorId] = useState("");
+
+  const fetchMotivosAnulacion = React.useCallback(async () => {
+    try {
+      setLoadingMotivos(true);
+      const res = await fetch("/api/facturacion/motivos-anulacion");
+      const json = await res.json();
+      if (res.ok && json.data) {
+        setMotivosList(json.data.motivos || []);
+        setUsuariosAutorizadores(json.data.usuarios_autorizadores || []);
+      }
+    } catch (err) {
+      console.error("Error al cargar catálogo de motivos de anulación:", err);
+    } finally {
+      setLoadingMotivos(false);
+    }
+  }, []);
+
+  const openCancelModal = () => {
+    setCancelError(null);
+    setSelectedMotivoId("");
+    setCancelObservation("");
+    setDestinoProducto("DISPONIBLE");
+    setSelectedAutorizadorId("");
+    setIsCancelModalOpen(true);
+    fetchMotivosAnulacion();
+  };
 
   const fetchDetail = React.useCallback(async () => {
     if (!facturaId) return;
@@ -88,6 +125,24 @@ export default function InvoiceDetailModal({
   const ordenTrabajo = data?.orden_trabajo;
   const detalle = data?.detalle || [];
   const pagos = data?.pagos || [];
+  const anulacion = data?.anulacion;
+
+  // FAC-6.1: Clasificación de líneas de factura para cálculo de efecto de inventario
+  const lineasProductosElegibles = detalle.filter((item) => {
+    const isServicio = item.tipo_linea === "SERVICIO" || !!item.servicio_id;
+    const isRepuesto = item.tipo_linea === "REPUESTO" || !!item.orden_producto_id;
+    return !isServicio && !isRepuesto && (item.tipo_linea === "PRODUCTO" || !!item.producto_id);
+  });
+  const totalUnidadesRevertibles = lineasProductosElegibles.reduce(
+    (acc, item) => acc + Number(item.cantidad || 0),
+    0
+  );
+  const tieneServicios = detalle.some((item) => item.tipo_linea === "SERVICIO" || !!item.servicio_id);
+  const tieneRepuestosOT = detalle.some((item) => item.tipo_linea === "REPUESTO" || !!item.orden_producto_id);
+
+  const selectedMotivo = motivosList.find(
+    (m) => String(m.motivo_anulacion_factura_id) === String(selectedMotivoId)
+  );
 
   const formatMoney = (val) => {
     const num = parseFloat(val || 0);
@@ -210,9 +265,18 @@ export default function InvoiceDetailModal({
 
   const handleConfirmCancel = async (e) => {
     if (e) e.preventDefault();
-    const trimmedReason = cancelReason.trim();
-    if (!trimmedReason) {
-      setCancelError("El motivo de la anulación es obligatorio.");
+    if (!selectedMotivoId) {
+      setCancelError("Debe seleccionar un motivo de anulación del catálogo.");
+      return;
+    }
+
+    if (selectedMotivo?.requiere_observacion && !cancelObservation.trim()) {
+      setCancelError("La observación es obligatoria para el motivo de anulación seleccionado.");
+      return;
+    }
+
+    if (selectedMotivo?.requiere_autorizacion && !selectedAutorizadorId) {
+      setCancelError("Debe seleccionar el usuario que autoriza la anulación.");
       return;
     }
 
@@ -223,7 +287,12 @@ export default function InvoiceDetailModal({
       const res = await fetch(`/api/facturacion/facturas/${facturaId}/anular`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ motivo: trimmedReason })
+        body: JSON.stringify({
+          motivo_anulacion_factura_id: Number(selectedMotivoId),
+          observacion: cancelObservation.trim() || undefined,
+          destino_producto: destinoProducto,
+          usuario_autorizacion_id: selectedAutorizadorId ? Number(selectedAutorizadorId) : null
+        })
       });
 
       const json = await res.json();
@@ -236,7 +305,10 @@ export default function InvoiceDetailModal({
       }
 
       setIsCancelModalOpen(false);
-      setCancelReason("");
+      setSelectedMotivoId("");
+      setCancelObservation("");
+      setDestinoProducto("DISPONIBLE");
+      setSelectedAutorizadorId("");
       await fetchDetail();
       if (onInvoiceUpdated) {
         onInvoiceUpdated(json.data);
@@ -306,11 +378,7 @@ export default function InvoiceDetailModal({
               {puedeAnular && (
                 <button
                   type="button"
-                  onClick={() => {
-                    setCancelReason("");
-                    setCancelError(null);
-                    setIsCancelModalOpen(true);
-                  }}
+                  onClick={openCancelModal}
                   className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-mono font-bold uppercase tracking-wider text-white bg-rose-600 hover:bg-rose-500 rounded-xl transition-all shadow-md shadow-rose-600/20 cursor-pointer"
                   title="Anular Factura y Revertir Salidas de Inventario"
                 >
@@ -347,26 +415,70 @@ export default function InvoiceDetailModal({
 
             {!isLoading && !error && factura && (
               <>
-                {/* Banner de Factura Anulada (Regla 22) */}
+                {/* Banner de Factura Anulada (FAC-6.1 Snapshot y Trazabilidad Histórica) */}
                 {factura.estado === "ANULADA" && (
-                  <div className="p-4 rounded-xl bg-error-muted/30 border border-error/40 text-error space-y-2">
-                    <div className="flex items-center gap-2 font-mono font-bold text-sm">
-                      <AlertTriangle className="w-4 h-4 text-error shrink-0" />
-                      <span>ESTA FACTURA HA SIDO ANULADA</span>
+                  <div className="p-4 rounded-xl bg-error-muted/30 border border-error/40 text-error space-y-3">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2 font-mono font-bold text-sm">
+                        <AlertTriangle className="w-4 h-4 text-error shrink-0" />
+                        <span>ESTA FACTURA HA SIDO ANULADA</span>
+                      </div>
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-error/20 border border-error/30 text-error uppercase">
+                        {anulacion?.tipo_movimiento_codigo_snapshot || (anulacion?.genera_movimiento_snapshot ? "DEV_VENTA" : "SIN MOVIMIENTO")}
+                      </span>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-mono pt-2 border-t border-error/20">
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs font-mono pt-3 border-t border-error/20">
                       <div>
-                        <span className="text-foreground-muted block text-[11px]">Motivo de Anulación:</span>
-                        <span className="font-semibold text-foreground">{factura.motivo_anulacion || "Sin motivo especificado"}</span>
+                        <span className="text-foreground-muted block text-[10px] uppercase font-bold">Motivo:</span>
+                        <span className="font-semibold text-foreground">
+                          {anulacion?.motivo_snapshot || factura.motivo_anulacion || "Sin motivo especificado"}
+                        </span>
+                        {anulacion?.motivo_descripcion_snapshot && (
+                          <p className="text-[10px] text-foreground-muted font-sans mt-0.5">{anulacion.motivo_descripcion_snapshot}</p>
+                        )}
                       </div>
+
                       <div>
-                        <span className="text-foreground-muted block text-[11px]">Fecha de Anulación:</span>
-                        <span className="font-semibold text-foreground">{formatDateTime(factura.fecha_anulacion)}</span>
+                        <span className="text-foreground-muted block text-[10px] uppercase font-bold">Efecto inventario:</span>
+                        <span className="font-semibold text-foreground">
+                          {anulacion
+                            ? (anulacion.genera_movimiento_snapshot ? "Reverso físico aplicado" : "Sin movimiento físico")
+                            : "Sin movimiento de inventario"}
+                        </span>
+                        <span className="text-[10px] text-foreground-muted block mt-0.5">
+                          Movimiento: {anulacion?.tipo_movimiento_codigo_snapshot || (anulacion?.genera_movimiento_snapshot ? "DEV_VENTA" : "Sin movimiento")}
+                        </span>
                       </div>
+
                       <div>
-                        <span className="text-foreground-muted block text-[11px]">Anulado por:</span>
-                        <span className="font-semibold text-foreground">{factura.usuario_anulacion_nombre || "Usuario del sistema"}</span>
+                        <span className="text-foreground-muted block text-[10px] uppercase font-bold">Destino producto:</span>
+                        <span className="font-semibold text-foreground">
+                          {anulacion?.destino_producto || "No aplica"}
+                        </span>
+                        {anulacion?.usuario_autorizacion_nombre && (
+                          <span className="text-[10px] text-foreground-muted block mt-0.5">
+                            Autorizado por: <strong className="text-foreground font-sans">{anulacion.usuario_autorizacion_nombre}</strong>
+                          </span>
+                        )}
                       </div>
+
+                      <div>
+                        <span className="text-foreground-muted block text-[10px] uppercase font-bold">Trazabilidad:</span>
+                        <span className="text-foreground block">
+                          Por: <strong className="font-sans">{anulacion?.usuario_anulacion_nombre || factura.usuario_anulacion_nombre || "Sistema"}</strong>
+                        </span>
+                        <span className="text-[10px] text-foreground-muted block mt-0.5">
+                          {formatDateTime(anulacion?.fecha_anulacion || factura.fecha_anulacion)}
+                        </span>
+                      </div>
+
+                      {anulacion?.observacion && (
+                        <div className="col-span-1 sm:col-span-2 md:col-span-4 bg-surface/60 p-2.5 rounded-lg border border-border/60 text-foreground">
+                          <span className="text-foreground-muted block text-[10px] uppercase font-bold font-mono">Observación registrada:</span>
+                          <p className="text-xs font-sans mt-0.5 italic">{anulacion.observacion}</p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -725,10 +837,10 @@ export default function InvoiceDetailModal({
         />
       )}
 
-      {/* Modal de Confirmación de Anulación (Reglas 1, 2, 14) */}
+      {/* Modal de Confirmación de Anulación (FAC-6.1) */}
       {isCancelModalOpen && factura && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-card border border-border rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col transition-colors">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 overflow-y-auto">
+          <div className="bg-card border border-border rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col my-auto transition-colors">
             {/* Header */}
             <div className="flex items-center justify-between p-5 border-b border-border bg-rose-500/10">
               <div className="flex items-center gap-3">
@@ -756,64 +868,210 @@ export default function InvoiceDetailModal({
 
             {/* Form */}
             <form onSubmit={handleConfirmCancel} className="p-5 space-y-4">
-              {/* Resumen de Factura */}
-              <div className="p-3.5 rounded-xl border border-border bg-surface/50 grid grid-cols-2 gap-3 text-xs font-mono">
+              {/* Resumen: Factura que se anulará */}
+              <div className="p-3.5 rounded-xl border border-border bg-surface/50 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
                 <div>
-                  <span className="text-foreground-muted block text-[10px]">Código Factura:</span>
+                  <span className="text-foreground-muted block text-[10px]">Factura:</span>
                   <strong className="text-foreground">{factura.codigo_factura}</strong>
                 </div>
                 <div>
-                  <span className="text-foreground-muted block text-[10px]">Total Facturado:</span>
+                  <span className="text-foreground-muted block text-[10px]">Total:</span>
                   <strong className="text-foreground">{formatMoney(factura.total)}</strong>
                 </div>
                 <div>
-                  <span className="text-foreground-muted block text-[10px]">Estado Actual:</span>
+                  <span className="text-foreground-muted block text-[10px]">Estado:</span>
                   <span className="text-foreground font-bold">{factura.estado}</span>
                 </div>
                 <div>
-                  <span className="text-foreground-muted block text-[10px]">Origen:</span>
+                  <span className="text-foreground-muted block text-[10px]">Tipo:</span>
                   <span className="text-foreground">
                     {factura.tipo_factura_nombre || (factura.orden_trabajo_id ? "Orden de Trabajo" : "Venta Directa")}
                   </span>
                 </div>
               </div>
 
-              {/* Advertencia de Pagos Registrados (Regla 14) */}
+              {/* Advertencia de Pagos Registrados */}
               {Number(factura.monto_pagado || 0) > 0 && (
                 <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-700 dark:text-amber-300 text-xs flex items-start gap-2.5">
                   <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
                   <div className="space-y-1">
                     <p className="font-semibold">Atención con los cobros registrados:</p>
-                    <p>La anulación no registra automáticamente una devolución de dinero. Los pagos aplicados permanecerán en el historial financiero como evidencia contable.</p>
+                    <p className="text-[11px] leading-relaxed">
+                      La anulación no registra automáticamente una devolución de dinero. Los pagos aplicados ({formatMoney(factura.monto_pagado)}) permanecerán en el historial financiero como evidencia contable.
+                    </p>
                   </div>
                 </div>
               )}
 
-              {/* Detalle sobre el inventario */}
-              <p className="text-xs text-foreground-secondary leading-relaxed">
-                {factura.tipo_factura_codigo === "VENTA_DIRECTA" || !factura.orden_trabajo_id
-                  ? "Al anular esta factura se generarán movimientos de reversa DEV_VENTA devolviendo las existencias físicas al stock del almacén correspondiente."
-                  : "Los repuestos y mano de obra del taller permanecerán inalterados. Solo se revertirán los productos adicionales facturados."}
-              </p>
-
-              {/* Campo obligatorio: Motivo */}
+              {/* Motivo de anulación (SELECT OBLIGATORIO) */}
               <div>
                 <label className="block text-xs font-mono font-bold text-foreground mb-1.5 uppercase">
                   Motivo de anulación <span className="text-rose-500">*</span>
                 </label>
+                {loadingMotivos ? (
+                  <div className="flex items-center gap-2 p-2.5 text-xs text-foreground-muted bg-surface rounded-xl border border-border">
+                    <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                    <span>Cargando catálogo de motivos...</span>
+                  </div>
+                ) : (
+                  <select
+                    value={selectedMotivoId}
+                    onChange={(e) => {
+                      setSelectedMotivoId(e.target.value);
+                      if (cancelError) setCancelError(null);
+                    }}
+                    disabled={isCancelling}
+                    className="w-full px-3 py-2 text-xs font-sans rounded-xl border border-border bg-surface focus:outline-none focus:ring-2 focus:ring-rose-500/30 focus:border-rose-500 transition-all text-foreground cursor-pointer"
+                    autoFocus
+                  >
+                    <option value="">-- Seleccione un motivo del catálogo --</option>
+                    {motivosList.map((m) => (
+                      <option key={m.motivo_anulacion_factura_id} value={m.motivo_anulacion_factura_id}>
+                        {m.motivo_anulacion} {m.genera_movimiento ? "• (Afecta Inventario)" : "• (Sin Movimiento)"}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {selectedMotivo?.descripcion && (
+                  <p className="text-[11px] text-foreground-muted mt-1 font-sans">
+                    {selectedMotivo.descripcion}
+                  </p>
+                )}
+              </div>
+
+              {/* Advertencia Especial para CAMBIO_FORMA_PAGO */}
+              {selectedMotivo?.codigo === "CAMBIO_FORMA_PAGO" && (
+                <div className="p-3 bg-amber-500/15 border border-amber-500/40 rounded-xl text-amber-800 dark:text-amber-200 text-xs flex items-start gap-2.5 animate-in fade-in duration-150">
+                  <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="font-bold">Advertencia importante para cambio de pago:</p>
+                    <p className="text-[11px] leading-relaxed">
+                      Para corregir únicamente la forma de pago se recomienda modificar/revertir el pago, no anular la factura. Si anula la factura, los productos con salida de inventario serán devueltos según la regla normal para evitar doble descuento al refacturar.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Panel Informativo: Efecto sobre Inventario */}
+              <div className="p-3.5 rounded-xl border border-border/80 bg-surface/70 space-y-2 text-xs">
+                <div className="flex items-center gap-2 font-mono font-bold text-foreground text-[11px] uppercase tracking-wide">
+                  <PackageCheck className="w-4 h-4 text-primary shrink-0" />
+                  <span>Efecto sobre inventario</span>
+                </div>
+
+                {!selectedMotivo ? (
+                  <p className="text-foreground-muted text-[11px]">
+                    Seleccione un motivo del catálogo para calcular el impacto de inventario sobre las líneas de esta factura.
+                  </p>
+                ) : selectedMotivo.genera_movimiento && lineasProductosElegibles.length > 0 ? (
+                  <div className="space-y-1.5 text-foreground leading-relaxed">
+                    {destinoProducto === "DISPONIBLE" ? (
+                      <p className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                        Esta anulación afectará {lineasProductosElegibles.length} producto(s) y devolverá {totalUnidadesRevertibles} unidades al inventario disponible.
+                      </p>
+                    ) : (
+                      <p className="text-amber-600 dark:text-amber-400 font-semibold">
+                        El destino seleccionado ({destinoProducto}) registrará la condición histórica de las unidades devueltas pero NO sumará existencias al stock comercial disponible.
+                      </p>
+                    )}
+                    <p className="text-[11px] text-foreground-muted">
+                      Se generará movimiento <strong>{selectedMotivo.codigo_tipo_movimiento || "DEV_VENTA"}</strong> sobre la salida original <strong>SAL_VENTA</strong>.
+                    </p>
+                    {(tieneServicios || tieneRepuestosOT) && (
+                      <p className="text-[10px] text-foreground-muted italic pt-1 border-t border-border/40">
+                        Nota: Los servicios y repuestos consumidos por Taller no serán modificados ni generan devolución al inventario comercial.
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-1 text-foreground leading-relaxed">
+                    <p className="text-foreground-secondary font-medium">
+                      Esta anulación no genera movimiento físico de inventario.
+                    </p>
+                    {lineasProductosElegibles.length === 0 && (tieneServicios || tieneRepuestosOT) && (
+                      <p className="text-[11px] text-foreground-muted">
+                        La factura contiene servicios y/o repuestos de orden de trabajo que no admiten reingreso físico como venta directa.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Destino del producto (Cuando aplique reingreso físico) */}
+              {selectedMotivo?.genera_movimiento && lineasProductosElegibles.length > 0 && (
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-mono font-bold text-foreground uppercase">
+                    Destino del producto <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={destinoProducto}
+                    onChange={(e) => setDestinoProducto(e.target.value)}
+                    disabled={isCancelling}
+                    className="w-full px-3 py-2 text-xs font-sans rounded-xl border border-border bg-surface focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all text-foreground cursor-pointer"
+                  >
+                    <option value="DISPONIBLE">DISPONIBLE (Devolver al stock disponible para la venta)</option>
+                    <option value="DAÑADO">DAÑADO (No sumar al disponible comercial - Registro histórico)</option>
+                    <option value="DEFECTUOSO">DEFECTUOSO (No sumar al disponible comercial - Registro histórico)</option>
+                    <option value="CUARENTENA">CUARENTENA (En revisión técnica - No sumar al disponible)</option>
+                  </select>
+                  <p className="text-[10px] text-foreground-muted">
+                    {destinoProducto === "DISPONIBLE"
+                      ? "Las existencias se sumarán a la cantidad actual del almacén con su costo PMP histórico."
+                      : "Las existencias se conservarán bloqueadas sin falsear disponibilidad física comercial."}
+                  </p>
+                </div>
+              )}
+
+              {/* Observación (Condicional: obligatoria u opcional) */}
+              <div>
+                <label className="block text-xs font-mono font-bold text-foreground mb-1.5 uppercase">
+                  Observación {selectedMotivo?.requiere_observacion ? <span className="text-rose-500">* (Obligatoria)</span> : <span className="text-foreground-muted font-normal text-[11px]">(Opcional)</span>}
+                </label>
                 <textarea
-                  value={cancelReason}
+                  value={cancelObservation}
                   onChange={(e) => {
-                    setCancelReason(e.target.value);
+                    setCancelObservation(e.target.value);
                     if (cancelError) setCancelError(null);
                   }}
                   disabled={isCancelling}
-                  rows={3}
-                  placeholder="Indique detalladamente el motivo por el cual se anula la factura (obligatorio)..."
+                  rows={2}
+                  placeholder={
+                    selectedMotivo?.requiere_observacion
+                      ? "Indique detalladamente la justificación de la anulación (obligatoria)..."
+                      : "Comentarios u observaciones adicionales..."
+                  }
                   className="w-full px-3 py-2 text-xs font-sans rounded-xl border border-border bg-surface focus:outline-none focus:ring-2 focus:ring-rose-500/30 focus:border-rose-500 transition-all resize-none text-foreground placeholder:text-foreground-muted"
-                  autoFocus
                 />
               </div>
+
+              {/* Usuario que autoriza (Condicional: cuando el motivo lo requiera) */}
+              {selectedMotivo?.requiere_autorizacion && (
+                <div className="space-y-1.5 p-3 rounded-xl border border-purple-500/30 bg-purple-500/5">
+                  <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-purple-700 dark:text-purple-300 uppercase">
+                    <ShieldCheck className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                    <span>Usuario que autoriza <span className="text-rose-500">*</span></span>
+                  </div>
+                  <select
+                    value={selectedAutorizadorId}
+                    onChange={(e) => {
+                      setSelectedAutorizadorId(e.target.value);
+                      if (cancelError) setCancelError(null);
+                    }}
+                    disabled={isCancelling}
+                    className="w-full px-3 py-2 text-xs font-sans rounded-xl border border-border bg-surface focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500 transition-all text-foreground cursor-pointer"
+                  >
+                    <option value="">-- Seleccione el usuario autorizador --</option>
+                    {usuariosAutorizadores.map((u) => (
+                      <option key={u.usuario_id} value={u.usuario_id}>
+                        {u.nombre_completo} ({u.rol_nombre || "Autorizador"}) • {u.correo}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-foreground-muted">
+                    Este motivo requiere validación de un usuario con permisos administrativos.
+                  </p>
+                </div>
+              )}
 
               {cancelError && (
                 <div className="p-2.5 bg-error-muted border border-error/30 rounded-lg text-error text-xs flex items-center gap-2">
@@ -834,7 +1092,12 @@ export default function InvoiceDetailModal({
                 </button>
                 <button
                   type="submit"
-                  disabled={isCancelling || !cancelReason.trim()}
+                  disabled={
+                    isCancelling ||
+                    !selectedMotivoId ||
+                    (selectedMotivo?.requiere_observacion && !cancelObservation.trim()) ||
+                    (selectedMotivo?.requiere_autorizacion && !selectedAutorizadorId)
+                  }
                   className="px-4 py-2 text-xs font-mono font-bold uppercase tracking-wider text-white bg-rose-600 hover:bg-rose-500 rounded-xl transition-all shadow-md shadow-rose-600/20 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
                 >
                   {isCancelling ? (

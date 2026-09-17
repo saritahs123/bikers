@@ -589,6 +589,9 @@ export async function crearFactura(
           observacion: `Venta Factura ${codigoFactura} (${tipoFactura.codigo})`
         });
 
+        // Sección 11: Vincular salida original en la línea de detalle
+        lp.movimiento_inventario_id = movRes.movimientoId;
+
         // Snapshot del costo unitario (PMP del almacén) si no fue provisto
         if (lp.costo_unitario == null) {
           lp.costo_unitario = movRes.costoUnitario;
@@ -623,6 +626,7 @@ export async function crearFactura(
         tipo_servicio_id: linea.tipo_servicio_id || null,
         orden_servicio_id: linea.orden_servicio_id || null,
         orden_producto_id: linea.orden_producto_id || null,
+        movimiento_inventario_id: linea.movimiento_inventario_id || null,
         codigo: linea.codigo ? linea.codigo.trim() : null,
         descripcion: linea.descripcion.trim(),
         cantidad: cant,
