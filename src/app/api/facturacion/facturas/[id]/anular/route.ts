@@ -144,27 +144,53 @@ export async function POST(request: NextRequest, context: RouteParams) {
     const movsSalVentaRes = await client.query(movsSalVentaSql, [empresaId, codigoFactura, numeroFactura]);
     const movsSalVenta = movsSalVentaRes.rows || [];
 
-    // Obtener tipo_movimiento_id para DEV_VENTA
-    const tipoMovRes = await client.query<{ tipo_movimiento_id: number }>(
-      `SELECT tipo_movimiento_id FROM admin.tipo_movimiento_inventario WHERE UPPER(TRIM(codigo)) = 'DEV_VENTA' LIMIT 1`
-    );
+    // 6. Resolver tipo_movimiento_id para DEV_VENTA por código canónico si hay reversos de venta directa
+    let devVentaTipoId: number | null = null;
+    if (movsSalVenta.length > 0) {
+      const tipoMovRes = await client.query<{
+        tipo_movimiento_id: number;
+        codigo: string;
+        nombre: string;
+        naturaleza: string;
+        estado?: string;
+      }>(
+        `SELECT tipo_movimiento_id, codigo, nombre, naturaleza, estado
+         FROM admin.tipo_movimiento_inventario
+         WHERE UPPER(TRIM(codigo)) = 'DEV_VENTA'
+         LIMIT 1`
+      );
 
-    let devVentaTipoId = tipoMovRes.rows[0]?.tipo_movimiento_id;
-    if (!devVentaTipoId) {
-      // Registrar dinámicamente si no existiera aún en BD
-      const insTipo = await client.query<{ tipo_movimiento_id: number }>(`
-        INSERT INTO admin.tipo_movimiento_inventario (
-          codigo, nombre, naturaleza, descripcion, estado
-        ) VALUES (
-          'DEV_VENTA', 'Devolución por Anulación de Venta', 'ENTRADA', 'Reingreso físico a inventario por anulación de factura con venta directa de productos.', 'ACTIVO'
-        ) RETURNING tipo_movimiento_id;
-      `);
-      devVentaTipoId = insTipo.rows[0]?.tipo_movimiento_id;
+      const devVentaRow = tipoMovRes.rows[0];
+      if (!devVentaRow || !devVentaRow.tipo_movimiento_id) {
+        await client.query("ROLLBACK");
+        return NextResponse.json(
+          {
+            error: "CATALOGO_DEV_VENTA_NO_CONFIGURADO",
+            message: "El tipo de movimiento DEV_VENTA no existe o no está configurado en el catálogo del sistema.",
+            details: "CATALOGO_DEV_VENTA_NO_CONFIGURADO: La migración 028 debe estar aplicada en la base de datos."
+          },
+          { status: 500 }
+        );
+      }
+
+      if (devVentaRow.estado && String(devVentaRow.estado).toUpperCase() === "INACTIVO") {
+        await client.query("ROLLBACK");
+        return NextResponse.json(
+          {
+            error: "CATALOGO_DEV_VENTA_NO_CONFIGURADO",
+            message: "El tipo de movimiento DEV_VENTA se encuentra inactivo en el catálogo de inventario.",
+            details: "CATALOGO_DEV_VENTA_NO_CONFIGURADO: El tipo de movimiento DEV_VENTA debe tener estado ACTIVO."
+          },
+          { status: 500 }
+        );
+      }
+
+      devVentaTipoId = Number(devVentaRow.tipo_movimiento_id);
     }
 
     const reversosGenerados: Array<{ movimiento_id: number; producto_id: number; cantidad: number }> = [];
 
-    // 6. Por cada movimiento original SAL_VENTA, crear movimiento inverso de ENTRADA (DEV_VENTA)
+    // 7. Por cada movimiento original SAL_VENTA, crear movimiento inverso de ENTRADA (DEV_VENTA)
     for (const movOrigen of movsSalVenta) {
       const productoId = Number(movOrigen.producto_id);
       const almacenId = Number(movOrigen.almacen_id);
@@ -338,6 +364,16 @@ export async function POST(request: NextRequest, context: RouteParams) {
     await client.query("ROLLBACK");
     const errorMsg = err instanceof Error ? err.message : String(err);
     console.error("Error en POST /api/facturacion/facturas/[id]/anular:", err);
+    if (errorMsg.includes("CATALOGO_DEV_VENTA_NO_CONFIGURADO")) {
+      return NextResponse.json(
+        {
+          error: "CATALOGO_DEV_VENTA_NO_CONFIGURADO",
+          message: "El tipo de movimiento DEV_VENTA no está configurado en el catálogo del sistema.",
+          details: errorMsg
+        },
+        { status: 500 }
+      );
+    }
     return NextResponse.json(
       {
         error: "ERROR_ANULAR_FACTURA",

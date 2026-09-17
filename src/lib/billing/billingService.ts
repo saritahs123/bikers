@@ -1245,8 +1245,8 @@ export async function anularFactura(
       await client.query("BEGIN");
     }
 
-    if (!input.motivo_anulacion || input.motivo_anulacion.trim().length < 5) {
-      throw new Error("El motivo de anulación es obligatorio y debe contener al menos 5 caracteres.");
+    if (!input.motivo_anulacion || input.motivo_anulacion.trim().length < 1) {
+      throw new Error("El motivo de anulación es obligatorio.");
     }
 
     const facRes = await client.query(`
@@ -1262,50 +1262,52 @@ export async function anularFactura(
 
     const factura: FacturaRow = facRes.rows[0];
     if (factura.estado === "ANULADA") {
-      throw new Error(`La factura ${factura.codigo_factura} ya se encuentra anulada.`);
+      throw new Error(`La factura ${factura.codigo_factura || factura.numero_factura || `#${factura.factura_id}`} ya se encuentra anulada.`);
     }
 
-    // Anular pagos asociados para mantener congruencia contable
-    await client.query(`
-      UPDATE admin.pagos
-      SET estado = 'ANULADO'
-      WHERE factura_id IN (
-        SELECT factura_id FROM admin.facturas WHERE factura_id = $1 AND empresa_id = $2
-      )
-    `, [input.factura_id, input.empresa_id]);
+    // Regla 3 & 13: NO borrar ni modificar registros de admin.pagos (se conservan como evidencia histórica)
+    // Regla 20 & 21: NO modificar el estado de la Orden de Trabajo si pertenecía a una OT
 
-    // Anular factura
-    const notaAnulacion = `[ANULADA el ${new Date().toISOString()} por usuario #${input.usuario_id}]: ${input.motivo_anulacion.trim()}`;
+    // Anular factura con columnas de trazabilidad si existen en el esquema
+    const facCols = await getTableColumns(client, "facturas");
+    const updateSet: string[] = ["estado = 'ANULADA'"];
+    const updateParams: (string | number)[] = [input.factura_id];
+    let updateIdx = 2;
+
+    if (facCols.has("motivo_anulacion")) {
+      updateSet.push(`motivo_anulacion = $${updateIdx}`);
+      updateParams.push(input.motivo_anulacion.trim());
+      updateIdx++;
+    }
+
+    if (facCols.has("fecha_anulacion")) {
+      updateSet.push(`fecha_anulacion = NOW()`);
+    }
+
+    if (facCols.has("usuario_anulacion_id")) {
+      updateSet.push(`usuario_anulacion_id = $${updateIdx}`);
+      updateParams.push(input.usuario_id);
+      updateIdx++;
+    }
+
+    if (facCols.has("fecha_modificacion")) {
+      updateSet.push(`fecha_modificacion = NOW()`);
+    }
+
+    if (facCols.has("usuario_modificacion_id")) {
+      updateSet.push(`usuario_modificacion_id = $${updateIdx}`);
+      updateParams.push(input.usuario_id);
+      updateIdx++;
+    }
+
     const updRes = await client.query(`
       UPDATE admin.facturas
-      SET
-        estado = 'ANULADA',
-        balance_pendiente = 0,
-        observacion = CASE
-          WHEN observacion IS NULL OR observacion = '' THEN $1
-          ELSE observacion || E'\n' || $1
-        END,
-        usuario_modificacion_id = $2,
-        fecha_modificacion = NOW()
-      WHERE factura_id = $3 AND empresa_id = $4
+      SET ${updateSet.join(", ")}
+      WHERE factura_id = $1 AND empresa_id = $${updateIdx}
       RETURNING *;
-    `, [
-      notaAnulacion,
-      input.usuario_id,
-      input.factura_id,
-      input.empresa_id
-    ]);
+    `, [...updateParams, input.empresa_id]);
 
     const updatedFactura: FacturaRow = updRes.rows[0];
-
-    // Si provenía de una OT, actualizar bandera facturado en la orden
-    if (factura.orden_trabajo_id) {
-      await client.query(`
-        UPDATE admin.ordenes_trabajo
-        SET facturado = false
-        WHERE orden_trabajo_id = $1 AND empresa_id = $2
-      `, [factura.orden_trabajo_id, input.empresa_id]);
-    }
 
     if (isInternalTransaction) {
       await client.query("COMMIT");
