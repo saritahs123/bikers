@@ -13,9 +13,9 @@ export interface BillingInvoicePrintData {
     factura_id: number;
     codigo_factura: string;
     numero_factura?: string;
-    tipo_factura_id: number;
-    tipo_factura_codigo: string;
-    tipo_factura_nombre: string;
+    tipo_factura_id?: number;
+    tipo_factura_codigo?: string;
+    tipo_factura_nombre?: string;
     cliente_id: number | null;
     orden_trabajo_id: number | null;
     fecha_factura: string;
@@ -105,24 +105,68 @@ const formatDateShort = (dateStr?: string | null) => {
   }
 };
 
-const formatDateTime = (dateStr?: string | null) => {
+const formatDateOnly = (dateStr?: string | null) => {
   if (!dateStr) return "—";
   try {
+    if (typeof dateStr === "string" && /^\d{4}-\d{2}-\d{2}$/.test(dateStr.trim())) {
+      const [y, m, d] = dateStr.trim().split("-");
+      return `${d}/${m}/${y}`;
+    }
     const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr;
-    return d.toLocaleString("es-DO", {
+    if (isNaN(d.getTime())) return String(dateStr);
+    const parts = new Intl.DateTimeFormat("en-US", {
       timeZone: "America/Santo_Domingo",
-      day: "2-digit",
-      month: "2-digit",
       year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true
-    });
+      month: "2-digit",
+      day: "2-digit"
+    }).formatToParts(d);
+    const m = new Map(parts.map((p) => [p.type, p.value]));
+    return `${m.get("day")}/${m.get("month")}/${m.get("year")}`;
   } catch {
-    return dateStr;
+    return String(dateStr);
   }
 };
+
+const formatPrintDateTime = (d: Date = new Date()) => {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/Santo_Domingo",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true
+    }).formatToParts(d);
+
+    const m = new Map(parts.map((p) => [p.type, p.value]));
+    const day = m.get("day") || "01";
+    const month = m.get("month") || "01";
+    const year = m.get("year") || "1970";
+    const hour = m.get("hour") || "12";
+    const minute = m.get("minute") || "00";
+    const second = m.get("second") || "00";
+    const dayPeriod = (m.get("dayPeriod") || "AM").toUpperCase();
+
+    return `${day}/${month}/${year} ${hour}:${minute}:${second} ${dayPeriod}`;
+  } catch {
+    return d.toISOString();
+  }
+};
+
+const getInvoiceTypeName = (factura: BillingInvoicePrintData["factura"]): string => {
+  const nombre = factura?.tipo_factura_nombre?.trim();
+  if (nombre) {
+    return nombre.toUpperCase();
+  }
+  const codigo = factura?.tipo_factura_codigo?.trim();
+  if (codigo) {
+    return codigo.replace(/_/g, " ").toUpperCase();
+  }
+  return "CONSUMIDOR FINAL";
+};
+
 
 /**
  * ============================================================================
@@ -186,28 +230,30 @@ export function generateInvoiceModel1Pdf(data: BillingInvoicePrintData): jsPDF {
   doc.setFontSize(22);
   doc.text("FACTURA", pageWidth - marginX, currentY + 6, { align: "right" });
 
-  doc.setFontSize(8.5);
+  doc.setFontSize(8);
   doc.setTextColor(textDark[0], textDark[1], textDark[2]);
   let metaY = currentY + 14;
 
+  const tipoFacturaStr = getInvoiceTypeName(data.factura);
+  const printDateTime = formatPrintDateTime(new Date());
+  const fechaFacturaStr = formatDateOnly(data.factura.fecha_factura);
+
   const rightMeta = [
     { label: "Factura:", val: data.factura.codigo_factura || data.factura.numero_factura || "—" },
+    { label: "Tipo de Factura:", val: tipoFacturaStr },
     ...(data.factura.orden_trabajo_id && data.orden_trabajo?.codigo_orden
       ? [{ label: "Orden de Trabajo:", val: data.orden_trabajo.codigo_orden }]
       : []),
-    { label: "Fecha:", val: formatDateShort(data.factura.fecha_factura) },
-    {
-      label: "Origen:",
-      val: data.factura.orden_trabajo_id ? "ORDEN DE TRABAJO" : "VENTA DIRECTA"
-    }
+    { label: "Fecha:", val: fechaFacturaStr },
+    { label: "Fecha de impresión:", val: printDateTime }
   ];
 
   rightMeta.forEach((item) => {
     doc.setFont("helvetica", "bold");
-    doc.text(item.label, pageWidth - marginX - 52, metaY);
+    doc.text(item.label, pageWidth - marginX - 70, metaY);
     doc.setFont("helvetica", "normal");
     doc.text(item.val, pageWidth - marginX, metaY, { align: "right" });
-    metaY += 4.5;
+    metaY += 4.3;
   });
 
   // Estado Badge
@@ -215,7 +261,7 @@ export function generateInvoiceModel1Pdf(data: BillingInvoicePrintData): jsPDF {
   const badgeWidth = 32;
   const badgeHeight = 6.2;
   const badgeX = pageWidth - marginX - badgeWidth;
-  const badgeY = metaY + 1;
+  const badgeY = metaY + 1.2;
 
   let badgeBg = [236, 253, 245];
   let badgeBorder = brandGreen;
@@ -646,8 +692,8 @@ export function generateInvoiceModel2Pdf(data: BillingInvoicePrintData): jsPDF {
   // Calculamos la altura dinámica del rollo térmico según cantidad de líneas y pagos
   const lineCount = (data.detalle || []).length;
   const payCount = (data.pagos || []).length;
-  const baseHeight = 150;
-  const dynamicHeight = Math.max(170, baseHeight + lineCount * 9 + payCount * 6);
+  const baseHeight = 160;
+  const dynamicHeight = Math.max(180, baseHeight + lineCount * 9 + payCount * 6);
 
   const doc = new jsPDF({
     orientation: "portrait",
@@ -721,30 +767,43 @@ export function generateInvoiceModel2Pdf(data: BillingInvoicePrintData): jsPDF {
   }
 
   // 2. METADATA DE FACTURA & CLIENTE
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8.5);
-  doc.setTextColor(0, 0, 0);
-  doc.text(`FACTURA: ${data.factura.codigo_factura}`, marginX, currentY);
-  currentY += 3.8;
+  const facNumero = data.factura.codigo_factura || data.factura.numero_factura || "—";
+  const tipoFacturaTicket = getInvoiceTypeName(data.factura);
+  const printDateTime = formatPrintDateTime(new Date());
+  const fechaFactura = formatDateOnly(data.factura.fecha_factura);
 
-  doc.setFontSize(6.8);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(0, 0, 0);
+  doc.text(`Factura: ${facNumero}`, marginX, currentY);
+  currentY += 3.6;
+
+  doc.setFontSize(6.5);
   doc.setFont("helvetica", "normal");
   doc.setTextColor(40, 40, 40);
 
+  // Tipo de Factura
+  doc.text(`Tipo: ${tipoFacturaTicket}`, marginX, currentY, { maxWidth: contentWidth });
+  currentY += 3.2;
+
+  // OT (solo si aplica)
   if (data.factura.orden_trabajo_id && data.orden_trabajo?.codigo_orden) {
-    doc.setFont("helvetica", "bold");
-    doc.text(`Orden de Trabajo: ${data.orden_trabajo.codigo_orden}`, marginX, currentY);
-    doc.setFont("helvetica", "normal");
-    currentY += 3.4;
+    doc.text(`OT: ${data.orden_trabajo.codigo_orden}`, marginX, currentY);
+    currentY += 3.2;
   }
 
-  doc.text(`Fecha: ${formatDateTime(data.factura.fecha_factura)}`, marginX, currentY);
+  // Fecha de Factura y Estado
+  doc.text(`Fecha: ${fechaFactura}`, marginX, currentY);
   doc.text(`Estado: ${data.factura.estado.toUpperCase()}`, pageWidth - marginX, currentY, { align: "right" });
-  currentY += 3.4;
+  currentY += 3.2;
+
+  // Fecha de Impresión (calculada en tiempo real)
+  doc.text(`Impresión: ${printDateTime}`, marginX, currentY);
+  currentY += 3.2;
 
   const clienteNombre = data.cliente?.nombre_completo || "Cliente General";
   doc.text(`Cliente: ${clienteNombre}`, marginX, currentY, { maxWidth: contentWidth });
-  currentY += 3.4;
+  currentY += 3.2;
 
   if (data.cliente?.identificacion) {
     doc.text(`RNC / Cédula: ${data.cliente.identificacion}`, marginX, currentY);
