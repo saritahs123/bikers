@@ -61,8 +61,7 @@ function SidebarContent({
       submenu: [
         { href: "/workshop?view=list", label: "RECEPCIONES" },
         { href: "/workshop?view=work_orders", label: "ÓRDENES DE TRABAJO" },
-        { href: "/workshop?view=kanban", label: "VISTA KANBAN" },
-        { href: "/workshop?view=billing", label: "DESPACHO DE ÓRDENES" }
+        { href: "/workshop?view=kanban", label: "VISTA KANBAN" }
       ]
     },
     {
@@ -85,6 +84,17 @@ function SidebarContent({
         { href: "/inventory/entries", label: "ENTRADAS" },
         { href: "/inventory/adjustments", label: "SALIDAS Y AJUSTES" },
         { href: "/inventory/transfers", label: "TRANSFERENCIAS" }
+      ]
+    },
+    {
+      id: "facturacion",
+      icon: "receipt_long",
+      label: "FACTURACIÓN",
+      submenu: [
+        { href: "/billing/new", label: "NUEVA FACTURA" },
+        { href: "/billing/invoices", label: "FACTURAS" },
+        { href: "/billing/payments", label: "PAGOS" },
+        { href: "/workshop?view=billing", label: "DESPACHO DE ÓRDENES" }
       ]
     },
     {

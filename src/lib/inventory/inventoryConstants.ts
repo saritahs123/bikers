@@ -13,13 +13,16 @@ export const INVENTORY_SYSTEM_CODES = {
   INVENTARIO_INICIAL: 10,
   CONSUMO_TALLER: 12,
   DEVOLUCION_TALLER: 13,
+  FACTURA: 14,
+  SALIDA_VENTA: 15,
+  DEVOLUCION_VENTA: 16,
 } as const;
 
 export type InventorySystemCodeKey = keyof typeof INVENTORY_SYSTEM_CODES;
 
 /**
  * Asegura de forma idempotente que la empresa posea los registros de código de sistema
- * para el módulo de inventario (IDs 5 al 10, 12 para consumo y 13 para devolución/reverso de taller).
+ * para el módulo de inventario (IDs 5 al 10, 12 para consumo, 13 para devolución/reverso de taller, 15 para salida por venta y 16 para devolución por venta).
  */
 export async function ensureEmpresaCodigoSistemaProvisioned(
   client: PoolClient,
@@ -47,7 +50,10 @@ export async function ensureEmpresaCodigoSistemaProvisioned(
       ($1, 9, 'TRANSFERENCIA_INVENTARIO', 'TRFI', 6, 0, TO_CHAR(CURRENT_TIMESTAMP AT TIME ZONE 'America/Santo_Domingo', 'YYYYMM'), true, false, NOW(), NOW()),
       ($1, 10, 'INVENTARIO_INCIAL', 'INVI', 6, 0, TO_CHAR(CURRENT_TIMESTAMP AT TIME ZONE 'America/Santo_Domingo', 'YYYYMM'), true, false, NOW(), NOW()),
       ($1, 12, 'CONSUMO_REPUESTO_TALLER', 'CRT', 6, 0, TO_CHAR(CURRENT_TIMESTAMP AT TIME ZONE 'America/Santo_Domingo', 'YYYYMM'), true, false, NOW(), NOW()),
-      ($1, 13, 'DEVOLUCION_REPUESTO_TALLER', 'DRT', 6, 0, TO_CHAR(CURRENT_TIMESTAMP AT TIME ZONE 'America/Santo_Domingo', 'YYYYMM'), true, false, NOW(), NOW())
+      ($1, 13, 'DEVOLUCION_REPUESTO_TALLER', 'DRT', 6, 0, TO_CHAR(CURRENT_TIMESTAMP AT TIME ZONE 'America/Santo_Domingo', 'YYYYMM'), true, false, NOW(), NOW()),
+      ($1, 14, 'FACTURA', 'FAC', 6, 0, TO_CHAR(CURRENT_TIMESTAMP AT TIME ZONE 'America/Santo_Domingo', 'YYYYMM'), true, false, NOW(), NOW()),
+      ($1, 15, 'SALIDA_VENTA', 'SV', 6, 0, TO_CHAR(CURRENT_TIMESTAMP AT TIME ZONE 'America/Santo_Domingo', 'YYYYMM'), true, false, NOW(), NOW()),
+      ($1, 16, 'DEVOLUCION_VENTA', 'DV', 6, 0, TO_CHAR(CURRENT_TIMESTAMP AT TIME ZONE 'America/Santo_Domingo', 'YYYYMM'), true, false, NOW(), NOW())
     ON CONFLICT (empresa_id, codigo_sistema_id) DO NOTHING
   `;
   await client.query(sql, [empresaId]);
