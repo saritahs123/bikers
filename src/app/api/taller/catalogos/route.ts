@@ -49,17 +49,24 @@ export async function GET() {
     const productos = await query(
       `SELECT p.producto_id,
               p.codigo_producto AS codigo,
+              p.codigo_producto,
+              p.codigo_barra,
               p.nombre,
+              p.descripcion,
               COALESCE(p.precio_venta, 0)::numeric AS precio_venta,
               um.codigo AS unidad_medida,
               COALESCE(um.permite_decimales, false) AS permite_decimales,
+              cp.nombre AS categoria_nombre,
+              mp.nombre AS marca_nombre,
               COALESCE(SUM(ep.cantidad_actual - ep.cantidad_reservada), 0)::numeric AS stock_disponible
        FROM admin.productos p
        LEFT JOIN admin.unidad_medida um ON p.unidad_medida_id = um.unidad_medida_id
-       LEFT JOIN admin.existencias_producto ep ON p.producto_id = ep.producto_id AND ep.empresa_id = $1 AND UPPER(ep.estado) = 'ACTIVO'
-       WHERE (p.estado = 'ACTIVO' OR p.estado IS NULL)
+       LEFT JOIN admin.categoria_producto cp ON p.categoria_producto_id = cp.categoria_producto_id
+       LEFT JOIN admin.marca_producto mp ON p.marca_producto_id = mp.marca_producto_id
+       LEFT JOIN admin.existencias_producto ep ON p.producto_id = ep.producto_id AND ep.empresa_id = $1 AND UPPER(COALESCE(ep.estado, 'ACTIVO')) = 'ACTIVO'
+       WHERE UPPER(COALESCE(p.estado, 'ACTIVO')) = 'ACTIVO'
          AND (p.empresa_id = $1 OR p.empresa_id IS NULL)
-       GROUP BY p.producto_id, p.codigo_producto, p.nombre, p.precio_venta, um.codigo, um.permite_decimales
+       GROUP BY p.producto_id, p.codigo_producto, p.codigo_barra, p.nombre, p.descripcion, p.precio_venta, um.codigo, um.permite_decimales, cp.nombre, mp.nombre
        ORDER BY p.nombre ASC`,
       [session.empresa_id]
     );
