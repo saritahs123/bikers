@@ -5,7 +5,6 @@ import Link from "next/link";
 import {
   X,
   Receipt,
-  Printer,
   DollarSign,
   ExternalLink,
   User,
@@ -21,7 +20,11 @@ import {
   ShieldCheck,
   PackageCheck
 } from "lucide-react";
-import InvoicePrintSelectorModal from "./InvoicePrintSelectorModal";
+import {
+  generateInvoiceModel1Pdf,
+  generateInvoiceModel2Pdf,
+  downloadInvoicePdf
+} from "@/lib/billing/billingPdfService";
 import RegisterPaymentModal from "./RegisterPaymentModal";
 
 export default function InvoiceDetailModal({
@@ -35,8 +38,11 @@ export default function InvoiceDetailModal({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // Estados de impresión directa
+  const [isPrintingA4, setIsPrintingA4] = useState(false);
+  const [isPrintingTicket, setIsPrintingTicket] = useState(false);
+
   // Modales secundarios
-  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
@@ -46,6 +52,7 @@ export default function InvoiceDetailModal({
   const [motivosList, setMotivosList] = useState([]);
   const [usuariosAutorizadores, setUsuariosAutorizadores] = useState([]);
   const [loadingMotivos, setLoadingMotivos] = useState(false);
+  const [motivosError, setMotivosError] = useState(null);
   const [selectedMotivoId, setSelectedMotivoId] = useState("");
   const [cancelObservation, setCancelObservation] = useState("");
   const [destinoProducto, setDestinoProducto] = useState("DISPONIBLE");
@@ -54,14 +61,21 @@ export default function InvoiceDetailModal({
   const fetchMotivosAnulacion = React.useCallback(async () => {
     try {
       setLoadingMotivos(true);
+      setMotivosError(null);
       const res = await fetch("/api/facturacion/motivos-anulacion");
       const json = await res.json();
-      if (res.ok && json.data) {
-        setMotivosList(json.data.motivos || []);
-        setUsuariosAutorizadores(json.data.usuarios_autorizadores || []);
+      if (!res.ok) {
+        throw new Error(json.message || json.error || "No se pudieron cargar los motivos de anulación.");
       }
+      const rawList = Array.isArray(json.data)
+        ? json.data
+        : (json.motivos || json.data?.motivos || []);
+      setMotivosList(rawList);
+      setUsuariosAutorizadores(json.usuarios_autorizadores || json.data?.usuarios_autorizadores || []);
     } catch (err) {
       console.error("Error al cargar catálogo de motivos de anulación:", err);
+      setMotivosError(err.message || "No se pudieron cargar los motivos de anulación.");
+      setMotivosList([]);
     } finally {
       setLoadingMotivos(false);
     }
@@ -69,12 +83,55 @@ export default function InvoiceDetailModal({
 
   const openCancelModal = () => {
     setCancelError(null);
+    setMotivosError(null);
     setSelectedMotivoId("");
     setCancelObservation("");
     setDestinoProducto("DISPONIBLE");
     setSelectedAutorizadorId("");
     setIsCancelModalOpen(true);
     fetchMotivosAnulacion();
+  };
+
+  const getFullInvoiceDataForPrint = async () => {
+    if (data && data.factura && Number(data.factura.factura_id) === Number(facturaId)) {
+      return data;
+    }
+    const res = await fetch(`/api/facturacion/facturas/${facturaId}`);
+    const json = await res.json();
+    if (!res.ok || !json.data) {
+      throw new Error(json.message || json.error || "No se pudo cargar la información de la factura.");
+    }
+    return json.data;
+  };
+
+  const handlePrintA4 = async () => {
+    try {
+      setIsPrintingA4(true);
+      const printData = await getFullInvoiceDataForPrint();
+      const doc = generateInvoiceModel1Pdf(printData);
+      const codigo = printData.factura?.codigo_factura || printData.factura?.numero_factura || `FAC-${facturaId}`;
+      downloadInvoicePdf(doc, `Factura_${codigo}.pdf`);
+    } catch (err) {
+      console.error("Error al generar PDF A4:", err);
+      alert("Error al generar Factura A4: " + (err.message || "Error desconocido"));
+    } finally {
+      setIsPrintingA4(false);
+    }
+  };
+
+  const handlePrintTicket = async () => {
+    try {
+      setIsPrintingTicket(true);
+      const printData = await getFullInvoiceDataForPrint();
+      const doc = generateInvoiceModel2Pdf(printData);
+      const codigo = printData.factura?.codigo_factura || printData.factura?.numero_factura || `FAC-${facturaId}`;
+      downloadInvoicePdf(doc, `Ticket_${codigo}.pdf`);
+    } catch (err) {
+      console.error("Error al generar Ticket POS:", err);
+      alert("Error al generar Ticket POS: " + (err.message || "Error desconocido"));
+    } finally {
+      setIsPrintingTicket(false);
+    }
   };
 
   const fetchDetail = React.useCallback(async () => {
@@ -350,17 +407,39 @@ export default function InvoiceDetailModal({
             </div>
 
             {/* Quick Action Buttons */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               {factura && (
-                <button
-                  type="button"
-                  onClick={() => setIsPrintModalOpen(true)}
-                  className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-mono font-bold uppercase tracking-wider text-foreground hover:text-primary bg-surface hover:bg-hover border border-border rounded-xl transition-all cursor-pointer shadow-sm"
-                  title="Imprimir Factura (Seleccionar Formato)"
-                >
-                  <Printer className="w-4 h-4 text-primary" />
-                  <span className="hidden sm:inline">Imprimir</span>
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={handlePrintA4}
+                    disabled={isPrintingA4}
+                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-mono font-bold uppercase tracking-wider text-foreground hover:text-primary bg-surface hover:bg-hover border border-border rounded-xl transition-all cursor-pointer shadow-sm disabled:opacity-50"
+                    title="Imprimir Factura Estándar A4"
+                  >
+                    {isPrintingA4 ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                    ) : (
+                      <FileText className="w-4 h-4 text-primary" />
+                    )}
+                    <span>Imprimir A4</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handlePrintTicket}
+                    disabled={isPrintingTicket}
+                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-mono font-bold uppercase tracking-wider text-foreground hover:text-emerald-600 dark:hover:text-emerald-400 bg-surface hover:bg-hover border border-border rounded-xl transition-all cursor-pointer shadow-sm disabled:opacity-50"
+                    title="Imprimir Ticket POS Térmico (80mm)"
+                  >
+                    {isPrintingTicket ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-emerald-600 dark:text-emerald-400" />
+                    ) : (
+                      <Receipt className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    )}
+                    <span>Imprimir Ticket</span>
+                  </button>
+                </>
               )}
 
               {puedeRegistrarPago && (
@@ -818,15 +897,6 @@ export default function InvoiceDetailModal({
         </div>
       </div>
 
-      {/* Selector de formato de impresión */}
-      {isPrintModalOpen && data && (
-        <InvoicePrintSelectorModal
-          isOpen={isPrintModalOpen}
-          onClose={() => setIsPrintModalOpen(false)}
-          invoiceData={data}
-        />
-      )}
-
       {/* Registro de pagos */}
       {isPaymentModalOpen && factura && (
         <RegisterPaymentModal
@@ -911,7 +981,26 @@ export default function InvoiceDetailModal({
                 {loadingMotivos ? (
                   <div className="flex items-center gap-2 p-2.5 text-xs text-foreground-muted bg-surface rounded-xl border border-border">
                     <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                    <span>Cargando catálogo de motivos...</span>
+                    <span>Cargando motivos...</span>
+                  </div>
+                ) : motivosError ? (
+                  <div className="p-3 bg-error-muted/40 border border-error/30 rounded-xl text-error text-xs flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 shrink-0" />
+                      <span>{motivosError}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={fetchMotivosAnulacion}
+                      className="px-2.5 py-1 text-[11px] font-mono font-bold uppercase rounded-lg bg-surface border border-border hover:bg-hover text-foreground transition-colors cursor-pointer"
+                    >
+                      Reintentar
+                    </button>
+                  </div>
+                ) : motivosList.length === 0 ? (
+                  <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-700 dark:text-amber-300 text-xs flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>No existen motivos de anulación activos configurados.</span>
                   </div>
                 ) : (
                   <select
@@ -927,7 +1016,7 @@ export default function InvoiceDetailModal({
                     <option value="">-- Seleccione un motivo del catálogo --</option>
                     {motivosList.map((m) => (
                       <option key={m.motivo_anulacion_factura_id} value={m.motivo_anulacion_factura_id}>
-                        {m.motivo_anulacion} {m.genera_movimiento ? "• (Afecta Inventario)" : "• (Sin Movimiento)"}
+                        {m.motivo_anulacion}
                       </option>
                     ))}
                   </select>
@@ -946,7 +1035,7 @@ export default function InvoiceDetailModal({
                   <div className="space-y-1">
                     <p className="font-bold">Advertencia importante para cambio de pago:</p>
                     <p className="text-[11px] leading-relaxed">
-                      Para corregir únicamente la forma de pago se recomienda modificar/revertir el pago, no anular la factura. Si anula la factura, los productos con salida de inventario serán devueltos según la regla normal para evitar doble descuento al refacturar.
+                      Para corregir únicamente la forma de pago se recomienda corregir o revertir el pago sin anular la factura.
                     </p>
                   </div>
                 </div>
@@ -956,7 +1045,7 @@ export default function InvoiceDetailModal({
               <div className="p-3.5 rounded-xl border border-border/80 bg-surface/70 space-y-2 text-xs">
                 <div className="flex items-center gap-2 font-mono font-bold text-foreground text-[11px] uppercase tracking-wide">
                   <PackageCheck className="w-4 h-4 text-primary shrink-0" />
-                  <span>Efecto sobre inventario</span>
+                  <span>EFECTO SOBRE INVENTARIO</span>
                 </div>
 
                 {!selectedMotivo ? (
@@ -967,11 +1056,11 @@ export default function InvoiceDetailModal({
                   <div className="space-y-1.5 text-foreground leading-relaxed">
                     {destinoProducto === "DISPONIBLE" ? (
                       <p className="text-emerald-600 dark:text-emerald-400 font-semibold">
-                        Esta anulación afectará {lineasProductosElegibles.length} producto(s) y devolverá {totalUnidadesRevertibles} unidades al inventario disponible.
+                        Esta anulación devolverá {totalUnidadesRevertibles} unidades al inventario disponible y generará {selectedMotivo.codigo_tipo_movimiento || "DEV_VENTA"}.
                       </p>
                     ) : (
                       <p className="text-amber-600 dark:text-amber-400 font-semibold">
-                        El destino seleccionado ({destinoProducto}) registrará la condición histórica de las unidades devueltas pero NO sumará existencias al stock comercial disponible.
+                        El destino seleccionado ({destinoProducto}) registrará la condición de las {totalUnidadesRevertibles} unidades devueltas pero NO sumará existencias al stock comercial disponible.
                       </p>
                     )}
                     <p className="text-[11px] text-foreground-muted">
@@ -979,14 +1068,14 @@ export default function InvoiceDetailModal({
                     </p>
                     {(tieneServicios || tieneRepuestosOT) && (
                       <p className="text-[10px] text-foreground-muted italic pt-1 border-t border-border/40">
-                        Nota: Los servicios y repuestos consumidos por Taller no serán modificados ni generan devolución al inventario comercial.
+                        Nota: Los servicios y repuestos consumidos por Taller no generan devolución al inventario comercial.
                       </p>
                     )}
                   </div>
                 ) : (
                   <div className="space-y-1 text-foreground leading-relaxed">
                     <p className="text-foreground-secondary font-medium">
-                      Esta anulación no genera movimiento físico de inventario.
+                      Esta anulación no genera movimiento de inventario.
                     </p>
                     {lineasProductosElegibles.length === 0 && (tieneServicios || tieneRepuestosOT) && (
                       <p className="text-[11px] text-foreground-muted">
