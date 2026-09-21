@@ -17,7 +17,9 @@ import {
   FileText,
   Loader2,
   Ban,
-  PackageCheck
+  PackageCheck,
+  HelpCircle,
+  ChevronDown
 } from "lucide-react";
 import {
   generateInvoiceModel1Pdf,
@@ -46,6 +48,7 @@ export default function InvoiceDetailModal({
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [cancelError, setCancelError] = useState(null);
+  const [showCancelHelp, setShowCancelHelp] = useState(false);
 
   // FAC-6.1: Catálogo de Motivos de Anulación y Reglas de Inventario
   const [motivosList, setMotivosList] = useState([]);
@@ -83,6 +86,7 @@ export default function InvoiceDetailModal({
     setSelectedMotivoId("");
     setCancelObservation("");
     setDestinoProducto("DISPONIBLE");
+    setShowCancelHelp(false);
     setIsCancelModalOpen(true);
     fetchMotivosAnulacion();
   };
@@ -179,18 +183,39 @@ export default function InvoiceDetailModal({
   const pagos = data?.pagos || [];
   const anulacion = data?.anulacion;
 
-  // FAC-6.1: Clasificación de líneas de factura para cálculo de efecto de inventario
-  const lineasProductosElegibles = detalle.filter((item) => {
-    const isServicio = item.tipo_linea === "SERVICIO" || !!item.servicio_id || !!item.orden_servicio_id;
-    return !isServicio && (item.tipo_linea === "PRODUCTO" || item.tipo_linea === "REPUESTO" || !!item.producto_id);
-  });
-  const totalUnidadesRevertibles = lineasProductosElegibles.reduce(
-    (acc, item) => acc + Number(item.cantidad || 0),
+  // FAC-6.1 / FIX-FAC-CANCEL-HELP-1: Clasificación de líneas de factura para cálculo de efecto de inventario
+  const isItemServicio = (item) => {
+    const tipo = String(item?.tipo_linea || "").toUpperCase();
+    return tipo === "SERVICIO" || !!item?.servicio_id || !!item?.tipo_servicio_id || !!item?.orden_servicio_id;
+  };
+
+  const isItemRepuestoOT = (item) => {
+    if (isItemServicio(item)) return false;
+    const tipo = String(item?.tipo_linea || "").toUpperCase();
+    return (
+      tipo === "REPUESTO" ||
+      !!item?.orden_producto_id ||
+      (Boolean(factura?.orden_trabajo_id) && tipo !== "PRODUCTO")
+    );
+  };
+
+  // Líneas físicas de venta comercial directa (generaron SAL_VENTA y pueden generar DEV_VENTA)
+  const lineasComerciales = detalle.filter(
+    (item) =>
+      !isItemServicio(item) &&
+      !isItemRepuestoOT(item) &&
+      (!!item?.producto_id || String(item?.tipo_linea || "").toUpperCase() === "PRODUCTO")
+  );
+
+  const totalUnidadesComerciales = lineasComerciales.reduce(
+    (acc, item) => acc + Number(item?.cantidad || 0),
     0
   );
-  const tieneServicios = detalle.some(
-    (item) => item.tipo_linea === "SERVICIO" || !!item.servicio_id || !!item.orden_servicio_id
-  );
+
+  const tieneServicios = detalle.some(isItemServicio);
+  const tieneRepuestosOT = detalle.some(isItemRepuestoOT);
+  const esFacturaExclusivaServiciosOT =
+    detalle.length > 0 && lineasComerciales.length === 0 && (tieneServicios || tieneRepuestosOT);
 
   const selectedMotivo = motivosList.find(
     (m) => String(m.motivo_anulacion_factura_id) === String(selectedMotivoId)
@@ -198,12 +223,27 @@ export default function InvoiceDetailModal({
 
   const codMotivo = String(selectedMotivo?.codigo || "").toUpperCase();
   const nombreMotivo = String(selectedMotivo?.motivo_anulacion || "").toLowerCase();
-  const esMotivoSinMovimiento =
+
+  const esCambioFormaPago =
     codMotivo === "CAMBIO_FORMA_PAGO" ||
-    codMotivo === "FACTURA_DUPLICADA" ||
-    codMotivo === "AJUSTE_ADMINISTRATIVO" ||
     nombreMotivo.includes("cambio de forma de pago") ||
-    nombreMotivo.includes("factura duplicada") ||
+    nombreMotivo.includes("forma de pago");
+
+  const esFacturaDuplicada =
+    codMotivo === "FACTURA_DUPLICADA" ||
+    nombreMotivo.includes("duplicada") ||
+    nombreMotivo.includes("duplicado");
+
+  const esAjusteAdministrativo =
+    codMotivo === "AJUSTE_ADMINISTRATIVO" ||
+    codMotivo === "AJUSTE_FISCAL" ||
+    nombreMotivo.includes("ajuste administrativo") ||
+    nombreMotivo.includes("ajuste fiscal");
+
+  const esMotivoSinMovimiento =
+    esCambioFormaPago ||
+    esFacturaDuplicada ||
+    esAjusteAdministrativo ||
     nombreMotivo.includes("sin movimiento") ||
     selectedMotivo?.genera_movimiento === false ||
     selectedMotivo?.genera_movimiento === "false";
@@ -215,6 +255,8 @@ export default function InvoiceDetailModal({
     selectedMotivo.genera_movimiento !== "false" &&
     selectedMotivo.genera_movimiento !== 0
   );
+
+  const mostrarDestinoProducto = Boolean(motivoGeneraMovimiento && lineasComerciales.length > 0);
 
   const formatMoney = (val) => {
     const num = parseFloat(val || 0);
@@ -369,6 +411,7 @@ export default function InvoiceDetailModal({
       setSelectedMotivoId("");
       setCancelObservation("");
       setDestinoProducto("DISPONIBLE");
+      setShowCancelHelp(false);
       await fetchDetail();
       if (onInvoiceUpdated) {
         onInvoiceUpdated(json.data);
@@ -976,11 +1019,34 @@ export default function InvoiceDetailModal({
                 </div>
               )}
 
-              {/* Motivo de anulación (SELECT OBLIGATORIO) */}
+              {/* Motivo de anulación (SELECT OBLIGATORIO) con Botón de Ayuda */}
               <div>
-                <label className="block text-xs font-mono font-bold text-foreground mb-1.5 uppercase">
-                  Motivo de anulación <span className="text-rose-500">*</span>
-                </label>
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <label className="block text-xs font-mono font-bold text-foreground uppercase">
+                    Motivo de anulación <span className="text-rose-500">*</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowCancelHelp((prev) => !prev)}
+                    title={showCancelHelp ? "Ocultar ayuda de anulación e inventario" : "¿Qué pasará con el inventario? Ver ayuda"}
+                    aria-label="¿Qué pasará con el inventario?"
+                    aria-expanded={showCancelHelp}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-mono font-medium rounded-lg transition-all border cursor-pointer ${
+                      showCancelHelp
+                        ? "bg-primary/20 text-primary border-primary/40 shadow-xs"
+                        : "bg-surface hover:bg-hover text-foreground-muted hover:text-foreground border-border"
+                    }`}
+                  >
+                    <HelpCircle className="w-3.5 h-3.5 text-primary shrink-0" />
+                    <span>{showCancelHelp ? "Ocultar ayuda" : "¿Qué pasará con el inventario?"}</span>
+                    <ChevronDown
+                      className={`w-3 h-3 text-foreground-muted transition-transform duration-200 ${
+                        showCancelHelp ? "rotate-180 text-primary" : ""
+                      }`}
+                    />
+                  </button>
+                </div>
+
                 {loadingMotivos ? (
                   <div className="flex items-center gap-2 p-2.5 text-xs text-foreground-muted bg-surface rounded-xl border border-border">
                     <Loader2 className="w-4 h-4 animate-spin text-primary" />
@@ -1031,6 +1097,188 @@ export default function InvoiceDetailModal({
                 )}
               </div>
 
+              {/* Panel Colapsable de Ayuda sobre Anulación e Inventario */}
+              {showCancelHelp && (
+                <div className="rounded-xl border border-primary/25 bg-card/95 shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 transition-all">
+                  {/* Cabecera del Panel */}
+                  <div className="flex items-center justify-between px-3.5 py-2.5 bg-primary/10 border-b border-primary/20">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1 rounded-md bg-primary/20 text-primary shrink-0">
+                        <HelpCircle className="w-3.5 h-3.5" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold font-mono text-foreground leading-tight">
+                          Ayuda sobre anulación e inventario
+                        </h4>
+                        <p className="text-[10px] text-foreground-muted font-sans">
+                          Reglas de trazabilidad física y destino de existencias
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowCancelHelp(false)}
+                      className="p-1 rounded-md text-foreground-muted hover:text-foreground hover:bg-hover transition-colors cursor-pointer"
+                      title="Cerrar ayuda"
+                      aria-label="Cerrar panel de ayuda"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Contenido con scroll contenido para mantener compacto el modal */}
+                  <div className="p-3.5 max-h-72 overflow-y-auto space-y-4 text-xs">
+                    {/* Subbloque A: Destino del producto */}
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-1.5 text-[11px] font-mono font-bold text-foreground uppercase tracking-wider">
+                        <PackageCheck className="w-3.5 h-3.5 text-primary shrink-0" />
+                        <span>Destino del producto</span>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-2">
+                        {/* DISPONIBLE */}
+                        <div className="p-2.5 rounded-lg border border-emerald-500/20 bg-emerald-500/5 space-y-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                              DISPONIBLE
+                            </span>
+                            <span className="text-[11px] font-semibold text-foreground">
+                              DISPONIBLE (Devolver al stock disponible para la venta)
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-foreground-muted pl-0.5 leading-relaxed">
+                            <span className="font-semibold text-foreground-secondary">Nota:</span> Las existencias se sumarán a la cantidad actual del almacén con su costo PMP histórico.
+                          </p>
+                        </div>
+
+                        {/* DAÑADO */}
+                        <div className="p-2.5 rounded-lg border border-rose-500/20 bg-rose-500/5 space-y-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30">
+                              DAÑADO
+                            </span>
+                            <span className="text-[11px] font-semibold text-foreground">
+                              DAÑADO (No sumar al disponible comercial - Registro histórico)
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-foreground-muted pl-0.5 leading-relaxed">
+                            <span className="font-semibold text-foreground-secondary">Nota:</span> Las existencias se conservarán bloqueadas sin falsear disponibilidad física comercial.
+                          </p>
+                        </div>
+
+                        {/* DEFECTUOSO */}
+                        <div className="p-2.5 rounded-lg border border-amber-500/20 bg-amber-500/5 space-y-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                              DEFECTUOSO
+                            </span>
+                            <span className="text-[11px] font-semibold text-foreground">
+                              DEFECTUOSO (No sumar al disponible comercial - Registro histórico)
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* CUARENTENA */}
+                        <div className="p-2.5 rounded-lg border border-blue-500/20 bg-blue-500/5 space-y-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/30">
+                              CUARENTENA
+                            </span>
+                            <span className="text-[11px] font-semibold text-foreground">
+                              CUARENTENA (En revisión técnica - No sumar al disponible)
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Subbloque B: Efecto sobre inventario según el motivo de anulación */}
+                    <div className="space-y-2 pt-2 border-t border-border/60">
+                      <div className="flex items-center gap-1.5 text-[11px] font-mono font-bold text-foreground uppercase tracking-wider">
+                        <FileText className="w-3.5 h-3.5 text-primary shrink-0" />
+                        <span>Efecto sobre inventario según el motivo de anulación</span>
+                      </div>
+
+                      <div className="space-y-2">
+                        {/* Cambio de forma de pago */}
+                        <div className="p-2.5 rounded-lg border border-border bg-surface/50 space-y-1">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <strong className="text-[11px] text-foreground font-mono">Cambio de forma de pago</strong>
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-surface border border-border text-foreground-muted">
+                              Oculta Destino del producto
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-foreground-secondary leading-relaxed">
+                            Esta anulación no genera movimiento de inventario (el producto permanece con el cliente; solo se anula para corregir la forma de pago).
+                          </p>
+                        </div>
+
+                        {/* Factura duplicada */}
+                        <div className="p-2.5 rounded-lg border border-border bg-surface/50 space-y-1">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <strong className="text-[11px] text-foreground font-mono">Factura duplicada</strong>
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-surface border border-border text-foreground-muted">
+                              Oculta Destino del producto
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-foreground-secondary leading-relaxed">
+                            Esta anulación no genera movimiento de inventario (factura emitida por duplicado; no se descuenta ni reingresa mercancía).
+                          </p>
+                        </div>
+
+                        {/* Ajuste administrativo / fiscal */}
+                        <div className="p-2.5 rounded-lg border border-border bg-surface/50 space-y-1">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <strong className="text-[11px] text-foreground font-mono">Ajuste administrativo / fiscal</strong>
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-surface border border-border text-foreground-muted">
+                              Oculta Destino del producto
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-foreground-secondary leading-relaxed">
+                            Esta anulación no genera movimiento físico de inventario ni altera las existencias en almacén.
+                          </p>
+                        </div>
+
+                        {/* Devolución / Error / Producto incorrecto */}
+                        <div className="p-2.5 rounded-lg border border-primary/20 bg-primary/5 space-y-1.5">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <strong className="text-[11px] text-primary font-mono">
+                              Devolución de producto / Error de facturación / Producto incorrecto
+                            </strong>
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-primary/20 text-primary border border-primary/30">
+                              Muestra Destino del producto
+                            </span>
+                          </div>
+                          <div className="space-y-1 text-[11px] text-foreground-secondary pl-1 border-l-2 border-primary/40 leading-relaxed">
+                            <p>
+                              • <strong className="text-foreground">Si el destino seleccionado es DISPONIBLE:</strong> Esta anulación devolverá &#123;N&#125; unidades al inventario comercial disponible.
+                            </p>
+                            <p>
+                              • <strong className="text-foreground">Si el destino seleccionado es DAÑADO, DEFECTUOSO o CUARENTENA:</strong> Las &#123;N&#125; unidades se registrarán en condición &quot;&#123;ESTADO&#125;&quot; (no se sumarán al stock disponible para la venta).
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Facturas exclusivas de servicios o repuestos de taller */}
+                        <div className="p-2.5 rounded-lg border border-border bg-surface/50 space-y-1">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <strong className="text-[11px] text-foreground font-mono">
+                              Facturas exclusivas de servicios o repuestos de taller
+                            </strong>
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-surface border border-border text-foreground-muted">
+                              Sin devolución comercial
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-foreground-secondary leading-relaxed">
+                            Esta factura no cuenta con ítems físicos de venta directa que admitan devolución al inventario comercial.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Advertencia Especial para CAMBIO_FORMA_PAGO */}
               {selectedMotivo?.codigo === "CAMBIO_FORMA_PAGO" && (
                 <div className="p-3 bg-amber-500/15 border border-amber-500/40 rounded-xl text-amber-800 dark:text-amber-200 text-xs flex items-start gap-2.5">
@@ -1044,7 +1292,7 @@ export default function InvoiceDetailModal({
                 </div>
               )}
 
-              {/* Panel Informativo: Efecto sobre Inventario */}
+              {/* Panel Informativo: Efecto sobre Inventario (Dinámico según motivo) */}
               <div className="p-3.5 rounded-xl border border-border/80 bg-surface/70 space-y-2 text-xs">
                 <div className="flex items-center gap-2 font-mono font-bold text-foreground text-[11px] uppercase tracking-wide">
                   <PackageCheck className="w-4 h-4 text-primary shrink-0" />
@@ -1055,15 +1303,55 @@ export default function InvoiceDetailModal({
                   <p className="text-foreground-muted text-[11px]">
                     Seleccione un motivo del catálogo para calcular el impacto de inventario sobre las líneas de esta factura.
                   </p>
-                ) : motivoGeneraMovimiento && lineasProductosElegibles.length > 0 ? (
+                ) : esCambioFormaPago ? (
+                  <div className="space-y-1 text-foreground leading-relaxed">
+                    <p className="text-foreground-secondary font-medium">
+                      Esta anulación no genera movimiento de inventario (el producto permanece con el cliente; solo se anula para corregir la forma de pago).
+                    </p>
+                  </div>
+                ) : esFacturaDuplicada ? (
+                  <div className="space-y-1 text-foreground leading-relaxed">
+                    <p className="text-foreground-secondary font-medium">
+                      Esta anulación no genera movimiento de inventario (factura emitida por duplicado; no se descuenta ni reingresa mercancía).
+                    </p>
+                  </div>
+                ) : esAjusteAdministrativo ? (
+                  <div className="space-y-1 text-foreground leading-relaxed">
+                    <p className="text-foreground-secondary font-medium">
+                      Esta anulación no genera movimiento físico de inventario ni altera las existencias en almacén.
+                    </p>
+                  </div>
+                ) : !motivoGeneraMovimiento ? (
+                  <div className="space-y-1 text-foreground leading-relaxed">
+                    <p className="text-foreground-secondary font-medium">
+                      Esta anulación no genera movimiento de inventario.
+                    </p>
+                  </div>
+                ) : esFacturaExclusivaServiciosOT || lineasComerciales.length === 0 ? (
+                  <div className="space-y-1 text-foreground leading-relaxed">
+                    <p className="text-foreground-secondary font-medium">
+                      Esta factura no cuenta con ítems físicos de venta directa que admitan devolución al inventario comercial.
+                    </p>
+                    {tieneServicios && (
+                      <p className="text-[10px] text-foreground-muted italic pt-1 border-t border-border/40">
+                        Nota: Los servicios de mano de obra/taller no generan movimiento de inventario.
+                      </p>
+                    )}
+                    {tieneRepuestosOT && (
+                      <p className="text-[10px] text-foreground-muted italic pt-0.5">
+                        Nota: Los repuestos consumidos en orden de trabajo salieron vía SAL_ORDEN y no duplican devolución comercial.
+                      </p>
+                    )}
+                  </div>
+                ) : (
                   <div className="space-y-1.5 text-foreground leading-relaxed">
                     {destinoProducto === "DISPONIBLE" ? (
                       <p className="text-emerald-600 dark:text-emerald-400 font-semibold">
-                        Esta anulación devolverá {totalUnidadesRevertibles} unidades al inventario comercial disponible.
+                        Esta anulación devolverá {totalUnidadesComerciales} {totalUnidadesComerciales === 1 ? "unidad" : "unidades"} al inventario comercial disponible.
                       </p>
                     ) : (
                       <p className="text-amber-600 dark:text-amber-400 font-semibold">
-                        El destino seleccionado ({destinoProducto}) registrará la condición de las {totalUnidadesRevertibles} unidades devueltas pero no sumará existencias al stock comercial disponible.
+                        Las {totalUnidadesComerciales} {totalUnidadesComerciales === 1 ? "unidad" : "unidades"} se registrarán en condición &quot;{destinoProducto}&quot; (no se sumarán al stock disponible para la venta).
                       </p>
                     )}
                     {tieneServicios && (
@@ -1071,23 +1359,17 @@ export default function InvoiceDetailModal({
                         Nota: Los servicios de mano de obra/taller no generan movimiento de inventario.
                       </p>
                     )}
-                  </div>
-                ) : (
-                  <div className="space-y-1 text-foreground leading-relaxed">
-                    <p className="text-foreground-secondary font-medium">
-                      Esta anulación no genera movimiento de inventario.
-                    </p>
-                    {lineasProductosElegibles.length === 0 && tieneServicios && (
-                      <p className="text-[11px] text-foreground-muted">
-                        La factura contiene únicamente servicios que no generan movimiento de inventario.
+                    {tieneRepuestosOT && (
+                      <p className="text-[10px] text-foreground-muted italic pt-0.5">
+                        Nota: Los repuestos consumidos en orden de trabajo salieron vía SAL_ORDEN y no duplican devolución comercial.
                       </p>
                     )}
                   </div>
                 )}
               </div>
 
-              {/* Destino del producto (Cuando aplique reingreso físico) */}
-              {motivoGeneraMovimiento && lineasProductosElegibles.length > 0 && (
+              {/* Destino del producto (Cuando aplique reingreso físico comercial) */}
+              {mostrarDestinoProducto && (
                 <div className="space-y-1.5">
                   <label className="block text-xs font-mono font-bold text-foreground uppercase">
                     Destino del producto <span className="text-rose-500">*</span>
