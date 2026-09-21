@@ -98,27 +98,26 @@ export async function anularFactura(
     );
     const movCols = new Set((movColsRes.rows || []).map(r => String(r.column_name).toLowerCase()));
 
-    let faCols = new Set<string>();
-    if (hasFacturaAnulacionTable) {
-      const faColsRes = await client.query<{ column_name: string }>(
-        `SELECT column_name FROM information_schema.columns WHERE table_schema = 'admin' AND table_name = 'factura_anulacion'`
+
+    // C. Pre-verificación de snapshot existente en admin.factura_anulacion (Obligatoria)
+    if (!hasFacturaAnulacionTable) {
+      throw new AnulacionFacturaError(
+        "TABLA_AUDITORIA_FALTANTE",
+        "La tabla de auditoría admin.factura_anulacion es obligatoria para anular facturas. Asegúrese de aplicar la migración 033.",
+        500
       );
-      faCols = new Set((faColsRes.rows || []).map(r => String(r.column_name).toLowerCase()));
     }
 
-    // C. Pre-verificación de snapshot existente en admin.factura_anulacion si la tabla existe
-    if (hasFacturaAnulacionTable) {
-      const faCheck = await client.query(
-        `SELECT factura_anulacion_id FROM admin.factura_anulacion WHERE factura_id = $1`,
-        [facturaId]
+    const faCheck = await client.query(
+      `SELECT factura_anulacion_id FROM admin.factura_anulacion WHERE factura_id = $1`,
+      [facturaId]
+    );
+    if (faCheck.rows && faCheck.rows.length > 0) {
+      throw new AnulacionFacturaError(
+        "FACTURA_YA_ANULADA",
+        "La factura ya cuenta con un registro histórico de anulación.",
+        409
       );
-      if (faCheck.rows && faCheck.rows.length > 0) {
-        throw new AnulacionFacturaError(
-          "FACTURA_YA_ANULADA",
-          "La factura ya cuenta con un registro histórico de anulación.",
-          409
-        );
-      }
     }
 
     // D. Resolver Motivo de Anulación desde Catálogo (BEFORE BEGIN)
@@ -236,11 +235,9 @@ export async function anularFactura(
       motivoRow.tipo_movimiento_id = null;
     }
 
-    // Snapshot del tipo de movimiento de anulación
     let snapshotTipoMovId: number | null = motivoRow.tipo_movimiento_id ? Number(motivoRow.tipo_movimiento_id) : null;
     let snapshotTipoMovCodigo: string | null = motivoRow.codigo_tipo_movimiento || null;
     let snapshotTipoMovNombre: string | null = motivoRow.nombre_tipo_movimiento || null;
-    let snapshotTipoMovNaturaleza: string | null = motivoRow.naturaleza || "ENTRADA";
 
     // Asegurar esquemas y códigos de sistema
     try {
@@ -429,7 +426,6 @@ export async function anularFactura(
         snapshotTipoMovId = regla.tipo_movimiento_reversion_id;
         snapshotTipoMovCodigo = regla.codigo_reversion;
         snapshotTipoMovNombre = regla.nombre_reversion;
-        snapshotTipoMovNaturaleza = regla.naturaleza_reversion;
 
         const targetAlmId = mov.almacen_id || 1;
         const costoUnitarioHistorico = mov.costo_unitario_historico;
@@ -569,55 +565,53 @@ export async function anularFactura(
       }
     }
 
-    // 6. Registrar snapshot en admin.factura_anulacion si la tabla existe
-    if (hasFacturaAnulacionTable) {
-      try {
-        await client.query("SAVEPOINT sp_factura_anulacion");
-        const maxFaRes = await client.query(
-          `SELECT COALESCE(MAX(factura_anulacion_id), 0) + 1 AS next_id FROM admin.factura_anulacion`
-        );
-        const nextFaId = Number(maxFaRes.rows[0]?.next_id) || 1;
+    // 6. Registrar snapshot OBLIGATORIO en admin.factura_anulacion
+    // Si falla el INSERT, la transacción falla y ejecuta ROLLBACK TOTAL (no se permite factura anulada sin auditoría)
+    const totalRevertido = debeRevertirInventario
+      ? lineasFisicas.reduce((sum, l) => sum + Number(l.cantidad), 0)
+      : 0;
 
-        const totalRevertido = lineasFisicas.reduce((sum, l) => sum + Number(l.cantidad), 0);
-
-        const faData: Record<string, unknown> = {
-          factura_anulacion_id: nextFaId,
-          factura_id: facturaId,
-          codigo_factura: codigoFactura,
-          motivo_anulacion_id: motivoRow.motivo_anulacion_factura_id,
-          motivo_anulacion: motivoRow.motivo_anulacion,
-          observacion,
-          destino_producto: destinoProducto,
-          usuario_autorizacion_id: validatedAutorizacionUsuarioId,
-          reversos_inventario: reversosGenerados.length,
-          total_unidades_revertidas: totalRevertido,
-          tipo_movimiento_id: snapshotTipoMovId,
-          codigo_tipo_movimiento: snapshotTipoMovCodigo,
-          nombre_tipo_movimiento: snapshotTipoMovNombre,
-          naturaleza_tipo_movimiento: snapshotTipoMovNaturaleza,
-          movimiento_inventario_id: reversosGenerados[0] || null,
-          usuario_registro: usuarioId,
-          fecha_anulacion: new Date(),
-          fecha_registro: new Date()
-        };
-
-        const validFaEntries = Object.entries(faData).filter(([col]) => faCols.has(col));
-        const faColNames = validFaEntries.map(([col]) => col).join(", ");
-        const faPlaceholders = validFaEntries.map((_, idx) => `$${idx + 1}`).join(", ");
-        const faValues = validFaEntries.map(([, val]) => val);
-
-        await client.query(
-          `INSERT INTO admin.factura_anulacion (${faColNames})
-           VALUES (${faPlaceholders})
-           ON CONFLICT (factura_id) DO NOTHING`,
-          faValues
-        );
-        await client.query("RELEASE SAVEPOINT sp_factura_anulacion");
-      } catch (faErr) {
-        await client.query("ROLLBACK TO SAVEPOINT sp_factura_anulacion").catch(() => {});
-        console.warn("Could not insert snapshot into admin.factura_anulacion:", faErr);
-      }
-    }
+    await client.query(
+      `INSERT INTO admin.factura_anulacion (
+        empresa_id,
+        factura_id,
+        motivo_anulacion_factura_id,
+        codigo_motivo,
+        motivo_anulacion,
+        descripcion_motivo,
+        genera_movimiento,
+        tipo_movimiento_reversion_id,
+        codigo_movimiento_reversion,
+        nombre_movimiento_reversion,
+        destino_producto,
+        cantidad_revertida,
+        observacion,
+        usuario_autorizacion_id,
+        usuario_anulacion_id,
+        fecha_anulacion,
+        fecha_registro
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, clock_timestamp()
+      )`,
+      [
+        empresaId,
+        facturaId,
+        motivoRow.motivo_anulacion_factura_id || null,
+        motivoRow.codigo || "OTRO",
+        motivoRow.motivo_anulacion,
+        motivoRow.descripcion || null,
+        debeRevertirInventario,
+        debeRevertirInventario ? snapshotTipoMovId : null,
+        debeRevertirInventario ? snapshotTipoMovCodigo : null,
+        debeRevertirInventario ? snapshotTipoMovNombre : null,
+        debeRevertirInventario ? destinoProducto : null,
+        debeRevertirInventario ? totalRevertido : 0,
+        observacion || null,
+        validatedAutorizacionUsuarioId,
+        usuarioId,
+        new Date()
+      ]
+    );
 
     // 7. Actualizar admin.facturas como ANULADA
     const updateSet: string[] = [];

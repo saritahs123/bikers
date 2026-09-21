@@ -461,26 +461,26 @@ export async function GET(request: NextRequest, context: RouteContext) {
       console.warn("Could not query admin.empresa, using fallback metadata:", empErr);
     }
 
-    // 7. Snapshot de Anulación (admin.factura_anulacion) si la factura está anulada (Sección 26)
+    // 7. Snapshot de Anulación (admin.factura_anulacion) si la factura está anulada
     let anulacion: Record<string, unknown> | null = null;
     if (factura.estado === "ANULADA") {
       try {
         const faSql = `
           SELECT
             fa.factura_anulacion_id,
+            fa.empresa_id,
             fa.factura_id,
             fa.motivo_anulacion_factura_id,
-            fa.motivo_codigo_snapshot,
-            fa.motivo_snapshot,
-            fa.motivo_descripcion_snapshot,
-            fa.genera_movimiento_snapshot,
-            fa.tipo_movimiento_id_snapshot,
-            fa.tipo_movimiento_codigo_snapshot,
-            fa.tipo_movimiento_nombre_snapshot,
-            fa.tipo_movimiento_naturaleza_snapshot,
+            fa.codigo_motivo,
+            fa.motivo_anulacion,
+            fa.descripcion_motivo,
+            fa.genera_movimiento,
+            fa.tipo_movimiento_reversion_id,
+            fa.codigo_movimiento_reversion,
+            fa.nombre_movimiento_reversion,
             fa.destino_producto,
+            fa.cantidad_revertida,
             fa.observacion,
-            fa.requiere_autorizacion_snapshot,
             fa.usuario_autorizacion_id,
             COALESCE(NULLIF(TRIM(CONCAT_WS(' ', ui_aut.nombre, ui_aut.apellido)), ''), ui_aut.correo_electronico, ('Usuario #' || u_aut.usuario_id::text), NULL) AS usuario_autorizacion_nombre,
             fa.fecha_anulacion,
@@ -496,10 +496,63 @@ export async function GET(request: NextRequest, context: RouteContext) {
         `;
         const faRows = await query<Record<string, unknown>>(faSql, [facturaId, empresaId]);
         if (faRows && faRows.length > 0) {
-          anulacion = faRows[0];
+          const row = faRows[0];
+          anulacion = {
+            factura_anulacion_id: Number(row.factura_anulacion_id),
+            factura_id: Number(row.factura_id),
+            motivo: row.motivo_anulacion,
+            observacion: row.observacion,
+            genera_movimiento: Boolean(row.genera_movimiento),
+            movimiento_codigo: row.codigo_movimiento_reversion,
+            movimiento_nombre: row.nombre_movimiento_reversion,
+            cantidad_revertida: Number(row.cantidad_revertida || 0),
+            destino_producto: row.destino_producto,
+            usuario: row.usuario_anulacion_nombre,
+            fecha: row.fecha_anulacion,
+            // Snapshot y compatibilidad adicional
+            codigo_motivo: row.codigo_motivo,
+            descripcion_motivo: row.descripcion_motivo,
+            motivo_snapshot: row.motivo_anulacion,
+            motivo_descripcion_snapshot: row.descripcion_motivo,
+            genera_movimiento_snapshot: Boolean(row.genera_movimiento),
+            tipo_movimiento_codigo_snapshot: row.codigo_movimiento_reversion,
+            tipo_movimiento_nombre_snapshot: row.nombre_movimiento_reversion,
+            usuario_autorizacion_id: row.usuario_autorizacion_id ? Number(row.usuario_autorizacion_id) : null,
+            usuario_autorizacion_nombre: row.usuario_autorizacion_nombre,
+            usuario_anulacion_id: Number(row.usuario_anulacion_id),
+            usuario_anulacion_nombre: row.usuario_anulacion_nombre,
+            fecha_anulacion: row.fecha_anulacion,
+            estado_auditoria: "AUDITORIA_COMPLETA"
+          };
+        } else {
+          // Factura anulada históricamente sin snapshot en admin.factura_anulacion
+          anulacion = {
+            estado_auditoria: "AUDITORIA_ANULACION_INCOMPLETA",
+            motivo: (factura.motivo_anulacion as string) || "Sin motivo registrado",
+            observacion: null,
+            genera_movimiento: false,
+            movimiento_codigo: null,
+            movimiento_nombre: null,
+            cantidad_revertida: 0,
+            destino_producto: null,
+            usuario: (factura.usuario_anulacion_nombre as string) || "Sistema",
+            fecha: factura.fecha_anulacion
+          };
         }
       } catch (faErr) {
         console.warn("Could not query admin.factura_anulacion in invoice detail:", faErr);
+        anulacion = {
+          estado_auditoria: "AUDITORIA_ANULACION_INCOMPLETA",
+          motivo: (factura.motivo_anulacion as string) || "Sin motivo registrado",
+          observacion: null,
+          genera_movimiento: false,
+          movimiento_codigo: null,
+          movimiento_nombre: null,
+          cantidad_revertida: 0,
+          destino_producto: null,
+          usuario: (factura.usuario_anulacion_nombre as string) || "Sistema",
+          fecha: factura.fecha_anulacion
+        };
       }
     }
 
