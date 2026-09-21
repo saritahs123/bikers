@@ -192,7 +192,7 @@ export async function syncWorkOrderInvoice(
   // Insert Products
   for (const p of products) {
     totalLineasInsertadas++;
-    await executor.query(`
+    const insProdRes = await executor.query(`
       INSERT INTO admin.detalle_factura (
         factura_id,
         tipo_detalle,
@@ -219,14 +219,54 @@ export async function syncWorkOrderInvoice(
       parseFloat(p.subtotal || "0"),
       usuarioId ?? null
     ]);
+
+    const newDetId = insProdRes.rows[0]?.detalle_factura_id;
+    if (newDetId && p.producto_id) {
+      try {
+        const movRes = await executor.query(`
+          SELECT mi.movimiento_inventario_id
+          FROM admin.movimientos_inventario mi
+          JOIN admin.tipo_movimiento_inventario tm ON mi.tipo_movimiento_id = tm.tipo_movimiento_id
+          WHERE mi.producto_id = $1
+            AND (
+              ($2::int IS NOT NULL AND mi.orden_producto_id = $2::int)
+              OR ($3::int IS NOT NULL AND mi.orden_trabajo_id = $3::int)
+            )
+            AND tm.naturaleza = 'SALIDA'
+            AND NOT EXISTS (
+              SELECT 1 FROM admin.movimientos_inventario rev
+              WHERE rev.movimiento_origen_id = mi.movimiento_inventario_id
+            )
+          ORDER BY
+            (CASE WHEN $2::int IS NOT NULL AND mi.orden_producto_id = $2::int THEN 0 ELSE 1 END),
+            mi.movimiento_inventario_id DESC
+          LIMIT 1;
+        `, [p.producto_id, p.orden_producto_id || null, ordenId]);
+
+        if (movRes.rows && movRes.rows.length > 0) {
+          const movId = movRes.rows[0].movimiento_inventario_id;
+          await executor.query(`
+            INSERT INTO admin.detalle_factura_movimiento (
+              detalle_factura_id,
+              movimiento_inventario_id,
+              cantidad,
+              usuario_registro
+            ) VALUES ($1, $2, $3, $4)
+            ON CONFLICT (detalle_factura_id, movimiento_inventario_id) DO NOTHING;
+          `, [newDetId, movId, parseFloat(p.cantidad || "1"), usuarioId ?? null]);
+        }
+      } catch (errSyncMov) {
+        console.warn("Could not link detalle_factura_movimiento in syncWorkOrderInvoice:", errSyncMov);
+      }
+    }
   }
 
   // 6. Compute Invoice Totals
-  const subtotalServicios = services.reduce((acc: number, s: any) => acc + parseFloat(s.subtotal || "0"), 0);
-  const subtotalManoObra = labor.reduce((acc: number, m: any) => acc + parseFloat(m.subtotal || "0"), 0);
-  const subtotalProductos = products.reduce((acc: number, p: any) => acc + parseFloat(p.subtotal || "0"), 0);
-  const descuentoTotal = services.reduce((acc: number, s: any) => acc + parseFloat(s.descuento || "0"), 0) +
-                         products.reduce((acc: number, p: any) => acc + parseFloat(p.descuento || "0"), 0);
+  const subtotalServicios = services.reduce((acc: number, s: Record<string, unknown>) => acc + parseFloat(String(s.subtotal || "0")), 0);
+  const subtotalManoObra = labor.reduce((acc: number, m: Record<string, unknown>) => acc + parseFloat(String(m.subtotal || "0")), 0);
+  const subtotalProductos = products.reduce((acc: number, p: Record<string, unknown>) => acc + parseFloat(String(p.subtotal || "0")), 0);
+  const descuentoTotal = services.reduce((acc: number, s: Record<string, unknown>) => acc + parseFloat(String(s.descuento || "0")), 0) +
+                         products.reduce((acc: number, p: Record<string, unknown>) => acc + parseFloat(String(p.descuento || "0")), 0);
 
   const subtotalFactura = parseFloat((subtotalServicios + subtotalManoObra + subtotalProductos).toFixed(2));
   const totalFactura = subtotalFactura; // Subtotals already reflect discounts

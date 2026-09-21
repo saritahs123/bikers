@@ -70,19 +70,35 @@ export async function GET() {
 
       const rows = await query<Record<string, unknown>>(sql);
       if (rows && rows.length > 0) {
-        motivos = rows.map((r) => ({
-          motivo_anulacion_factura_id: Number(r.motivo_anulacion_factura_id),
-          codigo: String(r.codigo || ""),
-          motivo_anulacion: String(r.motivo_anulacion || ""),
-          descripcion: r.descripcion ? String(r.descripcion) : null,
-          genera_movimiento: Boolean(r.genera_movimiento),
-          tipo_movimiento_id: r.tipo_movimiento_id ? Number(r.tipo_movimiento_id) : null,
-          codigo_tipo_movimiento: r.codigo_tipo_movimiento ? String(r.codigo_tipo_movimiento) : null,
-          nombre_tipo_movimiento: r.nombre_tipo_movimiento ? String(r.nombre_tipo_movimiento) : null,
-          naturaleza: r.naturaleza ? String(r.naturaleza) : null,
-          requiere_observacion: Boolean(r.requiere_observacion),
-          requiere_autorizacion: Boolean(r.requiere_autorizacion),
-        }));
+        motivos = rows.map((r) => {
+          const cod = String(r.codigo || "").toUpperCase();
+          const nombre = String(r.motivo_anulacion || "").toLowerCase();
+          const esSinMovimiento =
+            cod === "CAMBIO_FORMA_PAGO" ||
+            cod === "FACTURA_DUPLICADA" ||
+            cod === "AJUSTE_ADMINISTRATIVO" ||
+            nombre.includes("cambio de forma de pago") ||
+            nombre.includes("factura duplicada") ||
+            nombre.includes("sin movimiento") ||
+            r.genera_movimiento === false ||
+            r.genera_movimiento === "false";
+
+          const generaMov = !esSinMovimiento && Boolean(r.genera_movimiento);
+
+          return {
+            motivo_anulacion_factura_id: Number(r.motivo_anulacion_factura_id),
+            codigo: String(r.codigo || ""),
+            motivo_anulacion: String(r.motivo_anulacion || ""),
+            descripcion: r.descripcion ? String(r.descripcion) : null,
+            genera_movimiento: generaMov,
+            tipo_movimiento_id: generaMov ? (r.tipo_movimiento_id ? Number(r.tipo_movimiento_id) : null) : null,
+            codigo_tipo_movimiento: generaMov ? (r.codigo_tipo_movimiento ? String(r.codigo_tipo_movimiento) : "DEV_VENTA") : null,
+            nombre_tipo_movimiento: generaMov ? (r.nombre_tipo_movimiento ? String(r.nombre_tipo_movimiento) : null) : null,
+            naturaleza: generaMov ? (r.naturaleza ? String(r.naturaleza) : null) : null,
+            requiere_observacion: false,
+            requiere_autorizacion: false,
+          };
+        });
       }
     } catch (sqlErr) {
       console.warn("Fallo al consultar admin.motivo_anulacion_factura, usando catálogo predeterminado:", sqlErr);
@@ -101,7 +117,7 @@ export async function GET() {
           codigo_tipo_movimiento: "DEV_VENTA",
           nombre_tipo_movimiento: "Devolución por Anulación de Venta",
           naturaleza: "ENTRADA",
-          requiere_observacion: true,
+          requiere_observacion: false,
           requiere_autorizacion: false,
         },
         {
@@ -127,7 +143,7 @@ export async function GET() {
           codigo_tipo_movimiento: "DEV_VENTA",
           nombre_tipo_movimiento: "Devolución por Anulación de Venta",
           naturaleza: "ENTRADA",
-          requiere_observacion: true,
+          requiere_observacion: false,
           requiere_autorizacion: false,
         },
         {
@@ -135,25 +151,25 @@ export async function GET() {
           codigo: "FACTURA_DUPLICADA",
           motivo_anulacion: "Factura duplicada",
           descripcion: "Emisión repetida accidentalmente de una misma transacción.",
-          genera_movimiento: true,
+          genera_movimiento: false,
           tipo_movimiento_id: null,
-          codigo_tipo_movimiento: "DEV_VENTA",
-          nombre_tipo_movimiento: "Devolución por Anulación de Venta",
-          naturaleza: "ENTRADA",
-          requiere_observacion: true,
-          requiere_autorizacion: true,
+          codigo_tipo_movimiento: null,
+          nombre_tipo_movimiento: null,
+          naturaleza: null,
+          requiere_observacion: false,
+          requiere_autorizacion: false,
         },
         {
           motivo_anulacion_factura_id: 5,
           codigo: "CAMBIO_FORMA_PAGO",
           motivo_anulacion: "Cambio de forma de pago",
           descripcion: "Cambio en la condición o medio de pago original.",
-          genera_movimiento: true,
+          genera_movimiento: false,
           tipo_movimiento_id: null,
-          codigo_tipo_movimiento: "DEV_VENTA",
-          nombre_tipo_movimiento: "Devolución por Anulación de Venta",
-          naturaleza: "ENTRADA",
-          requiere_observacion: true,
+          codigo_tipo_movimiento: null,
+          nombre_tipo_movimiento: null,
+          naturaleza: null,
+          requiere_observacion: false,
           requiere_autorizacion: false,
         },
       ];

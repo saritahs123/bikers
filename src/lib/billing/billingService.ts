@@ -68,6 +68,10 @@ import {
 } from "./billingTypes";
 import { registrarMovimientoInventario } from "@/lib/inventory/inventoryMovementService";
 import { INVENTORY_SYSTEM_CODES, generarCodigoMovimiento } from "@/lib/inventory/inventoryConstants";
+import {
+  ensureReversalTraceabilitySchema,
+  registrarDetalleFacturaMovimiento
+} from "./inventoryReversalTraceability";
 
 const BILLING_ADVISORY_LOCK_ID = 7005;
 
@@ -185,6 +189,12 @@ export async function crearFactura(
 
     // 0. Concurrencia segura: Lock consultivo a nivel de transacción para facturación
     await client.query("SELECT pg_advisory_xact_lock($1)", [BILLING_ADVISORY_LOCK_ID]);
+
+    try {
+      await ensureReversalTraceabilitySchema(client);
+    } catch (eTrace) {
+      console.warn("Could not ensure reversal traceability schema:", eTrace);
+    }
 
     // 1. Validaciones básicas de entrada y Multitenancy
     if (!input.empresa_id || input.empresa_id <= 0) {
@@ -599,6 +609,45 @@ export async function crearFactura(
       }
     }
 
+    // 7.2. Para facturas desde Orden de Trabajo (OT), vincular el movimiento real SAL_ORDEN ya emitido
+    if (input.orden_trabajo_id) {
+      for (const linea of input.lineas) {
+        if (!linea.movimiento_inventario_id && linea.producto_id && linea.tipo_linea !== "SERVICIO") {
+          try {
+            const movOtRes = await client.query<{ movimiento_inventario_id: number; costo_unitario: number }>(
+              `SELECT mi.movimiento_inventario_id, mi.costo_unitario
+               FROM admin.movimientos_inventario mi
+               JOIN admin.tipo_movimiento_inventario tm ON mi.tipo_movimiento_id = tm.tipo_movimiento_id
+               WHERE mi.empresa_id = $1
+                 AND mi.producto_id = $2
+                 AND (
+                   ($3::int IS NOT NULL AND mi.orden_producto_id = $3::int)
+                   OR ($4::int IS NOT NULL AND mi.orden_trabajo_id = $4::int)
+                 )
+                 AND tm.naturaleza = 'SALIDA'
+                 AND NOT EXISTS (
+                   SELECT 1 FROM admin.movimientos_inventario rev
+                   WHERE rev.movimiento_origen_id = mi.movimiento_inventario_id
+                 )
+               ORDER BY
+                 (CASE WHEN $3::int IS NOT NULL AND mi.orden_producto_id = $3::int THEN 0 ELSE 1 END),
+                 mi.movimiento_inventario_id DESC
+               LIMIT 1;`,
+              [input.empresa_id, linea.producto_id, linea.orden_producto_id || null, input.orden_trabajo_id]
+            );
+            if (movOtRes.rows && movOtRes.rows.length > 0) {
+              linea.movimiento_inventario_id = movOtRes.rows[0].movimiento_inventario_id;
+              if (linea.costo_unitario == null && movOtRes.rows[0].costo_unitario != null) {
+                linea.costo_unitario = Number(movOtRes.rows[0].costo_unitario);
+              }
+            }
+          } catch (otMovErr) {
+            console.warn("Could not query existing OT inventory movement:", otMovErr);
+          }
+        }
+      }
+    }
+
     // 8. Insertar Líneas en admin.detalle_factura (Snapshot Inmutable)
     const insertedDetalles: DetalleFacturaRow[] = [];
     const detCols = await getTableColumns(client, "detalle_factura");
@@ -651,6 +700,21 @@ export async function crearFactura(
       );
 
       insertedDetalles.push(detRes.rows[0]);
+
+      // Registrar trazabilidad explícita en admin.detalle_factura_movimiento para líneas físicas
+      if (linea.movimiento_inventario_id && linea.tipo_linea !== "SERVICIO" && !linea.orden_servicio_id) {
+        try {
+          await registrarDetalleFacturaMovimiento(
+            client,
+            nextDetalleId,
+            linea.movimiento_inventario_id,
+            cant,
+            input.usuario_id
+          );
+        } catch (traceErr) {
+          console.warn("Could not register detalle_factura_movimiento:", traceErr);
+        }
+      }
     }
 
     // 9. Insertar Pagos Iniciales en admin.pagos (si existen)
