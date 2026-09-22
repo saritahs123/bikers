@@ -125,6 +125,12 @@ export async function GET() {
       [empresaId]
     );
 
+    // Cantidad real de tipos de producto activos en el catálogo admin.tipo_producto
+    const totalTiposRes = await query(
+      `SELECT COUNT(*)::int AS total FROM admin.tipo_producto WHERE (estado = 'ACTIVO' OR estado IS NULL)`
+    );
+    const totalTipos = Number(totalTiposRes[0]?.total || distribucionTipoRes.length);
+
     // Calculate totals for percentages
     const prodsTotalSum = distribucionTipoRes.reduce((acc: number, c: Record<string, unknown>) => acc + Number(c.total_productos || 0), 0) || 1;
     const montoTotalSum = distribucionTipoRes.reduce((acc: number, c: Record<string, unknown>) => acc + Number(c.monto_total || 0), 0) || 1;
@@ -226,8 +232,10 @@ export async function GET() {
           valor_inventario: valorTotalInventario,
           bajo_minimo: bajoStockCount,
           sin_stock: sinStockCount,
-          movimientos_hoy: movimientosHoyCount
+          movimientos_hoy: movimientosHoyCount,
+          total_tipos: totalTipos
         },
+        total_tipos: totalTipos,
         valor_por_almacen: (valorPorAlmacenRes as Record<string, unknown>[]).map((a) => ({
           almacen_id: a.almacen_id,
           almacen_codigo: a.almacen_codigo,
