@@ -150,11 +150,35 @@ export async function GET(
           ORDER BY f.factura_id DESC LIMIT 1
         ) AS factura_id,
         (
-          SELECT f.numero_factura
+          SELECT COALESCE(f.codigo_factura, f.numero_factura, f.factura_id::text)
           FROM admin.facturas f
           WHERE f.orden_trabajo_id = ot.orden_trabajo_id AND f.empresa_id = c.empresa_id AND f.estado <> 'ANULADA'
           ORDER BY f.factura_id DESC LIMIT 1
         ) AS codigo_factura,
+        (
+          SELECT COALESCE(f.total, f.total_factura, 0)::numeric
+          FROM admin.facturas f
+          WHERE f.orden_trabajo_id = ot.orden_trabajo_id AND f.empresa_id = c.empresa_id AND f.estado <> 'ANULADA'
+          ORDER BY f.factura_id DESC LIMIT 1
+        ) AS factura_total,
+        (
+          SELECT COALESCE(f.monto_pagado, 0)::numeric
+          FROM admin.facturas f
+          WHERE f.orden_trabajo_id = ot.orden_trabajo_id AND f.empresa_id = c.empresa_id AND f.estado <> 'ANULADA'
+          ORDER BY f.factura_id DESC LIMIT 1
+        ) AS factura_monto_pagado,
+        (
+          SELECT COALESCE(f.balance_pendiente, 0)::numeric
+          FROM admin.facturas f
+          WHERE f.orden_trabajo_id = ot.orden_trabajo_id AND f.empresa_id = c.empresa_id AND f.estado <> 'ANULADA'
+          ORDER BY f.factura_id DESC LIMIT 1
+        ) AS factura_balance_pendiente,
+        (
+          SELECT f.estado
+          FROM admin.facturas f
+          WHERE f.orden_trabajo_id = ot.orden_trabajo_id AND f.empresa_id = c.empresa_id AND f.estado <> 'ANULADA'
+          ORDER BY f.factura_id DESC LIMIT 1
+        ) AS factura_estado,
         COALESCE(NULLIF(TRIM(CONCAT_WS(' ', ui_mec.nombre, ui_mec.apellido)), ''), ui_mec.correo_electronico, ('Mecánico #' || u_mec.usuario_id::text)) AS mecanico_nombre,
         c_mec.nombre AS mecanico_cargo,
         tu_mec.nombre AS mecanico_tipo,
@@ -1466,7 +1490,7 @@ export async function PUT(
           empresa_id: session.empresa_id || Number(currentOrder.empresa_id || 1),
           usuario_id: session.usuario_id,
           observacion: typeof obs === "string" && obs.trim() ? obs.trim() : undefined
-        }, client);
+        });
       } catch (invErr: any) {
         await client.query("ROLLBACK");
         console.error("Error al obtener/crear factura en entrega de orden:", invErr);
@@ -1482,6 +1506,39 @@ export async function PUT(
       }
 
       activeInvoiceRecord = invoiceResult.factura;
+      const facTotal = Number(activeInvoiceRecord.total || activeInvoiceRecord.total_factura || 0);
+      const facPagado = Number(activeInvoiceRecord.monto_pagado || 0);
+      const facBalance = Number(
+        activeInvoiceRecord.balance_pendiente != null && !isNaN(Number(activeInvoiceRecord.balance_pendiente))
+          ? activeInvoiceRecord.balance_pendiente
+          : Math.max(0, facTotal - facPagado)
+      );
+      const condicionVenta = String(activeInvoiceRecord.condicion_venta || "CONTADO").toUpperCase();
+
+      // Validación financiera: Si la factura es CONTADO y tiene saldo pendiente, NO completar entrega
+      if (condicionVenta !== "CREDITO" && facTotal > 0 && facBalance > 0.009) {
+        await client.query("ROLLBACK");
+        return NextResponse.json(
+          {
+            success: false,
+            error: "PAYMENT_REQUIRED",
+            title: "Pago Requerido",
+            message: `La factura aún tiene un saldo pendiente de RD$ ${facBalance.toFixed(2)}. Complete el pago para entregar la orden.`,
+            factura: {
+              factura_id: activeInvoiceRecord.factura_id,
+              codigo_factura: activeInvoiceRecord.codigo_factura || activeInvoiceRecord.numero_factura || `FAC-${activeInvoiceRecord.factura_id}`,
+              numero_factura: activeInvoiceRecord.numero_factura,
+              total: facTotal,
+              total_factura: facTotal,
+              monto_pagado: facPagado,
+              balance_pendiente: facBalance,
+              estado: activeInvoiceRecord.estado,
+              condicion_venta: condicionVenta
+            }
+          },
+          { status: 409 }
+        );
+      }
 
       // 3. Transición de estado a ENTREGADA y sincronización legacy facturado (Sección 1, 9, 12, 14)
       const updateDelivRes = await client.query(`
@@ -1838,7 +1895,7 @@ export async function PUT(
     } else if (targetStateId === estadoListaEntregaId) {
       successMessage = "La orden fue marcada como lista para entrega.";
     } else if (targetStateId === estadoEntregadaId) {
-      successMessage = "La orden fue entregada al cliente exitosamente.";
+      successMessage = "Orden entregada correctamente.";
     }
 
     return NextResponse.json({

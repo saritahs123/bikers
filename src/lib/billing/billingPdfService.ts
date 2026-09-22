@@ -698,52 +698,133 @@ export function generateInvoiceModel1Pdf(data: BillingInvoicePrintData): jsPDF {
 }
 
 /**
+ * Helper para resolver el tipo o método de pago principal para el encabezado del ticket
+ */
+function getInvoicePaymentType(data: BillingInvoicePrintData): string {
+  if (data.pagos && data.pagos.length > 0) {
+    const methods = Array.from(
+      new Set(
+        data.pagos
+          .map((p) => (p.tipo_pago_nombre || p.tipo_pago_codigo || "").trim())
+          .filter(Boolean)
+      )
+    );
+    if (methods.length === 1) {
+      return methods[0].toUpperCase();
+    }
+    if (methods.length > 1) {
+      return "MÚLTIPLES";
+    }
+  }
+  if ((data.factura.estado || "").toUpperCase() === "PENDIENTE") {
+    return "PENDIENTE";
+  }
+  if ((data.factura.estado || "").toUpperCase() === "ANULADA") {
+    return "ANULADA";
+  }
+  return "NO ESPECIFICADO";
+}
+
+/**
+ * Helper centralizado para determinar la leyenda legal del footer según el tipo de factura
+ */
+function getInvoiceLegalNotice(data: BillingInvoicePrintData): string {
+  if ((data.factura.estado || "").toUpperCase() === "ANULADA") {
+    return "Documento anulado — sin validez fiscal ni comercial";
+  }
+
+  const tipo = getInvoiceTypeName(data.factura).toUpperCase();
+  const codigo = (data.factura.tipo_factura_codigo || "").toUpperCase();
+
+  if (
+    tipo.includes("CRÉDITO FISCAL") ||
+    tipo.includes("CREDITO FISCAL") ||
+    codigo.includes("CREDITO") ||
+    codigo === "B01"
+  ) {
+    return "Comprobante fiscal válido para crédito fiscal";
+  }
+
+  if (
+    tipo.includes("GUBERNAMENTAL") ||
+    codigo.includes("GUBERNAMENTAL") ||
+    codigo === "B15"
+  ) {
+    return "Comprobante fiscal para instituciones del Estado";
+  }
+
+  if (
+    tipo.includes("ESPECIAL") ||
+    codigo.includes("ESPECIAL") ||
+    codigo === "B14"
+  ) {
+    return "Comprobante para regímenes especiales de tributación";
+  }
+
+  if (
+    tipo.includes("CONSUMIDOR") ||
+    tipo.includes("CONSUMO") ||
+    codigo === "B02"
+  ) {
+    return "Documento no válido para crédito fiscal — Consumidor Final";
+  }
+
+  return "Documento no válido para crédito fiscal";
+}
+
+/**
  * ============================================================================
  * MODELO 2: TICKET POS TÉRMICO (80 mm)
  * Reutiliza la estructura del Ticket POS de Despacho de Orden de Trabajo,
  * adaptándose a Factura Venta Directa o Factura de OT.
  * ============================================================================
  */
-export function generateInvoiceModel2Pdf(data: BillingInvoicePrintData): jsPDF {
-  // Calculamos la altura dinámica del rollo térmico según cantidad de líneas y pagos
-  const lineCount = (data.detalle || []).length;
-  const payCount = (data.pagos || []).length;
-  const baseHeight = 160;
-  const dynamicHeight = Math.max(180, baseHeight + lineCount * 9 + payCount * 6);
-
-  const doc = new jsPDF({
-    orientation: "portrait",
-    unit: "mm",
-    format: [80, dynamicHeight]
-  });
-
+function renderTicketContent(doc: jsPDF, data: BillingInvoicePrintData): number {
   const pageWidth = 80;
-  const marginX = 4;
-  const contentWidth = pageWidth - marginX * 2; // 72mm
+  const marginX = 3.5;
+  const contentWidth = pageWidth - marginX * 2; // 73mm
+  let currentY = 5.5;
 
-  let currentY = 6;
+  // Separador punteado compacto
+  const drawDashedLine = (y: number) => {
+    doc.setDrawColor(160, 160, 160);
+    doc.setLineWidth(0.2);
+    doc.setLineDashPattern([1, 1], 0);
+    doc.line(marginX, y, pageWidth - marginX, y);
+    doc.setLineDashPattern([], 0); // reset
+  };
+
+  // Truncado de texto seguro
+  const truncateText = (text: string, maxW: number): string => {
+    if (doc.getTextWidth(text) <= maxW) return text;
+    let t = text;
+    while (t.length > 0 && doc.getTextWidth(t + "...") > maxW) {
+      t = t.slice(0, -1);
+    }
+    return t + "...";
+  };
 
   // 1. HEADER - BRAND & EMPRESA
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(13);
+  doc.setFontSize(12.5);
   doc.setTextColor(0, 0, 0);
   const companyName = (data.empresa?.nombre_comercial || "RIDE LAB").toUpperCase();
   doc.text(companyName, pageWidth / 2, currentY, { align: "center" });
-  currentY += 4.2;
+  currentY += 4.0;
 
-  doc.setFontSize(7);
+  doc.setFontSize(6.8);
   doc.setFont("helvetica", "bold");
   doc.text("TIENDA Y TALLER DE BICICLETAS", pageWidth / 2, currentY, { align: "center" });
-  currentY += 3.8;
+  currentY += 3.4;
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(6.5);
+  doc.setFontSize(6.0);
   doc.setTextColor(60, 60, 60);
 
   if (data.empresa?.direccion) {
     const dirLines = doc.splitTextToSize(data.empresa.direccion, contentWidth);
     doc.text(dirLines, pageWidth / 2, currentY, { align: "center" });
-    currentY += dirLines.length * 3.0;
+    currentY += dirLines.length * 2.8;
   }
 
   const telRnc = [
@@ -753,114 +834,110 @@ export function generateInvoiceModel2Pdf(data: BillingInvoicePrintData): jsPDF {
 
   if (telRnc) {
     doc.text(telRnc, pageWidth / 2, currentY, { align: "center" });
-    currentY += 3.2;
+    currentY += 3.0;
   }
 
-  // Separador punteado
-  const drawDashedLine = (y: number) => {
-    doc.setDrawColor(160, 160, 160);
-    doc.setLineWidth(0.2);
-    doc.setLineDashPattern([1, 1], 0);
-    doc.line(marginX, y, pageWidth - marginX, y);
-    doc.setLineDashPattern([], 0); // reset
-  };
-
-  currentY += 1;
+  currentY += 0.5;
   drawDashedLine(currentY);
-  currentY += 3.5;
+  currentY += 3.2;
 
   // Marca visible ANULADA en Modelo 2 (Ticket POS)
-  if (data.factura.estado.toUpperCase() === "ANULADA") {
+  if ((data.factura.estado || "").toUpperCase() === "ANULADA") {
     doc.setDrawColor(220, 38, 38);
     doc.setFillColor(254, 242, 242);
-    doc.setLineWidth(0.4);
-    doc.rect(marginX, currentY, contentWidth, 7, "FD");
+    doc.setLineWidth(0.3);
+    doc.rect(marginX, currentY, contentWidth, 6.5, "FD");
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(8.5);
+    doc.setFontSize(8.0);
     doc.setTextColor(220, 38, 38);
-    doc.text("*** FACTURA ANULADA ***", pageWidth / 2, currentY + 4.8, { align: "center" });
-    currentY += 9;
+    doc.text("*** FACTURA ANULADA ***", pageWidth / 2, currentY + 4.5, { align: "center" });
+    currentY += 8.5;
   }
 
-  // 2. METADATA DE FACTURA & CLIENTE
+  // 2. METADATA EN DOS COLUMNAS (4 FILAS PERFECTAMENTE ALINEADAS)
   const facNumero = data.factura.codigo_factura || data.factura.numero_factura || "—";
   const tipoFacturaTicket = getInvoiceTypeName(data.factura);
   const printDateTime = formatPrintDateTime(new Date());
   const fechaFactura = formatDateOnly(data.factura.fecha_factura);
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8);
-  doc.setTextColor(0, 0, 0);
-  doc.text(`Factura: ${facNumero}`, marginX, currentY);
-  currentY += 3.6;
-
-  doc.setFontSize(6.5);
-  doc.setFont("helvetica", "normal");
-  doc.setTextColor(40, 40, 40);
-
-  // Tipo de Factura
-  doc.text(`Tipo: ${tipoFacturaTicket}`, marginX, currentY, { maxWidth: contentWidth });
-  currentY += 3.2;
-
-  // OT (solo si aplica)
-  if (data.factura.orden_trabajo_id && data.orden_trabajo?.codigo_orden) {
-    doc.text(`OT: ${data.orden_trabajo.codigo_orden}`, marginX, currentY);
-    currentY += 3.2;
-  }
-
-  // Fecha de Factura y Estado
-  doc.text(`Fecha: ${fechaFactura}`, marginX, currentY);
-  doc.text(`Estado: ${data.factura.estado.toUpperCase()}`, pageWidth - marginX, currentY, { align: "right" });
-  currentY += 3.2;
-
-  // Fecha de Impresión (calculada en tiempo real)
-  doc.text(`Impresión: ${printDateTime}`, marginX, currentY);
-  currentY += 3.2;
-
+  const tipoPagoTicket = getInvoicePaymentType(data);
+  const estadoFactura = (data.factura.estado || "").toUpperCase();
   const clienteNombre = data.cliente?.nombre_completo || "Cliente General";
-  doc.text(`Cliente: ${clienteNombre}`, marginX, currentY, { maxWidth: contentWidth });
-  currentY += 3.2;
+  const clienteTel = data.cliente?.telefono_principal || "—";
 
-  if (data.cliente?.identificacion) {
-    doc.text(`RNC / Cédula: ${data.cliente.identificacion}`, marginX, currentY);
-    currentY += 3.4;
-  }
-  if (data.cliente?.telefono_principal) {
-    doc.text(`Tel: ${data.cliente.telefono_principal}`, marginX, currentY);
-    currentY += 3.4;
-  }
+  // Columna Izquierda: FACTURA, TIPO FACTURA, FECHA FACTURA, CLIENTE
+  const leftFields: Array<{ label: string; val: string }> = [
+    { label: "FACTURA:", val: facNumero },
+    { label: "TIPO FACTURA:", val: tipoFacturaTicket },
+    { label: "FECHA FACTURA:", val: fechaFactura },
+    { label: "CLIENTE:", val: clienteNombre }
+  ];
 
-  // Si tiene bicicleta asociada en la OT
-  const bike = data.orden_trabajo?.bicicleta;
-  if (bike && (bike.marca || bike.modelo)) {
-    currentY += 1;
-    drawDashedLine(currentY);
-    currentY += 3.2;
+  // Columna Derecha: IMPRESIÓN, TIPO PAGO, ESTADO, TEL
+  const rightFields: Array<{ label: string; val: string }> = [
+    { label: "IMPRESIÓN:", val: printDateTime },
+    { label: "TIPO PAGO:", val: tipoPagoTicket },
+    { label: "ESTADO:", val: estadoFactura },
+    { label: "TEL:", val: clienteTel }
+  ];
 
+  const fontSizeMeta = 4.8;
+  const lineSpacingMeta = 2.9;
+  const leftX = marginX; // 3.5mm
+  const rightX = 41.5; // 41.5mm
+  const col1MaxW = 37.5;
+  const col2MaxW = 35.0;
+
+  const startMetaY = currentY;
+
+  // Renderizar Columna Izquierda: el tipo de factura nunca se corta visualmente
+  leftFields.forEach((field, i) => {
+    const y = startMetaY + i * lineSpacingMeta;
+    doc.setFontSize(fontSizeMeta);
     doc.setFont("helvetica", "bold");
-    doc.text("BICICLETA:", marginX, currentY);
+    doc.setTextColor(0, 0, 0);
+    const lblStr = `${field.label} `;
+    doc.text(lblStr, leftX, y);
+    const lw = doc.getTextWidth(lblStr);
+
     doc.setFont("helvetica", "normal");
-    const bikeStr = [bike.marca, bike.modelo, bike.color].filter(Boolean).join(" ");
-    doc.text(bikeStr, marginX + 18, currentY, { maxWidth: contentWidth - 18 });
-    currentY += 3.4;
-
-    if (bike.numero_serie_cuadro) {
-      doc.text(`Serie: ${bike.numero_serie_cuadro}`, marginX, currentY);
-      currentY += 3.4;
+    doc.setTextColor(40, 40, 40);
+    const availW = col1MaxW - lw;
+    let valFontSize = fontSizeMeta;
+    while (doc.getTextWidth(field.val) > availW && valFontSize > 3.4) {
+      valFontSize -= 0.2;
+      doc.setFontSize(valFontSize);
     }
-  }
+    doc.text(truncateText(field.val, availW), leftX + lw, y);
+  });
 
-  currentY += 1;
+  // Renderizar Columna Derecha: TEL queda perfectamente alineado con el resto
+  rightFields.forEach((field, i) => {
+    const y = startMetaY + i * lineSpacingMeta;
+    doc.setFontSize(fontSizeMeta);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(0, 0, 0);
+    const lblStr = `${field.label} `;
+    doc.text(lblStr, rightX, y);
+    const lw = doc.getTextWidth(lblStr);
+
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(40, 40, 40);
+    const availW = col2MaxW - lw;
+    let valFontSize = fontSizeMeta;
+    while (doc.getTextWidth(field.val) > availW && valFontSize > 3.4) {
+      valFontSize -= 0.2;
+      doc.setFontSize(valFontSize);
+    }
+    doc.text(truncateText(field.val, availW), rightX + lw, y);
+  });
+
+  currentY = startMetaY + Math.max(leftFields.length, rightFields.length) * lineSpacingMeta;
+
+  currentY += 0.8;
   drawDashedLine(currentY);
-  currentY += 3.5;
+  currentY += 2.0;
 
-  // 3. TABLA DE DETALLE (Ticket POS)
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(7);
-  doc.setTextColor(0, 0, 0);
-  doc.text("DETALLE DE CONCEPTOS", marginX, currentY);
-  currentY += 3;
-
+  // 3. TABLA DE DETALLE (Comienza directamente después del bloque superior, sin label "DETALLE DE CONCEPTOS")
   const ticketTableBody = (data.detalle || []).map((item) => {
     const cant = Number(item.cantidad || 0).toFixed(2);
     const sub = formatMoney(item.subtotal);
@@ -870,15 +947,15 @@ export function generateInvoiceModel2Pdf(data: BillingInvoicePrintData): jsPDF {
 
   autoTable(doc, {
     startY: currentY,
-    margin: { left: marginX, right: marginX, top: 2, bottom: 4 },
+    margin: { left: marginX, right: marginX, top: 1, bottom: 2 },
     theme: "plain",
     head: [["DESCRIPCIÓN", "CANT.", "TOTAL"]],
-    body: ticketTableBody.length > 0 ? ticketTableBody : [["Sin conceptos", "0", "RD$ 0.00"]],
+    body: ticketTableBody.length > 0 ? ticketTableBody : [["Sin conceptos", "0.00", "RD$ 0.00"]],
     styles: {
       font: "helvetica",
-      fontSize: 6.5,
+      fontSize: 6.2,
       textColor: [0, 0, 0],
-      cellPadding: { top: 1.2, bottom: 1.2, left: 1, right: 1 },
+      cellPadding: { top: 1.0, bottom: 1.0, left: 1, right: 1 },
       lineColor: [220, 220, 220],
       lineWidth: 0.1,
       overflow: "linebreak"
@@ -887,24 +964,22 @@ export function generateInvoiceModel2Pdf(data: BillingInvoicePrintData): jsPDF {
       fontStyle: "bold",
       fillColor: [240, 240, 240],
       textColor: [0, 0, 0],
-      fontSize: 6.5
+      fontSize: 6.2
     },
     columnStyles: {
       0: { cellWidth: 44, halign: "left" },
-      1: { cellWidth: 12, halign: "center" },
+      1: { cellWidth: 13, halign: "center" },
       2: { cellWidth: 16, halign: "right", fontStyle: "bold" }
     }
   });
 
-  currentY = ((doc as unknown as AutoTableDoc).lastAutoTable?.finalY || currentY) + 3;
+  currentY = ((doc as unknown as AutoTableDoc).lastAutoTable?.finalY || currentY) + 2.5;
 
   drawDashedLine(currentY);
-  currentY += 3.5;
+  currentY += 3.2;
 
   // 4. TOTALES
-  doc.setFontSize(6.8);
-  doc.setFont("helvetica", "normal");
-  doc.setTextColor(40, 40, 40);
+  doc.setFontSize(6.5);
 
   const drawRow = (label: string, val: string, isBold = false) => {
     if (isBold) {
@@ -912,11 +987,11 @@ export function generateInvoiceModel2Pdf(data: BillingInvoicePrintData): jsPDF {
       doc.setTextColor(0, 0, 0);
     } else {
       doc.setFont("helvetica", "normal");
-      doc.setTextColor(60, 60, 60);
+      doc.setTextColor(50, 50, 50);
     }
     doc.text(label, marginX, currentY);
     doc.text(val, pageWidth - marginX, currentY, { align: "right" });
-    currentY += 3.5;
+    currentY += 3.1;
   };
 
   drawRow("Subtotal:", formatMoney(data.factura.subtotal));
@@ -927,70 +1002,73 @@ export function generateInvoiceModel2Pdf(data: BillingInvoicePrintData): jsPDF {
     drawRow("ITBIS (Impuesto):", formatMoney(data.factura.impuesto));
   }
 
-  // TOTAL Box destacado
+  // TOTAL Destacado
   currentY += 0.5;
   doc.setDrawColor(0, 0, 0);
   doc.setLineWidth(0.4);
   doc.line(marginX, currentY, pageWidth - marginX, currentY);
-  currentY += 4.2;
+  currentY += 3.8;
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(9.5);
+  doc.setFontSize(9.0);
   doc.setTextColor(0, 0, 0);
   doc.text("TOTAL:", marginX, currentY);
   doc.text(formatMoney(data.factura.total), pageWidth - marginX, currentY, { align: "right" });
-  currentY += 2.2;
+  currentY += 2.0;
 
   doc.line(marginX, currentY, pageWidth - marginX, currentY);
-  currentY += 4;
+  currentY += 3.5;
 
-  // Pagado y Pendiente
-  doc.setFontSize(7);
+  // Monto Pagado & Balance
+  doc.setFontSize(6.8);
   drawRow("Monto Pagado:", formatMoney(data.factura.monto_pagado), true);
   if (Number(data.factura.balance_pendiente) > 0) {
     drawRow("Balance Pendiente:", formatMoney(data.factura.balance_pendiente), true);
   }
 
-  // 5. HISTORIAL DE PAGOS
-  if (data.pagos && data.pagos.length > 0) {
-    currentY += 1;
-    drawDashedLine(currentY);
-    currentY += 3.2;
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(6.8);
-    doc.setTextColor(0, 0, 0);
-    doc.text("PAGOS APLICADOS:", marginX, currentY);
-    currentY += 3.2;
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(6.2);
-    data.pagos.forEach((p) => {
-      const met = p.tipo_pago_nombre || "Pago";
-      const fecha = formatDateShort(p.fecha_pago);
-      doc.text(`${fecha} - ${met}:`, marginX, currentY);
-      doc.text(formatMoney(p.monto), pageWidth - marginX, currentY, { align: "right" });
-      currentY += 3.0;
-    });
-  }
-
-  // 6. CIERRE
-  currentY += 2;
+  // 5. CIERRE & PIE CON LEYENDA LEGAL DINÁMICA
+  currentY += 1.5;
   drawDashedLine(currentY);
-  currentY += 4.5;
+  currentY += 3.8;
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(7);
+  doc.setFontSize(6.8);
   doc.setTextColor(0, 0, 0);
-  doc.text(`¡GRACIAS POR SU PREFERENCIA!`, pageWidth / 2, currentY, { align: "center" });
-  currentY += 3.5;
+  doc.text("¡GRACIAS POR SU PREFERENCIA!", pageWidth / 2, currentY, { align: "center" });
+  currentY += 3.2;
 
+  const legalNotice = getInvoiceLegalNotice(data);
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(6);
+  doc.setFontSize(5.6);
   doc.setTextColor(80, 80, 80);
-  doc.text("Documento no válido para crédito fiscal", pageWidth / 2, currentY, { align: "center" });
+  doc.text(legalNotice, pageWidth / 2, currentY, { align: "center" });
 
-  return doc;
+  return currentY;
+}
+
+export function generateInvoiceModel2Pdf(data: BillingInvoicePrintData): jsPDF {
+  // Pase 1: Medición exacta de la altura requerida según el contenido real
+  const dummyDoc = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: [80, 1000]
+  });
+
+  const finalContentY = renderTicketContent(dummyDoc, data);
+
+  // Margen inferior adicional cómodo y respirado (8–12 mm, configurado en 11 mm)
+  const dynamicHeight = Math.max(80, Math.ceil(finalContentY + 11));
+
+  // Pase 2: Renderizado final en documento con altura exacta
+  const finalDoc = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: [80, dynamicHeight]
+  });
+
+  renderTicketContent(finalDoc, data);
+
+  return finalDoc;
 }
 
 /**

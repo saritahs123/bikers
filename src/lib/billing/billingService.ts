@@ -68,6 +68,10 @@ import {
 } from "./billingTypes";
 import { registrarMovimientoInventario } from "@/lib/inventory/inventoryMovementService";
 import { INVENTORY_SYSTEM_CODES, generarCodigoMovimiento } from "@/lib/inventory/inventoryConstants";
+import {
+  ensureReversalTraceabilitySchema,
+  registrarDetalleFacturaMovimiento
+} from "./inventoryReversalTraceability";
 
 const BILLING_ADVISORY_LOCK_ID = 7005;
 
@@ -185,6 +189,12 @@ export async function crearFactura(
 
     // 0. Concurrencia segura: Lock consultivo a nivel de transacción para facturación
     await client.query("SELECT pg_advisory_xact_lock($1)", [BILLING_ADVISORY_LOCK_ID]);
+
+    try {
+      await ensureReversalTraceabilitySchema(client);
+    } catch (eTrace) {
+      console.warn("Could not ensure reversal traceability schema:", eTrace);
+    }
 
     // 1. Validaciones básicas de entrada y Multitenancy
     if (!input.empresa_id || input.empresa_id <= 0) {
@@ -589,9 +599,51 @@ export async function crearFactura(
           observacion: `Venta Factura ${codigoFactura} (${tipoFactura.codigo})`
         });
 
+        // Sección 11: Vincular salida original en la línea de detalle
+        lp.movimiento_inventario_id = movRes.movimientoId;
+
         // Snapshot del costo unitario (PMP del almacén) si no fue provisto
         if (lp.costo_unitario == null) {
           lp.costo_unitario = movRes.costoUnitario;
+        }
+      }
+    }
+
+    // 7.2. Para facturas desde Orden de Trabajo (OT), vincular el movimiento real SAL_ORDEN ya emitido
+    if (input.orden_trabajo_id) {
+      for (const linea of input.lineas) {
+        if (!linea.movimiento_inventario_id && linea.producto_id && linea.tipo_linea !== "SERVICIO") {
+          try {
+            const movOtRes = await client.query<{ movimiento_inventario_id: number; costo_unitario: number }>(
+              `SELECT mi.movimiento_inventario_id, mi.costo_unitario
+               FROM admin.movimientos_inventario mi
+               JOIN admin.tipo_movimiento_inventario tm ON mi.tipo_movimiento_id = tm.tipo_movimiento_id
+               WHERE mi.empresa_id = $1
+                 AND mi.producto_id = $2
+                 AND (
+                   ($3::int IS NOT NULL AND mi.orden_producto_id = $3::int)
+                   OR ($4::int IS NOT NULL AND mi.orden_trabajo_id = $4::int)
+                 )
+                 AND tm.naturaleza = 'SALIDA'
+                 AND NOT EXISTS (
+                   SELECT 1 FROM admin.movimientos_inventario rev
+                   WHERE rev.movimiento_origen_id = mi.movimiento_inventario_id
+                 )
+               ORDER BY
+                 (CASE WHEN $3::int IS NOT NULL AND mi.orden_producto_id = $3::int THEN 0 ELSE 1 END),
+                 mi.movimiento_inventario_id DESC
+               LIMIT 1;`,
+              [input.empresa_id, linea.producto_id, linea.orden_producto_id || null, input.orden_trabajo_id]
+            );
+            if (movOtRes.rows && movOtRes.rows.length > 0) {
+              linea.movimiento_inventario_id = movOtRes.rows[0].movimiento_inventario_id;
+              if (linea.costo_unitario == null && movOtRes.rows[0].costo_unitario != null) {
+                linea.costo_unitario = Number(movOtRes.rows[0].costo_unitario);
+              }
+            }
+          } catch (otMovErr) {
+            console.warn("Could not query existing OT inventory movement:", otMovErr);
+          }
         }
       }
     }
@@ -623,6 +675,7 @@ export async function crearFactura(
         tipo_servicio_id: linea.tipo_servicio_id || null,
         orden_servicio_id: linea.orden_servicio_id || null,
         orden_producto_id: linea.orden_producto_id || null,
+        movimiento_inventario_id: linea.movimiento_inventario_id || null,
         codigo: linea.codigo ? linea.codigo.trim() : null,
         descripcion: linea.descripcion.trim(),
         cantidad: cant,
@@ -647,6 +700,21 @@ export async function crearFactura(
       );
 
       insertedDetalles.push(detRes.rows[0]);
+
+      // Registrar trazabilidad explícita en admin.detalle_factura_movimiento para líneas físicas
+      if (linea.movimiento_inventario_id && linea.tipo_linea !== "SERVICIO" && !linea.orden_servicio_id) {
+        try {
+          await registrarDetalleFacturaMovimiento(
+            client,
+            nextDetalleId,
+            linea.movimiento_inventario_id,
+            cant,
+            input.usuario_id
+          );
+        } catch (traceErr) {
+          console.warn("Could not register detalle_factura_movimiento:", traceErr);
+        }
+      }
     }
 
     // 9. Insertar Pagos Iniciales en admin.pagos (si existen)
@@ -757,12 +825,17 @@ export async function getOrCreateInvoiceForWorkOrder(
     }
 
     // 1. Verificar si ya existe una factura activa para esta orden (Sección 9)
+    const facCols = await getTableColumns(client, "facturas");
+    const colCondicion = facCols.has("condicion_venta") ? "f.condicion_venta" : "'CONTADO'";
     const existingFacRes = await client.query(`
       SELECT f.factura_id,
-             COALESCE(f.numero_factura, f.factura_id::text) AS codigo_factura,
+             f.empresa_id,
+             COALESCE(f.codigo_factura, f.numero_factura, f.factura_id::text) AS codigo_factura,
              f.numero_factura,
              f.estado,
-             COALESCE(f.total_factura, 0)::numeric AS total_factura,
+             ${colCondicion} AS condicion_venta,
+             COALESCE(f.total, f.total_factura, 0)::numeric AS total,
+             COALESCE(f.total_factura, f.total, 0)::numeric AS total_factura,
              COALESCE(f.monto_pagado, 0)::numeric AS monto_pagado,
              COALESCE(f.balance_pendiente, 0)::numeric AS balance_pendiente
       FROM admin.facturas f
@@ -777,7 +850,17 @@ export async function getOrCreateInvoiceForWorkOrder(
       if (isInternalTransaction) {
         await client.query("COMMIT");
       }
-      return { factura: existing, created: false };
+      return {
+        factura: {
+          ...existing,
+          total: Number(existing.total || existing.total_factura || 0),
+          total_factura: Number(existing.total_factura || existing.total || 0),
+          monto_pagado: Number(existing.monto_pagado || 0),
+          balance_pendiente: Number(existing.balance_pendiente ?? 0),
+          condicion_venta: (existing.condicion_venta as CondicionVenta) || "CONTADO"
+        },
+        created: false
+      };
     }
 
     // 2. Si no existe factura activa, cargar la OT y bloquearla (Sección 10, 11, 12)
@@ -912,10 +995,13 @@ export async function getOrCreateInvoiceForWorkOrder(
       if (dbErr.code === "OT_YA_FACTURADA" || dbErr.code === "23505" || String(dbErr.message || "").includes("orden_trabajo")) {
         const raceCheck = await client.query(`
           SELECT f.factura_id,
-                 COALESCE(f.numero_factura, f.factura_id::text) AS codigo_factura,
+                 f.empresa_id,
+                 COALESCE(f.codigo_factura, f.numero_factura, f.factura_id::text) AS codigo_factura,
                  f.numero_factura,
                  f.estado,
-                 COALESCE(f.total_factura, 0)::numeric AS total_factura,
+                 ${colCondicion} AS condicion_venta,
+                 COALESCE(f.total, f.total_factura, 0)::numeric AS total,
+                 COALESCE(f.total_factura, f.total, 0)::numeric AS total_factura,
                  COALESCE(f.monto_pagado, 0)::numeric AS monto_pagado,
                  COALESCE(f.balance_pendiente, 0)::numeric AS balance_pendiente
           FROM admin.facturas f
@@ -927,7 +1013,18 @@ export async function getOrCreateInvoiceForWorkOrder(
           if (isInternalTransaction) {
             await client.query("COMMIT");
           }
-          return { factura: raceCheck.rows[0] as FacturaRow, created: false };
+          const raceFac = raceCheck.rows[0] as FacturaRow;
+          return {
+            factura: {
+              ...raceFac,
+              total: Number(raceFac.total || raceFac.total_factura || 0),
+              total_factura: Number(raceFac.total_factura || raceFac.total || 0),
+              monto_pagado: Number(raceFac.monto_pagado || 0),
+              balance_pendiente: Number(raceFac.balance_pendiente ?? 0),
+              condicion_venta: (raceFac.condicion_venta as CondicionVenta) || "CONTADO"
+            },
+            created: false
+          };
         }
       }
       throw err;
@@ -1245,8 +1342,8 @@ export async function anularFactura(
       await client.query("BEGIN");
     }
 
-    if (!input.motivo_anulacion || input.motivo_anulacion.trim().length < 5) {
-      throw new Error("El motivo de anulación es obligatorio y debe contener al menos 5 caracteres.");
+    if (!input.motivo_anulacion || input.motivo_anulacion.trim().length < 1) {
+      throw new Error("El motivo de anulación es obligatorio.");
     }
 
     const facRes = await client.query(`
@@ -1262,50 +1359,52 @@ export async function anularFactura(
 
     const factura: FacturaRow = facRes.rows[0];
     if (factura.estado === "ANULADA") {
-      throw new Error(`La factura ${factura.codigo_factura} ya se encuentra anulada.`);
+      throw new Error(`La factura ${factura.codigo_factura || factura.numero_factura || `#${factura.factura_id}`} ya se encuentra anulada.`);
     }
 
-    // Anular pagos asociados para mantener congruencia contable
-    await client.query(`
-      UPDATE admin.pagos
-      SET estado = 'ANULADO'
-      WHERE factura_id IN (
-        SELECT factura_id FROM admin.facturas WHERE factura_id = $1 AND empresa_id = $2
-      )
-    `, [input.factura_id, input.empresa_id]);
+    // Regla 3 & 13: NO borrar ni modificar registros de admin.pagos (se conservan como evidencia histórica)
+    // Regla 20 & 21: NO modificar el estado de la Orden de Trabajo si pertenecía a una OT
 
-    // Anular factura
-    const notaAnulacion = `[ANULADA el ${new Date().toISOString()} por usuario #${input.usuario_id}]: ${input.motivo_anulacion.trim()}`;
+    // Anular factura con columnas de trazabilidad si existen en el esquema
+    const facCols = await getTableColumns(client, "facturas");
+    const updateSet: string[] = ["estado = 'ANULADA'"];
+    const updateParams: (string | number)[] = [input.factura_id];
+    let updateIdx = 2;
+
+    if (facCols.has("motivo_anulacion")) {
+      updateSet.push(`motivo_anulacion = $${updateIdx}`);
+      updateParams.push(input.motivo_anulacion.trim());
+      updateIdx++;
+    }
+
+    if (facCols.has("fecha_anulacion")) {
+      updateSet.push(`fecha_anulacion = NOW()`);
+    }
+
+    if (facCols.has("usuario_anulacion_id")) {
+      updateSet.push(`usuario_anulacion_id = $${updateIdx}`);
+      updateParams.push(input.usuario_id);
+      updateIdx++;
+    }
+
+    if (facCols.has("fecha_modificacion")) {
+      updateSet.push(`fecha_modificacion = NOW()`);
+    }
+
+    if (facCols.has("usuario_modificacion_id")) {
+      updateSet.push(`usuario_modificacion_id = $${updateIdx}`);
+      updateParams.push(input.usuario_id);
+      updateIdx++;
+    }
+
     const updRes = await client.query(`
       UPDATE admin.facturas
-      SET
-        estado = 'ANULADA',
-        balance_pendiente = 0,
-        observacion = CASE
-          WHEN observacion IS NULL OR observacion = '' THEN $1
-          ELSE observacion || E'\n' || $1
-        END,
-        usuario_modificacion_id = $2,
-        fecha_modificacion = NOW()
-      WHERE factura_id = $3 AND empresa_id = $4
+      SET ${updateSet.join(", ")}
+      WHERE factura_id = $1 AND empresa_id = $${updateIdx}
       RETURNING *;
-    `, [
-      notaAnulacion,
-      input.usuario_id,
-      input.factura_id,
-      input.empresa_id
-    ]);
+    `, [...updateParams, input.empresa_id]);
 
     const updatedFactura: FacturaRow = updRes.rows[0];
-
-    // Si provenía de una OT, actualizar bandera facturado en la orden
-    if (factura.orden_trabajo_id) {
-      await client.query(`
-        UPDATE admin.ordenes_trabajo
-        SET facturado = false
-        WHERE orden_trabajo_id = $1 AND empresa_id = $2
-      `, [factura.orden_trabajo_id, input.empresa_id]);
-    }
 
     if (isInternalTransaction) {
       await client.query("COMMIT");
