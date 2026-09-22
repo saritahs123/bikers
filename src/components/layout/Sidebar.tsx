@@ -65,6 +65,17 @@ function SidebarContent({
       ]
     },
     {
+      id: "facturacion",
+      icon: "receipt_long",
+      label: "FACTURACIÓN",
+      submenu: [
+        { href: "/billing/new", label: "NUEVA FACTURA" },
+        { href: "/billing/invoices", label: "FACTURAS" },
+        { href: "/billing/payments", label: "PAGOS" },
+        { href: "/workshop?view=billing", label: "DESPACHO DE ÓRDENES" }
+      ]
+    },
+    {
       id: "crm",
       icon: "group",
       label: "CRM",
@@ -84,17 +95,6 @@ function SidebarContent({
         { href: "/inventory/entries", label: "ENTRADAS" },
         { href: "/inventory/adjustments", label: "SALIDAS Y AJUSTES" },
         { href: "/inventory/transfers", label: "TRANSFERENCIAS" }
-      ]
-    },
-    {
-      id: "facturacion",
-      icon: "receipt_long",
-      label: "FACTURACIÓN",
-      submenu: [
-        { href: "/billing/new", label: "NUEVA FACTURA" },
-        { href: "/billing/invoices", label: "FACTURAS" },
-        { href: "/billing/payments", label: "PAGOS" },
-        { href: "/workshop?view=billing", label: "DESPACHO DE ÓRDENES" }
       ]
     },
     {
