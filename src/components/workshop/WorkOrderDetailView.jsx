@@ -36,6 +36,7 @@ import WorkOrderServicesView from "./WorkOrderServicesView";
 import WorkOrderHistoryView from "./WorkOrderHistoryView";
 import EditWorkOrderModal from "./EditWorkOrderModal";
 import WorkOrderStatusBadge from "./WorkOrderStatusBadge";
+import RegisterPaymentModal from "@/components/billing/RegisterPaymentModal";
 
 export default function WorkOrderDetailView({ ordenId, onBack }) {
   const searchParams = useSearchParams();
@@ -363,6 +364,81 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
   const showSuccessToast = (msg, title = "Confirmación", duration = 4500) => showToast(msg, "success", title, duration);
 
   const [loadingStateChange, setLoadingStateChange] = useState(false);
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [invoiceForPayment, setInvoiceForPayment] = useState(null);
+  const deliveryCompletedRef = useRef(false);
+
+  const completeDelivery = async (notes = "") => {
+    try {
+      setLoadingStateChange(true);
+      const res = await fetch(`/api/taller/ordenes/${ordenId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          estado_orden_id: 8,
+          accion: "ENTREGAR_A_CLIENTE",
+          observacion_cambio_estado: notes || "Entrega al cliente completada."
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        if (data.error === "PAYMENT_REQUIRED" && data.factura) {
+          setInvoiceForPayment(data.factura);
+          setPaymentModalOpen(true);
+          showInfoToast(`La factura aún tiene un saldo pendiente de RD$ ${Number(data.factura.balance_pendiente || 0).toFixed(2)}. Complete el pago para entregar la orden.`);
+          return;
+        }
+        throw new Error(data.message || data.title || "No se pudo completar la entrega de la orden.");
+      }
+
+      deliveryCompletedRef.current = true;
+      showSuccessToast("Orden entregada correctamente.");
+      await fetchOrderDetail(true);
+    } catch (err) {
+      console.error("Error al completar entrega:", err);
+      showErrorToast(err.message || "Error al entregar la orden.");
+    } finally {
+      setLoadingStateChange(false);
+    }
+  };
+
+  const handlePaymentSuccess = async (paymentResult) => {
+    showSuccessToast("Pago registrado correctamente.");
+    const updatedFac = paymentResult?.factura;
+    const nuevoBalance = Number(updatedFac?.balance_pendiente ?? 0);
+    const nuevoEstado = updatedFac?.estado;
+
+    if (nuevoBalance <= 0.009 || nuevoEstado === "PAGADA") {
+      setPaymentModalOpen(false);
+      setInvoiceForPayment(null);
+      await completeDelivery();
+    } else {
+      showWarningToast(`La factura aún tiene un saldo pendiente de RD$ ${nuevoBalance.toFixed(2)}. Complete el pago para entregar la orden.`);
+      if (updatedFac) {
+        setInvoiceForPayment(prev => ({
+          ...prev,
+          ...updatedFac,
+          balance_pendiente: nuevoBalance,
+          monto_pagado: Number(updatedFac.monto_pagado || 0)
+        }));
+      }
+      await fetchOrderDetail(true);
+    }
+  };
+
+  const handleClosePaymentModal = () => {
+    setPaymentModalOpen(false);
+    if (!deliveryCompletedRef.current && invoiceForPayment) {
+      const bal = Number(invoiceForPayment.balance_pendiente || 0);
+      const cond = String(invoiceForPayment.condicion_venta || "CONTADO").toUpperCase();
+      if (cond !== "CREDITO" && bal > 0.009) {
+        showWarningToast("Debe registrar el pago para completar la entrega de una factura de contado.");
+      }
+    }
+    setInvoiceForPayment(null);
+    fetchOrderDetail(true);
+  };
 
   const handleTransitionState = async (targetStateId, notes = "") => {
     if (loadingStateChange) return;
@@ -374,6 +450,59 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
         8000,
         `Servicios pendientes: ${incompleteServices.map(s => s.codigo_servicio || s.tipo_servicio_nombre || 'Servicio').join(', ')}`
       );
+      return;
+    }
+
+    if (targetStateId === 8) {
+      setLoadingStateChange(true);
+      setModalError(null);
+      deliveryCompletedRef.current = false;
+
+      try {
+        // 1. Obtener o generar factura activa para la orden
+        const invRes = await fetch(`/api/taller/facturacion/ordenes/${ordenId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" }
+        });
+        const invData = await invRes.json();
+
+        if (!invRes.ok || !invData.success || !invData.factura) {
+          throw new Error(invData.message || invData.error || "No se pudo obtener o generar la factura de la orden.");
+        }
+
+        const fac = invData.factura;
+        const facTotal = Number(fac.total || fac.total_factura || 0);
+        const facPagado = Number(fac.monto_pagado || 0);
+        const facBalance = Number(
+          fac.balance_pendiente != null && !isNaN(Number(fac.balance_pendiente))
+            ? fac.balance_pendiente
+            : Math.max(0, facTotal - facPagado)
+        );
+        const condicion = String(fac.condicion_venta || "CONTADO").toUpperCase();
+
+        // 2. Si la factura es CONTADO y tiene saldo pendiente > 0, abrir modal Registrar Pago inmediatamente
+        if (condicion !== "CREDITO" && facTotal > 0 && facBalance > 0.009) {
+          setInvoiceForPayment({
+            ...fac,
+            total: facTotal,
+            total_factura: facTotal,
+            monto_pagado: facPagado,
+            balance_pendiente: facBalance
+          });
+          setPaymentModalOpen(true);
+          setLoadingStateChange(false);
+          return;
+        }
+
+        // 3. Si ya está pagada o total = 0 o es crédito, completar entrega directamente
+        await completeDelivery(notes);
+      } catch (err) {
+        console.error("Error en flujo de entrega:", err);
+        const errorMsg = err.message || "Error al procesar la entrega de la orden.";
+        showErrorToast(errorMsg);
+        setModalError({ title: "Error en Entrega", description: errorMsg });
+        setLoadingStateChange(false);
+      }
       return;
     }
 
@@ -2168,6 +2297,14 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
         </div>,
         document.body
       )}
+
+      {/* Modal Registrar Pago Reutilizado */}
+      <RegisterPaymentModal
+        isOpen={paymentModalOpen}
+        onClose={handleClosePaymentModal}
+        factura={invoiceForPayment}
+        onPaymentSuccess={handlePaymentSuccess}
+      />
 
       {/* Printable Document Section (Visible ONLY on print) */}
       <div id="printable-work-order" className="hidden print:block p-8 bg-white text-slate-900 font-sans text-xs max-w-4xl mx-auto leading-relaxed">

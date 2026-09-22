@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { query, withTransaction } from "@/lib/db";
+import { query } from "@/lib/db";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { getOrCreateInvoiceForWorkOrder } from "@/lib/billing/billingService";
 
 // GET /api/taller/facturacion/ordenes/[id]
 export async function GET(
@@ -57,7 +58,7 @@ export async function GET(
       JOIN admin.clientes c ON ot.cliente_id = c.cliente_id
       WHERE ot.orden_trabajo_id = $1 AND ot.activo = true
     `;
-    const existenceRes = await query<any>(existenceSql, [ordenId]);
+    const existenceRes = await query<Record<string, unknown>>(existenceSql, [ordenId]);
     if (!existenceRes || existenceRes.length === 0) {
       return NextResponse.json(
         { error: "NOT_FOUND", message: "La orden solicitada no existe." },
@@ -129,9 +130,48 @@ export async function GET(
           ),
           null
         ) AS mecanico_cargo,
-        COALESCE(ot.facturado, false) AS facturado,
+        COALESCE(ot.facturado, false) OR EXISTS (
+          SELECT 1 FROM admin.facturas f
+          WHERE f.orden_trabajo_id = ot.orden_trabajo_id AND f.empresa_id = c.empresa_id AND f.estado <> 'ANULADA'
+        ) AS facturado,
         ot.fecha_facturacion,
         ot.usuario_facturacion_id,
+        (
+          SELECT f.factura_id
+          FROM admin.facturas f
+          WHERE f.orden_trabajo_id = ot.orden_trabajo_id AND f.empresa_id = c.empresa_id AND f.estado <> 'ANULADA'
+          ORDER BY f.factura_id DESC LIMIT 1
+        ) AS factura_id,
+        (
+          SELECT COALESCE(f.codigo_factura, f.numero_factura, f.factura_id::text)
+          FROM admin.facturas f
+          WHERE f.orden_trabajo_id = ot.orden_trabajo_id AND f.empresa_id = c.empresa_id AND f.estado <> 'ANULADA'
+          ORDER BY f.factura_id DESC LIMIT 1
+        ) AS codigo_factura,
+        (
+          SELECT COALESCE(f.total, f.total_factura, 0)::numeric
+          FROM admin.facturas f
+          WHERE f.orden_trabajo_id = ot.orden_trabajo_id AND f.empresa_id = c.empresa_id AND f.estado <> 'ANULADA'
+          ORDER BY f.factura_id DESC LIMIT 1
+        ) AS factura_total,
+        (
+          SELECT COALESCE(f.monto_pagado, 0)::numeric
+          FROM admin.facturas f
+          WHERE f.orden_trabajo_id = ot.orden_trabajo_id AND f.empresa_id = c.empresa_id AND f.estado <> 'ANULADA'
+          ORDER BY f.factura_id DESC LIMIT 1
+        ) AS factura_monto_pagado,
+        (
+          SELECT COALESCE(f.balance_pendiente, 0)::numeric
+          FROM admin.facturas f
+          WHERE f.orden_trabajo_id = ot.orden_trabajo_id AND f.empresa_id = c.empresa_id AND f.estado <> 'ANULADA'
+          ORDER BY f.factura_id DESC LIMIT 1
+        ) AS factura_balance_pendiente,
+        (
+          SELECT f.estado
+          FROM admin.facturas f
+          WHERE f.orden_trabajo_id = ot.orden_trabajo_id AND f.empresa_id = c.empresa_id AND f.estado <> 'ANULADA'
+          ORDER BY f.factura_id DESC LIMIT 1
+        ) AS factura_estado,
         COALESCE(NULLIF(TRIM(CONCAT_WS(' ', ui_fact.nombre, ui_fact.apellido)), ''), uf.estado, ('Usuario #' || uf.usuario_id::text)) AS usuario_facturacion_nombre,
         ot.subtotal_servicios,
         ot.subtotal_productos AS subtotal_repuestos,
@@ -207,7 +247,7 @@ export async function GET(
       WHERE ot.orden_trabajo_id = $1 AND ot.activo = true
     `;
 
-    const orderRes = await query<any>(orderSql, [ordenId]);
+    const orderRes = await query<Record<string, unknown>>(orderSql, [ordenId]);
     if (!orderRes || orderRes.length === 0) {
       return NextResponse.json({ error: "NOT_FOUND", message: "La orden solicitada no existe." }, { status: 404 });
     }
@@ -237,7 +277,7 @@ export async function GET(
       WHERE os.orden_trabajo_id = $1 AND (os.activo IS DISTINCT FROM false)
       ORDER BY os.orden_servicio_id ASC
     `;
-    const services = await query<any>(servSql, [ordenId]);
+    const services = await query<Record<string, unknown>>(servSql, [ordenId]);
 
     // 4. Fetch billable products / spare parts
     const prodSql = `
@@ -258,7 +298,7 @@ export async function GET(
       WHERE op.orden_trabajo_id = $1
       ORDER BY op.orden_producto_id ASC
     `;
-    const products = await query<any>(prodSql, [ordenId]);
+    const products = await query<Record<string, unknown>>(prodSql, [ordenId]);
 
     // 5. Check open timers
     const timerSql = `
@@ -269,15 +309,15 @@ export async function GET(
         AND (mo.activo IS DISTINCT FROM false)
         AND mo.fecha_finalizacion IS NULL
     `;
-    const timerRes = await query<any>(timerSql, [ordenId]);
+    const timerRes = await query<{ count: string | number }>(timerSql, [ordenId]);
     const openTimersCount = Number(timerRes[0]?.count || 0);
 
     // Business Rules validation for invoicing
     const isFacturado = Boolean(orderData.facturado);
     const estadoId = Number(orderData.estado_orden_id);
-    const totalOrdenDB = parseFloat(orderData.total_orden || 0);
+    const totalOrdenDB = parseFloat(String(orderData.total_orden || 0));
 
-    const incompleteServices = (services || []).filter((s: any) => {
+    const incompleteServices = (services || []).filter((s: Record<string, unknown>) => {
       const cod = String(s.estado_servicio_codigo || "").toUpperCase();
       return !['COMPLETADO', 'FINALIZADO', 'CANCELADO', 'ANULADO'].includes(cod) && [1, 2].includes(Number(s.estado_orden_servicio_id));
     });
@@ -307,7 +347,7 @@ export async function GET(
 
     // Calculate sum of items
     const allItems = [...services, ...products];
-    const totalCalculado = allItems.reduce((acc, it) => acc + parseFloat(it.subtotal || 0), 0);
+    const totalCalculado = allItems.reduce((acc, it) => acc + parseFloat(String(it.subtotal || 0)), 0);
     const hayInconsistencia = Math.abs(totalCalculado - totalOrdenDB) > 0.05;
 
     return NextResponse.json({
@@ -330,16 +370,22 @@ export async function GET(
           fecha_entrega: orderData.fecha_entrega,
           fecha_inicio_trabajo: orderData.fecha_inicio_trabajo ? String(orderData.fecha_inicio_trabajo) : null,
           fecha_finalizacion: orderData.fecha_finalizacion ? String(orderData.fecha_finalizacion) : null,
-          total_tiempo_transcurrido: parseInt(orderData.total_tiempo_transcurrido || "0", 10),
+          total_tiempo_transcurrido: parseInt(String(orderData.total_tiempo_transcurrido || "0"), 10),
           mecanico_id: orderData.mecanico_id ?? null,
           mecanico_nombre: orderData.mecanico_nombre || "No asignado",
           mecanico_cargo: orderData.mecanico_cargo || null,
           observaciones: orderData.observaciones,
           diagnostico_inicial: orderData.diagnostico_inicial,
-          facturado: isFacturado,
+          facturado: isFacturado || Boolean(orderData.factura_id),
+          factura_id: orderData.factura_id ? Number(orderData.factura_id) : null,
+          codigo_factura: orderData.codigo_factura || null,
+          factura_total: orderData.factura_total != null ? Number(orderData.factura_total) : null,
+          factura_monto_pagado: orderData.factura_monto_pagado != null ? Number(orderData.factura_monto_pagado) : null,
+          factura_balance_pendiente: orderData.factura_balance_pendiente != null ? Number(orderData.factura_balance_pendiente) : null,
+          factura_estado: orderData.factura_estado || null,
           fecha_facturacion: orderData.fecha_facturacion ? String(orderData.fecha_facturacion) : null,
-          usuario_facturacion_id: isFacturado ? orderData.usuario_facturacion_id : null,
-          usuario_facturacion_nombre: isFacturado ? orderData.usuario_facturacion_nombre : null,
+          usuario_facturacion_id: (isFacturado || Boolean(orderData.factura_id)) ? orderData.usuario_facturacion_id : null,
+          usuario_facturacion_nombre: (isFacturado || Boolean(orderData.factura_id)) ? orderData.usuario_facturacion_nombre : null,
           motivo_hold: orderData.motivo_hold || null,
           fecha_hold: orderData.fecha_hold ? String(orderData.fecha_hold) : null,
           usuario_hold_nombre: orderData.usuario_hold_nombre || null,
@@ -367,17 +413,17 @@ export async function GET(
         servicios: services,
         repuestos: products,
         resumen_financiero: {
-          subtotal_servicios: parseFloat(orderData.subtotal_servicios || 0),
-          subtotal_repuestos: parseFloat(orderData.subtotal_repuestos || 0),
-          descuento_total: parseFloat(orderData.descuento_total || 0),
-          impuesto: parseFloat(orderData.impuesto || 0),
+          subtotal_servicios: parseFloat(String(orderData.subtotal_servicios || 0)),
+          subtotal_repuestos: parseFloat(String(orderData.subtotal_repuestos || 0)),
+          descuento_total: parseFloat(String(orderData.descuento_total || 0)),
+          impuesto: parseFloat(String(orderData.impuesto || 0)),
           total_orden: totalOrdenDB,
           total_calculado_conceptos: totalCalculado,
           hay_inconsistencia_totales: hayInconsistencia
         }
       }
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error in GET /api/taller/facturacion/ordenes/[id]:", error);
     return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al consultar los detalles de facturación de la orden." }, { status: 500 });
   }
@@ -394,8 +440,146 @@ export async function PUT() {
   );
 }
 
-export async function POST() {
-  return NextResponse.json({ error: "METHOD_NOT_ALLOWED", message: "Operación no permitida en el módulo de facturación." }, { status: 405 });
+// POST /api/taller/facturacion/ordenes/[id] - Generar o reutilizar factura activa
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+
+  try {
+    if (!id || typeof id !== "string" || !/^\d+$/.test(id.trim())) {
+      return NextResponse.json(
+        { error: "INVALID_ID", message: "Identificador de orden inválido." },
+        { status: 400 }
+      );
+    }
+
+    const ordenId = Number(id.trim());
+    if (!Number.isSafeInteger(ordenId) || ordenId <= 0) {
+      return NextResponse.json(
+        { error: "INVALID_ID", message: "Identificador de orden inválido." },
+        { status: 400 }
+      );
+    }
+
+    const session = await getWorkshopSession();
+    if (!session || !session.usuario_id) {
+      return NextResponse.json(
+        { error: "UNAUTHORIZED", message: "Sesión inválida o expirada." },
+        { status: 401 }
+      );
+    }
+
+    const perms = await getModulePermissions("TALLER", session.usuario_id);
+    if (!perms.puede_ver && !perms.puede_crear && !perms.puede_editar) {
+      return NextResponse.json(
+        { error: "FORBIDDEN", message: "No tienes permiso para facturar esta orden." },
+        { status: 403 }
+      );
+    }
+
+    // 1. Isolation & Existence check
+    const existenceSql = `
+      SELECT
+        ot.orden_trabajo_id,
+        ot.codigo_orden,
+        ot.cliente_id,
+        ot.estado_orden_id,
+        ot.activo,
+        c.empresa_id AS order_empresa_id
+      FROM admin.ordenes_trabajo ot
+      JOIN admin.clientes c ON ot.cliente_id = c.cliente_id
+      WHERE ot.orden_trabajo_id = $1 AND ot.activo = true
+    `;
+    const existenceRes = await query<Record<string, unknown>>(existenceSql, [ordenId]);
+    if (!existenceRes || existenceRes.length === 0) {
+      return NextResponse.json(
+        { error: "NOT_FOUND", message: "La orden solicitada no existe." },
+        { status: 404 }
+      );
+    }
+
+    const currentOrder = existenceRes[0];
+    const orderEmpresaId = currentOrder.order_empresa_id ?? null;
+
+    if (
+      session.empresa_id == null ||
+      orderEmpresaId == null ||
+      Number(session.empresa_id) !== Number(orderEmpresaId)
+    ) {
+      return NextResponse.json(
+        { error: "NOT_FOUND", message: "La orden solicitada no existe o no pertenece a su empresa." },
+        { status: 404 }
+      );
+    }
+
+    // 2. Validate Business rules: must be in LISTA_ENTREGA (7) or ENTREGADA (8)
+    const estadoId = Number(currentOrder.estado_orden_id);
+    if (estadoId !== 7 && estadoId !== 8) {
+      return NextResponse.json(
+        {
+          error: "ORDER_NOT_READY_FOR_DELIVERY",
+          message: "La orden debe estar lista para entrega o entregada para generar su factura."
+        },
+        { status: 409 }
+      );
+    }
+
+    let body: Record<string, unknown> = {};
+    try {
+      body = await req.json();
+    } catch {
+      body = {};
+    }
+
+    const obs = typeof body.observacion === "string" ? body.observacion : undefined;
+
+    // 3. Generate or retrieve invoice using central billingService
+    const invoiceResult = await getOrCreateInvoiceForWorkOrder({
+      orden_trabajo_id: ordenId,
+      empresa_id: session.empresa_id || Number(orderEmpresaId),
+      usuario_id: session.usuario_id,
+      observacion: obs || `Factura de taller generada en entrega de Orden ${String(currentOrder.codigo_orden || `#${ordenId}`)}`
+    });
+
+    const activeInvoice = invoiceResult.factura;
+    const facTotal = Number(activeInvoice.total || activeInvoice.total_factura || 0);
+    const facPagado = Number(activeInvoice.monto_pagado || 0);
+    const facBalance = Number(
+      activeInvoice.balance_pendiente != null && !isNaN(Number(activeInvoice.balance_pendiente))
+        ? activeInvoice.balance_pendiente
+        : Math.max(0, facTotal - facPagado)
+    );
+
+    return NextResponse.json({
+      success: true,
+      created: invoiceResult.created,
+      factura: {
+        factura_id: activeInvoice.factura_id,
+        codigo_factura: activeInvoice.codigo_factura || activeInvoice.numero_factura || `FAC-${activeInvoice.factura_id}`,
+        numero_factura: activeInvoice.numero_factura,
+        total: facTotal,
+        total_factura: facTotal,
+        monto_pagado: facPagado,
+        balance_pendiente: facBalance,
+        estado: activeInvoice.estado,
+        condicion_venta: activeInvoice.condicion_venta || "CONTADO"
+      }
+    });
+
+  } catch (error: unknown) {
+    console.error("Error in POST /api/taller/facturacion/ordenes/[id]:", error);
+    const errMessage = error instanceof Error ? error.message : "Error al procesar la factura de la orden.";
+    return NextResponse.json(
+      {
+        success: false,
+        error: "INVOICE_OPERATION_FAILED",
+        message: errMessage
+      },
+      { status: 500 }
+    );
+  }
 }
 
 export async function DELETE() {

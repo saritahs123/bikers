@@ -825,12 +825,17 @@ export async function getOrCreateInvoiceForWorkOrder(
     }
 
     // 1. Verificar si ya existe una factura activa para esta orden (Sección 9)
+    const facCols = await getTableColumns(client, "facturas");
+    const colCondicion = facCols.has("condicion_venta") ? "f.condicion_venta" : "'CONTADO'";
     const existingFacRes = await client.query(`
       SELECT f.factura_id,
-             COALESCE(f.numero_factura, f.factura_id::text) AS codigo_factura,
+             f.empresa_id,
+             COALESCE(f.codigo_factura, f.numero_factura, f.factura_id::text) AS codigo_factura,
              f.numero_factura,
              f.estado,
-             COALESCE(f.total_factura, 0)::numeric AS total_factura,
+             ${colCondicion} AS condicion_venta,
+             COALESCE(f.total, f.total_factura, 0)::numeric AS total,
+             COALESCE(f.total_factura, f.total, 0)::numeric AS total_factura,
              COALESCE(f.monto_pagado, 0)::numeric AS monto_pagado,
              COALESCE(f.balance_pendiente, 0)::numeric AS balance_pendiente
       FROM admin.facturas f
@@ -845,7 +850,17 @@ export async function getOrCreateInvoiceForWorkOrder(
       if (isInternalTransaction) {
         await client.query("COMMIT");
       }
-      return { factura: existing, created: false };
+      return {
+        factura: {
+          ...existing,
+          total: Number(existing.total || existing.total_factura || 0),
+          total_factura: Number(existing.total_factura || existing.total || 0),
+          monto_pagado: Number(existing.monto_pagado || 0),
+          balance_pendiente: Number(existing.balance_pendiente ?? 0),
+          condicion_venta: (existing.condicion_venta as CondicionVenta) || "CONTADO"
+        },
+        created: false
+      };
     }
 
     // 2. Si no existe factura activa, cargar la OT y bloquearla (Sección 10, 11, 12)
@@ -980,10 +995,13 @@ export async function getOrCreateInvoiceForWorkOrder(
       if (dbErr.code === "OT_YA_FACTURADA" || dbErr.code === "23505" || String(dbErr.message || "").includes("orden_trabajo")) {
         const raceCheck = await client.query(`
           SELECT f.factura_id,
-                 COALESCE(f.numero_factura, f.factura_id::text) AS codigo_factura,
+                 f.empresa_id,
+                 COALESCE(f.codigo_factura, f.numero_factura, f.factura_id::text) AS codigo_factura,
                  f.numero_factura,
                  f.estado,
-                 COALESCE(f.total_factura, 0)::numeric AS total_factura,
+                 ${colCondicion} AS condicion_venta,
+                 COALESCE(f.total, f.total_factura, 0)::numeric AS total,
+                 COALESCE(f.total_factura, f.total, 0)::numeric AS total_factura,
                  COALESCE(f.monto_pagado, 0)::numeric AS monto_pagado,
                  COALESCE(f.balance_pendiente, 0)::numeric AS balance_pendiente
           FROM admin.facturas f
@@ -995,7 +1013,18 @@ export async function getOrCreateInvoiceForWorkOrder(
           if (isInternalTransaction) {
             await client.query("COMMIT");
           }
-          return { factura: raceCheck.rows[0] as FacturaRow, created: false };
+          const raceFac = raceCheck.rows[0] as FacturaRow;
+          return {
+            factura: {
+              ...raceFac,
+              total: Number(raceFac.total || raceFac.total_factura || 0),
+              total_factura: Number(raceFac.total_factura || raceFac.total || 0),
+              monto_pagado: Number(raceFac.monto_pagado || 0),
+              balance_pendiente: Number(raceFac.balance_pendiente ?? 0),
+              condicion_venta: (raceFac.condicion_venta as CondicionVenta) || "CONTADO"
+            },
+            created: false
+          };
         }
       }
       throw err;
