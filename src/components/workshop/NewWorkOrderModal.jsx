@@ -471,7 +471,7 @@ export default function NewWorkOrderModal({ isOpen, onClose, onSuccess }) {
   const filteredProductsList = useMemo(() => {
     const list = catalogs.productos || [];
     if (!productSearch || !productSearch.trim()) {
-      return list.slice(0, 30);
+      return list.slice(0, 50);
     }
     const q = normalizeText(productSearch);
     return list
@@ -479,9 +479,19 @@ export default function NewWorkOrderModal({ isOpen, onClose, onSuccess }) {
         const nombre = normalizeText(p.nombre);
         const codigo = normalizeText(p.codigo || p.codigo_producto);
         const barra = normalizeText(p.codigo_barra);
-        return nombre.includes(q) || codigo.includes(q) || barra.includes(q);
+        const desc = normalizeText(p.descripcion);
+        const cat = normalizeText(p.categoria_nombre);
+        const marca = normalizeText(p.marca_nombre);
+        return (
+          nombre.includes(q) ||
+          codigo.includes(q) ||
+          barra.includes(q) ||
+          desc.includes(q) ||
+          cat.includes(q) ||
+          marca.includes(q)
+        );
       })
-      .slice(0, 30);
+      .slice(0, 50);
   }, [catalogs.productos, productSearch]);
 
   const handleSelectProductCombobox = (prod) => {
@@ -1348,8 +1358,11 @@ export default function NewWorkOrderModal({ isOpen, onClose, onSuccess }) {
                         {isProductDropdownOpen && (
                           <div className="absolute left-0 right-0 top-full mt-1.5 bg-card border border-border rounded-xl shadow-2xl z-50 overflow-hidden font-mono text-xs max-h-56 overflow-y-auto custom-scrollbar animate-in fade-in duration-100">
                             {filteredProductsList.length === 0 ? (
-                              <div className="p-3 text-center text-foreground-muted text-xs">
-                                Sin coincidencias encontradas
+                              <div className="p-3 text-center text-foreground-muted text-xs space-y-1">
+                                <p className="font-semibold text-foreground">Sin coincidencias encontradas</p>
+                                <p className="text-[10px] text-foreground-muted">
+                                  Solo se muestran productos en estado <strong>ACTIVO</strong>. Si el producto existe, compruebe que esté activo en el catálogo.
+                                </p>
                               </div>
                             ) : (
                               filteredProductsList.map((prod, idx) => (
@@ -1367,7 +1380,10 @@ export default function NewWorkOrderModal({ isOpen, onClose, onSuccess }) {
                                     <div className="truncate">
                                       <p className="font-bold text-foreground truncate">{prod.nombre}</p>
                                       <p className="text-[10px] text-foreground-muted truncate">
-                                        {prod.codigo || prod.codigo_producto || "S/C"} {prod.categoria_nombre ? `• ${prod.categoria_nombre}` : ""}
+                                        {prod.codigo || prod.codigo_producto || "S/C"}
+                                        {prod.marca_nombre ? ` • ${prod.marca_nombre}` : ""}
+                                        {prod.categoria_nombre ? ` • ${prod.categoria_nombre}` : ""}
+                                        {prod.stock_disponible !== undefined ? ` • Disp: ${Number(prod.stock_disponible).toFixed(0)}` : ""}
                                       </p>
                                     </div>
                                   </div>

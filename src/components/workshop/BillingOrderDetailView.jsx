@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import {
@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { generateInvoicePdfDocument } from "@/lib/workshop/generateInvoicePdf";
 import WorkOrderStatusBadge, { hexToRgba } from "./WorkOrderStatusBadge";
+import RegisterPaymentModal from "@/components/billing/RegisterPaymentModal";
 
 export default function BillingOrderDetailView({ ordenId, onBack }) {
   const [data, setData] = useState(null);
@@ -38,6 +39,11 @@ export default function BillingOrderDetailView({ ordenId, onBack }) {
   const [reopenModalOpen, setReopenModalOpen] = useState(false);
   const [reopenReason, setReopenReason] = useState("");
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
+  // Payment modal states
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [invoiceForPayment, setInvoiceForPayment] = useState(null);
+  const deliveryCompletedRef = useRef(false);
 
   // Toast / Feedback State
   const [feedback, setFeedback] = useState(null);
@@ -102,11 +108,9 @@ export default function BillingOrderDetailView({ ordenId, onBack }) {
   }, [fetchDetail]);
 
   // Operational Action 1: ENTREGAR A CLIENTE (Atomically Delivers & Invoices)
-  const handleDeliverToCustomer = async () => {
-    if (!ordenId || isDelivering) return;
-    setIsDelivering(true);
-
+  const executeCompleteDelivery = async () => {
     try {
+      setIsDelivering(true);
       const res = await fetch(`/api/taller/ordenes/${ordenId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -123,6 +127,13 @@ export default function BillingOrderDetailView({ ordenId, onBack }) {
         const errKey = json.error;
         const msg = json.message || "No se pudo procesar la entrega de la orden.";
 
+        if (errKey === "PAYMENT_REQUIRED" && json.factura) {
+          setInvoiceForPayment(json.factura);
+          setPaymentModalOpen(true);
+          showToast("info", "PAGO REQUERIDO", `La factura aún tiene un saldo pendiente de RD$ ${Number(json.factura.balance_pendiente || 0).toFixed(2)}. Complete el pago para entregar la orden.`);
+          return;
+        }
+
         if (errKey === "ORDER_NOT_READY_FOR_DELIVERY") {
           showToast("info", "ORDEN AÚN NO DISPONIBLE PARA ENTREGA", msg);
         } else if (errKey === "ORDER_HAS_INCOMPLETE_SERVICES") {
@@ -137,18 +148,109 @@ export default function BillingOrderDetailView({ ordenId, onBack }) {
         return;
       }
 
+      deliveryCompletedRef.current = true;
       showToast(
         "success",
-        "ORDEN ENTREGADA Y FACTURADA",
-        json.message || "La orden ha sido entregada y facturada correctamente."
+        "ORDEN ENTREGADA",
+        "Orden entregada correctamente."
       );
       await fetchDetail();
     } catch (err) {
-      console.error("handleDeliverToCustomer Error:", err);
+      console.error("executeCompleteDelivery Error:", err);
       showToast("error", "ERROR DE CONEXIÓN", "No se pudo conectar con el servidor.");
     } finally {
       setIsDelivering(false);
     }
+  };
+
+  const handleDeliverToCustomer = async () => {
+    if (!ordenId || isDelivering) return;
+    setIsDelivering(true);
+    deliveryCompletedRef.current = false;
+
+    try {
+      // Paso 1: Generar o reutilizar factura existente
+      const invRes = await fetch(`/api/taller/facturacion/ordenes/${ordenId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+      });
+      const invData = await invRes.json();
+
+      if (!invRes.ok || !invData.success || !invData.factura) {
+        const msg = invData.message || invData.error || "No se pudo obtener o generar la factura de la orden.";
+        showToast("error", "ERROR DE FACTURACIÓN", msg);
+        setIsDelivering(false);
+        return;
+      }
+
+      const fac = invData.factura;
+      const facTotal = Number(fac.total || fac.total_factura || 0);
+      const facPagado = Number(fac.monto_pagado || 0);
+      const facBalance = Number(
+        fac.balance_pendiente != null && !isNaN(Number(fac.balance_pendiente))
+          ? fac.balance_pendiente
+          : Math.max(0, facTotal - facPagado)
+      );
+      const condicion = String(fac.condicion_venta || "CONTADO").toUpperCase();
+
+      // Paso 2: Si es CONTADO y tiene saldo pendiente > 0, abrir modal Registrar Pago inmediatamente
+      if (condicion !== "CREDITO" && facTotal > 0 && facBalance > 0.009) {
+        setInvoiceForPayment({
+          ...fac,
+          total: facTotal,
+          total_factura: facTotal,
+          monto_pagado: facPagado,
+          balance_pendiente: facBalance
+        });
+        setPaymentModalOpen(true);
+        setIsDelivering(false);
+        return;
+      }
+
+      // Paso 3: Si ya está pagada o total = 0 o es crédito, completar entrega directamente
+      await executeCompleteDelivery();
+    } catch (err) {
+      console.error("handleDeliverToCustomer Error:", err);
+      showToast("error", "ERROR DE CONEXIÓN", "No se pudo conectar con el servidor.");
+      setIsDelivering(false);
+    }
+  };
+
+  const handlePaymentSuccess = async (paymentResult) => {
+    showToast("success", "PAGO REGISTRADO", "Pago registrado correctamente.");
+    const updatedFac = paymentResult?.factura;
+    const nuevoBalance = Number(updatedFac?.balance_pendiente ?? 0);
+    const nuevoEstado = updatedFac?.estado;
+
+    if (nuevoBalance <= 0.009 || nuevoEstado === "PAGADA") {
+      setPaymentModalOpen(false);
+      setInvoiceForPayment(null);
+      await executeCompleteDelivery();
+    } else {
+      showToast("info", "SALDO PENDIENTE", `La factura aún tiene un saldo pendiente de RD$ ${nuevoBalance.toFixed(2)}. Complete el pago para entregar la orden.`);
+      if (updatedFac) {
+        setInvoiceForPayment(prev => ({
+          ...prev,
+          ...updatedFac,
+          balance_pendiente: nuevoBalance,
+          monto_pagado: Number(updatedFac.monto_pagado || 0)
+        }));
+      }
+      await fetchDetail();
+    }
+  };
+
+  const handleClosePaymentModal = () => {
+    setPaymentModalOpen(false);
+    if (!deliveryCompletedRef.current && invoiceForPayment) {
+      const bal = Number(invoiceForPayment.balance_pendiente || 0);
+      const cond = String(invoiceForPayment.condicion_venta || "CONTADO").toUpperCase();
+      if (cond !== "CREDITO" && bal > 0.009) {
+        showToast("info", "PAGO REQUERIDO", "Debe registrar el pago para completar la entrega de una factura de contado.");
+      }
+    }
+    setInvoiceForPayment(null);
+    fetchDetail();
   };
 
   // Operational Action 2: REABRIR REPARACIÓN (LISTA_ENTREGA -> REPARACION)
@@ -1049,6 +1151,14 @@ export default function BillingOrderDetailView({ ordenId, onBack }) {
         </div>,
         document.body
       )}
+
+      {/* Modal Registrar Pago Reutilizado */}
+      <RegisterPaymentModal
+        isOpen={paymentModalOpen}
+        onClose={handleClosePaymentModal}
+        factura={invoiceForPayment}
+        onPaymentSuccess={handlePaymentSuccess}
+      />
     </div>
   );
 }

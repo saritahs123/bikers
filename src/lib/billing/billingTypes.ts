@@ -25,6 +25,7 @@ export interface LineaFacturaInput {
   tipo_servicio_id?: number | null;
   orden_servicio_id?: number | null;
   orden_producto_id?: number | null;
+  movimiento_inventario_id?: number | null;
   codigo?: string | null;
   descripcion: string;
   cantidad: number;
@@ -72,7 +73,11 @@ export interface RegistrarPagoInput {
 export interface AnularFacturaInput {
   empresa_id: number;
   factura_id: number;
-  motivo_anulacion: string;
+  motivo_anulacion?: string;
+  motivo_anulacion_factura_id?: number | null;
+  observacion?: string | null;
+  destino_producto?: "DISPONIBLE" | "DAÑADO" | "DEFECTUOSO" | "CUARENTENA" | string | null;
+  usuario_autorizacion_id?: number | null;
   usuario_id: number;
 }
 
@@ -123,6 +128,7 @@ export interface DetalleFacturaRow {
   tipo_servicio_id: number | null;
   orden_servicio_id: number | null;
   orden_producto_id: number | null;
+  movimiento_inventario_id?: number | null;
   codigo: string | null;
   descripcion: string;
   cantidad: number;
