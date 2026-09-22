@@ -14,7 +14,8 @@ import {
   Calendar,
   FileText,
   TrendingUp,
-  Activity
+  Activity,
+  ChevronDown
 } from "lucide-react";
 
 // ============================================================================
@@ -148,9 +149,20 @@ const TYPE_COLORS = [
 ];
 
 // 2. Responsive SVG Donut Chart for "Distribución por Tipo de Producto"
-function ProductTypeDonutChart({ data, totalCount, totalUnidades, totalMonto }) {
+function ProductTypeDonutChart({ data, totalCount, totalUnidades, totalMonto, totalTipos }) {
   const [metricMode, setMetricMode] = useState("cantidad"); // 'cantidad' | 'monto'
   const [hoveredIndex, setHoveredIndex] = useState(null);
+
+  const totalAvailable = Math.max(1, data?.length || totalTipos || 0);
+
+  // Dynamic Top N options based on real count of available product types
+  const topOptions = useMemo(() => {
+    return Array.from({ length: totalAvailable }, (_, i) => i + 1);
+  }, [totalAvailable]);
+
+  // Default: Top 3 (or totalAvailable if < 3)
+  const [selectedTopN, setSelectedTopN] = useState(3);
+  const effectiveTopN = Math.min(Math.max(1, selectedTopN), totalAvailable);
 
   const formatMoney = (val) => {
     const num = Number(val || 0);
@@ -173,20 +185,37 @@ function ProductTypeDonutChart({ data, totalCount, totalUnidades, totalMonto }) 
     });
   };
 
-  // Base calculation depending on mode
+  // Base calculation for overall total (percentages reflect share over TOTAL GENERAL)
   const totalValue = useMemo(() => {
     if (metricMode === "monto") {
-      const sum = data.reduce((acc, d) => acc + Number(d.monto_total || 0), 0);
+      const sum = (data || []).reduce((acc, d) => acc + Number(d.monto_total || 0), 0);
       return Number(totalMonto || sum) || 1;
     }
-    const sum = data.reduce((acc, d) => acc + Number(d.total_productos || 0), 0);
+    const sum = (data || []).reduce((acc, d) => acc + Number(d.total_productos || 0), 0);
     return Number(totalCount || sum) || 1;
   }, [metricMode, totalCount, totalMonto, data]);
+
+  // Sort by active metric descending and take Top N
+  const sortedAndFilteredData = useMemo(() => {
+    if (!data || data.length === 0) return [];
+
+    const sorted = [...data].sort((a, b) => {
+      if (metricMode === "monto") {
+        return Number(b.monto_total || 0) - Number(a.monto_total || 0);
+      }
+      // metricMode === "cantidad": sort by total_productos desc, then cantidad_total desc
+      const diffProds = Number(b.total_productos || 0) - Number(a.total_productos || 0);
+      if (diffProds !== 0) return diffProds;
+      return Number(b.cantidad_total || 0) - Number(a.cantidad_total || 0);
+    });
+
+    const limit = Math.max(1, Math.min(effectiveTopN, sorted.length));
+    return sorted.slice(0, limit);
+  }, [data, metricMode, effectiveTopN]);
 
   // Calculate SVG Pie/Donut paths
   const chartSegments = useMemo(() => {
     let runningAngle = 0;
-    const isSingle = data.length === 1;
     const segments = [];
 
     // SVG Arc Calculation (center at 100, 100, radius 86, inner radius 65)
@@ -196,8 +225,8 @@ function ProductTypeDonutChart({ data, totalCount, totalUnidades, totalMonto }) 
     const cy = 100;
     const toRad = (deg) => ((deg - 90) * Math.PI) / 180;
 
-    for (let index = 0; index < data.length; index++) {
-      const item = data[index];
+    for (let index = 0; index < sortedAndFilteredData.length; index++) {
+      const item = sortedAndFilteredData[index];
       const val = metricMode === "monto" ? Number(item.monto_total || 0) : Number(item.total_productos || 0);
       const percentage = totalValue > 0 ? (val / totalValue) * 100 : 0;
       const angle = totalValue > 0 ? (val / totalValue) * 360 : 0;
@@ -208,7 +237,7 @@ function ProductTypeDonutChart({ data, totalCount, totalUnidades, totalMonto }) 
       const color = TYPE_COLORS[index % TYPE_COLORS.length];
 
       let pathData = "";
-      if (angle >= 359.9 || isSingle) {
+      if (angle >= 359.9) {
         // Full circle using two 180-deg arcs
         pathData = `
           M ${cx} ${cy - radius}
@@ -219,7 +248,7 @@ function ProductTypeDonutChart({ data, totalCount, totalUnidades, totalMonto }) 
           A ${innerRadius} ${innerRadius} 0 1 0 ${cx} ${cy - innerRadius}
           Z
         `;
-      } else {
+      } else if (angle > 0) {
         const x1 = cx + radius * Math.cos(toRad(startAngle));
         const y1 = cy + radius * Math.sin(toRad(startAngle));
         const x2 = cx + radius * Math.cos(toRad(endAngle - 0.02));
@@ -250,7 +279,7 @@ function ProductTypeDonutChart({ data, totalCount, totalUnidades, totalMonto }) 
     }
 
     return segments;
-  }, [data, totalValue, metricMode]);
+  }, [sortedAndFilteredData, totalValue, metricMode]);
 
   if (!data || data.length === 0) {
     return (
@@ -262,55 +291,85 @@ function ProductTypeDonutChart({ data, totalCount, totalUnidades, totalMonto }) 
   }
 
   return (
-    <div className="flex flex-col h-full select-none">
-      {/* Header with Title & Mode Selector */}
-      <div className="flex items-center justify-between pb-3 border-b border-border mb-3">
-        <div className="flex items-center gap-2">
+    <div className="flex flex-col select-none h-full justify-between">
+      {/* Header with Title, Mode Selector & Top N Filter */}
+      <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-border mb-3 shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
           <div className="w-7 h-7 rounded-lg bg-amber-500/15 text-amber-400 flex items-center justify-center shrink-0">
             <Boxes className="w-4 h-4" />
           </div>
-          <div>
-            <h3 className="font-bold text-sm text-foreground">
+          <div className="min-w-0">
+            <h3 className="font-bold text-sm text-foreground truncate">
               Distribución por Tipo de Producto
             </h3>
-            <p className="text-[11px] text-foreground-muted hidden sm:block">
+            <p className="text-[11px] text-foreground-muted hidden sm:block truncate">
               Variedad, existencias y valoración económica
             </p>
           </div>
         </div>
 
-        {/* Mode Toggle Button */}
-        <div className="inline-flex p-0.5 rounded-lg bg-surface-subtle border border-border text-[11px] font-semibold">
-          <button
-            type="button"
-            onClick={() => setMetricMode("cantidad")}
-            className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
-              metricMode === "cantidad"
-                ? "bg-primary text-primary-foreground shadow-xs"
-                : "text-foreground-muted hover:text-foreground"
-            }`}
-          >
-            Cantidad
-          </button>
-          <button
-            type="button"
-            onClick={() => setMetricMode("monto")}
-            className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
-              metricMode === "monto"
-                ? "bg-primary text-primary-foreground shadow-xs"
-                : "text-foreground-muted hover:text-foreground"
-            }`}
-          >
-            Monto RD$
-          </button>
+        {/* Controls: Mode Toggle [ Cantidad | Monto RD$ ] + [ Top N ▼ ] */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {/* Mode Toggle Button */}
+          <div className="inline-flex p-0.5 rounded-lg bg-surface-subtle border border-border text-[11px] font-semibold">
+            <button
+              type="button"
+              onClick={() => setMetricMode("cantidad")}
+              className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                metricMode === "cantidad"
+                  ? "bg-primary text-primary-foreground shadow-xs"
+                  : "text-foreground-muted hover:text-foreground"
+              }`}
+            >
+              Cantidad
+            </button>
+            <button
+              type="button"
+              onClick={() => setMetricMode("monto")}
+              className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                metricMode === "monto"
+                  ? "bg-primary text-primary-foreground shadow-xs"
+                  : "text-foreground-muted hover:text-foreground"
+              }`}
+            >
+              Monto RD$
+            </button>
+          </div>
+
+          {/* Top N Dynamic Selector */}
+          <div className="relative inline-flex items-center">
+            <select
+              value={effectiveTopN}
+              onChange={(e) => setSelectedTopN(Number(e.target.value))}
+              aria-label="Filtrar Top N tipos de producto"
+              className="appearance-none bg-surface-subtle hover:bg-surface border border-border rounded-lg pl-2.5 pr-6 py-1 text-[11px] font-semibold text-foreground cursor-pointer transition-all focus:outline-hidden focus:ring-1 focus:ring-primary shadow-xs"
+            >
+              {topOptions.map((n) => (
+                <option key={n} value={n} className="bg-surface text-foreground py-1">
+                  Top {n}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="w-3.5 h-3.5 text-foreground-muted absolute right-1.5 pointer-events-none" />
+          </div>
         </div>
       </div>
 
-      {/* Main Body: Donut + Rich Legend */}
-      <div className="flex-grow flex flex-col sm:flex-row items-center justify-between gap-5">
+      {/* Main Body: Donut + Rich Legend with internal scroll only on list */}
+      <div className="flex flex-col sm:flex-row items-center sm:items-center justify-between gap-4 flex-1 min-h-0">
         {/* Left: Donut SVG Graphic */}
-        <div className="relative w-48 h-48 sm:w-52 sm:h-52 shrink-0 flex items-center justify-center">
+        <div className="relative w-48 h-48 sm:w-52 sm:h-52 shrink-0 flex items-center justify-center self-center">
           <svg viewBox="0 0 200 200" className="w-full h-full transform -rotate-90 drop-shadow-md">
+            {/* Background track circle for unfilled portion */}
+            <circle
+              cx="100"
+              cy="100"
+              r="75.5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="21"
+              className="text-border/30"
+            />
             {chartSegments.map((seg, i) => {
               const isHovered = hoveredIndex === i;
               return (
@@ -331,7 +390,7 @@ function ProductTypeDonutChart({ data, totalCount, totalUnidades, totalMonto }) 
             })}
           </svg>
 
-          {/* Center Counter */}
+          {/* Center Counter: Always displays General Total */}
           <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none p-2">
             {metricMode === "monto" ? (
               <div className="flex flex-col items-center justify-center max-w-[124px] sm:max-w-[134px] overflow-hidden">
@@ -372,34 +431,34 @@ function ProductTypeDonutChart({ data, totalCount, totalUnidades, totalMonto }) 
           </div>
         </div>
 
-        {/* Right: Rich Legend Items with both Cantidad and Monto without truncation */}
-        <div className="flex-grow w-full space-y-2">
+        {/* Right: Rich Legend Items with internal scroll only on list */}
+        <div className="w-full sm:flex-1 min-w-0 max-h-56 sm:max-h-[212px] overflow-y-auto custom-scrollbar pr-1 space-y-1.5">
           {chartSegments.map((item, index) => {
             const isHovered = hoveredIndex === index;
             return (
               <div
-                key={index}
+                key={item.tipo_producto_id || index}
                 onMouseEnter={() => setHoveredIndex(index)}
                 onMouseLeave={() => setHoveredIndex(null)}
-                className={`p-2 rounded-lg border transition-all cursor-default ${
+                className={`px-2.5 py-1.5 rounded-lg border transition-all cursor-default ${
                   isHovered
                     ? "bg-surface border-primary/50 shadow-xs"
                     : "bg-surface-subtle/40 border-border/40 hover:border-border hover:bg-surface-subtle/70"
                 }`}
               >
                 {/* Row 1: Dot, Name, Percentage Badge */}
-                <div className="flex items-center justify-between text-xs mb-1">
-                  <div className="flex items-center gap-2 min-w-0">
+                <div className="flex items-center justify-between text-xs mb-0.5 leading-tight">
+                  <div className="flex items-center gap-1.5 min-w-0">
                     <span
-                      className="w-2.5 h-2.5 rounded-full shrink-0 shadow-xs ring-2 ring-background"
+                      className="w-2 h-2 rounded-full shrink-0 shadow-xs ring-2 ring-background"
                       style={{ backgroundColor: item.color }}
                     />
-                    <span className="text-foreground font-bold text-xs">
+                    <span className="text-foreground font-bold text-xs truncate" title={item.tipo_producto_nombre}>
                       {item.tipo_producto_nombre}
                     </span>
                   </div>
                   <span
-                    className="font-mono font-bold text-[10px] px-2 py-0.5 rounded-full shrink-0 border"
+                    className="font-mono font-bold text-[10px] px-1.5 py-0.5 rounded-full shrink-0 border ml-1 leading-none"
                     style={{
                       backgroundColor: `${item.color}15`,
                       color: item.color,
@@ -411,8 +470,8 @@ function ProductTypeDonutChart({ data, totalCount, totalUnidades, totalMonto }) 
                 </div>
 
                 {/* Row 2: Cantidad (prods + uds) on left, Monto RD$ on right */}
-                <div className="flex items-center justify-between text-[11px] pl-4 text-foreground-muted">
-                  <div className="flex items-center gap-1">
+                <div className="flex items-center justify-between text-[11px] leading-tight pl-3.5 text-foreground-muted">
+                  <div className="flex items-center gap-1 truncate">
                     <span className="font-semibold text-foreground">
                       {formatNumber(item.total_productos)}
                     </span>
@@ -908,10 +967,10 @@ export default function InventorySummaryView({
       {/* ====================================================================
           ROW 2: 3 BLOCKS (Valor por Almacén | Distribución Tipo Producto | Alertas)
           ==================================================================== */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
         {/* Block A: Valor del Inventario por Almacén (3 cols) */}
-        <div className="lg:col-span-3 bg-card border border-border rounded-xl p-4 flex flex-col shadow-xs">
-          <div className="flex items-center gap-2 mb-2">
+        <div className="lg:col-span-3 bg-card border border-border rounded-xl p-4 flex flex-col justify-between shadow-xs h-full">
+          <div className="flex items-center gap-2 mb-2 shrink-0">
             <div className="w-6 h-6 rounded-md bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0">
               <Warehouse className="w-3.5 h-3.5" />
             </div>
@@ -919,23 +978,24 @@ export default function InventorySummaryView({
               Valor por Almacén
             </h3>
           </div>
-          <div className="flex-grow flex items-center">
+          <div className="flex-1 flex items-center">
             <WarehouseBarChart data={valorPorAlmacen} />
           </div>
         </div>
 
         {/* Block B: Distribución por Tipo de Producto (5 cols - Amplio y destacado) */}
-        <div className="lg:col-span-5 bg-card border border-border rounded-xl p-4 flex flex-col shadow-xs">
+        <div className="lg:col-span-5 bg-card border border-border rounded-xl p-4 flex flex-col justify-between shadow-xs h-full">
           <ProductTypeDonutChart
             data={distribucionTipoProducto}
             totalCount={metrics.productos_activos}
             totalUnidades={metrics.unidades_stock}
             totalMonto={metrics.valor_inventario}
+            totalTipos={metrics.total_tipos || data?.total_tipos}
           />
         </div>
 
         {/* Block C: Alertas de Inventario (4 cols) */}
-        <div className="lg:col-span-4 bg-card border border-border rounded-xl p-4 flex flex-col shadow-xs overflow-hidden">
+        <div className="lg:col-span-4 bg-card border border-border rounded-xl p-4 flex flex-col justify-between shadow-xs overflow-hidden h-full">
           <div className="flex items-center justify-between mb-3 shrink-0">
             <div className="flex items-center gap-2">
               <div className="w-6 h-6 rounded-md bg-rose-500/15 text-rose-400 flex items-center justify-center shrink-0">
@@ -953,7 +1013,7 @@ export default function InventorySummaryView({
             </button>
           </div>
 
-          <div className="flex-grow overflow-x-hidden">
+          <div className="flex-1 overflow-x-hidden">
             {alertas.length === 0 ? (
               <div className="h-52 flex flex-col items-center justify-center text-foreground-muted text-xs">
                 <PackageCheck className="w-8 h-8 text-emerald-400/50 mb-2" />
