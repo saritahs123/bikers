@@ -30,7 +30,12 @@ import {
   Info,
   Trash2,
   Pause,
-  Play
+  Play,
+  QrCode,
+  Copy,
+  ExternalLink,
+  MoreVertical,
+  Power
 } from "lucide-react";
 import WorkOrderServicesView from "./WorkOrderServicesView";
 import WorkOrderHistoryView from "./WorkOrderHistoryView";
@@ -367,6 +372,105 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [invoiceForPayment, setInvoiceForPayment] = useState(null);
   const deliveryCompletedRef = useRef(false);
+
+  // Tracking state and operations
+  const [trackingData, setTrackingData] = useState(null);
+  const [loadingTracking, setLoadingTracking] = useState(false);
+  const [trackingActionLoading, setTrackingActionLoading] = useState(false);
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [secondaryTrackingMenuOpen, setSecondaryTrackingMenuOpen] = useState(false);
+
+  const fetchTrackingInfo = useCallback(async () => {
+    if (!ordenId) return;
+    setLoadingTracking(true);
+    try {
+      const res = await fetch(`/api/taller/ordenes/${ordenId}/tracking`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.tracking) {
+          setTrackingData(json.tracking);
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching tracking:", err);
+    } finally {
+      setLoadingTracking(false);
+    }
+  }, [ordenId]);
+
+  useEffect(() => {
+    if (ordenId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      fetchTrackingInfo();
+    }
+  }, [ordenId, fetchTrackingInfo]);
+
+  const handleCopyTrackingLink = () => {
+    if (!trackingData?.publicUrl) return;
+    navigator.clipboard.writeText(trackingData.publicUrl);
+    setCopiedLink(true);
+    showSuccessToast("Enlace de seguimiento copiado al portapapeles.", "Enlace Copiado");
+    setTimeout(() => setCopiedLink(false), 3000);
+  };
+
+  const handleRegenerateTracking = async () => {
+    if (!window.confirm("¿Estás seguro de regenerar el enlace? El enlace anterior dejará de funcionar inmediatamente.")) {
+      return;
+    }
+    setTrackingActionLoading(true);
+    try {
+      const res = await fetch(`/api/taller/ordenes/${ordenId}/tracking/regenerar`, {
+        method: "POST"
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setTrackingData(json.tracking);
+        showSuccessToast("Enlace de seguimiento regenerado. El anterior ha sido invalidado.", "Enlace Actualizado");
+      } else {
+        showErrorToast(json.message || "Error al regenerar enlace", "Error");
+      }
+    } catch (err) {
+      console.error(err);
+      showErrorToast("Error al regenerar enlace de seguimiento.", "Error de Conexión");
+    } finally {
+      setTrackingActionLoading(false);
+    }
+  };
+
+  const handleToggleTrackingStatus = async () => {
+    if (!trackingData) return;
+    const isCurrentlyActive = trackingData.activo;
+    const actionUrl = isCurrentlyActive
+      ? `/api/taller/ordenes/${ordenId}/tracking/desactivar`
+      : `/api/taller/ordenes/${ordenId}/tracking/activar`;
+
+    if (isCurrentlyActive && !window.confirm("¿Deseas desactivar el seguimiento público? Los clientes verán un mensaje de no encontrado.")) {
+      return;
+    }
+
+    setTrackingActionLoading(true);
+    try {
+      const res = await fetch(actionUrl, { method: "POST" });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        if (isCurrentlyActive) {
+          setTrackingData(prev => prev ? { ...prev, activo: false } : null);
+          showWarningToast("El seguimiento público ha sido desactivado.", "Seguimiento Desactivado");
+        } else {
+          setTrackingData(json.tracking);
+          showSuccessToast("El seguimiento público ha sido activado.", "Seguimiento Activado");
+        }
+      } else {
+        showErrorToast(json.message || "Error al actualizar estado de seguimiento", "Error");
+      }
+    } catch (err) {
+      console.error(err);
+      showErrorToast("Error de conexión al actualizar estado.", "Error");
+    } finally {
+      setTrackingActionLoading(false);
+    }
+  };
 
   const completeDelivery = async (notes = "") => {
     try {
@@ -1460,58 +1564,271 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Main Column (8/12 width) */}
           <div className="lg:col-span-8 flex flex-col gap-6">
-            {/* Row 1: Client & Bike Bento Cards */}
+            {/* Bento Row: Columna 1 (50%) = CLIENTE + EQUIPO (BICICLETA) juntos en el mismo recuadro; Columna 2 (50%) = SEGUIMIENTO DEL CLIENTE */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Client Card */}
-              <div className="bg-[#161a21] border border-[#2d3748] p-5 rounded-xl hover:border-slate-500 transition-colors">
-                <div className="flex items-center justify-between mb-4 pb-2 border-b border-[#2d3748]">
-                  <h3 className="font-mono text-xs font-bold text-slate-300 uppercase tracking-widest">
-                    CLIENTE
-                  </h3>
-                  <User className="w-4 h-4 text-slate-400" />
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-lg bg-[#1c2129] border border-[#2d3748] flex items-center justify-center text-[#bfce7f] shrink-0 font-mono text-lg font-bold">
-                    {order.cliente_nombre ? order.cliente_nombre.substring(0, 2).toUpperCase() : "CL"}
-                  </div>
+              {/* Recuadro Unificado 50%: CLIENTE y EQUIPO (BICICLETA) uno debajo de otro */}
+              <div className="bg-[#161a21] border border-[#2d3748] p-5 rounded-xl hover:border-slate-500 transition-colors flex flex-col justify-between shadow-lg h-full">
+                <div className="space-y-4">
+                  {/* Bloque Superior: CLIENTE */}
                   <div>
-                    <div className="font-bold text-slate-100 text-base font-sans">
-                      {order.cliente_nombre}
+                    <div className="flex items-center justify-between mb-3 pb-2 border-b border-[#2d3748]">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <User className="w-4 h-4 text-[#bfce7f] shrink-0" />
+                        <h3 className="font-mono text-xs font-bold text-slate-300 uppercase tracking-widest truncate">
+                          CLIENTE
+                        </h3>
+                      </div>
+                      <span className="text-[10px] text-[#bfce7f] font-mono font-semibold shrink-0">
+                        Socio Activo
+                      </span>
                     </div>
-                    <div className="text-xs text-slate-400 font-mono mt-0.5">
-                      {order.cliente_telefono || "Sin teléfono registrado"}
+
+                    <div className="flex items-start gap-3.5">
+                      <div className="w-11 h-11 rounded-lg bg-[#1c2129] border border-[#2d3748] flex items-center justify-center text-[#bfce7f] shrink-0 font-mono text-base font-bold shadow-inner">
+                        {order.cliente_nombre ? order.cliente_nombre.substring(0, 2).toUpperCase() : "CL"}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-bold text-slate-100 text-sm sm:text-base font-sans truncate">
+                          {order.cliente_nombre}
+                        </div>
+                        <div className="text-xs text-slate-400 font-mono mt-0.5 truncate">
+                          {order.cliente_telefono || "Sin teléfono registrado"}
+                        </div>
+                        {order.cliente_email && (
+                          <div className="text-[11px] text-slate-500 font-mono mt-0.5 truncate">
+                            {order.cliente_email}
+                          </div>
+                        )}
+                        {order.cliente_direccion && (
+                          <div className="text-[11px] text-slate-500 font-sans mt-0.5 truncate">
+                            {order.cliente_direccion}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <div className="text-[11px] text-[#bfce7f] font-mono font-semibold mt-1">
-                      Socio Premium
+                  </div>
+
+                  {/* Separador entre Cliente y Equipo */}
+                  <div className="border-t border-[#2d3748]/80 pt-3">
+                    {/* Bloque Inferior: EQUIPO (BICICLETA) */}
+                    <div className="flex items-center justify-between mb-3 pb-2 border-b border-[#2d3748]">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Bike className="w-4 h-4 text-[#bfce7f] shrink-0" />
+                        <h3 className="font-mono text-xs font-bold text-slate-300 uppercase tracking-widest truncate">
+                          EQUIPO (BICICLETA)
+                        </h3>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3.5">
+                      <div className="w-11 h-11 rounded-lg bg-[#1c2129] border border-[#2d3748] flex items-center justify-center text-[#bfce7f] shrink-0 shadow-inner">
+                        <Bike className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-bold text-slate-100 text-sm sm:text-base font-sans truncate">
+                          {order.bicicleta_marca} {order.bicicleta_modelo}
+                        </div>
+                        <div className="text-xs text-slate-400 font-mono mt-0.5 truncate">
+                          {order.bicicleta_ano || "N/A"} • {order.tipo_bicicleta || "Bicicleta"} • {order.bicicleta_color || "Color Estándar"}
+                        </div>
+                        <div className="text-[11px] text-slate-400 font-mono mt-0.5 uppercase tracking-wider truncate">
+                          SN: {order.bicicleta_serie || "N/A"}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Bike Card */}
-              <div className="bg-[#161a21] border border-[#2d3748] p-5 rounded-xl hover:border-slate-500 transition-colors">
-                <div className="flex items-center justify-between mb-4 pb-2 border-b border-[#2d3748]">
-                  <h3 className="font-mono text-xs font-bold text-slate-300 uppercase tracking-widest">
-                    EQUIPO (BICICLETA)
-                  </h3>
-                  <Bike className="w-4 h-4 text-slate-400" />
-                </div>
-                <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 rounded-lg bg-[#1c2129] border border-[#2d3748] flex items-center justify-center text-slate-300 shrink-0">
-                    <Bike className="w-6 h-6" />
+              {/* Recuadro Derecho 50%: SEGUIMIENTO DEL CLIENTE */}
+              <div className="bg-[#161a21] border border-[#2d3748] p-5 rounded-xl hover:border-slate-500 transition-colors relative flex flex-col justify-between shadow-lg h-full">
+                <div>
+                  {/* Header */}
+                  <div className="flex items-center justify-between mb-4 pb-2 border-b border-[#2d3748]">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <QrCode className="w-4 h-4 text-[#bfce7f] shrink-0" />
+                      <h3 className="font-mono text-xs font-bold text-slate-300 uppercase tracking-widest truncate">
+                        SEGUIMIENTO DEL CLIENTE
+                      </h3>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      {trackingData ? (
+                        <span
+                          className={`text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full border ${
+                            trackingData.activo
+                              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                              : "bg-rose-500/10 text-rose-400 border-rose-500/30"
+                          }`}
+                        >
+                          {trackingData.activo ? "Activo" : "Inactivo"}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-mono text-slate-500">
+                          {loadingTracking ? "Cargando..." : "Sin registrar"}
+                        </span>
+                      )}
+
+                      {/* Secondary Actions ⋯ menu */}
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setSecondaryTrackingMenuOpen((prev) => !prev)}
+                          className="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-[#1c2129] transition-colors"
+                          title="Opciones secundarias de seguimiento"
+                        >
+                          <MoreVertical className="w-4 h-4" />
+                        </button>
+
+                        {secondaryTrackingMenuOpen && (
+                          <div
+                            className="absolute right-0 top-7 z-20 w-48 bg-[#1c2129] border border-[#2d3748] rounded-xl shadow-2xl p-1.5 space-y-1 text-xs font-mono"
+                            onMouseLeave={() => setSecondaryTrackingMenuOpen(false)}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSecondaryTrackingMenuOpen(false);
+                                handleRegenerateTracking();
+                              }}
+                              disabled={trackingActionLoading}
+                              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-slate-300 hover:text-amber-400 hover:bg-[#161a21] transition-colors text-left"
+                            >
+                              <RotateCcw className={`w-3.5 h-3.5 ${trackingActionLoading ? "animate-spin" : ""}`} />
+                              <span>Regenerar enlace</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSecondaryTrackingMenuOpen(false);
+                                handleToggleTrackingStatus();
+                              }}
+                              disabled={trackingActionLoading}
+                              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg transition-colors text-left font-semibold ${
+                                trackingData?.activo
+                                  ? "text-rose-400 hover:text-rose-300 hover:bg-rose-500/10"
+                                  : "text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
+                              }`}
+                            >
+                              <Power className="w-3.5 h-3.5" />
+                              <span>{trackingData?.activo ? "Desactivar seguimiento" : "Activar seguimiento"}</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <div className="font-bold text-slate-100 text-base font-sans">
-                      {order.bicicleta_marca} {order.bicicleta_modelo}
+
+                  {/* Body: QR visible directamente o Inactivo */}
+                  {trackingData?.activo ? (
+                    <div className="flex items-center gap-4 py-2">
+                      {/* Direct QR Display */}
+                      <div className="p-2 bg-white rounded-xl shadow-md border border-slate-700 shrink-0">
+                        {trackingData.qrDataUrl ? (
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          <img
+                            src={trackingData.qrDataUrl}
+                            alt="QR Seguimiento"
+                            className="w-24 h-24 sm:w-28 sm:h-28 object-contain cursor-pointer"
+                            onClick={() => setShowQrModal(true)}
+                            title="Clic para ampliar código QR"
+                          />
+                        ) : (
+                          <div className="w-24 h-24 sm:w-28 sm:h-28 flex items-center justify-center text-[10px] text-slate-500 font-mono">
+                            Cargando QR...
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="min-w-0 flex-1 space-y-1.5">
+                        <div className="text-xs font-mono font-bold text-emerald-400 flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                          <span>Portal en vivo</span>
+                        </div>
+                        <p className="text-xs text-slate-300 font-sans leading-relaxed">
+                          El cliente puede escanear el QR o acceder con su enlace directo en tiempo real sin credenciales.
+                        </p>
+                        <div className="text-[11px] font-mono text-slate-400 truncate pt-0.5">
+                          Token: <span className="text-[#bfce7f] font-semibold">{trackingData.publicToken ? `${trackingData.publicToken.slice(0, 12)}...` : "Activo"}</span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-xs text-slate-400 font-mono mt-0.5">
-                      {order.bicicleta_ano || "N/A"} • {order.tipo_bicicleta || "Bicicleta"} • {order.bicicleta_color || "Color Estándar"}
+                  ) : (
+                    <div className="flex items-center gap-4 py-3">
+                      {trackingData?.qrDataUrl ? (
+                        <div className="p-2 bg-white/20 rounded-xl border border-slate-700 shrink-0 opacity-30 grayscale">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={trackingData.qrDataUrl}
+                            alt="QR Inactivo"
+                            className="w-24 h-24 sm:w-28 sm:h-28 object-contain"
+                          />
+                        </div>
+                      ) : (
+                        <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl bg-slate-800/40 border border-slate-700 flex items-center justify-center shrink-0 text-slate-600">
+                          <QrCode className="w-10 h-10 opacity-40" />
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1 space-y-1.5">
+                        <div className="text-xs font-mono font-bold text-rose-400 uppercase tracking-wide flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-rose-400" />
+                          INACTIVO
+                        </div>
+                        <p className="text-xs text-slate-400 font-sans leading-relaxed">
+                          El enlace público está deshabilitado. No responderá hasta ser activado nuevamente.
+                        </p>
+                      </div>
                     </div>
-                    <div className="text-[11px] text-slate-400 font-mono mt-1 uppercase tracking-wider">
-                      SN: {order.bicicleta_serie || "N/A"}
-                    </div>
-                  </div>
+                  )}
                 </div>
+
+                {/* Primary Action Buttons */}
+                {trackingData?.activo ? (
+                  <div className="grid grid-cols-2 gap-3 pt-4 font-mono text-xs">
+                    <button
+                      type="button"
+                      onClick={handleCopyTrackingLink}
+                      disabled={trackingActionLoading}
+                      className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg bg-[#1c2129] border border-[#2d3748] hover:border-slate-500 text-slate-200 transition-all active:scale-95 cursor-pointer font-medium"
+                      title="Copiar enlace público de seguimiento"
+                    >
+                      {copiedLink ? (
+                        <>
+                          <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                          <span className="text-emerald-400 font-semibold truncate">Copiado</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-4 h-4 text-[#bfce7f] shrink-0" />
+                          <span className="truncate">Copiar enlace</span>
+                        </>
+                      )}
+                    </button>
+
+                    <a
+                      href={trackingData.publicUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg bg-[#84924a] hover:bg-[#96a655] text-white font-semibold transition-all active:scale-95 shadow-sm shadow-[#84924a]/20"
+                      title="Abrir portal público en nueva pestaña"
+                    >
+                      <ExternalLink className="w-4 h-4 shrink-0" />
+                      <span className="truncate">Abrir</span>
+                    </a>
+                  </div>
+                ) : (
+                  <div className="pt-4">
+                    <button
+                      type="button"
+                      onClick={handleToggleTrackingStatus}
+                      disabled={trackingActionLoading}
+                      className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-xs font-bold transition-all shadow-md shadow-emerald-600/20 active:scale-95 cursor-pointer disabled:opacity-50"
+                    >
+                      {trackingActionLoading ? <RotateCcw className="w-3.5 h-3.5 animate-spin" /> : <Power className="w-3.5 h-3.5" />}
+                      <span>ACTIVAR SEGUIMIENTO</span>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1751,6 +2068,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                 </div>
               )}
             </div>
+
 
 
             {/* Spare Parts Alert Card */}
@@ -2305,6 +2623,72 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
         factura={invoiceForPayment}
         onPaymentSuccess={handlePaymentSuccess}
       />
+
+      {/* Modal Mostrar Código QR Seguimiento */}
+      {showQrModal && trackingData && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl max-w-sm w-full p-6 text-center space-y-5 shadow-2xl relative">
+            <button
+              onClick={() => setShowQrModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-100 p-1 rounded-lg bg-[#1c2129] border border-[#2d3748] transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div>
+              <span className="font-mono text-[10px] font-bold text-[#bfce7f] uppercase tracking-widest">
+                RIDE LAB • PORTAL PÚBLICO
+              </span>
+              <h3 className="text-lg font-bold text-slate-100 mt-1">
+                Seguimiento de Orden
+              </h3>
+              <p className="text-xs text-slate-400 font-mono mt-0.5">
+                {order?.codigo_orden}
+              </p>
+            </div>
+
+            <div className="p-4 bg-white rounded-2xl mx-auto inline-block shadow-lg border-4 border-slate-900">
+              {trackingData.qrDataUrl ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={trackingData.qrDataUrl}
+                  alt={`QR Seguimiento ${order?.codigo_orden}`}
+                  className="w-56 h-56 mx-auto object-contain"
+                />
+              ) : (
+                <div className="w-56 h-56 flex items-center justify-center text-slate-500 font-mono text-xs">
+                  Generando código QR...
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-xs text-slate-300 font-sans">
+                Escanea este código con cualquier teléfono móvil para ver el estado de la reparación en vivo.
+              </p>
+              <div className="flex items-center gap-2 pt-1 font-mono">
+                <button
+                  type="button"
+                  onClick={handleCopyTrackingLink}
+                  className="flex-1 py-2 px-3 rounded-lg bg-[#1c2129] border border-[#2d3748] text-xs text-slate-200 hover:border-slate-500 transition-colors flex items-center justify-center gap-1.5"
+                >
+                  {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-[#bfce7f]" />}
+                  <span>{copiedLink ? "Copiado" : "Copiar Enlace"}</span>
+                </button>
+                <a
+                  href={trackingData.publicUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="py-2 px-3 rounded-lg bg-[#84924a] text-white hover:brightness-110 text-xs font-bold transition-all flex items-center gap-1"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Abrir</span>
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Printable Document Section (Visible ONLY on print) */}
       <div id="printable-work-order" className="hidden print:block p-8 bg-white text-slate-900 font-sans text-xs max-w-4xl mx-auto leading-relaxed">

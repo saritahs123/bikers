@@ -1,9 +1,11 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { PoolClient } from "pg";
 import { query, withTransaction } from "@/lib/db";
 import { recordUserActivity, recordUserAudit } from "@/lib/auditLogger";
 import { CURRENT_RECEPTION_TERMS_VERSION, isValidReceptionTermsVersion } from "@/lib/workshop/receptionTerms";
 import { resolveDefaultWarehouse, reserveProductsForNewWorkOrder } from "@/lib/workshop/workshopInventoryReservationService";
 import { recalculateWorkOrderTotals } from "@/lib/workshop/recalculateWorkOrderTotals";
+import { ensureWorkOrderTracking } from "@/lib/tracking/workOrderTrackingService";
 
 export interface ServiceItemInput {
   tipo_servicio_id: number;
@@ -825,6 +827,13 @@ export async function executeReceptionWithWorkOrder(
         orden_trabajo_id,
         codigo_orden
       };
+
+      // Create tracking access automatically for the work order without breaking transaction
+      try {
+        await ensureWorkOrderTracking(orden_trabajo_id, session.usuario_id, client);
+      } catch (trackingErr) {
+        console.error("Warning: automatic tracking generation failed:", trackingErr);
+      }
     }
 
     // Atomic Transactional Audit Log
