@@ -19,6 +19,7 @@ export interface SessionLifecycleRecord {
   motivo_cierre: string | null;
   revocado_por: number | null;
   fecha_revocacion: string | null;
+  duracion_sesion_minutos?: number | null;
 }
 
 export type ValidateSessionResult =
@@ -40,23 +41,25 @@ export async function validateAndTouchSession(rawToken?: string | null): Promise
   try {
     const rows = await query<SessionLifecycleRecord>(
       `SELECT
-         sesion_id,
-         usuario_id,
-         token_identificador,
-         dispositivo_navegador,
-         direccion_ip,
-         ubicacion,
-         fecha_inicio,
-         ultima_actividad,
-         fecha_expiracion,
-         estado,
-         fecha_cierre,
-         tipo_cierre,
-         motivo_cierre,
-         revocado_por,
-         fecha_revocacion
-       FROM admin.usuario_sesion
-       WHERE token_identificador = $1
+         s.sesion_id,
+         s.usuario_id,
+         s.token_identificador,
+         s.dispositivo_navegador,
+         s.direccion_ip,
+         s.ubicacion,
+         s.fecha_inicio,
+         s.ultima_actividad,
+         s.fecha_expiracion,
+         s.estado,
+         s.fecha_cierre,
+         s.tipo_cierre,
+         s.motivo_cierre,
+         s.revocado_por,
+         s.fecha_revocacion,
+         u.duracion_sesion_minutos
+       FROM admin.usuario_sesion s
+       LEFT JOIN admin.usuario u ON s.usuario_id = u.usuario_id
+       WHERE s.token_identificador = $1
        LIMIT 1`,
       [tokenHash]
     );
@@ -87,7 +90,24 @@ export async function validateAndTouchSession(rawToken?: string | null): Promise
       return { valid: false, reason: "INACTIVE", status: 401, session };
     }
 
-    // 5. Check natural expiration against fecha_expiracion
+    // 5. Check natural expiration against fecha_expiracion or newly configured user duration
+    if (session.fecha_inicio && session.duracion_sesion_minutos) {
+      const startTime = new Date(session.fecha_inicio).getTime();
+      const configuredDurationMs = Number(session.duracion_sesion_minutos) * 60 * 1000;
+      const expectedExpirationTime = startTime + configuredDurationMs;
+      const currentExpirationTime = session.fecha_expiracion ? new Date(session.fecha_expiracion).getTime() : 0;
+
+      if (Math.abs(expectedExpirationTime - currentExpirationTime) > 1000) {
+        session.fecha_expiracion = new Date(expectedExpirationTime).toISOString();
+        await query(
+          `UPDATE admin.usuario_sesion
+           SET fecha_expiracion = fecha_inicio + make_interval(mins => $1)
+           WHERE sesion_id = $2 AND estado = 'ACTIVA'`,
+          [session.duracion_sesion_minutos, session.sesion_id]
+        ).catch(err => console.warn("Could not sync session expiration:", err));
+      }
+    }
+
     if (session.fecha_expiracion) {
       const expirationDate = new Date(session.fecha_expiracion);
       if (!isNaN(expirationDate.getTime()) && expirationDate.getTime() <= Date.now()) {
@@ -95,15 +115,16 @@ export async function validateAndTouchSession(rawToken?: string | null): Promise
         await query(
           `UPDATE admin.usuario_sesion
            SET estado = 'EXPIRADA',
-               fecha_cierre = COALESCE(fecha_expiracion, NOW()),
+               fecha_cierre = clock_timestamp(),
                tipo_cierre = 'EXPIRACION',
-               motivo_cierre = 'Expiración automática por límite de tiempo'
+               motivo_cierre = 'Sesión expirada por tiempo máximo configurado'
            WHERE sesion_id = $1 AND estado = 'ACTIVA'`,
           [session.sesion_id]
         ).catch(err => console.warn("Could not persist session expiration:", err));
 
         session.estado = 'EXPIRADA';
         session.tipo_cierre = 'EXPIRACION';
+        session.motivo_cierre = 'Sesión expirada por tiempo máximo configurado';
         return { valid: false, reason: "EXPIRED", status: 401, session };
       }
     }
@@ -116,14 +137,14 @@ export async function validateAndTouchSession(rawToken?: string | null): Promise
     if (shouldUpdateActivity) {
       await query(
         `UPDATE admin.usuario_sesion
-         SET ultima_actividad = NOW()
+         SET ultima_actividad = clock_timestamp()
          WHERE sesion_id = $1`,
         [session.sesion_id]
       ).catch(err => console.warn("Could not update session activity:", err));
 
       await query(
         `UPDATE admin.usuario_seguridad
-         SET fecha_ultimo_acceso = NOW()
+         SET fecha_ultimo_acceso = clock_timestamp()
          WHERE usuario_id = $1`,
         [session.usuario_id]
       ).catch(err => console.warn("Could not update usuario_seguridad last access:", err));
@@ -158,10 +179,10 @@ export async function closeSession(params: {
       await query(
         `UPDATE admin.usuario_sesion
          SET estado = 'CERRADA',
-             fecha_cierre = NOW(),
+             fecha_cierre = clock_timestamp(),
              tipo_cierre = 'LOGOUT',
              motivo_cierre = $1,
-             ultima_actividad = NOW()
+             ultima_actividad = clock_timestamp()
          WHERE token_identificador = $2
            AND estado = 'ACTIVA'`,
         [motivoCierre, tokenHash]
@@ -170,10 +191,10 @@ export async function closeSession(params: {
       await query(
         `UPDATE admin.usuario_sesion
          SET estado = 'CERRADA',
-             fecha_cierre = NOW(),
+             fecha_cierre = clock_timestamp(),
              tipo_cierre = 'LOGOUT',
              motivo_cierre = $1,
-             ultima_actividad = NOW()
+             ultima_actividad = clock_timestamp()
          WHERE usuario_id = $2
            AND estado = 'ACTIVA'`,
         [motivoCierre, userId]
@@ -201,12 +222,12 @@ export async function revokeSession(params: {
     await query(
       `UPDATE admin.usuario_sesion
        SET estado = 'REVOCADA',
-           fecha_cierre = NOW(),
-           fecha_revocacion = NOW(),
+           fecha_cierre = clock_timestamp(),
+           fecha_revocacion = clock_timestamp(),
            revocado_por = $1,
            tipo_cierre = 'REVOCACION',
            motivo_cierre = $2,
-           ultima_actividad = NOW()
+           ultima_actividad = clock_timestamp()
        WHERE sesion_id = $3`,
       [adminId, motivoRevocacion, sessionId]
     );
@@ -233,16 +254,16 @@ export async function revokeAllUserSessions(params: {
     let sql = `
       UPDATE admin.usuario_sesion
       SET estado = 'REVOCADA',
-          fecha_cierre = NOW(),
-          fecha_revocacion = NOW(),
+          fecha_cierre = clock_timestamp(),
+          fecha_revocacion = clock_timestamp(),
           revocado_por = $1,
           tipo_cierre = 'REVOCACION',
           motivo_cierre = $2,
-          ultima_actividad = NOW()
+          ultima_actividad = clock_timestamp()
       WHERE usuario_id = $3
         AND estado = 'ACTIVA'
     `;
-    const queryParams: any[] = [adminId, motivoRevocacion, targetUserId];
+    const queryParams: (number | string)[] = [adminId, motivoRevocacion, targetUserId];
 
     if (excludeSessionId) {
       sql += ` AND sesion_id != $4`;
@@ -250,9 +271,61 @@ export async function revokeAllUserSessions(params: {
     }
 
     const res = await query(sql, queryParams);
-    return (res as any)?.rowCount || 0;
+    return (res as { rowCount?: number })?.rowCount || 0;
   } catch (error) {
     console.error("revokeAllUserSessions error:", error);
     return 0;
   }
+}
+
+/**
+ * Global sweep: Transitions all sessions whose fecha_expiracion <= clock_timestamp() to 'EXPIRADA'
+ */
+export async function sweepExpiredSessions(): Promise<number> {
+  try {
+    const expiredRows = await query<{ sesion_id: number }>(
+      `UPDATE admin.usuario_sesion
+       SET estado = 'EXPIRADA',
+           fecha_cierre = COALESCE(fecha_expiracion, clock_timestamp()),
+           tipo_cierre = 'EXPIRACION',
+           motivo_cierre = 'Sesión expirada por límite de tiempo'
+       WHERE estado = 'ACTIVA'
+         AND fecha_expiracion <= clock_timestamp()
+       RETURNING sesion_id`
+    );
+    return expiredRows.length;
+  } catch (err) {
+    console.warn("sweepExpiredSessions error:", err);
+    return 0;
+  }
+}
+
+declare global {
+  var __sessionSweeperStarted: boolean | undefined;
+}
+
+/**
+ * Initializes a background sweeper running in the Node.js server
+ */
+export function initSessionSweeper() {
+  if (typeof window !== "undefined") return;
+  if (global.__sessionSweeperStarted) return;
+  global.__sessionSweeperStarted = true;
+
+  // Run immediate sweep on startup
+  sweepExpiredSessions().catch(() => {});
+
+  // Run periodic sweep every 20 seconds
+  const timer = setInterval(() => {
+    sweepExpiredSessions().catch(() => {});
+  }, 20000);
+
+  if (typeof timer.unref === "function") {
+    timer.unref();
+  }
+}
+
+// Automatically start background sweeper on server initialization
+if (typeof window === "undefined") {
+  initSessionSweeper();
 }

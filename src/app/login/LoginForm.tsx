@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useRef, useState } from "react";
 import { loginAction } from "./actions";
 
-export default function LoginForm() {
+export default function LoginForm({ isSessionExpired = false }: { isSessionExpired?: boolean }) {
   const [state, formAction, isPending] = useActionState(loginAction, null);
   const [identifierVal, setIdentifierVal] = useState("");
   const [passwordVal, setPasswordVal] = useState("");
@@ -12,14 +12,20 @@ export default function LoginForm() {
   const identifierRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
 
+  const expiredMessage = "Tu sesión ha expirado. Inicia sesión nuevamente.";
+  const displayError = state?.error || (isSessionExpired && !state ? expiredMessage : null);
+
   useEffect(() => {
     if (state?.error) {
-      setPasswordVal("");
-      if (identifierVal.trim()) {
-        passwordRef.current?.focus();
-      } else {
-        identifierRef.current?.focus();
-      }
+      const timer = setTimeout(() => {
+        setPasswordVal("");
+        if (identifierRef.current?.value.trim()) {
+          passwordRef.current?.focus();
+        } else {
+          identifierRef.current?.focus();
+        }
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [state]);
 
@@ -66,14 +72,14 @@ export default function LoginForm() {
             </div>
 
             {/* Error Banner */}
-            {state?.error && (
+            {displayError && (
               <div
                 role="alert"
                 aria-live="polite"
                 className="w-full mb-6 px-4 py-3 bg-red-950/20 border border-red-800/40 text-red-300 text-xs sm:text-[13px] font-mono flex items-center gap-2.5 rounded-none"
               >
                 <span className="material-symbols-outlined text-red-400 text-[16px] shrink-0">error</span>
-                <span className="truncate">{state.error}</span>
+                <span className="truncate">{displayError}</span>
               </div>
             )}
 

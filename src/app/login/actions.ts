@@ -5,10 +5,8 @@ import { verifyPassword, hashSessionToken } from "@/lib/auth";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import crypto from "crypto";
-import { recordUserActivity, recordUserAudit } from "@/lib/auditLogger";
-
-const SESSION_DURATION_HOURS = 8;
-const REMEMBER_ME_DURATION_DAYS = 30;
+import { recordUserActivity } from "@/lib/auditLogger";
+import { sweepExpiredSessions } from "@/lib/sessionLifecycle";
 
 const GENERIC_FUNC_ERROR = "Usuario o contraseña inválidos.";
 const EMPTY_BOTH_ERROR = "Ingrese usuario y contraseña.";
@@ -36,6 +34,7 @@ function parseUserAgent(ua: string | null): string {
 interface UserDbRecord {
   usuario_id: number;
   usuario_estado: string;
+  duracion_sesion_minutos?: number | null;
   password_hash: string | null;
   intentos_fallidos: number | null;
   bloqueado_hasta: string | Date | null;
@@ -59,7 +58,6 @@ export async function loginAction(
   try {
     const rawIdentifier = formData.get("identifier");
     const rawPassword = formData.get("password");
-    const rememberMe = formData.get("rememberMe") === "true";
 
     const identifier = String(rawIdentifier || "").trim();
     const password = String(rawPassword || "");
@@ -87,6 +85,7 @@ export async function loginAction(
         `SELECT
            u.usuario_id,
            u.estado AS usuario_estado,
+           u.duracion_sesion_minutos,
            us.password AS password_hash,
            us.intentos_fallidos,
            us.bloqueado_hasta,
@@ -183,14 +182,25 @@ export async function loginAction(
       return { success: false, type: "auth", error: GENERIC_FUNC_ERROR };
     }
 
-    // 8. Session Duration & Cookie Expiration Configuration based on RememberMe
+    // 8. Session Duration & Cookie Expiration Configuration based on DB user duration
     const sessionToken = `ses_${crypto.randomUUID().replace(/-/g, "")}`;
     const tokenHash = hashSessionToken(sessionToken);
-    const intervalSql = rememberMe
-      ? `${REMEMBER_ME_DURATION_DAYS} days`
-      : `${SESSION_DURATION_HOURS} hours`;
+    const sessionDurationMinutes = Math.max(1, Number(targetUser.duracion_sesion_minutos) || 480);
 
     try {
+      await sweepExpiredSessions().catch(() => {});
+
+      // Close previous active sessions for this user on login so only the new active session stays
+      await query(
+        `UPDATE admin.usuario_sesion
+         SET estado = 'CERRADA',
+             fecha_cierre = clock_timestamp(),
+             tipo_cierre = 'NUEVO_LOGIN',
+             motivo_cierre = 'Sustituida por nuevo inicio de sesión'
+         WHERE usuario_id = $1 AND estado = 'ACTIVA'`,
+        [targetUser.usuario_id]
+      ).catch(() => {});
+
       await query(
         `UPDATE admin.usuario_seguridad
          SET
@@ -204,10 +214,10 @@ export async function loginAction(
 
       await query(
         `INSERT INTO admin.usuario_sesion
-         (sesion_id, usuario_id, token_identificador, dispositivo_navegador, direccion_ip, ubicacion, fecha_inicio, ultima_actividad, fecha_expiracion, estado)
+         (usuario_id, token_identificador, dispositivo_navegador, direccion_ip, ubicacion, fecha_inicio, ultima_actividad, fecha_expiracion, estado)
          VALUES
-         ((SELECT COALESCE(MAX(sesion_id), 0) + 1 FROM admin.usuario_sesion), $1, $2, $3, $4, 'No disponible', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NOW() + INTERVAL '${intervalSql}', 'ACTIVA')`,
-        [targetUser.usuario_id, tokenHash, device, ip]
+         ($1, $2, $3, $4, 'No disponible', clock_timestamp(), clock_timestamp(), clock_timestamp() + make_interval(mins => $5), 'ACTIVA')`,
+        [targetUser.usuario_id, tokenHash, device, ip, sessionDurationMinutes]
       );
 
       // Record successful login in activity log
@@ -223,8 +233,15 @@ export async function loginAction(
       });
 
       const cookieStore = await cookies();
-      const maxAgeSeconds = rememberMe ? REMEMBER_ME_DURATION_DAYS * 24 * 60 * 60 : SESSION_DURATION_HOURS * 60 * 60;
-      const baseCookieOptions: any = {
+      const maxAgeSeconds = sessionDurationMinutes * 60;
+      const baseCookieOptions: {
+        httpOnly: boolean;
+        secure: boolean;
+        sameSite: "lax" | "strict" | "none";
+        path: string;
+        maxAge: number;
+        expires: Date;
+      } = {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
@@ -247,8 +264,8 @@ export async function loginAction(
     } else {
       redirect("/");
     }
-  } catch (err: any) {
-    if (err && typeof err === "object" && "digest" in err && String(err.digest).startsWith("NEXT_REDIRECT")) {
+  } catch (err: unknown) {
+    if (err && typeof err === "object" && "digest" in err && String((err as { digest: string }).digest).startsWith("NEXT_REDIRECT")) {
       throw err;
     }
     console.error("Unhandled technical error in loginAction:", err);

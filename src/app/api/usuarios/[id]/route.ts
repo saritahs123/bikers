@@ -3,6 +3,7 @@ import { query } from "@/lib/db";
 import { authorizeUserAccess, authorizeUserUpdate } from "@/lib/userAuth";
 import { getModulePermissions } from "@/lib/workshop-session";
 import { recordUserActivity, recordUserAudit } from "@/lib/auditLogger";
+import { sweepExpiredSessions } from "@/lib/sessionLifecycle";
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -16,6 +17,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       );
     }
 
+    await sweepExpiredSessions().catch(() => {});
+
     const requestedUserId = authResult.targetUserId;
 
     // Query PostgreSQL user detail using exact real database columns
@@ -25,6 +28,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         u.estado,
         u.estado_activacion,
         u.fecha_creacion,
+        u.duracion_sesion_minutos,
         u.empresa_id AS "companyId",
         emp.nombre_comercial AS empresa_nombre,
         u.rol_principal_id AS rol_id,
@@ -48,6 +52,27 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
           (SELECT MAX(COALESCE(s.ultima_actividad, s.fecha_inicio)) FROM admin.usuario_sesion s WHERE s.usuario_id = u.usuario_id),
           us.fecha_ultimo_acceso
         ) AS last_login_at,
+        (
+          SELECT s.fecha_inicio
+          FROM admin.usuario_sesion s
+          WHERE s.usuario_id = u.usuario_id
+          ORDER BY CASE WHEN s.estado = 'ACTIVA' THEN 0 ELSE 1 END, s.sesion_id DESC
+          LIMIT 1
+        ) AS fecha_inicio_sesion,
+        (
+          SELECT s.fecha_expiracion
+          FROM admin.usuario_sesion s
+          WHERE s.usuario_id = u.usuario_id
+          ORDER BY CASE WHEN s.estado = 'ACTIVA' THEN 0 ELSE 1 END, s.sesion_id DESC
+          LIMIT 1
+        ) AS fecha_expiracion_sesion,
+        (
+          SELECT s.estado
+          FROM admin.usuario_sesion s
+          WHERE s.usuario_id = u.usuario_id
+          ORDER BY CASE WHEN s.estado = 'ACTIVA' THEN 0 ELSE 1 END, s.sesion_id DESC
+          LIMIT 1
+        ) AS estado_sesion,
         us.mfa_activo AS "mfaEnabled",
         us.mfa_tipo AS mfa_method,
         us.detalle_estado AS activation,
@@ -105,7 +130,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
       includeChildren = scopeRes[0].incluir_herencia_jerarquica ?? true;
       const scopeDetailRes = await query(`SELECT referencia_id FROM admin.usuario_alcance_detalle WHERE usuario_alcance_id = $1`, [scopeRes[0].usuario_alcance_id]);
-      scopeEntityIds = (scopeDetailRes || []).map((r: any) => Number(r.referencia_id));
+      scopeEntityIds = (scopeDetailRes || []).map((r: { referencia_id?: number | string }) => Number(r.referencia_id));
     }
 
     const mappedUser = {
@@ -138,6 +163,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         }
       ],
       last_login_at: u.last_login_at ?? null,
+      fecha_inicio_sesion: u.fecha_inicio_sesion ?? null,
+      fecha_expiracion_sesion: u.fecha_expiracion_sesion ?? null,
+      estado_sesion: u.estado_sesion ?? null,
       mfaEnabled: Boolean(u.mfaEnabled),
       mfa_method: u.mfa_method ?? null,
       status: u.estado ?? null,
@@ -145,6 +173,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       estado_activacion: u.estado_activacion ?? null,
       activation: u.activation ?? null,
       fecha_creacion: u.fecha_creacion ?? null,
+      duracion_sesion_minutos: u.duracion_sesion_minutos ?? 480,
       correo_acceso: u.correo_acceso ?? null,
       enviar_invitacion_correo: Boolean(u.enviar_invitacion_correo),
       generar_clave_automatica: Boolean(u.generar_clave_automatica),
@@ -168,7 +197,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     };
 
     return NextResponse.json(mappedUser);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error in GET /api/usuarios/[id]:", error);
     return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al obtener el usuario." }, { status: 500 });
   }
@@ -193,7 +222,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
     const { authUserId, targetUserId, isSelf, authUserCompanyId } = authResult;
 
-    let body: any;
+    let body: Record<string, unknown>;
     try {
       body = await req.json();
     } catch {
@@ -219,6 +248,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
          u.tipo_usuario_id,
          u.estado,
          u.estado_activacion,
+         u.duracion_sesion_minutos,
          ui.nombre,
          ui.apellido,
          ui.correo_electronico,
@@ -256,7 +286,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
     // Self Profile Guard: Only block admin changes if caller does NOT have SEGURIDAD edit permissions
     if (isSelf && !hasAdminEditPerm) {
-      const isParamChanged = (newVal: any, oldVal: any) =>
+      const isParamChanged = (newVal: unknown, oldVal: unknown) =>
         newVal !== undefined && newVal !== null && String(newVal).trim() !== String(oldVal ?? '').trim();
 
       const triedCompany = body.companyId !== undefined ? body.companyId : body.empresa_id;
@@ -271,6 +301,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         isParamChanged(triedStatus, current.estado) ||
         isParamChanged(triedUserType, current.tipo_usuario_id) ||
         isParamChanged(triedEstadoActivacion, current.estado_activacion) ||
+        (body.duracion_sesion_minutos !== undefined && Number(body.duracion_sesion_minutos) !== Number(current.duracion_sesion_minutos)) ||
         body.password !== undefined ||
         body.confirm_password !== undefined
       ) {
@@ -462,6 +493,21 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       }
     }
 
+    // Validate duracion_sesion_minutos if provided
+    const rawSessionMinutes = body.duracion_sesion_minutos !== undefined ? Number(body.duracion_sesion_minutos) : undefined;
+    if (rawSessionMinutes !== undefined) {
+      if (isNaN(rawSessionMinutes) || rawSessionMinutes < 1) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "VALIDATION_ERROR",
+            message: "La duración de sesión debe ser mayor que 0 minutos."
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     // Update admin.usuario
     await query(
       `UPDATE admin.usuario
@@ -470,17 +516,45 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
            tipo_usuario_id = $3,
            estado = $4,
            estado_activacion = $5,
+           duracion_sesion_minutos = COALESCE($6, duracion_sesion_minutos),
            fecha_actualizacion = NOW()
-       WHERE usuario_id = $6`,
+       WHERE usuario_id = $7`,
       [
         newCompanyId ? Number(newCompanyId) : null,
         newRolId ? Number(newRolId) : null,
         newTipoUsuarioId ? Number(newTipoUsuarioId) : null,
         newEstado ? String(newEstado) : null,
         newEstadoActivacion ? String(newEstadoActivacion) : null,
+        rawSessionMinutes !== undefined ? rawSessionMinutes : null,
         targetUserId
       ]
     );
+
+    // If session duration changed, dynamically recalculate expiration for all active sessions
+    if (rawSessionMinutes !== undefined) {
+      await query(
+        `UPDATE admin.usuario_sesion
+         SET fecha_expiracion = fecha_inicio + make_interval(mins => $1),
+             estado = CASE
+               WHEN fecha_inicio + make_interval(mins => $1) <= clock_timestamp() THEN 'EXPIRADA'
+               ELSE estado
+             END,
+             tipo_cierre = CASE
+               WHEN fecha_inicio + make_interval(mins => $1) <= clock_timestamp() THEN 'EXPIRACION'
+               ELSE tipo_cierre
+             END,
+             motivo_cierre = CASE
+               WHEN fecha_inicio + make_interval(mins => $1) <= clock_timestamp() THEN 'Sesión expirada por cambio de duración máxima configurada'
+               ELSE motivo_cierre
+             END,
+             fecha_cierre = CASE
+               WHEN fecha_inicio + make_interval(mins => $1) <= clock_timestamp() THEN clock_timestamp()
+               ELSE fecha_cierre
+             END
+         WHERE usuario_id = $2 AND estado = 'ACTIVA'`,
+        [rawSessionMinutes, targetUserId]
+      );
+    }
 
     // Update admin.usuario_identidad
     const finalFirstName = updatedFirstName !== null && updatedFirstName !== undefined ? String(updatedFirstName).trim() : null;
@@ -597,6 +671,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         u.estado,
         u.estado_activacion,
         u.fecha_creacion,
+        u.duracion_sesion_minutos,
         u.empresa_id AS "companyId",
         emp.nombre_comercial AS empresa_nombre,
         u.rol_principal_id AS "primaryRoleId",
@@ -624,6 +699,27 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
           (SELECT MAX(COALESCE(s.ultima_actividad, s.fecha_inicio)) FROM admin.usuario_sesion s WHERE s.usuario_id = u.usuario_id),
           useg.fecha_ultimo_acceso
         ) AS fecha_ultimo_login,
+        (
+          SELECT s.fecha_inicio
+          FROM admin.usuario_sesion s
+          WHERE s.usuario_id = u.usuario_id
+          ORDER BY CASE WHEN s.estado = 'ACTIVA' THEN 0 ELSE 1 END, s.sesion_id DESC
+          LIMIT 1
+        ) AS fecha_inicio_sesion,
+        (
+          SELECT s.fecha_expiracion
+          FROM admin.usuario_sesion s
+          WHERE s.usuario_id = u.usuario_id
+          ORDER BY CASE WHEN s.estado = 'ACTIVA' THEN 0 ELSE 1 END, s.sesion_id DESC
+          LIMIT 1
+        ) AS fecha_expiracion_sesion,
+        (
+          SELECT s.estado
+          FROM admin.usuario_sesion s
+          WHERE s.usuario_id = u.usuario_id
+          ORDER BY CASE WHEN s.estado = 'ACTIVA' THEN 0 ELSE 1 END, s.sesion_id DESC
+          LIMIT 1
+        ) AS estado_sesion,
         useg.fecha_credenciales_generada,
         useg.fecha_expiracion_invitacion,
         useg.intentos_fallidos,
@@ -650,7 +746,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const updatedRows = await query(fetchUpdatedSql, [targetUserId]);
     const updatedRow = updatedRows?.[0] || {};
 
-    const usuarioActualizado: any = updatedRow ? {
+    const usuarioActualizado = updatedRow ? {
       id: updatedRow.id,
       nombre: `${updatedRow.firstName || ''} ${updatedRow.lastName || ''}`.trim() || updatedRow.email || 'Sin nombre',
       firstName: updatedRow.firstName ?? null,
@@ -674,7 +770,11 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       estado_activacion: updatedRow.estado_activacion || 'Activo',
       status: updatedRow.estado || 'ACTIVO',
       created_at: updatedRow.fecha_creacion ?? null,
+      duracion_sesion_minutos: updatedRow.duracion_sesion_minutos !== undefined ? Number(updatedRow.duracion_sesion_minutos) : 480,
       last_login: updatedRow.fecha_ultimo_login ?? null,
+      fecha_inicio_sesion: updatedRow.fecha_inicio_sesion ?? null,
+      fecha_expiracion_sesion: updatedRow.fecha_expiracion_sesion ?? null,
+      estado_sesion: updatedRow.estado_sesion ?? null,
       idioma_preferido: updatedRow.idioma_preferido || 'es',
       zona_horaria: updatedRow.zona_horaria || 'America/Santo_Domingo',
       formato_fecha: updatedRow.formato_fecha || 'DD/MM/YYYY',
@@ -738,7 +838,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     let activityDesc = changedFields.length > 0
       ? `Actualización de campos: ${changedFields.map(f => f.field).join(', ')}`
       : 'Actualización de perfil y configuración';
-    let auditMotivo = body.motivo || 'Actualización de datos del usuario';
+    let auditMotivo: string = (typeof body.motivo === 'string' ? body.motivo : '') || 'Actualización de datos del usuario';
 
     if (newEstado !== current.estado) {
       if (newEstado === 'ACTIVO') {
@@ -754,7 +854,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         activityEvent = 'CAMBIO_ESTADO';
         activityDesc = `Cambio de estado de ${current.estado} a ${newEstado}`;
       }
-      auditMotivo = body.motivo_bloqueo || `Cambio de estado a ${newEstado}`;
+      auditMotivo = (typeof body.motivo_bloqueo === 'string' ? body.motivo_bloqueo : '') || `Cambio de estado a ${newEstado}`;
     } else if (newRolId !== current.rol_principal_id) {
       auditAction = 'ROLE_CHANGED';
       activityEvent = 'CAMBIO_ROL';
@@ -803,7 +903,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       message: "Usuario actualizado correctamente.",
       data: usuarioActualizado
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error in PUT /api/usuarios/[id]:", error);
     return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error interno al actualizar usuario." }, { status: 500 });
   }
@@ -983,7 +1083,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       success: true,
       message: "Usuario eliminado correctamente."
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error in DELETE /api/usuarios/[id]:", error);
     return NextResponse.json(
       { success: false, error: "SERVER_ERROR", message: "Error interno al eliminar usuario." },
