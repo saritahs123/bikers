@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getPool, query } from "@/lib/db";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
 import { recordUserActivity, recordUserAudit } from "@/lib/auditLogger";
+import { ensureWorkOrderTracking } from "@/lib/tracking/workOrderTrackingService";
 
 // GET /api/taller/ordenes
 export async function GET(req: NextRequest) {
@@ -523,6 +524,13 @@ export async function POST(req: NextRequest) {
           $2, 'Orden de trabajo creada a partir de recepción existente', NOW(), true, NOW(), $2
         )
       `, [ordenTrabajoId, session.usuario_id]);
+
+      // Create tracking access automatically for the work order without breaking transaction
+      try {
+        await ensureWorkOrderTracking(ordenTrabajoId, session.usuario_id, client);
+      } catch (trackingErr) {
+        console.error("Warning: automatic tracking generation failed:", trackingErr);
+      }
 
       await recordUserAudit({
         userId: session.usuario_id,
