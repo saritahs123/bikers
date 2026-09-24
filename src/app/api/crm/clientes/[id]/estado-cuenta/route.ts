@@ -66,6 +66,17 @@ export async function GET(request: NextRequest, context: RouteContext) {
       );
     }
 
+    // Verificar dinámicamente si condicion_venta existe en admin.facturas
+    const facColsCheck = await query<{ column_name: string }>(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'admin' AND table_name = 'facturas'
+    `);
+    const facCols = new Set(facColsCheck.map((c) => c.column_name));
+    const colCondicion = facCols.has("condicion_venta")
+      ? "COALESCE(f.condicion_venta, 'CONTADO')"
+      : "'CONTADO'";
+
     // Consulta agregada y eficiente (SIN N+1) de facturas y pagos aplicados
     const facturasRows = await query<FacturaEstadoCuentaRow>(`
       SELECT 
@@ -73,7 +84,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
         f.empresa_id,
         COALESCE(f.codigo_factura, f.numero_factura, 'FAC-' || f.factura_id::text) AS codigo_factura,
         f.fecha_factura,
-        COALESCE(f.condicion_venta, 'CONTADO') AS condicion_venta,
+        ${colCondicion} AS condicion_venta,
         COALESCE(f.total, f.total_factura, 0)::numeric AS total,
         COALESCE(f.balance_pendiente, 0)::numeric AS balance_pendiente_bd,
         f.estado,
@@ -81,7 +92,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
         ot.codigo_orden,
         COALESCE(SUM(
           CASE 
-            WHEN (p.estado = 'APLICADO' OR p.estado IS NULL) THEN COALESCE(p.monto_pago, p.monto, 0)
+            WHEN (p.estado = 'APLICADO' OR p.estado IS NULL) THEN COALESCE(p.monto_pago, 0)
             ELSE 0 
           END
         ), 0)::numeric AS total_pagado_calc,
@@ -89,7 +100,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       FROM admin.facturas f
       LEFT JOIN admin.pagos p ON f.factura_id = p.factura_id AND (p.estado = 'APLICADO' OR p.estado IS NULL)
       LEFT JOIN admin.ordenes_trabajo ot ON f.orden_trabajo_id = ot.orden_trabajo_id
-      WHERE f.cliente_id = $1 AND f.empresa_id = $2
+      WHERE f.cliente_id = $1 AND (f.empresa_id = $2 OR f.empresa_id IS NULL)
       GROUP BY f.factura_id, ot.codigo_orden
       ORDER BY f.fecha_factura DESC, f.factura_id DESC
     `, [clienteId, session.empresa_id]);
