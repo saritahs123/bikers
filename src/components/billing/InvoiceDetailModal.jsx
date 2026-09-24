@@ -461,14 +461,14 @@ export default function InvoiceDetailModal({
                     onClick={handlePrintA4}
                     disabled={isPrintingA4}
                     className="flex items-center gap-1.5 px-3 py-2 text-xs font-mono font-bold uppercase tracking-wider text-foreground hover:text-primary bg-surface hover:bg-hover border border-border rounded-xl transition-all cursor-pointer shadow-sm disabled:opacity-50"
-                    title="Imprimir Factura Estándar A4"
+                    title="Descargar Factura Estándar A4"
                   >
                     {isPrintingA4 ? (
                       <Loader2 className="w-4 h-4 animate-spin text-primary" />
                     ) : (
                       <FileText className="w-4 h-4 text-primary" />
                     )}
-                    <span>Imprimir A4</span>
+                    <span>Descargar A4</span>
                   </button>
 
                   <button
@@ -476,14 +476,14 @@ export default function InvoiceDetailModal({
                     onClick={handlePrintTicket}
                     disabled={isPrintingTicket}
                     className="flex items-center gap-1.5 px-3 py-2 text-xs font-mono font-bold uppercase tracking-wider text-foreground hover:text-emerald-600 dark:hover:text-emerald-400 bg-surface hover:bg-hover border border-border rounded-xl transition-all cursor-pointer shadow-sm disabled:opacity-50"
-                    title="Imprimir Ticket POS Térmico (80mm)"
+                    title="Descargar Ticket POS Térmico (80mm)"
                   >
                     {isPrintingTicket ? (
                       <Loader2 className="w-4 h-4 animate-spin text-emerald-600 dark:text-emerald-400" />
                     ) : (
                       <Receipt className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                     )}
-                    <span>Imprimir Ticket</span>
+                    <span>Descargar Ticket</span>
                   </button>
                 </>
               )}

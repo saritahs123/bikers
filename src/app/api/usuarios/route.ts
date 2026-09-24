@@ -4,8 +4,46 @@ import { hashPassword, maskEmail } from "@/lib/auth";
 import { validateEmail, validatePasswordPolicy } from "@/lib/validations";
 import { recordUserActivity, recordUserAudit } from "@/lib/auditLogger";
 import { authorizeUserCreate } from "@/lib/userAuth";
+import { sweepExpiredSessions } from "@/lib/sessionLifecycle";
 
-const parseNum = (val: any) => {
+interface UserRow {
+  id: number;
+  estado: string;
+  estado_activacion: string;
+  fecha_creacion: string;
+  duracion_sesion_minutos: number | null;
+  companyId: number | null;
+  first_name: string | null;
+  last_name: string | null;
+  full_name: string | null;
+  email: string | null;
+  phone: string | null;
+  document_number: string | null;
+  departamento_id: number | null;
+  area_id: number | null;
+  cargo_id: number | null;
+  role: string | null;
+  user_type: string | null;
+  primary_access_type: string | null;
+  identificador_principal: string | null;
+  login_identifiers: string | null;
+  last_login_at: string | null;
+  mfaEnabled: boolean | null;
+  mfa_method: string | null;
+  activation: string | null;
+  correo_acceso: string | null;
+  enviar_invitacion_correo: boolean | null;
+  generar_clave_automatica: boolean | null;
+  forzar_cambio_clave: boolean | null;
+  idioma_preferido: string | null;
+  zona_horaria: string | null;
+  formato_fecha: string | null;
+  fecha_inicio_sesion?: string | null;
+  fecha_expiracion_sesion?: string | null;
+  estado_sesion?: string | null;
+}
+
+const parseNum = (val: unknown) => {
   if (val === null || val === undefined || val === '') return null;
   const num = Number(val);
   return isNaN(num) ? null : num;
@@ -13,6 +51,8 @@ const parseNum = (val: any) => {
 
 export async function GET() {
   try {
+    await sweepExpiredSessions().catch(() => {});
+
     // 1. We join the primary identity, security, access config, role and type tables.
     const sql = `
       SELECT 
@@ -20,6 +60,7 @@ export async function GET() {
         u.estado,
         u.estado_activacion,
         u.fecha_creacion,
+        u.duracion_sesion_minutos,
         u.empresa_id AS "companyId",
         ui.nombre AS first_name,
         ui.apellido AS last_name,
@@ -39,6 +80,27 @@ export async function GET() {
           (SELECT MAX(COALESCE(s.ultima_actividad, s.fecha_inicio)) FROM admin.usuario_sesion s WHERE s.usuario_id = u.usuario_id),
           us.fecha_ultimo_acceso
         ) AS last_login_at,
+        (
+          SELECT s.fecha_inicio
+          FROM admin.usuario_sesion s
+          WHERE s.usuario_id = u.usuario_id
+          ORDER BY CASE WHEN s.estado = 'ACTIVA' THEN 0 ELSE 1 END, s.sesion_id DESC
+          LIMIT 1
+        ) AS fecha_inicio_sesion,
+        (
+          SELECT s.fecha_expiracion
+          FROM admin.usuario_sesion s
+          WHERE s.usuario_id = u.usuario_id
+          ORDER BY CASE WHEN s.estado = 'ACTIVA' THEN 0 ELSE 1 END, s.sesion_id DESC
+          LIMIT 1
+        ) AS fecha_expiracion_sesion,
+        (
+          SELECT s.estado
+          FROM admin.usuario_sesion s
+          WHERE s.usuario_id = u.usuario_id
+          ORDER BY CASE WHEN s.estado = 'ACTIVA' THEN 0 ELSE 1 END, s.sesion_id DESC
+          LIMIT 1
+        ) AS estado_sesion,
         us.mfa_activo AS "mfaEnabled",
         us.mfa_tipo AS mfa_method,
         us.detalle_estado AS activation,
@@ -60,7 +122,7 @@ export async function GET() {
     const usersRes = await query(sql);
     
     // Convert properties correctly for the frontend component
-    const mappedUsers = (usersRes || []).map((u: any) => {
+    const mappedUsers = ((usersRes as unknown as UserRow[]) || []).map((u: UserRow) => {
       const primaryAccessValue = u.identificador_principal || u.correo_acceso || u.email || u.document_number || (u.id ? `ID #${u.id}` : '—');
       const resolvedFullName = u.full_name || u.email || u.identificador_principal || (u.id ? `Usuario #${u.id}` : 'Usuario');
 
@@ -95,6 +157,10 @@ export async function GET() {
         estado_activacion: u.estado_activacion,
         activation: u.activation,
         fecha_creacion: u.fecha_creacion,
+        duracion_sesion_minutos: u.duracion_sesion_minutos ?? 480,
+        fecha_inicio_sesion: u.fecha_inicio_sesion ?? null,
+        fecha_expiracion_sesion: u.fecha_expiracion_sesion ?? null,
+        estado_sesion: u.estado_sesion ?? null,
         correo_acceso: u.correo_acceso || u.identificador_principal || u.email || null,
         enviar_invitacion_correo: Boolean(u.enviar_invitacion_correo),
         generar_clave_automatica: Boolean(u.generar_clave_automatica),
@@ -108,7 +174,7 @@ export async function GET() {
     });
 
     return NextResponse.json(mappedUsers);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error in GET /api/usuarios:", error);
     return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al obtener la lista de usuarios." }, { status: 500 });
   }
@@ -127,6 +193,11 @@ export async function POST(req: Request) {
     const companyId = parseNum(body.companyId || body.empresa_id);
     const userTypeId = parseNum(body.tipo_usuario_id || body.user_type_id || body.userTypeId);
     let rolId = parseNum(body.rol_id || body.role_id || body.roleId || body.rol_principal_id);
+    const sessionMinutes = body.duracion_sesion_minutos !== undefined ? parseNum(body.duracion_sesion_minutos) : 480;
+
+    if (sessionMinutes === null || sessionMinutes < 1) {
+      return NextResponse.json({ error: 'La duración de sesión debe ser mayor que 0 minutos.' }, { status: 400 });
+    }
 
     // 1. Authorize user creation with strict SEGURIDAD.puede_crear permission and multitenant company isolation
     const authCheck = await authorizeUserCreate(companyId);
@@ -234,7 +305,6 @@ export async function POST(req: Request) {
     const mainType = body.primary_access_type || 'EMAIL';
     const mainIdent = mainType === 'EMAIL' ? email : (docNumber || email);
     const forceChange = Boolean(body.must_change_password || body.forzar_cambio_clave);
-    const scopeType = body.scope_type || 'COMPANY';
 
     // ATOMIC TRANSACTION: User, Identity, Security, Additional Roles, and Scope
     const nextUserId = await withTransaction(async (client) => {
@@ -244,9 +314,9 @@ export async function POST(req: Request) {
 
       // 2. Insert into admin.usuario
       await client.query(
-        `INSERT INTO admin.usuario (usuario_id, empresa_id, tipo_usuario_id, rol_principal_id, estado, estado_activacion, fecha_creacion)
-         VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
-        [createdUserId, companyId, userTypeId, rolId, 'ACTIVO', 'Activo']
+        `INSERT INTO admin.usuario (usuario_id, empresa_id, tipo_usuario_id, rol_principal_id, estado, estado_activacion, duracion_sesion_minutos, fecha_creacion)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
+        [createdUserId, companyId, userTypeId, rolId, 'ACTIVO', 'Activo', sessionMinutes]
       );
 
       // 3. Insert into admin.usuario_identidad
@@ -347,7 +417,7 @@ export async function POST(req: Request) {
       user_id: nextUserId,
       message: 'Usuario creado correctamente.'
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error in POST /api/usuarios:", error);
     return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al crear el usuario en la base de datos." }, { status: 500 });
   }

@@ -20,7 +20,7 @@ async function isSessionValid() {
       return { valid: false, mustChange: false };
     }
 
-    const secRows = await query<any>(
+    const secRows = await query<{ forzar_cambio_clave?: boolean | null; requiere_cambio_clave?: boolean | null }>(
       `SELECT forzar_cambio_clave, requiere_cambio_clave FROM admin.usuario_seguridad WHERE usuario_id = $1 LIMIT 1`,
       [validation.userId]
     );
@@ -33,7 +33,14 @@ async function isSessionValid() {
   }
 }
 
-export default async function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ expired?: string; reason?: string }>;
+}) {
+  const resolvedParams = searchParams ? await searchParams : {};
+  const isExpired = resolvedParams.expired === "true" || resolvedParams.reason === "SESSION_EXPIRED";
+
   const sessionStatus = await isSessionValid();
   if (sessionStatus.valid) {
     if (sessionStatus.mustChange) {
@@ -43,5 +50,5 @@ export default async function LoginPage() {
     }
   }
 
-  return <LoginForm />;
+  return <LoginForm isSessionExpired={isExpired} />;
 }
