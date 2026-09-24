@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import {
   Users,
@@ -12,7 +12,6 @@ import {
   Trash2,
   CheckCircle2,
   XCircle,
-  Save,
   RefreshCw,
   Info,
   ArrowUpDown,
@@ -32,9 +31,16 @@ import {
   Building2,
   UserCheck,
   Eye,
-  MapPin
+  MapPin,
+  Receipt,
+  Wallet,
+  FileText,
+  DollarSign,
+  Loader2
 } from "lucide-react";
 import CustomerFormDrawer from "./CustomerFormDrawer";
+import RegisterPaymentModal from "@/components/billing/RegisterPaymentModal";
+import InvoiceDetailModal from "@/components/billing/InvoiceDetailModal";
 import {
   normalizeDigits,
   formatCedula,
@@ -77,7 +83,6 @@ export default function CustomersView() {
   const [sortDirection, setSortDirection] = useState("desc");
   const [page, setPage] = useState(1);
   const itemsPerPage = 8;
-  const [mounted, setMounted] = useState(false);
 
   // RBAC permissions state
   const [permissions, setPermissions] = useState({
@@ -92,6 +97,15 @@ export default function CustomersView() {
   const [detailUser, setDetailUser] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [expandedOrders, setExpandedOrders] = useState({});
+
+  // Estado de Cuenta State
+  const [estadoCuenta, setEstadoCuenta] = useState(null);
+  const [loadingEstadoCuenta, setLoadingEstadoCuenta] = useState(false);
+  const [filtroFacturas, setFiltroFacturas] = useState("pendientes");
+  const [paymentModalFactura, setPaymentModalFactura] = useState(null);
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [detailInvoiceId, setDetailInvoiceId] = useState(null);
+  const [isInvoiceDetailModalOpen, setIsInvoiceDetailModalOpen] = useState(false);
 
   // Form Drawer States
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -125,17 +139,61 @@ export default function CustomersView() {
   // Global Toast
   const [toastMessage, setToastMessage] = useState(null);
 
-  useEffect(() => {
-    setMounted(true);
-    fetchData();
-  }, []);
+  // Bicicleta Actual: resuelta prioritariamente por la última OT del cliente
+  const biciActual = useMemo(() => {
+    if (!detailUser) return null;
+    if (detailUser.bicicleta_actual) return detailUser.bicicleta_actual;
+    if (Array.isArray(detailUser.ordenes) && detailUser.ordenes.length > 0) {
+      const ultimaOtConBici = detailUser.ordenes.find(
+        (ot) => ot.bicicleta_id && (ot.activo !== false)
+      );
+      if (ultimaOtConBici && Array.isArray(detailUser.bicicletas)) {
+        const found = detailUser.bicicletas.find(
+          (b) => Number(b.id || b.bicicleta_id) === Number(ultimaOtConBici.bicicleta_id)
+        );
+        if (found) {
+          return {
+            ...found,
+            salud: ultimaOtConBici.salud_global_porcentaje ?? found.salud
+          };
+        }
+      }
+    }
+    if (Array.isArray(detailUser.bicicletas) && detailUser.bicicletas.length > 0) {
+      return detailUser.bicicletas[0];
+    }
+    return null;
+  }, [detailUser]);
+
+  const facturasList = useMemo(() => estadoCuenta?.facturas || [], [estadoCuenta]);
+  const resumenEstadoCuenta = useMemo(() => {
+    return estadoCuenta?.resumen || {
+      saldoPendiente: 0,
+      totalFacturado: 0,
+      totalPagado: 0,
+      facturasPendientes: 0
+    };
+  }, [estadoCuenta]);
+
+  const facturasPendientesList = useMemo(() => {
+    return facturasList.filter(
+      (f) => f.estado !== "ANULADA" && Number(f.saldo || 0) > 0.009
+    );
+  }, [facturasList]);
+
+  const facturasMostradas = useMemo(() => {
+    if (filtroFacturas === "pendientes") {
+      return facturasPendientesList;
+    }
+    return facturasList;
+  }, [filtroFacturas, facturasPendientesList, facturasList]);
 
   const showToast = (text, type = "success") => {
     setToastMessage({ text, type });
     setTimeout(() => setToastMessage(null), 4500);
   };
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       const res = await fetch("/api/crm/clientes");
@@ -173,7 +231,20 @@ export default function CustomersView() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    const timer = setTimeout(() => {
+      if (isMounted) {
+        fetchData();
+      }
+    }, 0);
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [fetchData]);
 
   const handleOpenDrawer = (item = null) => {
     if (!permissions.puede_crear && !item) {
@@ -362,10 +433,31 @@ export default function CustomersView() {
     }
   };
 
+  const fetchEstadoCuenta = useCallback(async (clienteId) => {
+    if (!clienteId) return;
+    try {
+      setLoadingEstadoCuenta(true);
+      const res = await fetch(`/api/crm/clientes/${clienteId}/estado-cuenta`);
+      if (res.ok) {
+        const json = await res.json();
+        setEstadoCuenta(json);
+      } else {
+        setEstadoCuenta(null);
+      }
+    } catch (err) {
+      console.error("Error fetching estado de cuenta:", err);
+      setEstadoCuenta(null);
+    } finally {
+      setLoadingEstadoCuenta(false);
+    }
+  }, []);
+
   const handleViewDetail = async (item) => {
     try {
       setLoadingDetail(true);
-      const res = await fetch(`/api/crm/clientes/${item.id || item.cliente_id}`);
+      const clientId = item.id || item.cliente_id;
+      fetchEstadoCuenta(clientId);
+      const res = await fetch(`/api/crm/clientes/${clientId}`);
       if (res.ok) {
         const fullClient = await res.json();
         setDetailUser(fullClient);
@@ -376,6 +468,40 @@ export default function CustomersView() {
       setDetailUser(item);
     } finally {
       setLoadingDetail(false);
+    }
+  };
+
+  const handleOpenRegisterPayment = (factura) => {
+    setPaymentModalFactura({
+      factura_id: factura.factura_id,
+      codigo_factura: factura.codigo_factura,
+      total: factura.total,
+      total_factura: factura.total,
+      monto_pagado: factura.monto_pagado,
+      balance_pendiente: factura.saldo,
+      estado: factura.estado,
+      condicion_venta: factura.condicion_venta
+    });
+    setIsPaymentModalOpen(true);
+  };
+
+  const handleOpenInvoiceDetail = (facturaId) => {
+    setDetailInvoiceId(facturaId);
+    setIsInvoiceDetailModalOpen(true);
+  };
+
+  const formatFacturaDate = (dateVal) => {
+    if (!dateVal) return "—";
+    try {
+      const d = new Date(dateVal);
+      if (isNaN(d.getTime())) return String(dateVal).substring(0, 10);
+      return d.toLocaleDateString("es-DO", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric"
+      });
+    } catch {
+      return String(dateVal).substring(0, 10);
     }
   };
 
@@ -723,84 +849,388 @@ export default function CustomersView() {
           </div>
 
           {/* ========================================================================= */}
-          {/* SECTION: BICICLETAS DEL CLIENTE                                           */}
+          {/* SECTION: BICICLETA ACTUAL + ESTADO DE CUENTA                              */}
           {/* ========================================================================= */}
-          <section className="space-y-4">
-            <div className="flex items-center justify-between border-b border-border pb-3">
-              <div className="flex items-center gap-2.5">
-                <Bike className="text-primary" size={20} />
-                <h2 className="text-lg font-bold text-foreground tracking-tight font-mono">
-                  Bicicletas del Cliente
-                </h2>
-                <span className="text-xs bg-surface-subtle border border-border px-2.5 py-0.5 rounded-full font-mono text-foreground-muted">
-                  {detailUser.bicicletas ? detailUser.bicicletas.length : 0}
-                </span>
-              </div>
-
-              <a
-                href={`/crm/bicycles`}
-                className="text-xs font-mono font-bold text-primary hover:text-foreground flex items-center gap-1 transition-colors"
-              >
-                <span>Ir al Catálogo de Bicicletas</span>
-                <ExternalLink size={13} />
-              </a>
-            </div>
-
-            {(!detailUser.bicicletas || detailUser.bicicletas.length === 0) ? (
-              <div className="bg-card border border-border rounded-2xl p-8 text-center font-mono space-y-3 shadow-sm">
-                <div className="w-12 h-12 rounded-full bg-surface-subtle border border-border flex items-center justify-center text-foreground-muted mx-auto">
-                  <Bike size={22} />
-                </div>
-                <h3 className="text-foreground font-bold text-sm">Sin bicicletas registradas</h3>
-                <p className="text-foreground-muted text-xs max-w-md mx-auto">
-                  Este cliente no tiene bicicletas asignadas en el sistema actualmente.
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {detailUser.bicicletas.map((bike) => (
-                  <div
-                    key={bike.id || bike.bicicleta_id}
-                    className="bg-card border border-border rounded-2xl p-5 shadow-sm hover:border-primary/50 transition-all flex flex-col justify-between"
-                  >
-                    <div>
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <span className="px-2 py-0.5 rounded bg-surface-subtle border border-border text-primary text-[10px] font-mono font-bold uppercase">
-                          {bike.tipo_bicicleta || "MTB"}
-                        </span>
-                        <span className="text-[10px] font-mono text-foreground-muted">
-                          {bike.ano || "Año N/A"} • Talla {bike.talla || "M"}
-                        </span>
-                      </div>
-
-                      <h3 className="text-base font-bold text-foreground tracking-tight">
-                        {bike.marca} {bike.modelo}
-                      </h3>
-
-                      <div className="mt-3 space-y-1 text-xs text-foreground-muted font-mono">
-                        <p>Color: <strong className="text-foreground-secondary">{bike.color || "No especificado"}</strong></p>
-                        <p>Serial Cuadro: <strong className="text-foreground-secondary">{bike.numero_serie_cuadro || "Sin serial"}</strong></p>
-                        <p>Salud Global: <span className="text-foreground-muted font-bold">Sin evaluación</span></p>
-                      </div>
+          <section className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+            {/* 1. Tarjeta: BICICLETA ACTUAL (35% -> lg:col-span-4 xl:col-span-4) */}
+            <div className="lg:col-span-4 xl:col-span-4 bg-card border border-border rounded-2xl p-5 shadow-md flex flex-col justify-between">
+              <div>
+                {/* Header */}
+                <div className="flex items-center justify-between pb-3 border-b border-border">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-primary/10 border border-primary/20 text-primary shrink-0">
+                      <Bike size={18} />
                     </div>
-
-                    <div className="mt-4 pt-3 border-t border-border flex items-center justify-between">
-                      <span className="text-[10px] text-foreground-muted font-mono">
-                        {bike.kilometraje_actual ? `${bike.kilometraje_actual} KM` : "0 KM"}
+                    <h3 className="text-base font-bold text-foreground font-mono tracking-tight">
+                      Bicicleta Actual
+                    </h3>
+                  </div>
+                  {biciActual && (
+                    <div className="flex items-center gap-2">
+                      {biciActual.tipo_bicicleta && (
+                        <span className="px-2 py-0.5 rounded-md bg-surface-subtle border border-border text-primary text-[10px] font-mono font-bold uppercase">
+                          {biciActual.tipo_bicicleta}
+                        </span>
+                      )}
+                      <span className="text-[11px] font-mono text-foreground-muted">
+                        {[biciActual.ano, biciActual.talla ? `Talla ${biciActual.talla}` : null].filter(Boolean).join(" • ")}
                       </span>
+                    </div>
+                  )}
+                </div>
 
-                      <a
-                        href={`/crm/bicycles?id=${bike.id || bike.bicicleta_id}`}
-                        className="px-3 py-1.5 bg-surface border border-border hover:border-primary text-primary hover:text-foreground text-xs font-mono font-bold rounded-lg transition-all flex items-center gap-1.5"
-                      >
-                        <span>Ver Bicicleta</span>
-                        <ExternalLink size={12} />
-                      </a>
+                {/* Marca y Modelo */}
+                <div className="mt-3">
+                  <h4 className="text-lg font-extrabold text-foreground font-mono tracking-tight truncate">
+                    {biciActual ? `${biciActual.marca || ""} ${biciActual.modelo || ""}`.trim() : "Sin bicicleta en órdenes recientes"}
+                  </h4>
+                </div>
+
+                {/* Fotografía principal con aspect-ratio mantenido */}
+                <div className="my-4 py-2 flex items-center justify-center min-h-[170px] max-h-[210px] w-full rounded-xl bg-surface/40 border border-border/60 overflow-hidden relative">
+                  {biciActual?.foto_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={biciActual.foto_url}
+                      alt={`${biciActual.marca || ""} ${biciActual.modelo || ""}`}
+                      className="max-h-[190px] w-full object-contain p-2 transition-transform hover:scale-105 duration-300"
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center text-foreground-muted gap-2 py-6">
+                      <div className="w-14 h-14 rounded-2xl bg-surface border border-border flex items-center justify-center text-primary/70">
+                        <Bike size={28} />
+                      </div>
+                      <span className="text-[11px] font-mono uppercase tracking-wider text-foreground-muted">
+                        {biciActual ? "Fotografía no disponible" : "Sin bicicleta registrada"}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Tabla de especificaciones de la bicicleta */}
+                {biciActual && (
+                  <div className="space-y-1.5 text-xs font-mono pt-2 border-t border-border-subtle">
+                    {biciActual.tipo_bicicleta && (
+                      <div className="flex justify-between items-center py-0.5">
+                        <span className="text-foreground-muted">Tipo</span>
+                        <span className="text-foreground font-semibold">{biciActual.tipo_bicicleta}</span>
+                      </div>
+                    )}
+                    {biciActual.color && (
+                      <div className="flex justify-between items-center py-0.5">
+                        <span className="text-foreground-muted">Color</span>
+                        <span className="text-foreground font-semibold">{biciActual.color}</span>
+                      </div>
+                    )}
+                    {biciActual.ano && (
+                      <div className="flex justify-between items-center py-0.5">
+                        <span className="text-foreground-muted">Año</span>
+                        <span className="text-foreground font-semibold">{biciActual.ano}</span>
+                      </div>
+                    )}
+                    {biciActual.numero_serie_cuadro && (
+                      <div className="flex justify-between items-center py-0.5">
+                        <span className="text-foreground-muted">Serial del Cuadro</span>
+                        <span className="text-foreground font-semibold truncate max-w-[180px]">{biciActual.numero_serie_cuadro}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center py-0.5">
+                      <span className="text-foreground-muted">Condición General</span>
+                      <span className="text-emerald-400 font-bold inline-flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                        {biciActual.salud ? `${biciActual.salud}%` : "Excelente"}
+                      </span>
                     </div>
                   </div>
-                ))}
+                )}
               </div>
-            )}
+
+              {/* Footer de Bicicleta Actual */}
+              <div className="mt-4 pt-3 border-t border-border flex items-center justify-between">
+                <span className="text-xs font-mono font-bold text-foreground-muted">
+                  {biciActual?.kilometraje_actual ? `${biciActual.kilometraje_actual} KM` : "0 KM"}
+                </span>
+
+                {biciActual ? (
+                  <a
+                    href={`/crm/bicycles?id=${biciActual.id || biciActual.bicicleta_id}`}
+                    className="px-3 py-1.5 bg-surface border border-border hover:border-primary text-primary hover:text-foreground text-xs font-mono font-bold rounded-xl transition-all flex items-center gap-1.5 shadow-sm"
+                  >
+                    <span>Ver Bicicleta</span>
+                    <ExternalLink size={12} />
+                  </a>
+                ) : (
+                  <a
+                    href={`/crm/bicycles`}
+                    className="px-3 py-1.5 bg-surface border border-border hover:border-primary text-primary hover:text-foreground text-xs font-mono font-bold rounded-xl transition-all flex items-center gap-1.5 shadow-sm"
+                  >
+                    <span>Catálogo de Bicicletas</span>
+                    <ExternalLink size={12} />
+                  </a>
+                )}
+              </div>
+            </div>
+
+            {/* 2. Tarjeta: ESTADO DE CUENTA (65% -> lg:col-span-8 xl:col-span-8) */}
+            <div className="lg:col-span-8 xl:col-span-8 bg-card border border-border rounded-2xl p-5 shadow-md flex flex-col justify-between">
+              <div>
+                {/* Header */}
+                <div className="flex items-center justify-between pb-3 border-b border-border">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 shrink-0">
+                      <Receipt size={18} />
+                    </div>
+                    <h3 className="text-base font-bold text-foreground font-mono tracking-tight">
+                      Estado de Cuenta
+                    </h3>
+                  </div>
+
+                  {loadingEstadoCuenta && (
+                    <div className="flex items-center gap-2 text-xs font-mono text-primary">
+                      <Loader2 size={14} className="animate-spin" />
+                      <span>Actualizando...</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* 4 KPI Cards Resumen */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 my-4">
+                  {/* Saldo Pendiente */}
+                  <div className="p-3 rounded-xl bg-surface/50 border border-rose-500/30 flex items-center gap-2.5">
+                    <div className="p-2 rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/20 shrink-0">
+                      <Wallet size={16} />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="block text-[10px] uppercase font-mono text-foreground-muted truncate">
+                        Saldo Pendiente
+                      </span>
+                      <span className="text-sm sm:text-base font-black text-rose-400 font-mono block truncate">
+                        RD$ {Number(resumenEstadoCuenta.saldoPendiente || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Total Facturado */}
+                  <div className="p-3 rounded-xl bg-surface/50 border border-border flex items-center gap-2.5">
+                    <div className="p-2 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 shrink-0">
+                      <FileText size={16} />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="block text-[10px] uppercase font-mono text-foreground-muted truncate">
+                        Total Facturado
+                      </span>
+                      <span className="text-sm sm:text-base font-black text-foreground font-mono block truncate">
+                        RD$ {Number(resumenEstadoCuenta.totalFacturado || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Total Pagado */}
+                  <div className="p-3 rounded-xl bg-surface/50 border border-border flex items-center gap-2.5">
+                    <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
+                      <DollarSign size={16} />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="block text-[10px] uppercase font-mono text-foreground-muted truncate">
+                        Total Pagado
+                      </span>
+                      <span className="text-sm sm:text-base font-black text-emerald-400 font-mono block truncate">
+                        RD$ {Number(resumenEstadoCuenta.totalPagado || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Facturas Pendientes */}
+                  <div className="p-3 rounded-xl bg-surface/50 border border-border flex items-center gap-2.5">
+                    <div className="p-2 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 shrink-0">
+                      <Receipt size={16} />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="block text-[10px] uppercase font-mono text-foreground-muted truncate">
+                        Facturas Pendientes
+                      </span>
+                      <span className="text-sm sm:text-base font-black text-foreground font-mono block truncate">
+                        {resumenEstadoCuenta.facturasPendientes || 0}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Filtro: Pendientes / Todas */}
+                <div className="flex items-center gap-2 mb-3">
+                  <button
+                    type="button"
+                    onClick={() => setFiltroFacturas("pendientes")}
+                    className={`px-3 py-1.5 text-xs font-mono font-bold rounded-xl transition-all cursor-pointer ${
+                      filtroFacturas === "pendientes"
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "bg-surface text-foreground-muted hover:text-foreground border border-border hover:bg-hover"
+                    }`}
+                  >
+                    Pendientes ({facturasPendientesList.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFiltroFacturas("todas")}
+                    className={`px-3 py-1.5 text-xs font-mono font-bold rounded-xl transition-all cursor-pointer ${
+                      filtroFacturas === "todas"
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "bg-surface text-foreground-muted hover:text-foreground border border-border hover:bg-hover"
+                    }`}
+                  >
+                    Todas ({facturasList.length})
+                  </button>
+                </div>
+
+                {/* Tabla o Empty State */}
+                {filtroFacturas === "pendientes" && facturasPendientesList.length === 0 ? (
+                  <div className="bg-surface/30 border border-border rounded-xl p-8 text-center font-mono my-3 space-y-2">
+                    <div className="w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mx-auto">
+                      <CheckCircle2 size={20} />
+                    </div>
+                    <h4 className="text-emerald-400 font-bold text-sm uppercase tracking-wider">
+                      ✓ AL DÍA
+                    </h4>
+                    <p className="text-foreground-muted text-xs max-w-sm mx-auto">
+                      Este cliente no tiene facturas pendientes de pago.
+                    </p>
+                  </div>
+                ) : facturasMostradas.length === 0 ? (
+                  <div className="bg-surface/30 border border-border rounded-xl p-8 text-center font-mono my-3 space-y-2">
+                    <div className="w-10 h-10 rounded-full bg-surface-subtle border border-border text-foreground-muted flex items-center justify-center mx-auto">
+                      <Receipt size={20} />
+                    </div>
+                    <h4 className="text-foreground font-bold text-sm">
+                      Sin facturas registradas
+                    </h4>
+                    <p className="text-foreground-muted text-xs max-w-sm mx-auto">
+                      No existen registros de facturación para este cliente actualmente.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-xl border border-border bg-surface/20">
+                    <table className="w-full text-left text-xs font-mono">
+                      <thead className="bg-surface/70 border-b border-border text-[10px] text-foreground-muted uppercase font-bold tracking-wider">
+                        <tr>
+                          <th className="py-2.5 px-3">Factura</th>
+                          <th className="py-2.5 px-3">Fecha</th>
+                          <th className="py-2.5 px-3">Condición</th>
+                          <th className="py-2.5 px-3 text-right">Total</th>
+                          <th className="py-2.5 px-3 text-right">Pagado</th>
+                          <th className="py-2.5 px-3 text-right">Saldo</th>
+                          <th className="py-2.5 px-3 text-center">Estado</th>
+                          <th className="py-2.5 px-3 text-right">Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/50">
+                        {facturasMostradas.map((f) => {
+                          const est = String(f.estado || "").toUpperCase();
+                          const cond = String(f.condicion_venta || "CONTADO").toUpperCase();
+                          const saldoNum = Number(f.saldo || 0);
+                          const totalNum = Number(f.total || 0);
+                          const pagadoNum = Number(f.monto_pagado || 0);
+
+                          return (
+                            <tr key={f.factura_id} className="hover:bg-surface/50 transition-colors">
+                              <td className="py-2.5 px-3 font-bold text-foreground">
+                                {f.codigo_factura}
+                              </td>
+                              <td className="py-2.5 px-3 text-foreground-muted">
+                                {formatFacturaDate(f.fecha_factura)}
+                              </td>
+                              <td className="py-2.5 px-3">
+                                {cond === "CREDITO" || cond === "CRÉDITO" ? (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-blue-500/10 text-blue-400 border border-blue-500/30">
+                                    Crédito
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                                    Contado
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-2.5 px-3 text-right text-foreground font-semibold">
+                                RD$ {totalNum.toLocaleString("es-DO", { minimumFractionDigits: 2 })}
+                              </td>
+                              <td className="py-2.5 px-3 text-right text-foreground-secondary font-semibold">
+                                RD$ {pagadoNum.toLocaleString("es-DO", { minimumFractionDigits: 2 })}
+                              </td>
+                              <td className="py-2.5 px-3 text-right font-bold text-foreground">
+                                <span className={saldoNum > 0.009 ? "text-rose-400" : "text-foreground-muted"}>
+                                  RD$ {saldoNum.toLocaleString("es-DO", { minimumFractionDigits: 2 })}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-3 text-center">
+                                {est === "PAGADA" && (
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                                    PAGADA
+                                  </span>
+                                )}
+                                {est === "PARCIAL" && (
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                                    PARCIAL
+                                  </span>
+                                )}
+                                {est === "PENDIENTE" && (
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-rose-500/10 text-rose-400 border border-rose-500/30">
+                                    PENDIENTE
+                                  </span>
+                                )}
+                                {est === "ANULADA" && (
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-slate-500/10 text-slate-400 border border-slate-500/30">
+                                    ANULADA
+                                  </span>
+                                )}
+                                {est !== "PAGADA" && est !== "PARCIAL" && est !== "PENDIENTE" && est !== "ANULADA" && (
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-surface border border-border text-foreground-muted">
+                                    {est || "BORRADOR"}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-2.5 px-3 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenInvoiceDetail(f.factura_id)}
+                                    className="px-2.5 py-1 bg-surface border border-border hover:border-primary text-foreground-secondary hover:text-foreground text-[11px] font-mono rounded-lg transition-all flex items-center gap-1 cursor-pointer shadow-sm hover:bg-hover"
+                                    title="Ver detalle completo de factura"
+                                  >
+                                    <Eye size={12} className="text-primary" />
+                                    <span>Ver Factura</span>
+                                  </button>
+
+                                  {saldoNum > 0.009 && est !== "ANULADA" && estadoCuenta?.permisos?.puede_registrar_pago !== false && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenRegisterPayment(f)}
+                                      className="px-2.5 py-1 bg-emerald-600/10 border border-emerald-500/30 hover:bg-emerald-600/20 text-emerald-400 text-[11px] font-mono font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer shadow-sm"
+                                      title="Registrar pago a esta factura"
+                                    >
+                                      <DollarSign size={12} />
+                                      <span>Registrar Pago</span>
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer de Estado de Cuenta */}
+              <div className="mt-4 pt-3 border-t border-border flex items-center justify-end">
+                <div className="text-right">
+                  <span className="text-xs font-mono text-foreground-muted mr-2">Total Pendiente:</span>
+                  <span className="text-base font-black text-primary font-mono">
+                    RD$ {Number(resumenEstadoCuenta.saldoPendiente || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              </div>
+            </div>
           </section>
 
           {/* ========================================================================= */}
@@ -1423,6 +1853,48 @@ export default function CustomersView() {
           </div>
         </div>,
         document.body
+      )}
+
+      {/* Modal Registrar Pago Reutilizado */}
+      {isPaymentModalOpen && paymentModalFactura && (
+        <RegisterPaymentModal
+          isOpen={isPaymentModalOpen}
+          onClose={() => {
+            setIsPaymentModalOpen(false);
+            setPaymentModalFactura(null);
+          }}
+          factura={paymentModalFactura}
+          onPaymentSuccess={async () => {
+            setIsPaymentModalOpen(false);
+            setPaymentModalFactura(null);
+            showToast("Pago registrado exitosamente. Estado de cuenta actualizado.", "success");
+            if (detailUser) {
+              fetchEstadoCuenta(detailUser.id || detailUser.cliente_id);
+            }
+          }}
+        />
+      )}
+
+      {/* Modal Ver Detalle de Factura Reutilizado */}
+      {isInvoiceDetailModalOpen && detailInvoiceId && (
+        <InvoiceDetailModal
+          isOpen={isInvoiceDetailModalOpen}
+          onClose={() => {
+            setIsInvoiceDetailModalOpen(false);
+            setDetailInvoiceId(null);
+          }}
+          facturaId={detailInvoiceId}
+          onInvoiceUpdated={() => {
+            if (detailUser) {
+              fetchEstadoCuenta(detailUser.id || detailUser.cliente_id);
+            }
+          }}
+          permisos={{
+            puede_ver: true,
+            puede_editar: Boolean(estadoCuenta?.permisos?.puede_registrar_pago),
+            puede_eliminar: false
+          }}
+        />
       )}
     </div>
   );
