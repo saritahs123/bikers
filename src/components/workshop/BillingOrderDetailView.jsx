@@ -663,7 +663,7 @@ export default function BillingOrderDetailView({ ordenId, onBack }) {
                   <span>Ver Factura {order.codigo_factura || order.numero_factura ? `• ${order.codigo_factura || order.numero_factura}` : ""}</span>
                 </Link>
 
-                {/* Botón 1: Imprimir A4 (PDF) */}
+                {/* Botón 1: Descargar A4 (PDF) */}
                 <button
                   type="button"
                   onClick={handlePrintInvoice}
@@ -679,7 +679,7 @@ export default function BillingOrderDetailView({ ordenId, onBack }) {
                   ) : (
                     <>
                       <Printer className="w-3.5 h-3.5 text-primary" />
-                      <span>Imprimir A4</span>
+                      <span>Descargar A4</span>
                     </>
                   )}
                 </button>

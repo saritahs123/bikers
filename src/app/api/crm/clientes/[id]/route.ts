@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import { query, withTransaction } from "@/lib/db";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
@@ -126,7 +127,7 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
     `, [clienteId]);
 
     const orderIds = (parentOrders || []).map((o: any) => o.orden_trabajo_id);
-    let subServicesMap: Record<number, any[]> = {};
+    const subServicesMap: Record<number, any[]> = {};
 
     if (orderIds.length > 0) {
       const subServicesRows = await query(`
@@ -247,10 +248,66 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
 
     const totalGastado = Number(totalGastadoRow[0]?.total_gastado || 0);
 
+    // Resolver BICICLETA ACTUAL: bicicleta vinculada a la ÚLTIMA Orden de Trabajo del cliente
+    let bicicletaActual: any = null;
+    const biciActualRows = await query(`
+      SELECT
+        b.bicicleta_id AS id,
+        b.bicicleta_id,
+        b.cliente_id,
+        b.codigo_qr,
+        b.url_qr,
+        b.marca,
+        b.modelo,
+        b.tipo_bicicleta,
+        b.ano,
+        b.color,
+        b.talla,
+        b.numero_serie_cuadro,
+        b.descripcion,
+        b.kilometraje_actual,
+        b.notas_tecnicas,
+        b.activo,
+        f.url_archivo AS foto_url,
+        ot.orden_trabajo_id AS ultima_orden_trabajo_id,
+        ot.codigo_orden AS ultima_orden_codigo,
+        COALESCE(ot.fecha_recepcion, ot.fecha_registro) AS ultima_ot_fecha,
+        COALESCE(ot.salud_global_porcentaje,
+          (SELECT ot2.salud_global_porcentaje FROM admin.ordenes_trabajo ot2 WHERE ot2.bicicleta_id = b.bicicleta_id AND ot2.salud_global_porcentaje IS NOT NULL ORDER BY ot2.orden_trabajo_id DESC LIMIT 1)
+        ) AS salud
+      FROM admin.ordenes_trabajo ot
+      JOIN admin.bicicletas b ON ot.bicicleta_id = b.bicicleta_id
+      LEFT JOIN LATERAL (
+        SELECT url_archivo
+        FROM admin.bicicleta_fotos
+        WHERE bicicleta_id = b.bicicleta_id AND (activo = true OR activo IS NULL)
+        ORDER BY es_principal DESC, bicicleta_foto_id DESC
+        LIMIT 1
+      ) f ON true
+      WHERE ot.cliente_id = $1
+        AND (ot.activo = true OR ot.activo IS NULL)
+        AND b.fecha_eliminacion IS NULL
+      ORDER BY COALESCE(ot.fecha_recepcion, ot.fecha_registro) DESC, ot.orden_trabajo_id DESC
+      LIMIT 1
+    `, [clienteId]);
+
+    if (biciActualRows && biciActualRows.length > 0) {
+      const b = biciActualRows[0];
+      bicicletaActual = {
+        ...b,
+        foto_url: (b.foto_url && !b.foto_url.includes("default.png")) ? b.foto_url : null,
+        salud: b.salud !== null && b.salud !== undefined ? Number(b.salud) : null
+      };
+    } else if (mappedBikes.length > 0) {
+      // Fallback si no tiene OT registrada pero sí tiene bicicletas en su catálogo
+      bicicletaActual = mappedBikes[0];
+    }
+
     return NextResponse.json({
       id: cliente.cliente_id,
       ...cliente,
       total_gastado: totalGastado,
+      bicicleta_actual: bicicletaActual,
       bicicletas: mappedBikes,
       ordenes: mappedOrdenes
     });

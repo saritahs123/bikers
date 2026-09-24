@@ -25,11 +25,10 @@ export async function GET(request: Request) {
     if (!existing || existing.length === 0) {
       await query(
         `INSERT INTO admin.usuario_sesion (
-           sesion_id, usuario_id, token_identificador, estado,
+           usuario_id, token_identificador, estado,
            direccion_ip, dispositivo_navegador, ubicacion, fecha_inicio, ultima_actividad, fecha_expiracion
          )
          VALUES (
-           (SELECT COALESCE(MAX(sesion_id), 0) + 1 FROM admin.usuario_sesion),
            $1, $2, 'ACTIVA', '127.0.0.1', 'Dev Helper Agent', 'No disponible', NOW(), NOW(), NOW() + INTERVAL '100 years'
          )`,
         [userId, tokenHash]

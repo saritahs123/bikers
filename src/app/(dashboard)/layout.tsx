@@ -3,7 +3,23 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { query } from "@/lib/db";
 import { DashboardShell } from "@/components/layout/DashboardShell";
+import { AuthenticatedUser } from "@/components/layout/TopBar";
 import { validateAndTouchSession } from "@/lib/sessionLifecycle";
+
+interface UserRecord {
+  usuario_id: number;
+  usuario_estado: string;
+  nombre: string | null;
+  apellido: string | null;
+  correo_electronico: string | null;
+  correo_acceso: string | null;
+  identificador_principal: string | null;
+  forzar_cambio_clave?: boolean | null;
+  requiere_cambio_clave?: boolean | null;
+  rol_nombre: string | null;
+  cargo_nombre: string | null;
+  empresa_nombre: string | null;
+}
 
 export const dynamic = "force-dynamic";
 
@@ -12,20 +28,20 @@ async function getAuthenticatedUser() {
   const tokenCookie = cookieStore.get("session_token")?.value;
 
   if (!tokenCookie || !tokenCookie.trim()) {
-    return null;
+    return { user: null, reason: "NO_TOKEN" };
   }
 
   const validation = await validateAndTouchSession(tokenCookie);
   if (!validation.valid) {
-    return null;
+    return { user: null, reason: validation.reason === "EXPIRED" ? "SESSION_EXPIRED" : validation.reason };
   }
 
   const targetUserId = validation.userId;
   if (!targetUserId || isNaN(Number(targetUserId))) {
-    return null;
+    return { user: null, reason: "INVALID_USER" };
   }
 
-  const userRows = await query<any>(
+  const userRows = await query<UserRecord>(
     `SELECT 
        u.usuario_id,
        u.estado AS usuario_estado,
@@ -51,7 +67,7 @@ async function getAuthenticatedUser() {
   );
 
   if (!userRows || userRows.length === 0) {
-    return null;
+    return { user: null, reason: "USER_NOT_FOUND" };
   }
 
   const row = userRows[0];
@@ -85,20 +101,24 @@ async function getAuthenticatedUser() {
   const empresaNombre = row.empresa_nombre || "Biker's Fort";
 
   return {
-    usuario_id: row.usuario_id,
-    nombre,
-    apellido,
-    nombre_completo: nombreCompleto,
-    identificador_principal: row.identificador_principal || "",
-    correo_acceso: row.correo_acceso || "",
-    correo_electronico: row.correo_electronico || "",
-    forzar_cambio_clave: Boolean(row.forzar_cambio_clave || row.requiere_cambio_clave),
-    rol: rolNombre,
-    rol_nombre: rolNombre,
-    cargo_nombre: cargoNombre,
-    empresa_nombre: empresaNombre,
-    iniciales,
-    foto_url: null
+    user: {
+      usuario_id: row.usuario_id,
+      nombre,
+      apellido,
+      nombre_completo: nombreCompleto,
+      identificador_principal: row.identificador_principal || "",
+      correo_acceso: row.correo_acceso || "",
+      correo_electronico: row.correo_electronico || "",
+      forzar_cambio_clave: Boolean(row.forzar_cambio_clave || row.requiere_cambio_clave),
+      rol: rolNombre,
+      rol_nombre: rolNombre,
+      cargo_nombre: cargoNombre,
+      empresa_nombre: empresaNombre,
+      iniciales,
+      foto_url: null,
+      session_expires_at: validation.session.fecha_expiracion || null
+    },
+    reason: null
   };
 }
 
@@ -107,11 +127,11 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  let user = null;
+  let authResult: { user: (AuthenticatedUser & { forzar_cambio_clave: boolean; session_expires_at?: string | null }) | null; reason: string | null } | null = null;
   let dbError = false;
 
   try {
-    user = await getAuthenticatedUser();
+    authResult = await getAuthenticatedUser();
   } catch (err) {
     console.error("DashboardLayout PostgreSQL session query failure:", err);
     dbError = true;
@@ -128,9 +148,14 @@ export default async function DashboardLayout({
     );
   }
 
-  if (!user) {
+  if (!authResult?.user) {
+    if (authResult?.reason === "SESSION_EXPIRED") {
+      redirect("/login?reason=SESSION_EXPIRED");
+    }
     redirect("/login");
   }
+
+  const user = authResult.user;
 
   if (user.forzar_cambio_clave) {
     redirect("/change-password");

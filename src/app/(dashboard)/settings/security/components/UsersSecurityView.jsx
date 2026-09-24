@@ -77,13 +77,28 @@ export function mapUserDetail(detail, authUser) {
       detail?.mfaEnabled ?? (detail?.mfa_activo != null ? Boolean(detail.mfa_activo) : false),
     mfa_method: detail?.mfa_method ?? detail?.mfa_tipo ?? null,
     last_login_at:
-      detail?.last_login_at ?? detail?.fecha_ultimo_acceso ?? null
+      detail?.last_login_at ?? detail?.fecha_ultimo_acceso ?? null,
+    duracion_sesion_minutos: detail?.duracion_sesion_minutos ?? 480,
+    fecha_inicio_sesion: detail?.fecha_inicio_sesion ?? null,
+    fecha_expiracion_sesion: detail?.fecha_expiracion_sesion ?? null,
+    estado_sesion: detail?.estado_sesion ?? null
   };
+}
+
+export function formatDurationText(hours, minutes) {
+  const h = parseInt(hours, 10) || 0;
+  const m = parseInt(minutes, 10) || 0;
+  if (h === 0 && m === 0) return '0 minutos';
+  const parts = [];
+  if (h > 0) parts.push(`${h} ${h === 1 ? 'hora' : 'horas'}`);
+  if (m > 0) parts.push(`${m} ${m === 1 ? 'minuto' : 'minutos'}`);
+  return parts.join(' ');
 }
 
 export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode = false, selfUserId = null }) {
   const router = useRouter();
   const [data, setData] = useState([]);
+  const [nowTimestamp] = useState(() => Date.now());
   const [isLoading, setIsLoading] = useState(true);
   const [profileLoadError, setProfileLoadError] = useState(null);
   const [activities, setActivities] = useState([]);
@@ -609,6 +624,9 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         rol_principal_id: Number(targetData.rol_id),
         tipo_usuario_id: Number(targetData.tipo_usuario_id),
         user_type_id: Number(targetData.tipo_usuario_id),
+        duracion_sesion_minutos: (
+          (Number(targetData.sesion_horas ?? 8) * 60) + Number(targetData.sesion_minutos ?? 0)
+        ),
         updatedAt: new Date().toISOString(),
         updatedBy: 'Admin'
       };
@@ -736,6 +754,18 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
   const formatSafeDateTime = (dateVal, fallback = '—') => {
     if (!dateVal || dateVal === 'null' || dateVal === 'undefined') return fallback;
+    if (dateVal instanceof Date) {
+      if (isNaN(dateVal.getTime())) return fallback;
+      return dateVal.toLocaleString('es-DO', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true
+      });
+    }
     let str = String(dateVal).trim();
     if (str.includes(' ') && !str.includes('T')) {
       str = str.replace(' ', 'T');
@@ -1109,7 +1139,9 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
   }, [sortedData, currentPage, pageSize]);
 
   const handleChange = (field, value) => {
-    setFieldErrors(prev => ({ ...prev, [field]: undefined }));
+    setFieldErrors(prev => ({ ...prev, [field]: undefined, sesion_duracion: undefined }));
+    setFormErrors360(prev => ({ ...prev, [field]: undefined, sesion_duracion: undefined }));
+    setEdit360Error('');
     setWizardData(prev => {
       const updated = { ...prev, [field]: value };
       if (field === 'user_type') {
@@ -1290,7 +1322,10 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       department: '',
       area: '',
       avatar_url: null,
-      status: 'Activo'
+      status: 'Activo',
+      duracion_sesion_minutos: 480,
+      sesion_horas: 8,
+      sesion_minutos: 0
     });
   };
 
@@ -1350,6 +1385,12 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       const userTypeId = sourceUser.tipo_usuario_id || sourceUser.userTypeId || sourceUser.user_type_id || (matchedTuObj ? (matchedTuObj.tipo_usuario_id || matchedTuObj.id) : (userTypes && userTypes[0] ? (userTypes[0].tipo_usuario_id || userTypes[0].id) : ''));
       const userTypeName = sourceUser.user_type || sourceUser.tipo_usuario_nombre || (matchedTuObj ? (matchedTuObj.nombre || matchedTuObj.name) : '');
 
+      const durMins = sourceUser.duracion_sesion_minutos !== undefined && sourceUser.duracion_sesion_minutos !== null
+        ? Number(sourceUser.duracion_sesion_minutos)
+        : 480;
+      const sHoras = Math.floor(durMins / 60);
+      const sMinutos = durMins % 60;
+
       return {
         ...sourceUser,
         id: sourceUser.id || sourceUser.usuario_id,
@@ -1364,7 +1405,13 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         rol_id: rId ? Number(rId) : '',
         role: rName,
         tipo_usuario_id: userTypeId ? Number(userTypeId) : '',
-        user_type: userTypeName
+        user_type: userTypeName,
+        duracion_sesion_minutos: durMins,
+        sesion_horas: sHoras,
+        sesion_minutos: sMinutos,
+        fecha_inicio_sesion: sourceUser.fecha_inicio_sesion || null,
+        fecha_expiracion_sesion: sourceUser.fecha_expiracion_sesion || null,
+        estado_sesion: sourceUser.estado_sesion || null
       };
     };
 
@@ -1451,9 +1498,22 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       }
     }
 
+    const sHoras = wizardData.sesion_horas === '' ? 0 : Number(wizardData.sesion_horas ?? 8);
+    const sMinutos = wizardData.sesion_minutos === '' ? 0 : Number(wizardData.sesion_minutos ?? 0);
+    if (isNaN(sHoras) || sHoras < 0) {
+      newErrors.sesion_horas = 'Las horas no pueden ser negativas.';
+    }
+    if (isNaN(sMinutos) || sMinutos < 0 || sMinutos > 59) {
+      newErrors.sesion_minutos = 'Los minutos deben estar entre 0 y 59.';
+    }
+    const totalMinutos = (sHoras * 60) + sMinutos;
+    if (totalMinutos < 1) {
+      newErrors.sesion_duracion = 'La duración de sesión debe ser mayor que 0 minutos.';
+    }
+
     if (Object.keys(newErrors).length > 0) {
       setFormErrors360(newErrors);
-      setEdit360Error('Por favor complete los campos obligatorios marcados en el formulario.');
+      setEdit360Error(newErrors.sesion_duracion || 'Por favor complete los campos obligatorios marcados en el formulario.');
       return;
     }
 
@@ -1529,6 +1589,19 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         }
       }
 
+      const sHoras = wizardData.sesion_horas === '' ? 0 : Number(wizardData.sesion_horas ?? 8);
+      const sMinutos = wizardData.sesion_minutos === '' ? 0 : Number(wizardData.sesion_minutos ?? 0);
+      if (isNaN(sHoras) || sHoras < 0) {
+        errors.sesion_horas = 'Las horas no pueden ser negativas.';
+      }
+      if (isNaN(sMinutos) || sMinutos < 0 || sMinutos > 59) {
+        errors.sesion_minutos = 'Los minutos deben estar entre 0 y 59.';
+      }
+      const totalMinutos = (sHoras * 60) + sMinutos;
+      if (totalMinutos < 1) {
+        errors.sesion_duracion = 'La duración de sesión debe ser mayor que 0 minutos.';
+      }
+
       if (Object.keys(errors).length > 0) {
         setFieldErrors(errors);
         setTimeout(() => {
@@ -1578,6 +1651,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     cleanUser.must_change_password = Boolean(cleanUser.must_change_password);
     cleanUser.forzar_cambio_clave = Boolean(cleanUser.must_change_password);
     cleanUser.primary_access_type = 'EMAIL';
+    cleanUser.duracion_sesion_minutos = (Number(wizardData.sesion_horas ?? 8) * 60) + Number(wizardData.sesion_minutos ?? 0);
 
     // Set access channels
     cleanUser.web_access_enabled = true;
@@ -3329,6 +3403,121 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                         {formErrors360.tipo_usuario_id && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{formErrors360.tipo_usuario_id}</span>}
                       </div>
                     </div>
+
+                    {/* Row 6: DURACIÓN DE SESIÓN */}
+                    <div className="border-t border-border pt-4">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Clock size={16} className="text-primary" />
+                        <label className="text-xs font-bold text-foreground uppercase tracking-wider">
+                          DURACIÓN DE SESIÓN
+                        </label>
+                      </div>
+                      <p className="text-[11px] text-foreground-muted mb-3 font-normal">
+                        Define el tiempo máximo que la sesión del usuario puede permanecer activa.
+                      </p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Horas</label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={wizardData.sesion_horas !== undefined ? wizardData.sesion_horas : 8}
+                            onChange={(e) => {
+                              const val = e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value, 10) || 0);
+                              handleChange('sesion_horas', val);
+                            }}
+                            className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none transition-colors ${formErrors360.sesion_horas || formErrors360.sesion_duracion ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
+                            placeholder="Ej. 8"
+                          />
+                          {formErrors360.sesion_horas && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{formErrors360.sesion_horas}</span>}
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Minutos</label>
+                          <input
+                            type="number"
+                            min="0"
+                            max="59"
+                            value={wizardData.sesion_minutos !== undefined ? wizardData.sesion_minutos : 0}
+                            onChange={(e) => {
+                              const raw = e.target.value === '' ? '' : parseInt(e.target.value, 10) || 0;
+                              const val = raw === '' ? '' : Math.min(59, Math.max(0, raw));
+                              handleChange('sesion_minutos', val);
+                            }}
+                            className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none transition-colors ${formErrors360.sesion_minutos || formErrors360.sesion_duracion ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
+                            placeholder="Ej. 0"
+                          />
+                          {formErrors360.sesion_minutos && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{formErrors360.sesion_minutos}</span>}
+                        </div>
+                      </div>
+                      {formErrors360.sesion_duracion && (
+                        <span className="text-rose-400 text-[11px] mt-1.5 font-medium block">{formErrors360.sesion_duracion}</span>
+                      )}
+
+                      {/* Campo: Fecha de Expiración calculada en tiempo real al editar */}
+                      {(() => {
+                        const hVal = wizardData.sesion_horas === '' ? 0 : Number(wizardData.sesion_horas ?? 0);
+                        const mVal = wizardData.sesion_minutos === '' ? 0 : Number(wizardData.sesion_minutos ?? 0);
+                        const totalMins = (hVal * 60) + mVal;
+
+                        const hasActive = (detailUser?.estado_sesion === 'ACTIVA' || wizardData?.estado_sesion === 'ACTIVA');
+                        const startRef = (detailUser?.fecha_inicio_sesion || wizardData?.fecha_inicio_sesion || detailUser?.last_login_at);
+                        const startTimestamp = hasActive && startRef ? new Date(startRef).getTime() : null;
+
+                        const calculatedExpDate = (startTimestamp && !isNaN(startTimestamp))
+                          ? new Date(startTimestamp + totalMins * 60000)
+                          : new Date(nowTimestamp + totalMins * 60000);
+
+                        const isExpPast = calculatedExpDate.getTime() <= nowTimestamp;
+
+                        return (
+                          <div className="mt-4 pt-3.5 border-t border-border/50">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                              <div>
+                                <label className="block text-xs font-semibold text-foreground-secondary mb-1.5 flex items-center justify-between">
+                                  <span className="flex items-center gap-1.5">
+                                    <Calendar size={13} className="text-primary" />
+                                    <span>Fecha de expiración (calculada):</span>
+                                  </span>
+                                  {hasActive ? (
+                                    isExpPast ? (
+                                      <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-rose-500/10 text-rose-400 border border-rose-500/30">
+                                        Expirará al guardar
+                                      </span>
+                                    ) : (
+                                      <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                                        Sesión activa vigente
+                                      </span>
+                                    )
+                                  ) : (
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-indigo-500/10 text-indigo-400 border border-indigo-500/30">
+                                      Estimada si inicia ahora
+                                    </span>
+                                  )}
+                                </label>
+                                <input
+                                  type="text"
+                                  readOnly
+                                  disabled
+                                  value={totalMins > 0 ? formatSafeDateTime(calculatedExpDate) : 'Duración no válida'}
+                                  className="w-full bg-input/80 border border-border rounded-xl px-3.5 py-2.5 text-xs font-mono font-bold text-foreground focus:outline-none cursor-not-allowed select-all"
+                                />
+                              </div>
+
+                              <div className="space-y-1.5 text-xs text-foreground-muted">
+                                <div>
+                                  Duración total: <span className="text-primary font-bold">{formatDurationText(wizardData.sesion_horas ?? 8, wizardData.sesion_minutos ?? 0)}</span>
+                                </div>
+                                <p className="text-[11px] text-foreground-disabled leading-relaxed">
+                                  {hasActive && startTimestamp
+                                    ? `* Recalculada a partir de la sesión activa iniciada el ${formatSafeDateTime(new Date(startTimestamp))}.`
+                                    : '* Esta fecha y hora estimada se calculará a partir del momento en que el usuario inicie sesión.'}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
                   </div>
 
                   {/* Actions Footer */}
@@ -3406,6 +3595,51 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                       <span className="bg-surface-subtle border border-border text-foreground-secondary font-mono text-[10px] font-bold tracking-wider px-2 py-0.5 rounded w-fit">
                         {detailUser.user_type || (userTypes || []).find(t => t.id == detailUser.tipo_usuario_id || t.tipo_usuario_id == detailUser.tipo_usuario_id)?.nombre || (userTypes || []).find(t => t.id == detailUser.tipo_usuario_id || t.tipo_usuario_id == detailUser.tipo_usuario_id)?.name || '—'}
                       </span>
+                    </div>
+
+                    <div className="grid grid-cols-[140px_1fr] sm:grid-cols-[160px_1fr] items-center gap-2 border-b border-border/50 pb-2.5">
+                      <span className="text-foreground-muted font-bold">Duración de sesión:</span>
+                      <span className="font-bold text-foreground">
+                        {formatDurationText(
+                          Math.floor((detailUser.duracion_sesion_minutos ?? 480) / 60),
+                          (detailUser.duracion_sesion_minutos ?? 480) % 60
+                        )}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-[140px_1fr] sm:grid-cols-[160px_1fr] items-center gap-2 border-b border-border/50 pb-2.5">
+                      <span className="text-foreground-muted font-bold">Fecha de expiración:</span>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-foreground font-mono text-xs">
+                          {detailUser.fecha_expiracion_sesion
+                            ? formatSafeDateTime(detailUser.fecha_expiracion_sesion)
+                            : (detailUser.last_login_at
+                                ? formatSafeDateTime(new Date(new Date(detailUser.last_login_at).getTime() + (detailUser.duracion_sesion_minutos ?? 480) * 60000))
+                                : 'Sin sesión registrada')}
+                        </span>
+                        {detailUser.fecha_expiracion_sesion && (() => {
+                          const isExpTimePast = new Date(detailUser.fecha_expiracion_sesion).getTime() <= Date.now();
+                          let label = 'Activa';
+                          let badgeClass = 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30';
+
+                          if (detailUser.estado_sesion === 'REVOCADA') {
+                            label = 'Revocada';
+                            badgeClass = 'bg-amber-500/10 text-amber-400 border border-amber-500/30';
+                          } else if (detailUser.estado_sesion === 'CERRADA') {
+                            label = 'Cerrada';
+                            badgeClass = 'bg-surface-subtle text-foreground-secondary border border-border';
+                          } else if (detailUser.estado_sesion === 'EXPIRADA' || isExpTimePast) {
+                            label = 'Expirada';
+                            badgeClass = 'bg-rose-500/10 text-rose-400 border border-rose-500/30';
+                          }
+
+                          return (
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${badgeClass}`}>
+                              {label}
+                            </span>
+                          );
+                        })()}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -5812,6 +6046,98 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                           </span>
                         </label>
                       </div>
+
+                      {/* Sección: DURACIÓN DE SESIÓN */}
+                      <div className="border-t border-border pt-4">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Clock size={16} className="text-primary" />
+                          <label className="text-xs font-bold text-foreground uppercase tracking-wider">
+                            DURACIÓN DE SESIÓN
+                          </label>
+                        </div>
+                        <p className="text-[11px] text-foreground-muted mb-3 font-normal">
+                          Define el tiempo máximo que la sesión del usuario puede permanecer activa.
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Horas</label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={wizardData.sesion_horas !== undefined ? wizardData.sesion_horas : 8}
+                              onChange={(e) => {
+                                const val = e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value, 10) || 0);
+                                handleChange('sesion_horas', val);
+                              }}
+                              className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none transition-colors ${fieldErrors.sesion_horas || fieldErrors.sesion_duracion ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
+                              placeholder="Ej. 8"
+                            />
+                            {fieldErrors.sesion_horas && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{fieldErrors.sesion_horas}</span>}
+                          </div>
+                          <div>
+                            <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Minutos</label>
+                            <input
+                              type="number"
+                              min="0"
+                              max="59"
+                              value={wizardData.sesion_minutos !== undefined ? wizardData.sesion_minutos : 0}
+                              onChange={(e) => {
+                                const raw = e.target.value === '' ? '' : parseInt(e.target.value, 10) || 0;
+                                const val = raw === '' ? '' : Math.min(59, Math.max(0, raw));
+                                handleChange('sesion_minutos', val);
+                              }}
+                              className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none transition-colors ${fieldErrors.sesion_minutos || fieldErrors.sesion_duracion ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
+                              placeholder="Ej. 0"
+                            />
+                            {fieldErrors.sesion_minutos && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{fieldErrors.sesion_minutos}</span>}
+                          </div>
+                        </div>
+                        {fieldErrors.sesion_duracion && (
+                          <span className="text-rose-400 text-[11px] mt-1.5 font-medium block">{fieldErrors.sesion_duracion}</span>
+                        )}
+
+                        {/* Campo: Fecha de Expiración calculada en Creación de Usuario */}
+                        {(() => {
+                          const hVal = wizardData.sesion_horas === '' ? 0 : Number(wizardData.sesion_horas ?? 0);
+                          const mVal = wizardData.sesion_minutos === '' ? 0 : Number(wizardData.sesion_minutos ?? 0);
+                          const totalMins = (hVal * 60) + mVal;
+                          const calculatedExpDate = new Date(nowTimestamp + totalMins * 60000);
+
+                          return (
+                            <div className="mt-4 pt-3.5 border-t border-border/50">
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                                <div>
+                                  <label className="block text-xs font-semibold text-foreground-secondary mb-1.5 flex items-center justify-between">
+                                    <span className="flex items-center gap-1.5">
+                                      <Calendar size={13} className="text-primary" />
+                                      <span>Fecha de expiración (estimada):</span>
+                                    </span>
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-indigo-500/10 text-indigo-400 border border-indigo-500/30">
+                                      Estimada si inicia ahora
+                                    </span>
+                                  </label>
+                                  <input
+                                    type="text"
+                                    readOnly
+                                    disabled
+                                    value={totalMins > 0 ? formatSafeDateTime(calculatedExpDate) : 'Duración no válida'}
+                                    className="w-full bg-input/80 border border-border rounded-xl px-3.5 py-2.5 text-xs font-mono font-bold text-foreground focus:outline-none cursor-not-allowed select-all"
+                                  />
+                                </div>
+
+                                <div className="space-y-1.5 text-xs text-foreground-muted">
+                                  <div>
+                                    Duración total: <span className="text-primary font-bold">{formatDurationText(wizardData.sesion_horas ?? 8, wizardData.sesion_minutos ?? 0)}</span>
+                                  </div>
+                                  <p className="text-[11px] text-foreground-disabled leading-relaxed">
+                                    * Esta fecha y hora estimada se calculará a partir del momento en que el nuevo usuario inicie sesión.
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -5889,6 +6215,12 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                           <span className="text-foreground-muted font-medium">Forzar cambio de contraseña:</span>
                           <span className="font-normal text-foreground-secondary">
                             {wizardData.must_change_password ? 'Sí (al primer ingreso)' : 'No'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between border-b border-border/50 pb-2">
+                          <span className="text-foreground-muted font-medium">Duración de sesión:</span>
+                          <span className="font-bold text-foreground">
+                            {formatDurationText(wizardData.sesion_horas ?? 8, wizardData.sesion_minutos ?? 0)}
                           </span>
                         </div>
                       </div>
@@ -6198,7 +6530,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                   {wizardData.scope_entity_ids?.length || 0} agencias seleccionadas en total.
                 </span>
                 <span className="text-[9.5px] text-primary font-bold mt-0.5">
-                  * Recuerda hacer clic en "Guardar Cambios" al final del perfil.
+                  * Recuerda hacer clic en &quot;Guardar Cambios&quot; al final del perfil.
                 </span>
               </div>
               <div className="flex items-center gap-3">
