@@ -83,6 +83,7 @@ export default function CustomersView() {
   const [sortDirection, setSortDirection] = useState("desc");
   const [page, setPage] = useState(1);
   const itemsPerPage = 8;
+  const [mounted, setMounted] = useState(false);
 
   // RBAC permissions state
   const [permissions, setPermissions] = useState({
@@ -237,6 +238,7 @@ export default function CustomersView() {
     let isMounted = true;
     const timer = setTimeout(() => {
       if (isMounted) {
+        setMounted(true);
         fetchData();
       }
     }, 0);
