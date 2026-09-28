@@ -18,7 +18,8 @@ import {
   X,
   Plus,
   Minus,
-  ArrowRightLeft
+  ArrowRightLeft,
+  Truck
 } from "lucide-react";
 
 export default function InventoryStockView({ initialFilter = "TODOS" } = {}) {
@@ -32,6 +33,7 @@ export default function InventoryStockView({ initialFilter = "TODOS" } = {}) {
   // Filters & Pagination state
   const [search, setSearch] = useState("");
   const [almacenId, setAlmacenId] = useState("");
+  const [proveedorId, setProveedorId] = useState("");
   const [estadoStock, setEstadoStock] = useState(urlFilter);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -46,7 +48,8 @@ export default function InventoryStockView({ initialFilter = "TODOS" } = {}) {
     total_pages: 1
   });
   const [lookups, setLookups] = useState({
-    almacenes: []
+    almacenes: [],
+    proveedores: []
   });
 
   const fetchStock = useCallback(async () => {
@@ -56,6 +59,7 @@ export default function InventoryStockView({ initialFilter = "TODOS" } = {}) {
       const params = new URLSearchParams();
       if (search.trim()) params.set("search", search.trim());
       if (almacenId) params.set("almacen_id", almacenId);
+      if (proveedorId) params.set("proveedor_id", proveedorId);
       if (estadoStock && estadoStock !== "TODOS") params.set("estado_stock", estadoStock);
       params.set("page", String(page));
       params.set("page_size", String(pageSize));
@@ -91,7 +95,7 @@ export default function InventoryStockView({ initialFilter = "TODOS" } = {}) {
     } finally {
       setLoading(false);
     }
-  }, [search, almacenId, estadoStock, page, pageSize, sortBy, sortDirection]);
+  }, [search, almacenId, proveedorId, estadoStock, page, pageSize, sortBy, sortDirection]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -111,6 +115,7 @@ export default function InventoryStockView({ initialFilter = "TODOS" } = {}) {
   const handleResetFilters = () => {
     setSearch("");
     setAlmacenId("");
+    setProveedorId("");
     setEstadoStock("TODOS");
     setPage(1);
     setSortBy("producto_nombre");
@@ -188,7 +193,7 @@ export default function InventoryStockView({ initialFilter = "TODOS" } = {}) {
             <ArrowRightLeft className="w-3.5 h-3.5" />
             <span>Transferir</span>
           </Link>
-          {(search || almacenId || estadoStock !== "TODOS") && (
+          {(search || almacenId || proveedorId || estadoStock !== "TODOS") && (
             <button
               onClick={handleResetFilters}
               className="flex items-center gap-1 px-3 py-1.5 bg-surface-subtle hover:bg-surface-elevated text-foreground-muted hover:text-foreground text-xs font-medium rounded-md border border-border transition-colors cursor-pointer"
@@ -210,7 +215,7 @@ export default function InventoryStockView({ initialFilter = "TODOS" } = {}) {
       </div>
 
       {/* Main Filter Toolbar */}
-      <div className="bg-surface border border-border rounded-lg p-4 shadow-sm">
+      <div className="bg-surface border border-border rounded-lg p-4 shadow-sm space-y-3">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {/* Search Box */}
           <div className="relative">
@@ -222,7 +227,7 @@ export default function InventoryStockView({ initialFilter = "TODOS" } = {}) {
                 setSearch(e.target.value);
                 setPage(1);
               }}
-              placeholder="Buscar por código, producto o marca..."
+              placeholder="Buscar por código, producto, marca o proveedor..."
               className="w-full pl-9 pr-3 py-1.5 bg-input border border-border rounded-md text-xs text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-primary transition-colors"
             />
           </div>
@@ -247,6 +252,26 @@ export default function InventoryStockView({ initialFilter = "TODOS" } = {}) {
             </select>
           </div>
 
+          {/* Provider Selector */}
+          <div className="relative">
+            <Truck className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-foreground-muted" />
+            <select
+              value={proveedorId}
+              onChange={(e) => {
+                setProveedorId(e.target.value);
+                setPage(1);
+              }}
+              className="w-full pl-9 pr-3 py-1.5 bg-input border border-border rounded-md text-xs text-foreground focus:outline-none focus:border-primary transition-colors cursor-pointer"
+            >
+              <option value="">Todos los proveedores</option>
+              {lookups.proveedores?.map((p) => (
+                <option key={p.proveedor_id} value={p.proveedor_id}>
+                  {p.nombre_comercial}
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* Stock Status Selector */}
           <div className="relative">
             <Filter className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-foreground-muted" />
@@ -264,15 +289,15 @@ export default function InventoryStockView({ initialFilter = "TODOS" } = {}) {
               <option value="SIN_STOCK">Sin Stock (Agotado = 0)</option>
             </select>
           </div>
+        </div>
 
-          {/* Records summary indicator */}
-          <div className="flex items-center justify-end gap-3 text-xs text-foreground-muted px-1">
-            <span className="font-semibold text-foreground font-mono">
-              {pagination.total} {pagination.total === 1 ? "artículo" : "artículos"}
-            </span>
-            <span>•</span>
-            <span>Página {pagination.page} de {pagination.total_pages || 1}</span>
-          </div>
+        {/* Records summary indicator */}
+        <div className="flex items-center justify-end gap-3 text-xs text-foreground-muted px-1 pt-1 border-t border-border/40">
+          <span className="font-semibold text-foreground font-mono">
+            {pagination.total} {pagination.total === 1 ? "artículo" : "artículos"}
+          </span>
+          <span>•</span>
+          <span>Página {pagination.page} de {pagination.total_pages || 1}</span>
         </div>
       </div>
 
@@ -309,7 +334,7 @@ export default function InventoryStockView({ initialFilter = "TODOS" } = {}) {
             <p className="text-xs text-foreground-muted max-w-sm mx-auto">
               No hay registros que coincidan con los filtros de búsqueda y almacén seleccionados.
             </p>
-            {(search || almacenId || estadoStock !== "TODOS") && (
+            {(search || almacenId || proveedorId || estadoStock !== "TODOS") && (
               <button
                 onClick={handleResetFilters}
                 className="text-xs font-semibold text-primary hover:underline cursor-pointer"
@@ -340,6 +365,12 @@ export default function InventoryStockView({ initialFilter = "TODOS" } = {}) {
                     className="py-3 px-4 cursor-pointer hover:text-foreground transition-colors hidden md:table-cell"
                   >
                     Marca {getSortIcon("marca")}
+                  </th>
+                  <th
+                    onClick={() => handleSort("proveedor")}
+                    className="py-3 px-4 cursor-pointer hover:text-foreground transition-colors hidden md:table-cell"
+                  >
+                    Proveedor {getSortIcon("proveedor")}
                   </th>
                   <th
                     onClick={() => handleSort("almacen_nombre")}
@@ -399,6 +430,41 @@ export default function InventoryStockView({ initialFilter = "TODOS" } = {}) {
                     </td>
                     <td className="py-3 px-4 text-foreground-muted hidden md:table-cell whitespace-nowrap">
                       {item.marca}
+                    </td>
+                    <td className="py-3 px-4 text-foreground-muted hidden md:table-cell max-w-[180px]">
+                      {item.total_proveedores === 0 ? (
+                        <span className="italic text-foreground-muted/60">
+                          Sin proveedor
+                        </span>
+                      ) : item.total_proveedores === 1 ? (
+                        <span
+                          className="truncate font-medium text-foreground block"
+                          title={item.proveedores_lista?.[0] || item.proveedor}
+                        >
+                          {item.proveedor}
+                        </span>
+                      ) : item.tiene_proveedor_principal ? (
+                        <div
+                          className="flex items-center gap-1.5"
+                          title={item.proveedores_lista?.join("\n")}
+                        >
+                          <span className="truncate font-medium text-foreground">
+                            {item.proveedor}
+                          </span>
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-surface-elevated text-primary border border-primary/20 shrink-0">
+                            +{item.total_proveedores - 1}
+                          </span>
+                        </div>
+                      ) : (
+                        <div
+                          className="flex items-center"
+                          title={item.proveedores_lista?.join("\n")}
+                        >
+                          <span className="truncate font-medium text-foreground block">
+                            {item.proveedor}
+                          </span>
+                        </div>
+                      )}
                     </td>
                     <td className="py-3 px-4 text-foreground whitespace-nowrap">
                       <span className="font-medium">{item.almacen_nombre}</span>

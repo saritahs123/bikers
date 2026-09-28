@@ -42,6 +42,7 @@ import WorkOrderHistoryView from "./WorkOrderHistoryView";
 import EditWorkOrderModal from "./EditWorkOrderModal";
 import WorkOrderStatusBadge from "./WorkOrderStatusBadge";
 import RegisterPaymentModal from "@/components/billing/RegisterPaymentModal";
+import { resolvePipelineStep } from "@/lib/workshop/workOrderPipelineConfig";
 
 export default function WorkOrderDetailView({ ordenId, onBack }) {
   const searchParams = useSearchParams();
@@ -992,82 +993,25 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
   }
 
   // CHECKPOINT: FIX-TALLER-FLUJO-ESTADO-1
-  // Pipeline Stepper Definitions: mapped strictly by official catalog codes & operational sequence
-  // Visual presentation (completed, active, pending) is 100% decoupled from admin.estado_orden_trabajo.color_estado
-  const PIPELINE_STEPS = [
-    {
-      stepIndex: 1,
-      key: "RECIBIDA",
-      aliases: ["RECIBIDA", "PENDIENTE"],
-      catalogId: 1,
-      label: "PENDIENTE",
-      activeColor: "#3b82f6", // Blue for pending/received
-      icon: Check
-    },
-    {
-      stepIndex: 2,
-      key: "REPARACION",
-      aliases: ["REPARACION", "EN REPARACION", "EN_REPARACION"],
-      catalogId: 5,
-      label: "EN REPARACION",
-      activeColor: "#f97316", // Orange for in-repair
-      icon: Wrench
-    },
-    {
-      stepIndex: 3,
-      key: "LISTA_ENTREGA",
-      aliases: ["LISTA_ENTREGA", "COMPLETADA", "COMPLETADO"],
-      catalogId: 7,
-      label: "COMPLETADA",
-      activeColor: "#10b981", // Emerald green for ready/completed
-      icon: Truck
-    },
-    {
-      stepIndex: 4,
-      key: "ENTREGADA",
-      aliases: ["ENTREGADA", "ENTREGADO"],
-      catalogId: 8,
-      label: "ENTREGADA",
-      activeColor: "#059669", // Deep emerald green for final delivered
-      icon: ShieldCheck
-    }
-  ];
+  // Pipeline Stepper Definitions resolved from canonical shared configuration
+  const pipelineResolution = resolvePipelineStep(order.estado_codigo, order.estado_orden_id);
+  const currentStepIndex = pipelineResolution.currentStepIndex;
+  const isOrderHold = pipelineResolution.isHold;
 
-  // Resolve current step index from order state (code preferred, id fallback)
-  const orderStatusCode = String(order.estado_codigo || "").trim().toUpperCase();
-  const orderStatusId = Number(order.estado_orden_id || 0);
-
-  const isOrderHold = orderStatusCode === "HOLD" || orderStatusId === 2;
-
-  let currentStepIndex = 1;
-  if (isOrderHold) {
-    currentStepIndex = 2; // HOLD is a temporary condition handled within the repair step
-  } else if (orderStatusCode === "ENTREGADA" || orderStatusId === 8) {
-    currentStepIndex = 4;
-  } else if (orderStatusCode === "LISTA_ENTREGA" || orderStatusCode === "COMPLETADA" || orderStatusId === 7) {
-    currentStepIndex = 3;
-  } else if (orderStatusCode === "REPARACION" || orderStatusCode === "EN REPARACION" || orderStatusCode === "EN_REPARACION" || orderStatusId === 5) {
-    currentStepIndex = 2;
-  } else if (orderStatusCode === "RECIBIDA" || orderStatusCode === "PENDIENTE" || orderStatusId === 1) {
-    currentStepIndex = 1;
-  } else {
-    const foundStep = PIPELINE_STEPS.find(s => s.catalogId === orderStatusId);
-    currentStepIndex = foundStep ? foundStep.stepIndex : 1;
-  }
-
-  const getPipelineLabel = (step) => {
-    if (isOrderHold && step.stepIndex === 2) {
-      return "EN HOLD";
-    }
-    return step.label;
+  const STEP_ICONS = {
+    RECIBIDA: Check,
+    REPARACION: Wrench,
+    LISTA_ENTREGA: Truck,
+    ENTREGADA: ShieldCheck,
   };
 
-  const getPipelineActiveColor = (step) => {
-    if (isOrderHold && step.stepIndex === 2) {
-      return "#ef4444"; // Red alert for HOLD pause
-    }
-    return step.activeColor;
-  };
+  const PIPELINE_STEPS = pipelineResolution.steps.map((s) => ({
+    ...s,
+    icon: STEP_ICONS[s.key] || Check,
+  }));
+
+  const getPipelineLabel = (step) => step.label;
+  const getPipelineActiveColor = (step) => step.activeColor;
 
   // Extract services, labor items, and products from live backend API or order object
   const servicesList = (order.resumen_financiero?.servicios || order.servicios || []).map((s) => ({
@@ -1695,7 +1639,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                               className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-slate-300 hover:text-amber-400 hover:bg-[#161a21] transition-colors text-left"
                             >
                               <RotateCcw className={`w-3.5 h-3.5 ${trackingActionLoading ? "animate-spin" : ""}`} />
-                              <span>Regenerar enlace</span>
+                              <span>Regenerar</span>
                             </button>
                             <button
                               type="button"
@@ -1711,7 +1655,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                               }`}
                             >
                               <Power className="w-3.5 h-3.5" />
-                              <span>{trackingData?.activo ? "Desactivar seguimiento" : "Activar seguimiento"}</span>
+                              <span>{trackingData?.activo ? "Desactivar" : "Activar"}</span>
                             </button>
                           </div>
                         )}
@@ -1748,8 +1692,8 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                         <p className="text-xs text-slate-300 font-sans leading-relaxed">
                           El cliente puede escanear el QR o acceder con su enlace directo en tiempo real sin credenciales.
                         </p>
-                        <div className="text-[11px] font-mono text-slate-400 truncate pt-0.5">
-                          Token: <span className="text-[#bfce7f] font-semibold">{trackingData.publicToken ? `${trackingData.publicToken.slice(0, 12)}...` : "Activo"}</span>
+                        <div className="text-[11px] font-mono text-slate-400 truncate pt-0.5" title={trackingData.publicUrl}>
+                          Enlace: <span className="text-[#bfce7f] font-semibold select-all">{trackingData.publicUrl || "Cargando..."}</span>
                         </div>
                       </div>
                     </div>
@@ -1800,7 +1744,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                       ) : (
                         <>
                           <Copy className="w-4 h-4 text-[#bfce7f] shrink-0" />
-                          <span className="truncate">Copiar enlace</span>
+                          <span className="truncate">Copiar</span>
                         </>
                       )}
                     </button>
