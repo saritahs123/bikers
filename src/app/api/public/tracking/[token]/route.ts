@@ -8,7 +8,7 @@ export async function GET(
   try {
     const { token } = await context.params;
 
-    if (!token || typeof token !== "string" || token.trim().length < 16) {
+    if (!token || typeof token !== "string" || token.trim().length < 6) {
       return NextResponse.json(
         { error: "NOT_FOUND", message: "No fue posible encontrar este seguimiento." },
         { status: 404 }
