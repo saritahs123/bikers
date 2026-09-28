@@ -3,11 +3,17 @@ import crypto from "crypto";
 import QRCode from "qrcode";
 import { query } from "@/lib/db";
 import { PoolClient } from "pg";
+import {
+  resolvePipelineStep,
+  getPipelineStatusMessage,
+  ResolvedPipelineStep,
+} from "@/lib/workshop/workOrderPipelineConfig";
 
 export interface WorkOrderTrackingRecord {
   orden_tracking_id: number;
   orden_trabajo_id: number;
   public_token: string;
+  short_code: string;
   token_hash: string;
   activo: boolean;
   fecha_creacion: Date | string;
@@ -20,7 +26,8 @@ export interface WorkOrderTrackingInfo {
   ordenTrackingId: number;
   ordenTrabajoId: number;
   publicToken: string;
-  token: string; // Alias for publicToken for backward compatibility
+  shortCode: string;
+  token: string; // Alias for backward compatibility
   tokenHash: string;
   activo: boolean;
   publicUrl: string;
@@ -38,6 +45,9 @@ export interface PublicWorkOrderDTO {
   pasoActual: number;
   pasosTotales: number;
   esEntregada: boolean;
+  isHold: boolean;
+  pipelineSteps: ResolvedPipelineStep[];
+  statusMessage: string;
   fechaRecepcion: string;
   fechaPrometidaEstimada: string | null;
   fechaEntregaReal: string | null;
@@ -68,6 +78,33 @@ export interface PublicWorkOrderDTO {
     estadoLabel: string;
     completado: boolean;
   }>;
+}
+
+const BASE62_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+
+/**
+ * Generates an unpredictable, URL-safe Base62 short code (8 characters by default).
+ * Has ~2.18 * 10^14 combinations without modulo bias.
+ * Decoupled completely from IDs, sequences, or order codes.
+ */
+export function generateShortCode(length = 8): string {
+  let result = "";
+  const bytes = crypto.randomBytes(length * 2);
+  let byteIndex = 0;
+  while (result.length < length && byteIndex < bytes.length) {
+    const byte = bytes[byteIndex++];
+    // 62 * 4 = 248. Discard >= 248 to avoid modulo bias
+    if (byte < 248) {
+      result += BASE62_CHARS[byte % 62];
+    }
+  }
+  while (result.length < length) {
+    const extraByte = crypto.randomBytes(1)[0];
+    if (extraByte < 248) {
+      result += BASE62_CHARS[extraByte % 62];
+    }
+  }
+  return result;
 }
 
 /**
@@ -130,8 +167,8 @@ export async function generateTrackingQrSvg(url: string): Promise<string> {
 }
 
 /**
- * Ensures a work order has an active tracking record with persistent public_token.
- * If one exists, reuses the existing public_token without generating a new link.
+ * Ensures a work order has an active tracking record with persistent short_code.
+ * If one exists, reuses the existing short_code without generating a new link.
  * If not, creates one atomically.
  */
 export async function ensureWorkOrderTracking(
@@ -156,6 +193,7 @@ export async function ensureWorkOrderTracking(
        orden_tracking_id,
        orden_trabajo_id,
        public_token,
+       short_code,
        token_hash,
        activo,
        fecha_creacion,
@@ -170,48 +208,52 @@ export async function ensureWorkOrderTracking(
   if (existingRows.length > 0) {
     const row = existingRows[0];
 
-    // If public_token already exists, reuse it directly
-    if (row.public_token) {
+    // If both short_code and public_token exist, reuse them directly
+    if (row.short_code && row.public_token) {
       return {
         ordenTrackingId: row.orden_tracking_id,
         ordenTrabajoId: row.orden_trabajo_id,
         publicToken: row.public_token,
-        token: row.public_token,
+        shortCode: row.short_code,
+        token: row.short_code,
         tokenHash: row.token_hash,
         activo: row.activo,
-        publicUrl: `${baseUrl}/seguimiento/${row.public_token}`,
+        publicUrl: `${baseUrl}/${row.short_code}`,
         fechaCreacion: new Date(row.fecha_creacion).toISOString(),
         fechaUltimoAcceso: row.fecha_ultimo_acceso ? new Date(row.fecha_ultimo_acceso).toISOString() : null,
         fechaDesactivacion: row.fecha_desactivacion ? new Date(row.fecha_desactivacion).toISOString() : null,
       };
     }
 
-    // Failsafe backfill for any legacy record lacking public_token
-    const newPublicToken = generateCryptographicToken();
-    const newHash = hashTrackingToken(newPublicToken);
+    // Failsafe backfill for any legacy record lacking short_code or public_token
+    const finalShortCode = row.short_code || generateShortCode(8);
+    const finalPublicToken = row.public_token || generateCryptographicToken();
+    const finalHash = row.token_hash || hashTrackingToken(finalPublicToken);
 
     await runQuery(
       `UPDATE admin.orden_tracking
-       SET public_token = $1, token_hash = $2
-       WHERE orden_tracking_id = $3`,
-      [newPublicToken, newHash, row.orden_tracking_id]
+       SET short_code = $1, public_token = $2, token_hash = $3
+       WHERE orden_tracking_id = $4`,
+      [finalShortCode, finalPublicToken, finalHash, row.orden_tracking_id]
     );
 
     return {
       ordenTrackingId: row.orden_tracking_id,
       ordenTrabajoId: row.orden_trabajo_id,
-      publicToken: newPublicToken,
-      token: newPublicToken,
-      tokenHash: newHash,
+      publicToken: finalPublicToken,
+      shortCode: finalShortCode,
+      token: finalShortCode,
+      tokenHash: finalHash,
       activo: row.activo,
-      publicUrl: `${baseUrl}/seguimiento/${newPublicToken}`,
+      publicUrl: `${baseUrl}/${finalShortCode}`,
       fechaCreacion: new Date(row.fecha_creacion).toISOString(),
       fechaUltimoAcceso: row.fecha_ultimo_acceso ? new Date(row.fecha_ultimo_acceso).toISOString() : null,
       fechaDesactivacion: row.fecha_desactivacion ? new Date(row.fecha_desactivacion).toISOString() : null,
     };
   }
 
-  // 2. Create new tracking record with random public_token and its sha256 hash
+  // 2. Create new tracking record with random short_code, public_token and its sha256 hash
+  const shortCode = generateShortCode(8);
   const publicToken = generateCryptographicToken();
   const tokenHash = hashTrackingToken(publicToken);
 
@@ -219,17 +261,19 @@ export async function ensureWorkOrderTracking(
     INSERT INTO admin.orden_tracking (
       orden_trabajo_id,
       public_token,
+      short_code,
       token_hash,
       activo,
       fecha_creacion,
       usuario_registro
-    ) VALUES ($1, $2, $3, true, clock_timestamp(), $4)
+    ) VALUES ($1, $2, $3, $4, true, clock_timestamp(), $5)
     ON CONFLICT (orden_trabajo_id) DO UPDATE SET
       activo = true
     RETURNING 
       orden_tracking_id,
       orden_trabajo_id,
       public_token,
+      short_code,
       token_hash,
       activo,
       fecha_creacion,
@@ -241,21 +285,24 @@ export async function ensureWorkOrderTracking(
   const insertedRows = await runQuery<WorkOrderTrackingRecord>(insertSql, [
     ordenTrabajoId,
     publicToken,
+    shortCode,
     tokenHash,
     usuarioRegistroId || null,
   ]);
 
   const record = insertedRows[0];
+  const finalCode = record.short_code || shortCode;
   const finalToken = record.public_token || publicToken;
 
   return {
     ordenTrackingId: record.orden_tracking_id,
     ordenTrabajoId: record.orden_trabajo_id,
     publicToken: finalToken,
-    token: finalToken,
+    shortCode: finalCode,
+    token: finalCode,
     tokenHash: record.token_hash,
     activo: record.activo,
-    publicUrl: `${baseUrl}/seguimiento/${finalToken}`,
+    publicUrl: `${baseUrl}/${finalCode}`,
     fechaCreacion: new Date(record.fecha_creacion).toISOString(),
     fechaUltimoAcceso: record.fecha_ultimo_acceso ? new Date(record.fecha_ultimo_acceso).toISOString() : null,
     fechaDesactivacion: record.fecha_desactivacion ? new Date(record.fecha_desactivacion).toISOString() : null,
@@ -263,14 +310,15 @@ export async function ensureWorkOrderTracking(
 }
 
 /**
- * Regenerates the tracking link for a work order, immediately invalidating the previous token.
- * Generates a new public_token and new token_hash and persists both in a single query.
+ * Regenerates the tracking link for a work order, immediately invalidating the previous code and token.
+ * Generates a new short_code, new public_token and new token_hash and persists in a single query.
  */
 export async function regenerateWorkOrderTracking(
   ordenTrabajoId: number,
   usuarioId?: number | null,
   requestOrigin?: string | null
 ): Promise<WorkOrderTrackingInfo> {
+  const newShortCode = generateShortCode(8);
   const newPublicToken = generateCryptographicToken();
   const newTokenHash = hashTrackingToken(newPublicToken);
   const baseUrl = getPublicTrackingBaseUrl(requestOrigin);
@@ -279,13 +327,15 @@ export async function regenerateWorkOrderTracking(
     INSERT INTO admin.orden_tracking (
       orden_trabajo_id,
       public_token,
+      short_code,
       token_hash,
       activo,
       fecha_creacion,
       usuario_registro
-    ) VALUES ($1, $2, $3, true, clock_timestamp(), $4)
+    ) VALUES ($1, $2, $3, $4, true, clock_timestamp(), $5)
     ON CONFLICT (orden_trabajo_id) DO UPDATE SET
       public_token = EXCLUDED.public_token,
+      short_code = EXCLUDED.short_code,
       token_hash = EXCLUDED.token_hash,
       activo = true,
       fecha_creacion = EXCLUDED.fecha_creacion,
@@ -294,6 +344,7 @@ export async function regenerateWorkOrderTracking(
       orden_tracking_id,
       orden_trabajo_id,
       public_token,
+      short_code,
       token_hash,
       activo,
       fecha_creacion,
@@ -304,20 +355,23 @@ export async function regenerateWorkOrderTracking(
   const res = await query<any>(updateSql, [
     ordenTrabajoId,
     newPublicToken,
+    newShortCode,
     newTokenHash,
     usuarioId || null,
   ]);
 
   const record = res[0];
+  const finalCode = record.short_code || newShortCode;
 
   return {
     ordenTrackingId: record.orden_tracking_id,
     ordenTrabajoId: record.orden_trabajo_id,
     publicToken: record.public_token,
-    token: record.public_token,
+    shortCode: finalCode,
+    token: finalCode,
     tokenHash: record.token_hash,
     activo: record.activo,
-    publicUrl: `${baseUrl}/seguimiento/${record.public_token}`,
+    publicUrl: `${baseUrl}/${finalCode}`,
     fechaCreacion: new Date(record.fecha_creacion).toISOString(),
     fechaUltimoAcceso: record.fecha_ultimo_acceso ? new Date(record.fecha_ultimo_acceso).toISOString() : null,
     fechaDesactivacion: record.fecha_desactivacion ? new Date(record.fecha_desactivacion).toISOString() : null,
@@ -325,7 +379,7 @@ export async function regenerateWorkOrderTracking(
 }
 
 /**
- * Deactivates tracking for a work order without deleting the token.
+ * Deactivates tracking for a work order without deleting the short code.
  * Any public attempt to access it will return a generic 404.
  */
 export async function deactivateWorkOrderTracking(
@@ -346,7 +400,7 @@ export async function deactivateWorkOrderTracking(
 }
 
 /**
- * Reactivates tracking for a work order, reusing the existing public_token.
+ * Reactivates tracking for a work order, maintaining the same short_code if not regenerated.
  */
 export async function activateWorkOrderTracking(
   ordenTrabajoId: number,
@@ -363,6 +417,7 @@ export async function activateWorkOrderTracking(
        orden_tracking_id,
        orden_trabajo_id,
        public_token,
+       short_code,
        token_hash,
        activo,
        fecha_creacion,
@@ -373,14 +428,25 @@ export async function activateWorkOrderTracking(
 
   if (res && res.length > 0) {
     const row = res[0];
+    const finalCode = row.short_code || generateShortCode(8);
+
+    // If short_code was missing, ensure it's saved
+    if (!row.short_code) {
+      await query(
+        `UPDATE admin.orden_tracking SET short_code = $1 WHERE orden_tracking_id = $2`,
+        [finalCode, row.orden_tracking_id]
+      );
+    }
+
     return {
       ordenTrackingId: row.orden_tracking_id,
       ordenTrabajoId: row.orden_trabajo_id,
       publicToken: row.public_token,
-      token: row.public_token,
+      shortCode: finalCode,
+      token: finalCode,
       tokenHash: row.token_hash,
       activo: true,
-      publicUrl: `${baseUrl}/seguimiento/${row.public_token}`,
+      publicUrl: `${baseUrl}/${finalCode}`,
       fechaCreacion: new Date(row.fecha_creacion).toISOString(),
       fechaUltimoAcceso: row.fecha_ultimo_acceso ? new Date(row.fecha_ultimo_acceso).toISOString() : null,
       fechaDesactivacion: null,
@@ -388,41 +454,6 @@ export async function activateWorkOrderTracking(
   }
 
   return await ensureWorkOrderTracking(ordenTrabajoId, null, undefined, requestOrigin);
-}
-
-/**
- * Friendly translation for internal workshop order states.
- */
-export function translateOrderState(rawCode?: string, rawName?: string): {
-  label: string;
-  paso: number;
-} {
-  const code = (rawCode || "").trim().toUpperCase();
-  const name = (rawName || "").trim().toUpperCase();
-
-  if (code === "RECIBIDA" || name === "PENDIENTE" || code === "PENDIENTE") {
-    return { label: "Bicicleta recibida", paso: 1 };
-  }
-  if (code === "DIAGNOSTICO" || code === "EVALUACION" || name.includes("DIAGN")) {
-    return { label: "En diagnóstico técnico", paso: 2 };
-  }
-  if (code === "REPARACION" || code === "EN_REPARACION" || name.includes("REPARACI")) {
-    return { label: "En reparación", paso: 3 };
-  }
-  if (code === "HOLD" || code === "EN_HOLD" || name.includes("HOLD")) {
-    return { label: "En pausa / Espera de piezas", paso: 3 };
-  }
-  if (code === "APROBACION" || name.includes("APROBACI")) {
-    return { label: "Esperando aprobación", paso: 3 };
-  }
-  if (code === "LISTA_ENTREGA" || code === "LISTA_PARA_ENTREGA" || name === "COMPLETADA") {
-    return { label: "Lista para entrega", paso: 4 };
-  }
-  if (code === "ENTREGADA" || name === "ENTREGADA") {
-    return { label: "Entregada", paso: 5 };
-  }
-
-  return { label: rawName || rawCode || "En proceso", paso: 3 };
 }
 
 /**
@@ -452,31 +483,32 @@ export function translateServiceStatus(rawCode?: string, rawName?: string): {
 }
 
 /**
- * Fetches secure public DTO for an order by its tracking token.
- * Validates either by public_token or by token_hash.
- * Returns null if token is invalid or tracking is inactive (allowing generic 404).
+ * Fetches secure public DTO for an order by its short code or tracking token.
+ * Validates by short_code, token_hash, or public_token.
+ * Returns null if invalid or inactive (allowing generic 404).
  */
 export async function getPublicTrackingData(
-  token: string
+  codeOrToken: string
 ): Promise<PublicWorkOrderDTO | null> {
-  if (!token || typeof token !== "string" || token.trim().length < 16) {
+  if (!codeOrToken || typeof codeOrToken !== "string" || codeOrToken.trim().length < 6) {
     return null;
   }
 
-  const cleanToken = token.trim();
-  const tokenHash = hashTrackingToken(cleanToken);
+  const clean = codeOrToken.trim();
+  const tokenHash = hashTrackingToken(clean);
 
-  // 1. Verify tracking record by either token_hash or public_token
+  // 1. Verify tracking record by short_code, token_hash, or public_token
   const trackingRes = await query<any>(
     `SELECT 
        orden_tracking_id,
        orden_trabajo_id,
        public_token,
+       short_code,
        token_hash,
        activo
      FROM admin.orden_tracking
-     WHERE (token_hash = $1 OR public_token = $2)`,
-    [tokenHash, cleanToken]
+     WHERE (short_code = $1 OR token_hash = $2 OR public_token = $1)`,
+    [clean, tokenHash]
   );
 
   if (!trackingRes || trackingRes.length === 0) {
@@ -512,6 +544,7 @@ export async function getPublicTrackingData(
        ot.fecha_registro,
        ot.descripcion_cliente,
        ot.diagnostico_inicial,
+       ot.estado_orden_id,
        eot.codigo AS estado_codigo,
        eot.nombre AS estado_nombre,
        eot.color_estado AS estado_color,
@@ -543,7 +576,10 @@ export async function getPublicTrackingData(
   }
 
   const order = orderRes[0];
-  const translatedState = translateOrderState(order.estado_codigo, order.estado_nombre);
+
+  // Resolve pipeline step and message using canonical workshop pipeline config
+  const pipelineRes = resolvePipelineStep(order.estado_codigo, order.estado_orden_id);
+  const statusMessage = getPipelineStatusMessage(order.estado_codigo, order.estado_nombre);
 
   // 3. Query bicycle main photo if available
   let fotoUrl: string | null = null;
@@ -604,15 +640,15 @@ export async function getPublicTrackingData(
   );
 
   const timeline = (histRes || []).map((h: any, idx: number) => {
-    const trans = translateOrderState(h.estado_codigo, h.estado_nombre);
+    const stepResolution = resolvePipelineStep(h.estado_codigo);
     const isCurrent = idx === histRes.length - 1;
     return {
       id: h.orden_historial_estado_id,
       estadoCodigo: h.estado_codigo,
-      estadoLabel: trans.label,
-      color: h.color_estado || "#bfce7f",
+      estadoLabel: stepResolution.currentStepLabel,
+      color: stepResolution.activeColor,
       fecha: new Date(h.fecha).toISOString(),
-      comentario: trans.label,
+      comentario: stepResolution.currentStepLabel,
       esEstadoActual: isCurrent,
     };
   });
@@ -622,25 +658,28 @@ export async function getPublicTrackingData(
     timeline.push({
       id: 1,
       estadoCodigo: order.estado_codigo,
-      estadoLabel: translatedState.label,
-      color: order.estado_color || "#3b82f6",
+      estadoLabel: pipelineRes.currentStepLabel,
+      color: pipelineRes.activeColor,
       fecha: new Date(order.fecha_recepcion || order.fecha_registro).toISOString(),
-      comentario: translatedState.label,
+      comentario: pipelineRes.currentStepLabel,
       esEstadoActual: true,
     });
   }
 
-  const isDelivered = order.estado_codigo === "ENTREGADA";
+  const isDelivered = pipelineRes.currentStepIndex === 4;
   const ultimaActualizacion = order.fecha_actualizacion || timeline[timeline.length - 1]?.fecha || order.fecha_recepcion;
 
   return {
     codigoOrden: order.codigo_orden,
     estado: order.estado_codigo,
-    estadoLabel: translatedState.label,
-    estadoColor: order.estado_color || "#bfce7f",
-    pasoActual: translatedState.paso,
-    pasosTotales: 5,
+    estadoLabel: pipelineRes.currentStepLabel,
+    estadoColor: pipelineRes.activeColor,
+    pasoActual: pipelineRes.currentStepIndex,
+    pasosTotales: 4,
     esEntregada: isDelivered,
+    isHold: pipelineRes.isHold,
+    pipelineSteps: pipelineRes.steps,
+    statusMessage,
     fechaRecepcion: new Date(order.fecha_recepcion).toISOString(),
     fechaPrometidaEstimada: order.fecha_entrega_estimada ? new Date(order.fecha_entrega_estimada).toISOString() : null,
     fechaEntregaReal: order.fecha_entrega_real ? new Date(order.fecha_entrega_real).toISOString() : null,
