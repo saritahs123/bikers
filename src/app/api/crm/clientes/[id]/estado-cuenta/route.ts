@@ -23,6 +23,17 @@ interface FacturaEstadoCuentaRow {
   monto_pagado_bd: number | string;
 }
 
+interface ClienteRow {
+  cliente_id: number;
+  nombre: string;
+  apellido: string;
+  nombre_completo: string | null;
+  identificacion: string | null;
+  telefono_principal: string | null;
+  correo: string | null;
+  direccion: string | null;
+}
+
 export async function GET(request: NextRequest, context: RouteContext) {
   try {
     const session = await getWorkshopSession();
@@ -53,10 +64,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
     }
 
     // Validar que el cliente exista y pertenezca a la empresa de la sesión (Multitenancy estricto)
-    const clienteCheck = await query(`
-      SELECT cliente_id, nombre, apellido, nombre_completo
+    const clienteCheck = await query<ClienteRow>(`
+      SELECT cliente_id, nombre, apellido, nombre_completo, identificacion, telefono_principal, correo, direccion
       FROM admin.clientes
-      WHERE cliente_id = $1 AND empresa_id = $2 AND fecha_eliminacion IS NULL
+      WHERE cliente_id = $1 AND (empresa_id = $2 OR empresa_id IS NULL) AND fecha_eliminacion IS NULL
     `, [clienteId, session.empresa_id]);
 
     if (!clienteCheck || clienteCheck.length === 0) {
@@ -165,8 +176,64 @@ export async function GET(request: NextRequest, context: RouteContext) {
     totalPagado = parseFloat(totalPagado.toFixed(2));
     saldoPendiente = parseFloat(saldoPendiente.toFixed(2));
 
+    // Consultar información institucional de la empresa (multitenant)
+    let empresaInfo = {
+      nombre_comercial: "RIDE LAB",
+      subtitulo: "Tienda y Taller de Bicicletas",
+      direccion: "",
+      telefono: "",
+      email: "",
+      rnc: "",
+      logotipo_url: null as string | null
+    };
+
+    try {
+      const empRes = await query<{
+        nombre_comercial?: string;
+        alias?: string;
+        direccion?: string;
+        telefono?: string;
+        email?: string;
+        rnc?: string;
+        logotipo_url?: string | null;
+      }>(`
+        SELECT nombre_comercial, alias, direccion, telefono, email, rnc, logotipo_url
+        FROM admin.empresa
+        WHERE empresa_id = $1 LIMIT 1
+      `, [session.empresa_id]);
+
+      if (empRes && empRes.length > 0) {
+        const emp = empRes[0];
+        empresaInfo = {
+          nombre_comercial: emp.nombre_comercial || emp.alias || "RIDE LAB",
+          subtitulo: "Tienda y Taller de Bicicletas",
+          direccion: emp.direccion || "",
+          telefono: emp.telefono || "",
+          email: emp.email || "",
+          rnc: emp.rnc ? (emp.rnc.length === 9 ? `${emp.rnc.slice(0, 1)}-${emp.rnc.slice(1, 3)}-${emp.rnc.slice(3)}` : emp.rnc) : "",
+          logotipo_url: emp.logotipo_url || null
+        };
+      }
+    } catch (empErr) {
+      console.warn("Could not query admin.empresa for estado-cuenta:", empErr);
+    }
+
+    const cData = clienteCheck[0];
+    const nombreCompleto = (cData.nombre_completo || `${cData.nombre || ""} ${cData.apellido || ""}`).trim();
+
     return NextResponse.json({
       success: true,
+      empresa: empresaInfo,
+      cliente: {
+        cliente_id: clienteId,
+        codigo_cliente: `BF-CL-${clienteId}`,
+        nombre_completo: nombreCompleto,
+        identificacion: cData.identificacion || null,
+        telefono: cData.telefono_principal || null,
+        correo: cData.correo || null,
+        direccion: cData.direccion || null
+      },
+      fecha_generacion: new Date().toISOString(),
       resumen: {
         saldoPendiente,
         totalFacturado,

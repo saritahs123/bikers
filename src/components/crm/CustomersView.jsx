@@ -41,6 +41,7 @@ import {
 import CustomerFormDrawer from "./CustomerFormDrawer";
 import RegisterPaymentModal from "@/components/billing/RegisterPaymentModal";
 import InvoiceDetailModal from "@/components/billing/InvoiceDetailModal";
+import { generateCustomerStatementPdfDocument } from "@/lib/crm/generateCustomerStatementPdf";
 import {
   normalizeDigits,
   formatCedula,
@@ -107,6 +108,7 @@ export default function CustomersView() {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [detailInvoiceId, setDetailInvoiceId] = useState(null);
   const [isInvoiceDetailModalOpen, setIsInvoiceDetailModalOpen] = useState(false);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   // Form Drawer States
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -490,6 +492,67 @@ export default function CustomersView() {
   const handleOpenInvoiceDetail = (facturaId) => {
     setDetailInvoiceId(facturaId);
     setIsInvoiceDetailModalOpen(true);
+  };
+
+  const handleDownloadPdf = async () => {
+    if (isGeneratingPdf) return;
+    const clientId = detailUser?.id || detailUser?.cliente_id;
+    if (!clientId) {
+      showToast("No se pudo identificar al cliente para generar el estado de cuenta.", "error");
+      return;
+    }
+
+    setIsGeneratingPdf(true);
+    try {
+      // Reutilizar o consultar el estado de cuenta actualizado (fuente única de verdad)
+      let statementData = estadoCuenta;
+      if (!statementData || !statementData.resumen || !statementData.facturas) {
+        const res = await fetch(`/api/crm/clientes/${clientId}/estado-cuenta`);
+        if (!res.ok) {
+          throw new Error("No se pudo obtener la información financiera.");
+        }
+        statementData = await res.json();
+        setEstadoCuenta(statementData);
+      }
+
+      const clientCode = statementData.cliente?.codigo_cliente || `BF-CL-${clientId}`;
+      const pdfData = {
+        empresa: statementData.empresa || {
+          nombre_comercial: "RIDE LAB",
+          subtitulo: "Tienda y Taller de Bicicletas",
+          direccion: "",
+          telefono: "",
+          email: "",
+          rnc: ""
+        },
+        cliente: statementData.cliente || {
+          cliente_id: clientId,
+          codigo_cliente: clientCode,
+          nombre_completo: detailUser.nombre_completo || `${detailUser.nombre || ""} ${detailUser.apellido || ""}`.trim(),
+          identificacion: detailUser.identificacion || null,
+          telefono: detailUser.telefono_principal || null,
+          correo: detailUser.correo || null,
+          direccion: detailUser.direccion || null
+        },
+        fecha_generacion: statementData.fecha_generacion || new Date(),
+        resumen: statementData.resumen,
+        facturas: statementData.facturas || []
+      };
+
+      const doc = generateCustomerStatementPdfDocument(pdfData);
+
+      // Nombre del archivo: Estado_Cuenta_<codigo_cliente>.pdf (sanitizado)
+      const cleanCode = String(clientCode).replace(/[/\\?%*:|"<>]/g, "-");
+      const fileName = `Estado_Cuenta_${cleanCode}.pdf`;
+
+      doc.save(fileName);
+      showToast("Estado de cuenta descargado exitosamente.", "success");
+    } catch (err) {
+      console.error("Error generating customer statement PDF:", err);
+      showToast("No se pudo generar el estado de cuenta.", "error");
+    } finally {
+      setIsGeneratingPdf(false);
+    }
   };
 
   const formatFacturaDate = (dateVal) => {
@@ -987,12 +1050,34 @@ export default function CustomersView() {
                     </h3>
                   </div>
 
-                  {loadingEstadoCuenta && (
-                    <div className="flex items-center gap-2 text-xs font-mono text-primary">
-                      <Loader2 size={14} className="animate-spin" />
-                      <span>Actualizando...</span>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2.5">
+                    {loadingEstadoCuenta && (
+                      <div className="flex items-center gap-2 text-xs font-mono text-primary">
+                        <Loader2 size={14} className="animate-spin" />
+                        <span className="hidden sm:inline">Actualizando...</span>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={handleDownloadPdf}
+                      disabled={isGeneratingPdf || loadingEstadoCuenta}
+                      className="px-3 py-1.5 bg-surface border border-border text-foreground hover:border-primary rounded-xl transition-all cursor-pointer flex items-center gap-2 font-mono text-xs font-bold hover:bg-hover shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Descargar Estado de Cuenta en PDF"
+                    >
+                      {isGeneratingPdf ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin text-primary" />
+                          <span>Generando...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Download size={14} className="text-primary" />
+                          <span>Descargar PDF</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
 
                 {/* 4 KPI Cards Resumen */}
