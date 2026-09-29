@@ -6,13 +6,7 @@ import {
   Check,
   SearchX,
   RefreshCw,
-  Settings,
-  User,
-  Calendar,
   Clock,
-  Wrench,
-  Sparkles,
-  Camera,
   Phone,
   Download,
   ChevronRight,
@@ -57,51 +51,6 @@ function formatFriendlyDateParts(
   } catch {
     return null;
   }
-}
-
-function getStatusBadgeStyle(estadoCodigo?: string | null, isHold = false) {
-  const code = (estadoCodigo || "").trim().toUpperCase();
-  if (isHold) {
-    return {
-      bg: "bg-rose-50",
-      text: "text-rose-600",
-      border: "border-rose-200",
-      dot: "bg-rose-500",
-    };
-  }
-  if (
-    code === "COMPLETADA" ||
-    code === "LISTA_ENTREGA" ||
-    code === "ENTREGADA" ||
-    code === "ENTREGADO"
-  ) {
-    return {
-      bg: "bg-emerald-50",
-      text: "text-emerald-700",
-      border: "border-emerald-200",
-      dot: "bg-emerald-500",
-    };
-  }
-  if (
-    code === "PENDIENTE" ||
-    code === "RECIBIDA" ||
-    code === "REPARACION" ||
-    code === "EN REPARACION" ||
-    code === "EN_REPARACION"
-  ) {
-    return {
-      bg: "bg-orange-50",
-      text: "text-orange-700",
-      border: "border-orange-200",
-      dot: "bg-orange-500",
-    };
-  }
-  return {
-    bg: "bg-slate-50",
-    text: "text-slate-600",
-    border: "border-slate-200",
-    dot: "bg-slate-400",
-  };
 }
 
 export default function PublicTrackingView({
@@ -328,12 +277,11 @@ export default function PublicTrackingView({
   );
   const clientName = hasValidClientName ? rawClientName : null;
 
-  // Formatted date and time pairs for two-column row
+  // Formatted date and time for entry date
   const ingresoParts = formatFriendlyDateParts(order.fechaRecepcion);
-  const actualizacionParts = formatFriendlyDateParts(order.ultimaActualizacion);
-
-  // Badge style for current state
-  const badgeStyle = getStatusBadgeStyle(order.estado, order.isHold);
+  const ingresoTexto = ingresoParts
+    ? `${ingresoParts.date} ${ingresoParts.time}`
+    : "No registrada";
 
   // Real photo: only use if exists in order.fotos or order.bicicleta.fotoUrl
   const fotoPrincipal = order.fotos && order.fotos.length > 0 ? order.fotos[0].url : order.bicicleta?.fotoUrl || null;
@@ -356,89 +304,84 @@ export default function PublicTrackingView({
       </header>
 
       {/* Main Content Container: Mobile-first centered */}
-      <main className="w-full max-w-[430px] sm:max-w-[450px] mx-auto px-4 pt-2 pb-6 space-y-3.5">
-        {/* 4. HERO SECTION */}
-        <section className="text-center pt-2 pb-1 space-y-1.5 print:pt-0">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#ecfdf5] border border-[#a7f3d0] text-[#059669] text-[11px] font-bold tracking-wider uppercase shadow-2xs">
-            <span className="w-2 h-2 rounded-full bg-[#10b981] animate-pulse" />
-            PORTAL DE CLIENTES EN VIVO
-          </div>
-          <h1 className="text-2xl sm:text-[26px] font-black text-slate-900 tracking-tight">
-            Seguimiento de reparación
-          </h1>
-          <p className="text-xs sm:text-[13px] text-slate-500 font-normal leading-relaxed">
-            Información actualizada al instante desde nuestro box mecánico
-          </p>
-        </section>
-
-        {/* 5. CARD ORDEN DE TRABAJO */}
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 sm:p-5 space-y-3.5">
+      <main className="w-full max-w-[430px] sm:max-w-[450px] mx-auto px-3.5 min-[390px]:px-4 pt-3.5 sm:pt-4 pb-8 space-y-4">
+        {/* CARD PRINCIPAL */}
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_2px_8px_rgba(0,0,0,0.03)] p-4 sm:p-5 space-y-3.5">
           {/* Top Row: ORDEN DE TRABAJO (Left) and CLIENTE (Right) */}
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-1.5 text-slate-400">
-                <Settings className="w-3.5 h-3.5" />
-                <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider">
-                  ORDEN DE TRABAJO
-                </span>
-              </div>
-              <div className="text-lg sm:text-xl font-black text-slate-900 tracking-tight mt-0.5">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 items-start">
+            <div className="min-w-0">
+              <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
+                ORDEN DE TRABAJO
+              </span>
+              <div className="text-lg sm:text-xl font-black text-slate-900 tracking-tight mt-0.5 truncate">
                 {order.codigoOrden}
               </div>
             </div>
 
             {clientName && (
-              <div className="text-right">
+              <div className="text-right min-w-0">
                 <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
                   CLIENTE
                 </span>
-                <div className="flex items-center justify-end gap-1.5 text-xs sm:text-sm font-bold text-slate-800 mt-0.5">
-                  <User className="w-3.5 h-3.5 text-slate-400" />
-                  <span className="truncate max-w-[170px]" title={clientName}>
-                    {clientName}
-                  </span>
+                <div
+                  className="text-xs sm:text-sm font-bold text-slate-800 mt-0.5 truncate max-w-[170px] ml-auto"
+                  title={clientName}
+                >
+                  {clientName}
                 </div>
               </div>
             )}
           </div>
 
-          {/* Middle Row: Bicycle Details (Left with optional photo) and Status Badge (Right) */}
-          <div className="flex items-center justify-between gap-3 pt-1">
-            <div className="flex items-center gap-3 min-w-0">
+          {/* Bottom Row: BICICLETA (Left) and FECHA DE INGRESO (Right) */}
+          <div className="border-t border-slate-100/90 pt-3.5 grid grid-cols-2 gap-3 sm:gap-4 items-start">
+            {/* LADO IZQUIERDO: BICICLETA */}
+            <div className="flex items-start gap-2.5 sm:gap-3 min-w-0">
               {fotoPrincipal && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={fotoPrincipal}
                   alt={bikeTitle}
-                  className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl object-cover border border-slate-100 shadow-2xs shrink-0"
+                  className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl object-cover border border-slate-100 shrink-0 mt-0.5"
                 />
               )}
-              <div className="min-w-0">
-                <div className="text-sm sm:text-base font-black text-slate-900 uppercase tracking-tight truncate">
+              <div className="min-w-0 flex-1">
+                <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
+                  BICICLETA
+                </span>
+                <div
+                  className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-tight truncate mt-0.5"
+                  title={bikeTitle}
+                >
                   {bikeTitle}
                 </div>
                 {bikeSubtitle && (
-                  <div className="text-[11px] sm:text-xs font-semibold text-slate-400 uppercase tracking-wider truncate mt-0.5">
+                  <div
+                    className="text-[10px] sm:text-[11px] font-medium text-slate-400 uppercase tracking-wider truncate mt-0.5"
+                    title={bikeSubtitle}
+                  >
                     {bikeSubtitle}
                   </div>
                 )}
               </div>
             </div>
 
-            <span
-              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider shrink-0 border ${badgeStyle.bg} ${badgeStyle.text} ${badgeStyle.border}`}
-            >
-              <span className={`w-2 h-2 rounded-full ${badgeStyle.dot}`} />
-              {order.estadoLabel}
-            </span>
+            {/* LADO DERECHO: FECHA DE INGRESO */}
+            <div className="text-right shrink-0">
+              <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
+                FECHA DE INGRESO
+              </span>
+              <div className="text-[10.5px] min-[390px]:text-[11.5px] sm:text-xs font-bold text-slate-900 whitespace-nowrap mt-0.5">
+                {ingresoTexto}
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* 8 & 9. CARD ESTADO DE LA REPARACIÓN & STEPPER */}
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 sm:p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <Settings className="w-4 h-4 text-slate-700" />
-            <span className="text-xs font-bold text-slate-900 tracking-wider uppercase">
+        {/* 6. ESTADO DE LA REPARACIÓN & STEPPER */}
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_2px_8px_rgba(0,0,0,0.03)] p-4 sm:p-5">
+          <div className="mb-4">
+            <span className="text-xs font-bold text-slate-900 tracking-wider uppercase block">
               ESTADO DE LA REPARACIÓN
             </span>
           </div>
@@ -507,84 +450,14 @@ export default function PublicTrackingView({
           </div>
         </div>
 
-        {/* 10. FECHAS: INGRESO & ÚLTIMA ACTUALIZACIÓN (Fecha y hora en una sola línea horizontal) */}
-        <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5 items-stretch">
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-2.5 min-[390px]:p-3.5 sm:p-4 flex items-start gap-2 min-[390px]:gap-2.5 sm:gap-3 h-full">
-            <div className="w-[34px] h-[34px] min-[390px]:w-9 min-[390px]:h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-50 border border-slate-200/60 flex items-center justify-center text-slate-700 shrink-0 mt-0.5">
-              <Calendar className="w-4 h-4 min-[390px]:w-[18px] min-[390px]:h-[18px] sm:w-5 sm:h-5 text-slate-700" />
-            </div>
-            <div className="min-w-0 flex-1 flex flex-col justify-start">
-              <div
-                className="flex items-start"
-                style={{ height: "30px", minHeight: "30px", maxHeight: "30px" }}
-              >
-                <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider leading-[14px] sm:leading-[15px] block">
-                  FECHA DE INGRESO
-                </span>
-              </div>
-              <div className="flex items-baseline gap-1 sm:gap-1.5 whitespace-nowrap mt-1 min-w-0">
-                <span className="text-[10px] min-[380px]:text-[11px] min-[410px]:text-xs sm:text-[13px] font-bold text-slate-900 shrink-0">
-                  {ingresoParts?.date || "No registrada"}
-                </span>
-                {ingresoParts?.time && (
-                  <span className="text-[9px] min-[380px]:text-[10px] min-[410px]:text-[11px] sm:text-xs font-normal text-slate-500 shrink-0">
-                    {ingresoParts.time}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-2.5 min-[390px]:p-3.5 sm:p-4 flex items-start gap-2 min-[390px]:gap-2.5 sm:gap-3 h-full">
-            <div className="w-[34px] h-[34px] min-[390px]:w-9 min-[390px]:h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-50 border border-slate-200/60 flex items-center justify-center text-slate-700 shrink-0 mt-0.5">
-              <Clock className="w-4 h-4 min-[390px]:w-[18px] min-[390px]:h-[18px] sm:w-5 sm:h-5 text-slate-700" />
-            </div>
-            <div className="min-w-0 flex-1 flex flex-col justify-start">
-              <div
-                className="flex items-start"
-                style={{ height: "30px", minHeight: "30px", maxHeight: "30px" }}
-              >
-                <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider leading-[14px] sm:leading-[15px] block">
-                  ÚLTIMA ACTUALIZACIÓN
-                </span>
-              </div>
-              <div className="flex items-baseline gap-1 sm:gap-1.5 whitespace-nowrap mt-1 min-w-0">
-                <span className="text-[10px] min-[380px]:text-[11px] min-[410px]:text-xs sm:text-[13px] font-bold text-slate-900 shrink-0">
-                  {actualizacionParts?.date || "No registrada"}
-                </span>
-                {actualizacionParts?.time && (
-                  <span className="text-[9px] min-[380px]:text-[10px] min-[410px]:text-[11px] sm:text-xs font-normal text-slate-500 shrink-0">
-                    {actualizacionParts.time}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* 11. MENSAJE DEL ESTADO */}
-        <div className="bg-[#ecfdf5] border border-[#a7f3d0] rounded-2xl p-4 flex items-start gap-3.5 shadow-2xs">
-          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-[#059669] text-white flex items-center justify-center shrink-0 shadow-sm mt-0.5">
-            <Check className="w-4 h-4 sm:w-5 sm:h-5 stroke-[3]" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs sm:text-sm font-bold text-[#065f46] leading-snug">
-              “{order.statusMessage}”
-            </p>
-          </div>
-        </div>
-
-        {/* 12 & 13. SERVICIOS CONTRATADOS */}
+        {/* 7. SERVICIOS CONTRATADOS */}
         {order.servicios && order.servicios.length > 0 && (
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 sm:p-5 space-y-3">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_2px_8px_rgba(0,0,0,0.03)] p-4 sm:p-5 space-y-3">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Wrench className="w-4 h-4 text-slate-700" />
-                <span className="text-xs font-bold text-slate-900 tracking-wider uppercase">
-                  SERVICIOS CONTRATADOS
-                </span>
-              </div>
-              <span className="text-xs font-medium text-slate-400">
+              <span className="text-xs font-bold text-slate-900 tracking-wider uppercase">
+                SERVICIOS CONTRATADOS
+              </span>
+              <span className="text-[11px] sm:text-xs font-medium text-slate-400">
                 Total: {order.servicios.length} ítems
               </span>
             </div>
@@ -599,36 +472,31 @@ export default function PublicTrackingView({
                 return (
                   <div
                     key={idx}
-                    className="p-3 rounded-xl bg-slate-50/70 border border-slate-100/90 flex items-center justify-between gap-3"
+                    className="p-3 sm:p-3.5 rounded-xl bg-slate-50/80 border border-slate-100/90 flex items-center justify-between gap-3 transition-colors hover:bg-slate-50"
                   >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-9 h-9 rounded-lg bg-white border border-slate-200/80 flex items-center justify-center text-slate-600 shrink-0 shadow-2xs">
-                        <Sparkles className="w-4 h-4 text-emerald-600" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs sm:text-sm font-bold text-slate-900 truncate">
+                        {srv.nombre}
                       </div>
-                      <div className="min-w-0">
-                        <div className="text-xs sm:text-sm font-bold text-slate-900 truncate">
-                          {srv.nombre}
+                      {srv.descripcion && (
+                        <div className="text-[11px] text-slate-500 truncate mt-0.5">
+                          {srv.descripcion}
                         </div>
-                        {srv.descripcion && (
-                          <div className="text-[11px] text-slate-500 truncate">
-                            {srv.descripcion}
-                          </div>
-                        )}
-                      </div>
+                      )}
                     </div>
 
                     {isDone ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80 shrink-0">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80 shrink-0">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                         {srv.estadoLabel}
                       </span>
                     ) : isEnCola ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200 shrink-0">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200 shrink-0">
                         <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
                         {srv.estadoLabel}
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-orange-50 text-orange-700 border border-orange-200/80 shrink-0">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-semibold bg-orange-50 text-orange-700 border border-orange-200/80 shrink-0">
                         <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />
                         {srv.estadoLabel}
                       </span>
@@ -640,18 +508,15 @@ export default function PublicTrackingView({
           </div>
         )}
 
-        {/* 14 & 15. FOTOS DE RECEPCIÓN */}
+        {/* 8. FOTOS DE RECEPCIÓN */}
         {order.fotos && order.fotos.length > 0 ? (
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 sm:p-5 space-y-3">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_2px_8px_rgba(0,0,0,0.03)] p-4 sm:p-5 space-y-3">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Camera className="w-4 h-4 text-slate-700" />
-                <span className="text-xs font-bold text-slate-900 tracking-wider uppercase">
-                  FOTOS DE RECEPCIÓN
-                </span>
-              </div>
-              <span className="text-xs font-semibold text-emerald-600">
-                {order.fotos.length} fotos adjuntas
+              <span className="text-xs font-bold text-slate-900 tracking-wider uppercase">
+                FOTOS DE RECEPCIÓN
+              </span>
+              <span className="text-[11px] sm:text-xs font-semibold text-emerald-600">
+                {order.fotos.length} {order.fotos.length === 1 ? "foto adjunta" : "fotos adjuntas"}
               </span>
             </div>
 
