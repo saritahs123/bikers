@@ -508,36 +508,40 @@ export default function PublicTrackingView({
         </div>
 
         {/* 10. FECHAS: INGRESO & ÚLTIMA ACTUALIZACIÓN */}
-        <div className="grid grid-cols-2 gap-3 sm:gap-3.5">
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3.5 sm:p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200/60 flex items-center justify-center text-slate-700 shrink-0">
+        <div className="grid grid-cols-2 gap-3 sm:gap-3.5 items-stretch">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3.5 sm:p-4 flex items-start gap-2.5 sm:gap-3 h-full">
+            <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200/60 flex items-center justify-center text-slate-700 shrink-0 mt-0.5">
               <Calendar className="w-5 h-5 text-slate-700" />
             </div>
-            <div className="min-w-0">
-              <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                FECHA DE INGRESO
-              </span>
-              <span className="text-xs sm:text-sm font-bold text-slate-900 block truncate">
+            <div className="min-w-0 flex-1 flex flex-col justify-start">
+              <div className="h-[28px] sm:h-[30px] flex items-start">
+                <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider leading-tight line-clamp-2">
+                  FECHA DE INGRESO
+                </span>
+              </div>
+              <span className="text-xs sm:text-sm font-bold text-slate-900 block truncate mt-0.5">
                 {ingresoParts?.date || "No registrada"}
               </span>
-              <span className="text-[11px] sm:text-xs text-slate-500 block truncate">
+              <span className="text-[11px] sm:text-xs text-slate-500 block truncate leading-tight">
                 {ingresoParts?.time || "--:--"}
               </span>
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3.5 sm:p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200/60 flex items-center justify-center text-slate-700 shrink-0">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3.5 sm:p-4 flex items-start gap-2.5 sm:gap-3 h-full">
+            <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200/60 flex items-center justify-center text-slate-700 shrink-0 mt-0.5">
               <Clock className="w-5 h-5 text-slate-700" />
             </div>
-            <div className="min-w-0">
-              <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                ÚLTIMA ACTUALIZACIÓN
-              </span>
-              <span className="text-xs sm:text-sm font-bold text-slate-900 block truncate">
+            <div className="min-w-0 flex-1 flex flex-col justify-start">
+              <div className="h-[28px] sm:h-[30px] flex items-start">
+                <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider leading-tight line-clamp-2">
+                  ÚLTIMA ACTUALIZACIÓN
+                </span>
+              </div>
+              <span className="text-xs sm:text-sm font-bold text-slate-900 block truncate mt-0.5">
                 {actualizacionParts?.date || "No registrada"}
               </span>
-              <span className="text-[11px] sm:text-xs text-slate-500 block truncate">
+              <span className="text-[11px] sm:text-xs text-slate-500 block truncate leading-tight">
                 {actualizacionParts?.time || "--:--"}
               </span>
             </div>

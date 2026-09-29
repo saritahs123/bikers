@@ -20,7 +20,7 @@ export const WORK_ORDER_PIPELINE_STEPS: PipelineStepConfig[] = [
     aliases: ["RECIBIDA", "PENDIENTE"],
     catalogId: 1,
     label: "PENDIENTE",
-    activeColor: "#3b82f6", // Blue for pending/received
+    activeColor: "#f97316", // Naranja for pending/received
   },
   {
     stepIndex: 2,
