@@ -507,43 +507,57 @@ export default function PublicTrackingView({
           </div>
         </div>
 
-        {/* 10. FECHAS: INGRESO & ÚLTIMA ACTUALIZACIÓN */}
-        <div className="grid grid-cols-2 gap-3 sm:gap-3.5 items-stretch">
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3.5 sm:p-4 flex items-start gap-2.5 sm:gap-3 h-full">
-            <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200/60 flex items-center justify-center text-slate-700 shrink-0 mt-0.5">
-              <Calendar className="w-5 h-5 text-slate-700" />
+        {/* 10. FECHAS: INGRESO & ÚLTIMA ACTUALIZACIÓN (Fecha y hora en una sola línea horizontal) */}
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5 items-stretch">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-2.5 min-[390px]:p-3.5 sm:p-4 flex items-start gap-2 min-[390px]:gap-2.5 sm:gap-3 h-full">
+            <div className="w-[34px] h-[34px] min-[390px]:w-9 min-[390px]:h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-50 border border-slate-200/60 flex items-center justify-center text-slate-700 shrink-0 mt-0.5">
+              <Calendar className="w-4 h-4 min-[390px]:w-[18px] min-[390px]:h-[18px] sm:w-5 sm:h-5 text-slate-700" />
             </div>
             <div className="min-w-0 flex-1 flex flex-col justify-start">
-              <div className="h-[28px] sm:h-[30px] flex items-start">
-                <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider leading-tight line-clamp-2">
+              <div
+                className="flex items-start"
+                style={{ height: "30px", minHeight: "30px", maxHeight: "30px" }}
+              >
+                <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider leading-[14px] sm:leading-[15px] block">
                   FECHA DE INGRESO
                 </span>
               </div>
-              <span className="text-xs sm:text-sm font-bold text-slate-900 block truncate mt-0.5">
-                {ingresoParts?.date || "No registrada"}
-              </span>
-              <span className="text-[11px] sm:text-xs text-slate-500 block truncate leading-tight">
-                {ingresoParts?.time || "--:--"}
-              </span>
+              <div className="flex items-baseline gap-1 sm:gap-1.5 whitespace-nowrap mt-1 min-w-0">
+                <span className="text-[10px] min-[380px]:text-[11px] min-[410px]:text-xs sm:text-[13px] font-bold text-slate-900 shrink-0">
+                  {ingresoParts?.date || "No registrada"}
+                </span>
+                {ingresoParts?.time && (
+                  <span className="text-[9px] min-[380px]:text-[10px] min-[410px]:text-[11px] sm:text-xs font-normal text-slate-500 shrink-0">
+                    {ingresoParts.time}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3.5 sm:p-4 flex items-start gap-2.5 sm:gap-3 h-full">
-            <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200/60 flex items-center justify-center text-slate-700 shrink-0 mt-0.5">
-              <Clock className="w-5 h-5 text-slate-700" />
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-2.5 min-[390px]:p-3.5 sm:p-4 flex items-start gap-2 min-[390px]:gap-2.5 sm:gap-3 h-full">
+            <div className="w-[34px] h-[34px] min-[390px]:w-9 min-[390px]:h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-50 border border-slate-200/60 flex items-center justify-center text-slate-700 shrink-0 mt-0.5">
+              <Clock className="w-4 h-4 min-[390px]:w-[18px] min-[390px]:h-[18px] sm:w-5 sm:h-5 text-slate-700" />
             </div>
             <div className="min-w-0 flex-1 flex flex-col justify-start">
-              <div className="h-[28px] sm:h-[30px] flex items-start">
-                <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider leading-tight line-clamp-2">
+              <div
+                className="flex items-start"
+                style={{ height: "30px", minHeight: "30px", maxHeight: "30px" }}
+              >
+                <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider leading-[14px] sm:leading-[15px] block">
                   ÚLTIMA ACTUALIZACIÓN
                 </span>
               </div>
-              <span className="text-xs sm:text-sm font-bold text-slate-900 block truncate mt-0.5">
-                {actualizacionParts?.date || "No registrada"}
-              </span>
-              <span className="text-[11px] sm:text-xs text-slate-500 block truncate leading-tight">
-                {actualizacionParts?.time || "--:--"}
-              </span>
+              <div className="flex items-baseline gap-1 sm:gap-1.5 whitespace-nowrap mt-1 min-w-0">
+                <span className="text-[10px] min-[380px]:text-[11px] min-[410px]:text-xs sm:text-[13px] font-bold text-slate-900 shrink-0">
+                  {actualizacionParts?.date || "No registrada"}
+                </span>
+                {actualizacionParts?.time && (
+                  <span className="text-[9px] min-[380px]:text-[10px] min-[410px]:text-[11px] sm:text-xs font-normal text-slate-500 shrink-0">
+                    {actualizacionParts.time}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </div>
