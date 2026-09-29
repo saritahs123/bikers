@@ -3,11 +3,13 @@ import crypto from "crypto";
 import QRCode from "qrcode";
 import { query } from "@/lib/db";
 import { PoolClient } from "pg";
+import { getPresignedDownloadUrl } from "@/lib/storage/s3";
 import {
   resolvePipelineStep,
   getPipelineStatusMessage,
   ResolvedPipelineStep,
 } from "@/lib/workshop/workOrderPipelineConfig";
+import { InvoicePdfData } from "@/lib/workshop/generateInvoicePdf";
 
 export interface WorkOrderTrackingRecord {
   orden_tracking_id: number;
@@ -37,6 +39,30 @@ export interface WorkOrderTrackingInfo {
   fechaDesactivacion: string | null;
 }
 
+export interface PublicEmpresaDTO {
+  nombreComercial: string;
+  alias: string | null;
+  telefono: string | null;
+  telefonoLlamada: string | null;
+  whatsappUrl: string | null;
+  email: string | null;
+  direccion: string | null;
+  descripcion: string | null;
+  horario: string | null;
+}
+
+export interface PublicMecanicoDTO {
+  nombre: string | null;
+  cargo: string | null;
+}
+
+export interface PublicFotoDTO {
+  id: number;
+  url: string;
+  descripcion: string | null;
+  esPrincipal: boolean;
+}
+
 export interface PublicWorkOrderDTO {
   codigoOrden: string;
   estado: string;
@@ -45,9 +71,13 @@ export interface PublicWorkOrderDTO {
   pasoActual: number;
   pasosTotales: number;
   esEntregada: boolean;
+  canDownloadInvoice: boolean;
   isHold: boolean;
   pipelineSteps: ResolvedPipelineStep[];
   statusMessage: string;
+  mecanico?: PublicMecanicoDTO | null;
+  empresa: PublicEmpresaDTO;
+  fotos: PublicFotoDTO[];
   fechaRecepcion: string;
   fechaPrometidaEstimada: string | null;
   fechaEntregaReal: string | null;
@@ -74,6 +104,7 @@ export interface PublicWorkOrderDTO {
   servicios: Array<{
     secuencia: number;
     nombre: string;
+    descripcion?: string | null;
     estado: string;
     estadoLabel: string;
     completado: boolean;
@@ -189,7 +220,7 @@ export async function ensureWorkOrderTracking(
 
   // 1. Check if tracking record already exists
   const existingRows = await runQuery<WorkOrderTrackingRecord>(
-    `SELECT 
+    `SELECT
        orden_tracking_id,
        orden_trabajo_id,
        public_token,
@@ -269,7 +300,7 @@ export async function ensureWorkOrderTracking(
     ) VALUES ($1, $2, $3, $4, true, clock_timestamp(), $5)
     ON CONFLICT (orden_trabajo_id) DO UPDATE SET
       activo = true
-    RETURNING 
+    RETURNING
       orden_tracking_id,
       orden_trabajo_id,
       public_token,
@@ -340,7 +371,7 @@ export async function regenerateWorkOrderTracking(
       activo = true,
       fecha_creacion = EXCLUDED.fecha_creacion,
       fecha_desactivacion = NULL
-    RETURNING 
+    RETURNING
       orden_tracking_id,
       orden_trabajo_id,
       public_token,
@@ -472,6 +503,9 @@ export function translateServiceStatus(rawCode?: string, rawName?: string): {
   if (code === "EN_PROCESO" || name === "EN PROCESO") {
     return { label: "En proceso", completado: false };
   }
+  if (code === "EN_COLA" || code === "EN COLA" || name === "EN COLA") {
+    return { label: "En cola", completado: false };
+  }
   if (code === "CANCELADO" || name === "CANCELADO") {
     return { label: "Cancelado", completado: false };
   }
@@ -499,7 +533,7 @@ export async function getPublicTrackingData(
 
   // 1. Verify tracking record by short_code, token_hash, or public_token
   const trackingRes = await query<any>(
-    `SELECT 
+    `SELECT
        orden_tracking_id,
        orden_trabajo_id,
        public_token,
@@ -522,8 +556,8 @@ export async function getPublicTrackingData(
 
   // Asynchronously record last access time
   query(
-    `UPDATE admin.orden_tracking 
-     SET fecha_ultimo_acceso = clock_timestamp() 
+    `UPDATE admin.orden_tracking
+     SET fecha_ultimo_acceso = clock_timestamp()
      WHERE orden_tracking_id = $1`,
     [tracking.orden_tracking_id]
   ).catch((err) => {
@@ -534,7 +568,7 @@ export async function getPublicTrackingData(
 
   // 2. Query work order details safely
   const orderRes = await query<any>(
-    `SELECT 
+    `SELECT
        ot.orden_trabajo_id,
        ot.codigo_orden,
        ot.fecha_recepcion,
@@ -559,7 +593,12 @@ export async function getPublicTrackingData(
          NULLIF(TRIM(CONCAT_WS(' ', c_ot.nombre, c_ot.apellido)), ''),
          NULLIF(TRIM(c_rec.nombre_completo), ''),
          NULLIF(TRIM(CONCAT_WS(' ', c_rec.nombre, c_rec.apellido)), '')
-       ) AS cliente_nombre
+       ) AS cliente_nombre,
+       -- Empresa resolution
+       COALESCE(c_ot.empresa_id, c_rec.empresa_id, u_reg.empresa_id, 1) AS resolved_empresa_id,
+       -- Mecánico resolution
+       COALESCE(NULLIF(TRIM(CONCAT_WS(' ', ui_mec.nombre, ui_mec.apellido)), ''), ui_mec.correo_electronico) AS mecanico_nombre,
+       c_mec.nombre AS mecanico_cargo
      FROM admin.ordenes_trabajo ot
      JOIN admin.estado_orden_trabajo eot ON ot.estado_orden_id = eot.estado_orden_id
      LEFT JOIN admin.recepciones r ON ot.recepcion_id = r.recepcion_id
@@ -567,6 +606,10 @@ export async function getPublicTrackingData(
      LEFT JOIN admin.clientes c_rec ON r.cliente_id = c_rec.cliente_id
      LEFT JOIN admin.bicicletas b_ot ON ot.bicicleta_id = b_ot.bicicleta_id
      LEFT JOIN admin.bicicletas b_rec ON r.bicicleta_id = b_rec.bicicleta_id
+     LEFT JOIN admin.usuario u_reg ON ot.usuario_registro = u_reg.usuario_id
+     LEFT JOIN admin.usuario u_mec ON ot.mecanico_id = u_mec.usuario_id
+     LEFT JOIN admin.usuario_identidad ui_mec ON u_mec.usuario_id = ui_mec.usuario_id
+     LEFT JOIN admin.cargo c_mec ON ui_mec.cargo_id = c_mec.cargo_id
      WHERE ot.orden_trabajo_id = $1 AND ot.activo = true`,
     [ordenTrabajoId]
   );
@@ -581,27 +624,96 @@ export async function getPublicTrackingData(
   const pipelineRes = resolvePipelineStep(order.estado_codigo, order.estado_orden_id);
   const statusMessage = getPipelineStatusMessage(order.estado_codigo, order.estado_nombre);
 
-  // 3. Query bicycle main photo if available
-  let fotoUrl: string | null = null;
+  // 3. Query Empresa data dynamically (multitenancy from work order)
+  const empRes = await query<any>(
+    `SELECT
+       empresa_id,
+       nombre_comercial,
+       alias,
+       telefono,
+       email,
+       direccion,
+       descripcion
+     FROM admin.empresa
+     WHERE empresa_id = $1`,
+    [order.resolved_empresa_id || 1]
+  );
+  const emp = empRes && empRes.length > 0 ? empRes[0] : null;
+  const rawPhone = emp ? (emp.telefono || "").trim() : "";
+  const cleanDigits = rawPhone.replace(/\D/g, "");
+  let waDigits = cleanDigits;
+  if (waDigits.length === 10 && (waDigits.startsWith("809") || waDigits.startsWith("829") || waDigits.startsWith("849"))) {
+    waDigits = "1" + waDigits;
+  }
+  const whatsappUrl = waDigits ? `https://wa.me/${waDigits}?text=${encodeURIComponent(`Hola, deseo consultar el estado de mi orden ${order.codigo_orden}.`)}` : null;
+  const callDigits = waDigits ? (waDigits.startsWith("1") ? `+${waDigits}` : `+1${waDigits}`) : cleanDigits;
+  const telefonoLlamada = callDigits ? `tel:${callDigits}` : null;
+
+  const empresa: PublicEmpresaDTO = {
+    nombreComercial: emp?.nombre_comercial || emp?.alias || "Ride Lab",
+    alias: emp?.alias || null,
+    telefono: rawPhone || null,
+    telefonoLlamada,
+    whatsappUrl,
+    email: emp?.email || null,
+    direccion: emp?.direccion || null,
+    descripcion: emp?.descripcion || "Tienda y Taller de Bicicletas",
+    horario: null,
+  };
+
+  // 4. Query bicycle real photos from admin.bicicleta_fotos
+  const fotos: PublicFotoDTO[] = [];
   if (order.bicicleta_id) {
-    const fotoRes = await query<any>(
-      `SELECT url_archivo, ruta_archivo
+    const fotosRes = await query<any>(
+      `SELECT
+         bicicleta_foto_id,
+         url_archivo,
+         ruta_archivo,
+         descripcion,
+         tipo_foto,
+         es_principal,
+         orden_visual
        FROM admin.bicicleta_fotos
-       WHERE bicicleta_id = $1 AND activo = true
-       ORDER BY es_principal DESC, orden_visual ASC, bicicleta_foto_id ASC
-       LIMIT 1`,
+       WHERE bicicleta_id = $1 AND (activo = true OR activo IS NULL)
+       ORDER BY es_principal DESC, orden_visual ASC, bicicleta_foto_id DESC
+       LIMIT 6`,
       [order.bicicleta_id]
     );
-    if (fotoRes && fotoRes.length > 0) {
-      fotoUrl = fotoRes[0].url_archivo || fotoRes[0].ruta_archivo || null;
+
+    for (const f of fotosRes || []) {
+      let finalUrl = f.url_archivo && !f.url_archivo.includes("default.png") ? f.url_archivo : null;
+      if (!finalUrl && f.ruta_archivo) {
+        if (f.ruta_archivo.startsWith("http") || f.ruta_archivo.startsWith("/storage")) {
+          finalUrl = f.ruta_archivo;
+        } else if (f.ruta_archivo.includes("/")) {
+          try {
+            const { downloadUrl } = await getPresignedDownloadUrl({ key: f.ruta_archivo });
+            finalUrl = downloadUrl;
+          } catch (e) {
+            console.error("Error presigning bicycle photo:", e);
+          }
+        }
+      }
+
+      if (finalUrl) {
+        fotos.push({
+          id: f.bicicleta_foto_id,
+          url: finalUrl,
+          descripcion: f.descripcion || null,
+          esPrincipal: Boolean(f.es_principal),
+        });
+      }
     }
   }
 
-  // 4. Query visible services (only friendly names & statuses)
+  const fotoUrl = fotos.length > 0 ? fotos[0].url : null;
+
+  // 5. Query visible services (only friendly names & statuses)
   const servRes = await query<any>(
-    `SELECT 
+    `SELECT
        os.secuencia,
        COALESCE(ts.nombre, os.descripcion_servicio, 'Servicio de Taller') AS nombre_servicio,
+       COALESCE(os.descripcion_servicio, ts.descripcion) AS descripcion_servicio,
        eos.codigo AS estado_servicio_codigo,
        eos.nombre AS estado_servicio_nombre
      FROM admin.orden_servicios os
@@ -617,15 +729,16 @@ export async function getPublicTrackingData(
     return {
       secuencia: s.secuencia || idx + 1,
       nombre: s.nombre_servicio,
+      descripcion: s.descripcion_servicio || null,
       estado: s.estado_servicio_codigo || "PENDIENTE",
       estadoLabel: srvTrans.label,
       completado: srvTrans.completado,
     };
   });
 
-  // 5. Query state history for public timeline
+  // 6. Query state history for public timeline
   const histRes = await query<any>(
-    `SELECT 
+    `SELECT
        ohe.orden_historial_estado_id,
        e2.codigo AS estado_codigo,
        e2.nombre AS estado_nombre,
@@ -667,7 +780,33 @@ export async function getPublicTrackingData(
   }
 
   const isDelivered = pipelineRes.currentStepIndex === 4;
+  let canDownloadInvoice = false;
+  if (isDelivered) {
+    try {
+      const activeFacturaRes = await query<any>(
+        `SELECT factura_id
+         FROM admin.facturas
+         WHERE orden_trabajo_id = $1
+           AND estado != 'ANULADA'
+         LIMIT 1`,
+        [ordenTrabajoId]
+      );
+      if (activeFacturaRes && activeFacturaRes.length > 0) {
+        canDownloadInvoice = true;
+      }
+    } catch (e) {
+      console.error("Error checking active invoice for tracking:", e);
+    }
+  }
+
   const ultimaActualizacion = order.fecha_actualizacion || timeline[timeline.length - 1]?.fecha || order.fecha_recepcion;
+
+  const mecanico: PublicMecanicoDTO | null = order.mecanico_nombre
+    ? {
+        nombre: order.mecanico_nombre,
+        cargo: order.mecanico_cargo || null,
+      }
+    : null;
 
   return {
     codigoOrden: order.codigo_orden,
@@ -677,9 +816,13 @@ export async function getPublicTrackingData(
     pasoActual: pipelineRes.currentStepIndex,
     pasosTotales: 4,
     esEntregada: isDelivered,
+    canDownloadInvoice,
     isHold: pipelineRes.isHold,
     pipelineSteps: pipelineRes.steps,
     statusMessage,
+    mecanico,
+    empresa,
+    fotos,
     fechaRecepcion: new Date(order.fecha_recepcion).toISOString(),
     fechaPrometidaEstimada: order.fecha_entrega_estimada ? new Date(order.fecha_entrega_estimada).toISOString() : null,
     fechaEntregaReal: order.fecha_entrega_real ? new Date(order.fecha_entrega_real).toISOString() : null,
@@ -696,5 +839,433 @@ export async function getPublicTrackingData(
     },
     timeline,
     servicios,
+  };
+}
+
+/**
+ * Resolves complete InvoicePdfData securely for a public tracking token.
+ * Validates tracking, order delivery status, active invoice status, and multitenancy.
+ * Never exposes database IDs or internal credentials.
+ */
+export async function getPublicInvoicePdfData(
+  codeOrToken: string
+): Promise<{
+  success: boolean;
+  status: number;
+  error?: string;
+  message?: string;
+  data?: InvoicePdfData;
+}> {
+  if (!codeOrToken || typeof codeOrToken !== "string" || codeOrToken.trim().length < 6) {
+    return {
+      success: false,
+      status: 404,
+      error: "NOT_FOUND",
+      message: "No fue posible encontrar este seguimiento."
+    };
+  }
+
+  const clean = codeOrToken.trim();
+  const tokenHash = hashTrackingToken(clean);
+
+  // 1. Resolve tracking record
+  const trackingRes = await query<any>(
+    `SELECT
+       orden_tracking_id,
+       orden_trabajo_id,
+       public_token,
+       short_code,
+       activo
+     FROM admin.orden_tracking
+     WHERE (short_code = $1 OR token_hash = $2 OR public_token = $1)`,
+    [clean, tokenHash]
+  );
+
+  if (!trackingRes || trackingRes.length === 0) {
+    return {
+      success: false,
+      status: 404,
+      error: "NOT_FOUND",
+      message: "No fue posible encontrar este seguimiento."
+    };
+  }
+
+  const tracking = trackingRes[0];
+  if (!tracking.activo) {
+    return {
+      success: false,
+      status: 404,
+      error: "NOT_FOUND",
+      message: "No fue posible encontrar este seguimiento."
+    };
+  }
+
+  const ordenId = tracking.orden_trabajo_id;
+
+  // 2. Fetch order data
+  const orderRes = await query<any>(
+    `SELECT
+       ot.orden_trabajo_id,
+       ot.codigo_orden,
+       ot.recepcion_id,
+       r.codigo_recepcion,
+       ot.estado_orden_id,
+       eot.nombre AS estado_nombre,
+       eot.codigo AS estado_codigo,
+       ot.diagnostico_inicial,
+       ot.descripcion_cliente,
+       ot.observacion_interna AS observaciones,
+       ot.fecha_recepcion,
+       ot.fecha_inicio_trabajo,
+       ot.fecha_finalizacion,
+       ot.fecha_entrega_real,
+       COALESCE(ot.total_tiempo_transcurrido, 0) AS total_tiempo_transcurrido,
+       ot.mecanico_id,
+       COALESCE(
+         NULLIF(TRIM(CONCAT_WS(' ', ui_mec.nombre, ui_mec.apellido)), ''),
+         (
+           SELECT NULLIF(TRIM(CONCAT_WS(' ', ui_s.nombre, ui_s.apellido)), '')
+           FROM admin.orden_servicios os_m
+           JOIN admin.usuario u_s ON u_s.usuario_id = os_m.usuario_id
+           JOIN admin.usuario_identidad ui_s ON ui_s.usuario_id = u_s.usuario_id
+           WHERE os_m.orden_trabajo_id = ot.orden_trabajo_id AND (os_m.activo IS DISTINCT FROM false)
+           ORDER BY os_m.orden_servicio_id ASC LIMIT 1
+         ),
+         'No asignado'
+       ) AS mecanico_nombre,
+       COALESCE(
+         cargo_mec.nombre,
+         (
+           SELECT c_s.nombre
+           FROM admin.orden_servicios os_m
+           JOIN admin.usuario u_s ON u_s.usuario_id = os_m.usuario_id
+           JOIN admin.usuario_identidad ui_s ON ui_s.usuario_id = u_s.usuario_id
+           LEFT JOIN admin.cargo c_s ON c_s.cargo_id = ui_s.cargo_id
+           WHERE os_m.orden_trabajo_id = ot.orden_trabajo_id AND (os_m.activo IS DISTINCT FROM false)
+           ORDER BY os_m.orden_servicio_id ASC LIMIT 1
+         ),
+         null
+       ) AS mecanico_cargo,
+       COALESCE(ot.facturado, false) AS facturado,
+       ot.fecha_facturacion,
+       COALESCE(NULLIF(TRIM(CONCAT_WS(' ', ui_fact.nombre, ui_fact.apellido)), ''), uf.estado, ('Usuario #' || uf.usuario_id::text)) AS usuario_facturacion_nombre,
+       ot.subtotal_servicios,
+       ot.subtotal_productos AS subtotal_repuestos,
+       ot.descuento_servicios,
+       ot.descuento_productos,
+       COALESCE(ot.descuento_servicios, 0) + COALESCE(ot.descuento_productos, 0) AS descuento_total,
+       ot.subtotal_general,
+       COALESCE(ot.impuesto, 0) AS impuesto,
+       COALESCE(ot.total_orden, ot.subtotal_general, 0) AS total_orden,
+       COALESCE(c_ot.empresa_id, c_rec.empresa_id, u_reg.empresa_id, 1) AS empresa_id,
+
+       -- Customer Info
+       COALESCE(c_ot.nombre_completo, c_rec.nombre_completo, 'Cliente General') AS cliente_nombre,
+       COALESCE(c_ot.identificacion, c_rec.identificacion, '') AS cliente_identificacion,
+       COALESCE(c_ot.telefono_principal, c_rec.telefono_principal, '') AS cliente_telefono,
+       COALESCE(c_ot.correo, c_rec.correo, '') AS cliente_correo,
+       COALESCE(c_ot.direccion, c_rec.direccion, '') AS cliente_direccion,
+
+       -- Bicycle Info
+       COALESCE(b_ot.marca, b_rec.marca, 'Bicicleta') AS bicicleta_marca,
+       COALESCE(b_ot.modelo, b_rec.modelo, 'Sin Modelo') AS bicicleta_modelo,
+       COALESCE(b_ot.ano, b_rec.ano) AS bicicleta_ano,
+       COALESCE(b_ot.color, b_rec.color, '') AS bicicleta_color,
+       COALESCE(b_ot.numero_serie_cuadro, b_rec.numero_serie_cuadro, '') AS bicicleta_serie,
+       COALESCE(b_ot.codigo_qr, b_rec.codigo_qr, '') AS bicicleta_qr
+     FROM admin.ordenes_trabajo ot
+     LEFT JOIN admin.usuario uf ON uf.usuario_id = ot.usuario_facturacion_id
+     LEFT JOIN admin.usuario_identidad ui_fact ON ui_fact.usuario_id = uf.usuario_id
+     LEFT JOIN admin.usuario u_mec ON u_mec.usuario_id = ot.mecanico_id
+     LEFT JOIN admin.usuario_identidad ui_mec ON ui_mec.usuario_id = u_mec.usuario_id
+     LEFT JOIN admin.cargo cargo_mec ON cargo_mec.cargo_id = ui_mec.cargo_id
+     LEFT JOIN admin.recepciones r ON ot.recepcion_id = r.recepcion_id
+     LEFT JOIN admin.clientes c_ot ON ot.cliente_id = c_ot.cliente_id
+     LEFT JOIN admin.clientes c_rec ON r.cliente_id = c_rec.cliente_id
+     LEFT JOIN admin.bicicletas b_ot ON b_ot.bicicleta_id = ot.bicicleta_id
+     LEFT JOIN admin.bicicletas b_rec ON b_rec.bicicleta_id = r.bicicleta_id
+     LEFT JOIN admin.estado_orden_trabajo eot ON ot.estado_orden_id = eot.estado_orden_id
+     LEFT JOIN admin.usuario u_reg ON ot.usuario_registro = u_reg.usuario_id
+     WHERE ot.orden_trabajo_id = $1 AND ot.activo = true`,
+    [ordenId]
+  );
+
+  if (!orderRes || orderRes.length === 0) {
+    return {
+      success: false,
+      status: 404,
+      error: "NOT_FOUND",
+      message: "La orden solicitada no está disponible."
+    };
+  }
+
+  const orderData = orderRes[0];
+  const pipelineStep = resolvePipelineStep(orderData.estado_codigo, orderData.estado_orden_id);
+  const isEntregada = pipelineStep.currentStepIndex === 4 || orderData.estado_codigo === "ENTREGADA" || orderData.estado_orden_id === 8;
+
+  if (!isEntregada) {
+    return {
+      success: false,
+      status: 409,
+      error: "NOT_DELIVERED",
+      message: "La factura solo está disponible cuando la orden sea entregada."
+    };
+  }
+
+  // 3. Resolve active Invoice for this order
+  const facturasRes = await query<any>(
+    `SELECT factura_id, numero_factura, codigo_factura, fecha_factura, subtotal, descuento_total, impuesto_total, total_factura, monto_pagado, balance_pendiente, estado
+     FROM admin.facturas
+     WHERE orden_trabajo_id = $1
+     ORDER BY factura_id ASC`,
+    [ordenId]
+  );
+
+  if (!facturasRes || facturasRes.length === 0) {
+    return {
+      success: false,
+      status: 404,
+      error: "NO_INVOICE",
+      message: "No se encontró una factura asociada a esta orden de trabajo."
+    };
+  }
+
+  const activeFacturas = facturasRes.filter((f: any) => f.estado !== "ANULADA");
+
+  if (activeFacturas.length === 0) {
+    return {
+      success: false,
+      status: 409,
+      error: "INVOICE_CANCELLED",
+      message: "La factura asociada no está disponible."
+    };
+  }
+
+  if (activeFacturas.length > 1) {
+    return {
+      success: false,
+      status: 409,
+      error: "AMBIGUOUS_INVOICE",
+      message: "Existe más de una factura activa asociada a esta orden."
+    };
+  }
+
+  const persistedFactura = activeFacturas[0];
+
+  // 4. Fetch Company Info
+  let empresaInfo = {
+    nombre_comercial: "RIDE LAB",
+    subtitulo: "Tienda y Taller de Bicicletas",
+    direccion: undefined as string | undefined,
+    telefono: undefined as string | undefined,
+    email: undefined as string | undefined,
+    rnc: undefined as string | undefined,
+    logotipo_url: null as string | null
+  };
+
+  try {
+    const empresaRes = await query<any>(
+      `SELECT nombre_comercial, alias, direccion, telefono, email, rnc, logotipo_url
+       FROM admin.empresa
+       WHERE empresa_id = $1 LIMIT 1`,
+      [orderData.empresa_id]
+    );
+    if (empresaRes && empresaRes.length > 0) {
+      const emp = empresaRes[0];
+      empresaInfo = {
+        nombre_comercial: emp.nombre_comercial || emp.alias || "RIDE LAB",
+        subtitulo: "Tienda y Taller de Bicicletas",
+        direccion: emp.direccion || undefined,
+        telefono: emp.telefono || undefined,
+        email: emp.email || undefined,
+        rnc: emp.rnc ? (emp.rnc.length === 9 ? `${emp.rnc.slice(0, 1)}-${emp.rnc.slice(1, 3)}-${emp.rnc.slice(3)}` : emp.rnc) : undefined,
+        logotipo_url: emp.logotipo_url || null
+      };
+    }
+  } catch (empErr) {
+    console.warn("Could not query admin.empresa for invoice:", empErr);
+  }
+
+  // 5. Fetch line items
+  const numeroFactura = persistedFactura.numero_factura || `FAC-${orderData.codigo_orden.replace(/^OT-/, "")}`;
+  const codigoFactura = persistedFactura.codigo_factura || persistedFactura.numero_factura || numeroFactura;
+  const fechaFactura = persistedFactura.fecha_factura || orderData.fecha_facturacion || orderData.fecha_entrega_real || new Date().toISOString();
+  const balancePendiente = persistedFactura.balance_pendiente != null ? parseFloat(persistedFactura.balance_pendiente) : 0;
+  const totalOrden = parseFloat(persistedFactura.total_factura || orderData.total_orden || 0);
+  const montoPagado = persistedFactura.monto_pagado != null ? parseFloat(persistedFactura.monto_pagado) : totalOrden;
+  const estadoFactura = persistedFactura.estado || "PAGADA";
+
+  const detRes = await query<any>(
+    `SELECT
+       df.detalle_factura_id AS item_id,
+       df.tipo_detalle,
+       df.servicio_id,
+       df.producto_id,
+       df.descripcion,
+       df.cantidad,
+       df.precio_unitario,
+       df.descuento,
+       df.subtotal
+     FROM admin.detalle_factura df
+     WHERE df.factura_id = $1
+     ORDER BY df.detalle_factura_id ASC`,
+    [persistedFactura.factura_id]
+  );
+
+  let conceptos: any[] = [];
+  let subtotalServicios = 0;
+  let subtotalRepuestos = 0;
+  let descuentoTotal = parseFloat(persistedFactura.descuento_total || 0);
+  let impuestoTotal = parseFloat(persistedFactura.impuesto_total || 0);
+
+  if (detRes && detRes.length > 0) {
+    conceptos = detRes.map((d: any) => {
+      const isProduct = d.tipo_detalle === "PRODUCTO";
+      const isLabor = d.tipo_detalle === "MANO_OBRA";
+      const tipoConcepto = isProduct ? "REPUESTO" : (isLabor ? "MANO_OBRA" : "SERVICIO");
+      const codigo = isProduct
+        ? (d.producto_id ? `REP-${String(d.producto_id).padStart(4, "0")}` : `REP-${d.item_id}`)
+        : (d.servicio_id ? `SRV-${String(d.servicio_id).padStart(4, "0")}` : `SRV-${d.item_id}`);
+      const sub = parseFloat(d.subtotal || 0);
+      const desc = parseFloat(d.descuento || 0);
+
+      if (isProduct) {
+        subtotalRepuestos += sub;
+      } else {
+        subtotalServicios += sub;
+      }
+
+      return {
+        item_id: d.item_id,
+        tipo_concepto: tipoConcepto,
+        codigo,
+        descripcion: d.descripcion,
+        notas: "",
+        cantidad: parseFloat(d.cantidad || 1).toFixed(2),
+        precio_unitario: parseFloat(d.precio_unitario || 0),
+        descuento: desc,
+        subtotal: sub
+      };
+    });
+  } else {
+    // Fallback to order items
+    const servSql = `
+      SELECT
+        os.orden_servicio_id AS item_id,
+        'SERVICIO' AS tipo_concepto,
+        COALESCE(os.codigo_servicio, 'SRV-' || LPAD(os.orden_servicio_id::text, 4, '0')) AS codigo,
+        COALESCE(ts.nombre, os.descripcion_servicio, 'Servicio de Taller') AS descripcion,
+        COALESCE(os.observacion_tecnica, '') AS notas,
+        COALESCE(os.cantidad, 1.00) AS cantidad,
+        COALESCE(os.precio_unitario, 0) AS precio_unitario,
+        COALESCE(os.valor_descuento, 0) AS descuento,
+        COALESCE(os.subtotal, (COALESCE(os.cantidad, 1.00) * COALESCE(os.precio_unitario, 0) - COALESCE(os.valor_descuento, 0))) AS subtotal
+      FROM admin.orden_servicios os
+      LEFT JOIN admin.tipo_servicio ts ON os.tipo_servicio_id = ts.tipo_servicio_id
+      WHERE os.orden_trabajo_id = $1
+        AND (os.activo IS DISTINCT FROM false)
+      ORDER BY os.orden_servicio_id ASC
+    `;
+    const servRes = await query<any>(servSql, [ordenId]);
+    const services = (servRes || []).map((s: any) => ({
+      item_id: s.item_id,
+      tipo_concepto: "SERVICIO",
+      codigo: s.codigo,
+      descripcion: s.descripcion,
+      notas: s.notas || "",
+      cantidad: parseFloat(s.cantidad || 1).toFixed(2),
+      precio_unitario: parseFloat(s.precio_unitario || 0),
+      descuento: parseFloat(s.descuento || 0),
+      subtotal: parseFloat(s.subtotal || 0)
+    }));
+
+    const prodSql = `
+      SELECT
+        op.orden_producto_id AS item_id,
+        'REPUESTO' AS tipo_concepto,
+        COALESCE(p.codigo_producto, 'REP-' || LPAD(op.orden_producto_id::text, 4, '0')) AS codigo,
+        COALESCE(p.nombre, 'Repuesto / Componente') AS descripcion,
+        COALESCE(op.observacion, '') AS notas,
+        COALESCE(op.cantidad, 1.00) AS cantidad,
+        COALESCE(op.precio_unitario, 0) AS precio_unitario,
+        COALESCE(op.valor_descuento, 0) AS descuento,
+        COALESCE(op.subtotal, (COALESCE(op.cantidad, 1.00) * COALESCE(op.precio_unitario, 0) - COALESCE(op.valor_descuento, 0))) AS subtotal
+      FROM admin.orden_productos op
+      LEFT JOIN admin.productos p ON op.producto_id = p.producto_id
+      WHERE op.orden_trabajo_id = $1
+      ORDER BY op.orden_producto_id ASC
+    `;
+    const prodRes = await query<any>(prodSql, [ordenId]);
+    const products = (prodRes || []).map((p: any) => ({
+      item_id: p.item_id,
+      tipo_concepto: "REPUESTO",
+      codigo: p.codigo,
+      descripcion: p.descripcion,
+      notas: p.notas || "",
+      cantidad: parseFloat(p.cantidad || 1).toFixed(2),
+      precio_unitario: parseFloat(p.precio_unitario || 0),
+      descuento: parseFloat(p.descuento || 0),
+      subtotal: parseFloat(p.subtotal || 0)
+    }));
+
+    conceptos = [...services, ...products];
+    subtotalServicios = parseFloat(orderData.subtotal_servicios || 0);
+    subtotalRepuestos = parseFloat(orderData.subtotal_repuestos || 0);
+    descuentoTotal = parseFloat(orderData.descuento_total || 0);
+    impuestoTotal = parseFloat(orderData.impuesto || 0);
+  }
+
+  const invoicePdfData: InvoicePdfData = {
+    empresa: empresaInfo,
+    factura: {
+      numero_factura: numeroFactura,
+      codigo_factura: codigoFactura,
+      codigo_orden: orderData.codigo_orden,
+      codigo_recepcion: orderData.codigo_recepcion || "Sin Recepción",
+      fecha_factura: fechaFactura,
+      estado: estadoFactura
+    },
+    cliente: {
+      nombre_completo: orderData.cliente_nombre || "Cliente General",
+      identificacion: orderData.cliente_identificacion || "No registrada",
+      telefono: orderData.cliente_telefono || "No registrado",
+      correo: orderData.cliente_correo || "No registrado",
+      direccion: orderData.cliente_direccion || "No registrada"
+    },
+    bicicleta: {
+      marca_modelo: `${orderData.bicicleta_marca || "Bicicleta"} ${orderData.bicicleta_modelo || ""}`.trim(),
+      ano_color: `${orderData.bicicleta_ano || "—"} / ${orderData.bicicleta_color || "—"}`,
+      numero_serie: orderData.bicicleta_serie || "No registrado",
+      codigo_qr: orderData.bicicleta_qr || "No asignado"
+    },
+    servicio_info: {
+      mecanico_responsable: orderData.mecanico_nombre || "No asignado",
+      mecanico_cargo: orderData.mecanico_cargo || null,
+      fecha_inicio: orderData.fecha_inicio_trabajo,
+      fecha_finalizacion: orderData.fecha_finalizacion,
+      tiempo_trabajo_segundos: parseInt(orderData.total_tiempo_transcurrido || "0", 10)
+    },
+    pago_entrega: {
+      estado_pago: estadoFactura === "PAGADA" ? "Pagada" : estadoFactura,
+      fecha_entrega: orderData.fecha_entrega_real || orderData.fecha_facturacion,
+      entregado_por: orderData.usuario_facturacion_nombre || orderData.mecanico_nombre || "Usuario del Sistema"
+    },
+    observaciones: orderData.observaciones || orderData.diagnostico_inicial || "Sin observaciones adicionales",
+    conceptos,
+    resumen_financiero: {
+      subtotal_servicios: subtotalServicios,
+      subtotal_repuestos: subtotalRepuestos,
+      descuento_total: descuentoTotal,
+      impuesto: impuestoTotal,
+      total_general: totalOrden,
+      monto_pagado: montoPagado,
+      balance_pendiente: balancePendiente
+    }
+  };
+
+  return {
+    success: true,
+    status: 200,
+    data: invoicePdfData
   };
 }
