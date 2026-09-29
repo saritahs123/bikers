@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { COMPANY_LOGO_BASE64 } from "@/lib/assets/logoBase64";
@@ -14,6 +15,7 @@ export interface InvoicePdfData {
   };
   factura: {
     numero_factura: string;
+    codigo_factura?: string;
     codigo_orden: string;
     codigo_recepcion: string;
     fecha_factura: string;
