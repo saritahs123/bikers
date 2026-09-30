@@ -339,34 +339,34 @@ export default function PublicTrackingView({
         <div className="w-full max-w-[430px] sm:max-w-[450px] mx-auto px-3.5 min-[390px]:px-4 pt-3.5 sm:pt-4 pb-6 space-y-4">
         {/* CARD PRINCIPAL */}
         <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_2px_8px_rgba(0,0,0,0.03)] p-4 sm:p-5 space-y-3.5">
-          {/* Top Row: ORDEN DE TRABAJO (Left) and CLIENTE (Right) */}
-          <div className="grid grid-cols-2 gap-3 sm:gap-4 items-start">
-            <div className="min-w-0">
-              <span className="font-mono text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
-                ORDEN DE TRABAJO
-              </span>
-              <div className="font-mono text-lg sm:text-xl font-black text-[#0F0F0F] tracking-tight mt-0.5 truncate">
-                {order.codigoOrden}
-              </div>
-            </div>
-
-            <div className="text-right min-w-0">
+          {/* Top Row: CLIENTE (Left) and ORDEN DE TRABAJO (Right) */}
+          <div className="flex justify-between gap-3 sm:gap-4 items-start">
+            <div className="min-w-0 flex-1">
               <span className="font-mono text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
                 CLIENTE
               </span>
               <div
-                className="text-xs sm:text-sm font-bold text-[#0F0F0F] mt-0.5 truncate max-w-[170px] ml-auto"
+                className="text-sm min-[390px]:text-[15px] sm:text-base font-black text-[#0F0F0F] uppercase tracking-tight mt-0.5 truncate"
                 title={clientName}
               >
                 {clientName}
               </div>
             </div>
+
+            <div className="text-right shrink-0">
+              <span className="font-mono text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
+                ORDEN DE TRABAJO
+              </span>
+              <div className="font-mono text-[11px] min-[390px]:text-xs sm:text-[13px] font-bold text-[#0F0F0F] mt-0.5 truncate">
+                {order.codigoOrden}
+              </div>
+            </div>
           </div>
 
           {/* Bottom Row: BICICLETA (Left) and FECHA DE INGRESO (Right) */}
-          <div className="border-t border-slate-100/90 pt-3.5 grid grid-cols-2 gap-3 sm:gap-4 items-start">
+          <div className="border-t border-slate-100/90 pt-3.5 flex justify-between gap-2.5 sm:gap-4 items-start">
             {/* LADO IZQUIERDO: BICICLETA */}
-            <div className="flex items-start gap-2.5 sm:gap-3 min-w-0">
+            <div className="flex items-start gap-2.5 sm:gap-3 min-w-0 flex-1">
               {fotoPrincipal && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -380,7 +380,7 @@ export default function PublicTrackingView({
                   BICICLETA
                 </span>
                 <div
-                  className="text-xs sm:text-sm font-black text-[#0F0F0F] uppercase tracking-tight truncate mt-0.5"
+                  className="text-sm min-[390px]:text-[15px] sm:text-base font-black text-[#0F0F0F] uppercase tracking-tight truncate mt-0.5"
                   title={bikeTitle}
                 >
                   {bikeTitle}
