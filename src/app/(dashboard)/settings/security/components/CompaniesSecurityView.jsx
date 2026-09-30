@@ -18,6 +18,7 @@ import {
   Info,
   Upload, 
   Phone, 
+  MessageCircle,
   Mail, 
   MapPin, 
   Palette, 
@@ -64,6 +65,7 @@ export default function CompaniesSecurityView() {
     color_identificador: "#5c701b",
     direccion: "",
     telefono: "",
+    whatsapp: "",
     email: "",
     descripcion: ""
   });
@@ -73,6 +75,7 @@ export default function CompaniesSecurityView() {
     nombre_comercial: "",
     tipo_empresa_id: "",
     telefono: "",
+    whatsapp: "",
     email: "",
     logotipo_url: ""
   });
@@ -94,6 +97,7 @@ export default function CompaniesSecurityView() {
       nombre_comercial: "",
       tipo_empresa_id: "",
       telefono: "",
+      whatsapp: "",
       email: "",
       logotipo_url: ""
     };
@@ -108,6 +112,9 @@ export default function CompaniesSecurityView() {
 
     const phoneVal = validatePhoneDR(dataObj.telefono, false);
     if (!phoneVal.isValid) errors.telefono = phoneVal.message;
+
+    const whatsappVal = validatePhoneDR(dataObj.whatsapp, false);
+    if (!whatsappVal.isValid) errors.whatsapp = whatsappVal.message.replace(/teléfono|telefónico/gi, "WhatsApp");
 
     const emailVal = validateEmail(dataObj.email, false);
     if (!emailVal.isValid) errors.email = emailVal.message;
@@ -134,6 +141,11 @@ export default function CompaniesSecurityView() {
   const handlePhoneChange = (val) => {
     const { formatted } = formatPhoneDR(val);
     updateField("telefono", formatted);
+  };
+
+  const handleWhatsappChange = (val) => {
+    const { formatted } = formatPhoneDR(val);
+    updateField("whatsapp", formatted);
   };
 
   const handleEmailChange = (val) => {
@@ -187,6 +199,7 @@ export default function CompaniesSecurityView() {
       color_identificador: "#5c701b",
       direccion: "",
       telefono: "",
+      whatsapp: "",
       email: "",
       descripcion: ""
     });
@@ -195,6 +208,7 @@ export default function CompaniesSecurityView() {
       nombre_comercial: "",
       tipo_empresa_id: "",
       telefono: "",
+      whatsapp: "",
       email: "",
       logotipo_url: ""
     });
@@ -214,7 +228,8 @@ export default function CompaniesSecurityView() {
       estado: item.estado || "Activo",
       color_identificador: item.color_identificador || "#5c701b",
       direccion: item.direccion || "",
-      telefono: item.telefono || "",
+      telefono: item.telefono ? (formatPhoneDR(item.telefono).formatted || item.telefono) : "",
+      whatsapp: item.whatsapp ? (formatPhoneDR(item.whatsapp).formatted || item.whatsapp) : "",
       email: item.email || "",
       descripcion: item.descripcion || ""
     };
@@ -312,17 +327,18 @@ export default function CompaniesSecurityView() {
   const exportToExcel = () => {
     const headers = [
       "ID", "Código", "RNC", "Nombre Comercial", "Alias", 
-      "Tipo Empresa", "Empresa Padre", "Teléfono", "Email", "Estado", "Fecha Registro"
+      "Tipo Empresa", "Empresa Padre", "Teléfono", "WhatsApp", "Email", "Estado", "Fecha Registro"
     ];
     const rows = sortedData.map(i => [
-      item => item.id,
+      i.id,
       `"${i.codigo || ''}"`,
       `"${i.rnc || ''}"`,
       `"${i.nombre_comercial || ''}"`,
       `"${i.alias || ''}"`,
       `"${i.tipo_empresa_nombre || ''}"`,
       `"${i.empresa_padre_nombre || ''}"`,
-      `"${i.telefono || ''}"`,
+      `"${i.telefono ? (formatPhoneDR(i.telefono).formatted || i.telefono) : ''}"`,
+      `"${i.whatsapp ? (formatPhoneDR(i.whatsapp).formatted || i.whatsapp) : ''}"`,
       `"${i.email || ''}"`,
       i.estado,
       i.fecha_registro || ''
@@ -352,6 +368,7 @@ export default function CompaniesSecurityView() {
       item.tipo_empresa_nombre,
       item.empresa_padre_nombre,
       item.telefono,
+      item.whatsapp,
       item.email,
       item.direccion,
       item.descripcion
@@ -405,23 +422,38 @@ export default function CompaniesSecurityView() {
     return st === "INACTIVO" || st === "INACTIVOS" || st === "0" || st === "FALSE";
   }).length;
 
-  const renderSortableHeader = (label, columnKey, extraClass = "") => {
+  const formatDateCompact = (val) => {
+    if (!val) return "-";
+    try {
+      const d = new Date(val);
+      if (isNaN(d.getTime())) return String(val).substring(0, 10);
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      return `${day}/${month}/${year}`;
+    } catch {
+      return String(val).substring(0, 10);
+    }
+  };
+
+  const renderSortableHeader = (label, columnKey, extraClass = "", tooltip = "") => {
     const isSorted = sortColumn === columnKey;
     return (
       <th 
         onClick={() => handleSort(columnKey)}
-        className={`px-5 py-4 cursor-pointer select-none hover:text-foreground text-foreground-secondary transition-colors group/head ${extraClass}`}
+        title={tooltip || label}
+        className={`px-1.5 xl:px-2 py-2 cursor-pointer select-none hover:text-foreground text-foreground-secondary transition-colors group/head ${extraClass}`}
       >
-        <div className={`flex items-center gap-1.5 ${extraClass.includes('text-center') ? 'justify-center' : ''}`}>
+        <div className={`flex items-center gap-0.5 ${extraClass.includes('text-center') ? 'justify-center' : ''}`}>
           <span>{label}</span>
           {isSorted ? (
             sortDirection === 'asc' ? (
-              <ArrowUp size={13} className="text-primary shrink-0" />
+              <ArrowUp size={10} className="text-primary shrink-0" />
             ) : (
-              <ArrowDown size={13} className="text-primary shrink-0" />
+              <ArrowDown size={10} className="text-primary shrink-0" />
             )
           ) : (
-            <ArrowUpDown size={12} className="text-foreground-disabled group-hover/head:text-foreground-muted opacity-50 shrink-0" />
+            <ArrowUpDown size={9} className="text-foreground-disabled group-hover/head:text-foreground-muted opacity-50 shrink-0" />
           )}
         </div>
       </th>
@@ -550,32 +582,33 @@ export default function CompaniesSecurityView() {
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="bg-surface-subtle border-b border-border font-mono text-[11px] text-primary tracking-wider whitespace-nowrap">
+              <tr className="bg-surface-subtle border-b border-border font-mono text-[9.5px] xl:text-[10px] 2xl:text-[10.5px] text-primary tracking-wider whitespace-nowrap">
                 {renderSortableHeader("ID", "id")}
                 {renderSortableHeader("Código", "codigo")}
                 {renderSortableHeader("RNC", "rnc")}
                 {renderSortableHeader("Nombre Comercial", "nombre_comercial")}
                 {renderSortableHeader("Alias", "alias")}
-                {renderSortableHeader("Tipo Empresa", "tipo_empresa_nombre")}
-                {renderSortableHeader("Empresa Padre", "empresa_padre_nombre")}
+                {renderSortableHeader("Tipo", "tipo_empresa_nombre")}
+                {renderSortableHeader("Emp. Padre", "empresa_padre_nombre", "", "Empresa Padre")}
                 {renderSortableHeader("Teléfono", "telefono")}
+                {renderSortableHeader("WhatsApp", "whatsapp")}
                 {renderSortableHeader("Email", "email")}
                 {renderSortableHeader("Estado", "estado", "text-center")}
-                {renderSortableHeader("Fecha Registro", "fecha_registro")}
-                <th className="px-5 py-4 text-right sticky right-0 bg-surface-subtle shadow-[-8px_0_12px_rgba(0,0,0,0.06)] z-20">Acciones</th>
+                {renderSortableHeader("Registro", "fecha_registro")}
+                <th className="px-1.5 xl:px-2 py-2 text-right sticky right-0 bg-surface-subtle shadow-[-6px_0_10px_rgba(0,0,0,0.05)] z-20">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {loading ? (
                 <tr>
-                  <td colSpan={12} className="py-12 text-center text-foreground-muted font-mono">
+                  <td colSpan={13} className="py-12 text-center text-foreground-muted font-mono">
                     <RefreshCw className="animate-spin text-primary mx-auto mb-2" size={24} />
                     Cargando catálogo de empresas...
                   </td>
                 </tr>
               ) : paginatedData.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="py-12 text-center text-foreground-muted font-mono italic">
+                  <td colSpan={13} className="py-12 text-center text-foreground-muted font-mono italic">
                     No se encontraron registros de empresas.
                   </td>
                 </tr>
@@ -585,19 +618,19 @@ export default function CompaniesSecurityView() {
                     key={item.id} 
                     className="group hover:bg-hover transition-colors whitespace-nowrap"
                   >
-                    <td className="px-5 py-4 font-mono text-primary font-bold">
+                    <td className="px-1.5 xl:px-2 py-1.5 font-mono text-primary font-bold text-[10.5px]">
                       {item.id}
                     </td>
-                    <td className="px-5 py-4 font-mono text-foreground-secondary">
+                    <td className="px-1.5 xl:px-2 py-1.5 font-mono text-foreground-secondary text-[10.5px]">
                       {item.codigo || "-"}
                     </td>
-                    <td className="px-5 py-4 font-mono text-foreground font-bold">
+                    <td className="px-1.5 xl:px-2 py-1.5 font-mono text-foreground font-bold text-[10.5px]">
                       {item.rnc}
                     </td>
-                    <td className="px-5 py-4 font-bold text-foreground text-sm">
-                      <div className="flex items-center gap-2.5">
+                    <td className="px-1.5 xl:px-2 py-1.5 font-bold text-foreground text-[11px]">
+                      <div className="flex items-center gap-1.5 max-w-[130px] xl:max-w-none">
                         <div 
-                          className="w-3 h-3 rounded-full shrink-0 shadow-sm border border-border"
+                          className="w-2 h-2 rounded-full shrink-0 shadow-sm border border-border"
                           style={{ backgroundColor: item.color_identificador || '#5c701b' }}
                           title={`Color: ${item.color_identificador}`}
                         />
@@ -605,31 +638,40 @@ export default function CompaniesSecurityView() {
                           <img 
                             src={item.logotipo_url} 
                             alt={item.nombre_comercial} 
-                            className="w-6 h-6 rounded-md object-cover border border-border"
+                            className="w-4 h-4 rounded object-cover border border-border shrink-0"
                           />
                         ) : null}
-                        <span>{item.nombre_comercial}</span>
+                        <span className="truncate" title={item.nombre_comercial}>{item.nombre_comercial}</span>
                       </div>
                     </td>
-                    <td className="px-5 py-4 text-foreground-secondary italic">
-                      {item.alias || "-"}
+                    <td className="px-1.5 xl:px-2 py-1.5 text-foreground-secondary italic text-[10.5px]">
+                      <span className="truncate block max-w-[80px] xl:max-w-none" title={item.alias}>
+                        {item.alias || "-"}
+                      </span>
                     </td>
-                    <td className="px-5 py-4">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded bg-surface-subtle text-foreground-secondary border border-border font-mono text-[10px]">
+                    <td className="px-1.5 xl:px-2 py-1.5">
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-surface-subtle text-foreground-secondary border border-border font-mono text-[9px]">
                         {item.tipo_empresa_nombre || "General"}
                       </span>
                     </td>
-                    <td className="px-5 py-4 text-foreground-muted font-mono">
-                      {item.empresa_padre_nombre || "Ninguna"}
+                    <td className="px-1.5 xl:px-2 py-1.5 text-foreground-muted font-mono text-[10.5px]">
+                      <span className="truncate block max-w-[80px] xl:max-w-none" title={item.empresa_padre_nombre}>
+                        {item.empresa_padre_nombre || "-"}
+                      </span>
                     </td>
-                    <td className="px-5 py-4 font-mono text-foreground-secondary">
-                      {item.telefono || "-"}
+                    <td className="px-1.5 xl:px-2 py-1.5 font-mono text-foreground-secondary whitespace-nowrap text-[10.5px]">
+                      {item.telefono ? (formatPhoneDR(item.telefono).formatted || item.telefono) : "-"}
                     </td>
-                    <td className="px-5 py-4 text-foreground-secondary">
-                      {item.email || "-"}
+                    <td className="px-1.5 xl:px-2 py-1.5 font-mono text-foreground-secondary whitespace-nowrap text-[10.5px]">
+                      {item.whatsapp ? (formatPhoneDR(item.whatsapp).formatted || item.whatsapp) : "-"}
                     </td>
-                    <td className="px-5 py-4 text-center">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-mono font-bold tracking-wider uppercase border ${
+                    <td className="px-1.5 xl:px-2 py-1.5 text-foreground-secondary text-[10.5px]">
+                      <span className="truncate block max-w-[100px] xl:max-w-[140px]" title={item.email}>
+                        {item.email || "-"}
+                      </span>
+                    </td>
+                    <td className="px-1.5 xl:px-2 py-1.5 text-center">
+                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-mono font-bold tracking-wider uppercase border ${
                         (item.estado || "").toUpperCase() === "ACTIVO"
                           ? "bg-success/15 text-success border-success/30"
                           : "bg-surface-subtle text-foreground-muted border-border"
@@ -637,26 +679,26 @@ export default function CompaniesSecurityView() {
                         {item.estado}
                       </span>
                     </td>
-                    <td className="px-5 py-4 font-mono text-foreground-muted">
-                      {item.fecha_registro ? String(item.fecha_registro).substring(0, 10) : "-"}
+                    <td className="px-1.5 xl:px-2 py-1.5 font-mono text-foreground-muted text-[10px] whitespace-nowrap">
+                      {formatDateCompact(item.fecha_registro)}
                     </td>
-                    <td className="px-5 py-4 text-right sticky right-0 bg-card group-hover:bg-hover shadow-[-8px_0_12px_rgba(0,0,0,0.06)] z-10 transition-colors">
-                      <div className="flex items-center justify-end gap-2">
+                    <td className="px-1.5 xl:px-2 py-1.5 text-right sticky right-0 bg-card group-hover:bg-hover shadow-[-6px_0_10px_rgba(0,0,0,0.05)] z-10 transition-colors">
+                      <div className="flex items-center justify-end gap-1">
                         <button 
                           type="button"
                           onClick={() => handleOpenEdit(item)}
-                          className="p-2 bg-surface hover:bg-primary/20 text-foreground-secondary hover:text-primary border border-border hover:border-primary/40 rounded-lg transition-all cursor-pointer"
+                          className="p-1 bg-surface hover:bg-primary/20 text-foreground-secondary hover:text-primary border border-border hover:border-primary/40 rounded-lg transition-all cursor-pointer"
                           title="Editar"
                         >
-                          <Edit2 size={15} />
+                          <Edit2 size={12} />
                         </button>
                         <button 
                           type="button"
                           onClick={() => { setItemToDelete(item); setIsDeletingModalOpen(true); }}
-                          className="p-2 bg-surface hover:bg-error/20 text-foreground-secondary hover:text-error border border-border hover:border-error/40 rounded-lg transition-all cursor-pointer"
+                          className="p-1 bg-surface hover:bg-error/20 text-foreground-secondary hover:text-error border border-border hover:border-error/40 rounded-lg transition-all cursor-pointer"
                           title="Eliminar"
                         >
-                          <Trash2 size={15} />
+                          <Trash2 size={12} />
                         </button>
                       </div>
                     </td>
@@ -918,8 +960,31 @@ export default function CompaniesSecurityView() {
                     )}
                   </div>
 
-                  {/* EMAIL */}
+                  {/* WHATSAPP */}
                   <div className="space-y-1">
+                    <label className="font-mono text-[11px] text-foreground-secondary font-bold tracking-wider uppercase block flex items-center gap-1">
+                      <MessageCircle size={11} className="text-foreground-muted" />
+                      <span>WhatsApp</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.whatsapp}
+                      onChange={(e) => handleWhatsappChange(e.target.value)}
+                      placeholder="Ej. (809) 555-0199"
+                      className={`w-full bg-input border rounded-xl px-3 py-2 text-xs text-foreground placeholder:text-foreground-disabled focus:outline-none transition-all ${
+                        formErrors.whatsapp ? "border-error focus:border-error text-error" : "border-border focus:border-primary"
+                      }`}
+                    />
+                    {formErrors.whatsapp && (
+                      <div className="flex items-center gap-1 mt-1 text-[11px] text-error font-mono">
+                        <AlertCircle size={12} className="shrink-0 text-error" />
+                        <span>{formErrors.whatsapp}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* EMAIL */}
+                  <div className="col-span-2 space-y-1">
                     <label className="font-mono text-[11px] text-foreground-secondary font-bold tracking-wider uppercase block flex items-center gap-1">
                       <Mail size={11} className="text-foreground-muted" />
                       <span>Email</span>
