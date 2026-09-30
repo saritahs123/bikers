@@ -181,8 +181,8 @@ export default function PublicTrackingView({
   if (loading) {
     return (
       <div
-        style={{ height: "100dvh", minHeight: "100vh" }}
-        className="w-full h-[100dvh] overflow-hidden bg-[#f8fafc] text-[#0F0F0F] flex flex-col justify-center items-center p-4"
+        style={{ height: "100dvh" }}
+        className="w-full h-screen h-[100dvh] overflow-hidden bg-[#f8fafc] text-[#0F0F0F] flex flex-col justify-center items-center p-4"
       >
         <div className="w-14 h-14 rounded-2xl bg-white border border-slate-200/80 flex items-center justify-center mb-4 shadow-sm">
           <RefreshCw className="w-6 h-6 text-[#84924A] animate-spin" />
@@ -203,8 +203,8 @@ export default function PublicTrackingView({
   if (notFound || !order) {
     return (
       <div
-        style={{ height: "100dvh", minHeight: "100vh" }}
-        className="w-full h-[100dvh] overflow-hidden bg-[#f8fafc] text-[#0F0F0F] flex flex-col items-center justify-center p-4"
+        style={{ height: "100dvh" }}
+        className="w-full h-screen h-[100dvh] overflow-hidden bg-[#f8fafc] text-[#0F0F0F] flex flex-col items-center justify-center p-4"
       >
         <div className="max-w-[420px] w-full bg-white border border-slate-200/80 rounded-2xl p-6 text-center shadow-lg space-y-4">
           <div className="w-16 h-16 rounded-2xl bg-rose-50 border border-rose-200 text-rose-500 mx-auto flex items-center justify-center">
@@ -305,15 +305,14 @@ export default function PublicTrackingView({
 
   return (
     <div
-      style={{ height: "100dvh", minHeight: "100vh" }}
-      className="w-full flex flex-col overflow-hidden bg-[#f8fafc] text-[#0F0F0F] selection:bg-[#84924A]/20 antialiased font-sans"
+      style={{ height: "100dvh" }}
+      className="w-full h-screen h-[100dvh] flex flex-col overflow-hidden bg-[#f8fafc] text-[#0F0F0F] selection:bg-[#84924A]/20 antialiased font-sans"
     >
       <style>{`
         @media (max-height: 500px) {
           .portal-header-box { padding-top: 4px !important; padding-bottom: 4px !important; }
           .portal-logo-img { max-width: 130px !important; width: 28% !important; }
           .portal-footer-box { padding-top: 4px !important; }
-          .portal-footer-desc { display: none !important; }
         }
       `}</style>
       {/* HEADER ESTRUCTURAL OSCURO FULL WIDTH CON LOGO REAL CENTRADO - FIJO */}
@@ -649,33 +648,36 @@ export default function PublicTrackingView({
 
       {/* FOOTER OSCURO INTEGRADO (BASE #0F0F0F) - FIJO Y COMPACTO (~10% MÁS COMPACTO) */}
       <footer
-        style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom, 0px))" }}
-        className="portal-footer-box w-full flex-none shrink-0 bg-[#0F0F0F] text-slate-400 border-t border-[#1f1f1f] z-30 pt-2 min-[390px]:pt-2.5 sm:pt-3 print:hidden"
+        style={{
+          height: "auto",
+          paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom, 0px))",
+        }}
+        className="portal-footer-box w-full h-auto flex-none shrink-0 bg-[#0F0F0F] text-slate-400 border-t border-[#1f1f1f] z-30 pt-2 min-[390px]:pt-2.5 sm:pt-3 print:hidden"
       >
         <div className="w-full max-w-xl mx-auto px-3.5 sm:px-4 space-y-1.5 min-[390px]:space-y-2 text-center flex flex-col items-center">
           {order.empresa?.descripcion && (
-            <p className="portal-footer-desc text-[10px] min-[370px]:text-[10.5px] min-[390px]:text-[11px] sm:text-xs text-slate-300 font-normal whitespace-nowrap overflow-hidden text-ellipsis max-w-full tracking-tight">
+            <p className="portal-footer-desc text-[10px] min-[370px]:text-[10.5px] min-[390px]:text-[11px] sm:text-xs text-slate-300 font-normal leading-tight line-clamp-2 max-w-full tracking-tight">
               {order.empresa.descripcion}
             </p>
           )}
 
-          <div className="flex flex-wrap items-center justify-center gap-x-3.5 gap-y-1 text-[10px] min-[390px]:text-[10.5px] sm:text-[11px] text-slate-300">
+          <div className="flex flex-wrap items-center justify-center gap-x-3.5 sm:gap-x-4 gap-y-1 text-[10px] min-[390px]:text-[10.5px] sm:text-[11px] text-slate-300 leading-tight">
             {order.empresa?.telefono && (
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1 shrink-0">
                 <Phone className="w-3 h-3 text-slate-400 shrink-0" />
                 <span>{order.empresa.telefono}</span>
               </div>
             )}
 
             {order.empresa?.horario && (
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1 shrink-0">
                 <Clock className="w-3 h-3 text-slate-400 shrink-0" />
                 <span>{order.empresa.horario}</span>
               </div>
             )}
 
             {order.empresa?.direccion && (
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1 text-center">
                 <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
                 <span>{order.empresa.direccion}</span>
               </div>
@@ -683,7 +685,7 @@ export default function PublicTrackingView({
           </div>
 
           <div className="border-t border-[#2d3748]/40 pt-1.5 w-full text-center">
-            <p className="text-[9.5px] min-[390px]:text-[10px] sm:text-[10.5px] text-slate-400 font-normal">
+            <p className="text-[9.5px] min-[390px]:text-[10px] sm:text-[10.5px] text-slate-400 font-normal leading-tight">
               © {new Date().getFullYear()} {order.empresa?.nombreComercial || "Ride Lab"}. Todos los derechos reservados.
             </p>
           </div>
