@@ -35,7 +35,8 @@ import {
   Copy,
   ExternalLink,
   MoreVertical,
-  Power
+  Power,
+  Send
 } from "lucide-react";
 import WorkOrderServicesView from "./WorkOrderServicesView";
 import WorkOrderHistoryView from "./WorkOrderHistoryView";
@@ -373,6 +374,31 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [invoiceForPayment, setInvoiceForPayment] = useState(null);
   const deliveryCompletedRef = useRef(false);
+  const [isSendingStatus, setIsSendingStatus] = useState(false);
+
+  const handleSendStatusNotification = async () => {
+    if (isSendingStatus) return;
+    setIsSendingStatus(true);
+    try {
+      const res = await fetch(`/api/taller/ordenes/${ordenId}/notificaciones/estado`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showSuccessToast("Notificación enviada al cliente.");
+      } else if (data.missingPhone || data.error === "MISSING_PHONE") {
+        showErrorToast("El cliente no tiene un teléfono válido registrado.");
+      } else {
+        showErrorToast("No fue posible enviar la notificación.");
+      }
+    } catch (err) {
+      console.error("Error al enviar notificación de estado:", err);
+      showErrorToast("No fue posible enviar la notificación.");
+    } finally {
+      setIsSendingStatus(false);
+    }
+  };
 
   // Tracking state and operations
   const [trackingData, setTrackingData] = useState(null);
@@ -1374,6 +1400,21 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
               EDITAR OT
             </button>
           )}
+
+          {/* Botón Enviar Estado por SMS */}
+          <button
+            onClick={handleSendStatusNotification}
+            disabled={isSendingStatus}
+            className="flex items-center gap-2 px-3.5 py-2 bg-sky-500/10 text-sky-400 hover:bg-sky-500/20 rounded-xl border border-sky-500/30 transition-all font-mono text-xs font-bold uppercase tracking-wider cursor-pointer shadow-lg shadow-sky-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Enviar notificación SMS del estado actual al cliente"
+          >
+            {isSendingStatus ? (
+              <Loader2 className="w-4 h-4 animate-spin text-sky-400" />
+            ) : (
+              <Send className="w-4 h-4 text-sky-400" />
+            )}
+            {isSendingStatus ? "Enviando..." : "Enviar Estado"}
+          </button>
 
           {permissions.puede_eliminar && (
             <button

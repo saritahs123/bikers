@@ -6,6 +6,7 @@ import { CURRENT_RECEPTION_TERMS_VERSION, isValidReceptionTermsVersion } from "@
 import { resolveDefaultWarehouse, reserveProductsForNewWorkOrder } from "@/lib/workshop/workshopInventoryReservationService";
 import { recalculateWorkOrderTotals } from "@/lib/workshop/recalculateWorkOrderTotals";
 import { ensureWorkOrderTracking } from "@/lib/tracking/workOrderTrackingService";
+import { sendWelcomeNotification } from "@/lib/notifications/workOrderNotificationService";
 
 export interface ServiceItemInput {
   tipo_servicio_id: number;
@@ -914,6 +915,14 @@ export async function executeReceptionWithWorkOrder(
       resultado: "Exitoso",
       req
     }).catch((err) => console.error("Error logging user activity:", err));
+
+    if (resultData.orden_trabajo_id) {
+      sendWelcomeNotification({
+        ordenTrabajoId: resultData.orden_trabajo_id,
+        usuarioId: session.usuario_id,
+        empresaId: session.empresa_id
+      }).catch((err) => console.error("Error al enviar notificación de bienvenida SMS:", err));
+    }
   }
 
   return {
