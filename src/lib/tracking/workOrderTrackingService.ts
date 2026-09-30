@@ -631,6 +631,7 @@ export async function getPublicTrackingData(
        nombre_comercial,
        alias,
        telefono,
+       whatsapp,
        email,
        direccion,
        descripcion
@@ -640,13 +641,20 @@ export async function getPublicTrackingData(
   );
   const emp = empRes && empRes.length > 0 ? empRes[0] : null;
   const rawPhone = emp ? (emp.telefono || "").trim() : "";
-  const cleanDigits = rawPhone.replace(/\D/g, "");
-  let waDigits = cleanDigits;
+  const rawWhatsapp = emp ? (emp.whatsapp || "").trim() : "";
+  const waSource = rawWhatsapp || rawPhone;
+  const cleanWaDigits = waSource.replace(/\D/g, "");
+  let waDigits = cleanWaDigits;
   if (waDigits.length === 10 && (waDigits.startsWith("809") || waDigits.startsWith("829") || waDigits.startsWith("849"))) {
     waDigits = "1" + waDigits;
   }
   const whatsappUrl = waDigits ? `https://wa.me/${waDigits}?text=${encodeURIComponent(`Hola, deseo consultar el estado de mi orden ${order.codigo_orden}.`)}` : null;
-  const callDigits = waDigits ? (waDigits.startsWith("1") ? `+${waDigits}` : `+1${waDigits}`) : cleanDigits;
+  const cleanPhoneDigits = rawPhone.replace(/\D/g, "");
+  let phoneDigits = cleanPhoneDigits;
+  if (phoneDigits.length === 10 && (phoneDigits.startsWith("809") || phoneDigits.startsWith("829") || phoneDigits.startsWith("849"))) {
+    phoneDigits = "1" + phoneDigits;
+  }
+  const callDigits = phoneDigits ? (phoneDigits.startsWith("1") ? `+${phoneDigits}` : `+1${phoneDigits}`) : cleanPhoneDigits;
   const telefonoLlamada = callDigits ? `tel:${callDigits}` : null;
 
   const empresa: PublicEmpresaDTO = {

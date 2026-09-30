@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { validatePhoneDR, formatPhoneDR } from "@/lib/validations";
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -74,6 +75,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const color_identificador = body.color_identificador || '#bfce7f';
     const direccion = (body.direccion || '').trim();
     const telefono = (body.telefono || '').trim();
+    const whatsapp = (body.whatsapp || '').trim();
     const email = (body.email || '').trim();
     const descripcion = (body.descripcion || '').trim();
 
@@ -93,6 +95,21 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return NextResponse.json({ error: "El correo electrónico no tiene un formato válido." }, { status: 400 });
     }
+
+    // Telefono Validation
+    const phoneVal = validatePhoneDR(telefono, false);
+    if (!phoneVal.isValid) {
+      return NextResponse.json({ error: phoneVal.message }, { status: 400 });
+    }
+
+    // Whatsapp Validation
+    const whatsappVal = validatePhoneDR(whatsapp, false);
+    if (!whatsappVal.isValid) {
+      return NextResponse.json({ error: whatsappVal.message.replace(/teléfono|telefónico/gi, "WhatsApp") }, { status: 400 });
+    }
+
+    const telefonoFormatted = telefono ? (formatPhoneDR(telefono).formatted || telefono) : null;
+    const whatsappFormatted = whatsapp ? (formatPhoneDR(whatsapp).formatted || whatsapp) : null;
 
     // Check RNC uniqueness for other records
     try {
@@ -143,13 +160,14 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
              color_identificador = $9,
              direccion = $10,
              telefono = $11,
-             email = $12,
-             descripcion = $13,
+             whatsapp = $12,
+             email = $13,
+             descripcion = $14,
              fecha_actualizacion = NOW()
-         WHERE empresa_id = $14`,
+         WHERE empresa_id = $15`,
         [
           rnc, codigo || null, nombre_comercial, alias || null, tipo_empresa_id, empresa_padre_id || null,
-          logotipo_url || null, estado, color_identificador, direccion || null, telefono || null, email || null, descripcion || null, empresaId
+          logotipo_url || null, estado, color_identificador, direccion || null, telefonoFormatted, whatsappFormatted, email || null, descripcion || null, empresaId
         ]
       );
       return NextResponse.json({ success: true, message: "Empresa actualizada correctamente." });
@@ -171,12 +189,13 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
                color_identificador = $9,
                direccion = $10,
                telefono = $11,
-               email = $12,
-               descripcion = $13
-           WHERE empresa_id = $14`,
+               whatsapp = $12,
+               email = $13,
+               descripcion = $14
+           WHERE empresa_id = $15`,
           [
             rnc, codigo || null, nombre_comercial, alias || null, tipo_empresa_id, empresa_padre_id || null,
-            logotipo_url || null, estado, color_identificador, direccion || null, telefono || null, email || null, descripcion || null, empresaId
+            logotipo_url || null, estado, color_identificador, direccion || null, telefonoFormatted, whatsappFormatted, email || null, descripcion || null, empresaId
           ]
         );
         return NextResponse.json({ success: true, message: "Empresa actualizada correctamente." });

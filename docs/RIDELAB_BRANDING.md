@@ -39,11 +39,11 @@ Los colores provienen directamente del motor CSS `@theme` en `src/app/globals.cs
 ### 3.1 Brand & Accent Colors
 | Rol | Nombre | Hex (Modo Oscuro) | Hex (Modo Claro) | Tailwind Token |
 | :--- | :--- | :--- | :--- | :--- |
-| **Primary Accent** | Ride Lab Olive | `#bfce7f` | `#5c701b` | `var(--color-primary)` / `text-primary` |
-| **Primary Button** | Olive Action | `#84924a` | `#687e22` | `var(--color-primary-button-bg)` |
-| **Primary Hover** | Olive Bright | `#d0e092` | `#475713` | `var(--color-primary-hover)` |
-| **Primary Muted** | Olive Soft | `rgba(191,206,127,0.15)` | `rgba(92,112,27,0.10)` | `var(--color-primary-muted)` |
-| **WhatsApp Brand** | WhatsApp Emerald | `#00a884` / `#059669` | `#00a884` / `#059669` | `bg-[#00a884]` / `bg-emerald-600` |
+| **Logo Olive** | Ride Lab Olive Logo | `#868243` | `#868243` | Logo oficial engranaje + RIDE |
+| **Logo Orange** | Ride Lab Orange Logo | `#FF4E00` | `#FF4E00` | Logo oficial LAB + barra horizontal |
+| **Primary Actions / States** | Olive Action | `#84924A` | `#84924A` | `bg-[#84924A]` (WhatsApp, stepper activo, badges) |
+| **Primary Hover** | Olive Bright | `#97a655` | `#74813e` | `hover:bg-[#74813e]` |
+| **Primary Muted** | Olive Soft | `rgba(132,146,74,0.15)` | `rgba(132,146,74,0.15)` | `bg-[#84924A]/15 border-[#84924A]/30` |
 
 ### 3.2 Superficies y Fondos
 | Superficie | Modo Oscuro | Modo Claro | Clase CSS / Uso |
@@ -51,21 +51,21 @@ Los colores provienen directamente del motor CSS `@theme` en `src/app/globals.cs
 | **Background Principal** | `#0a0a0a` | `#f8fafc` | `bg-background` / `bg-[#f8fafc]` |
 | **Surface (Cards / Paneles)** | `#0e1117` | `#ffffff` | `bg-surface` / `bg-white` |
 | **Surface Subtle (Filas / Insets)** | `#161a21` | `#f1f5f9` (o `#f8fafc`) | `bg-surface-subtle` / `bg-slate-50/80` |
-| **Surface Elevated (Modales / Dropdowns)** | `#1c2129` | `#ffffff` | `bg-surface-elevated` |
-| **Footer Integrado** | `#0a0d14` | `#0a0d14` (Oscuro fijo) | `bg-[#0a0d14]` |
+| **Header Superior Oscuro** | `#0F0F0F` | `#0F0F0F` | `bg-[#0F0F0F] border-b border-[#1f1f1f]` |
+| **Footer Integrado (Base Oscuro)** | `#0F0F0F` | `#0F0F0F` | `bg-[#0F0F0F] border-t border-[#1f1f1f]` |
 
 ### 3.3 Textos y Tipografía
 | Jerarquía | Modo Oscuro | Modo Claro | Clase Tailwind |
 | :--- | :--- | :--- | :--- |
-| **Text Primary (Encabezados / Datos)** | `#f8fafc` | `#0f172a` (Slate 900) | `text-foreground` / `text-slate-900` |
+| **Text Primary (Encabezados / Datos)** | `#f8fafc` | `#0F0F0F` (Negro/Base Oficial) | `text-[#0F0F0F]` / `text-slate-900` |
 | **Text Secondary (Subtítulos / Cuerpos)** | `#cbd5e1` | `#334155` (Slate 700) | `text-foreground-secondary` / `text-slate-700` |
 | **Text Muted (Labels / Fechas auxiliares)** | `#94a3b8` | `#64748b` (Slate 500) | `text-foreground-muted` / `text-slate-500` |
-| **Text Labels Uppercase (Metadatos)** | `#64748b` | `#94a3b8` (Slate 400) | `text-slate-400 font-bold uppercase` |
+| **Text Labels Uppercase (Metadatos)** | `#64748b` | `#94a3b8` (Slate 400) | `font-mono text-slate-400 font-bold uppercase` |
 
 ### 3.4 Estados y Semántica
 | Estado | Color Principal | Fondo Muted | Borde | Uso en Taller |
 | :--- | :--- | :--- | :--- | :--- |
-| **Success** | `#10b981` / `#059669` | `#ecfdf5` | `#a7f3d0` | Orden Entregada, Completada, Factura |
+| **Success / Completado** | `#84924A` | `rgba(132,146,74,0.15)` | `rgba(132,146,74,0.30)` | Orden Entregada, Completada, Badges |
 | **Warning / Process** | `#f97316` / `#f59e0b` | `#fff7ed` | `#fed7aa` | Pendiente, En Reparación |
 | **Danger / Hold** | `#f43f5e` / `#e11d48` | `#fff1f2` | `#fecdd3` | Orden en Hold, Cancelada, Anulada |
 | **Info / Neutral** | `#0ea5e9` / `#64748b` | `#f0f9ff` / `#f1f5f9` | `#e2e8f0` | En Cola, Informativo, Catálogos |
@@ -77,15 +77,6 @@ Los colores provienen directamente del motor CSS `@theme` en `src/app/globals.cs
 ### 4.1 Fuentes del Sistema
 1. **Sans-Serif Principal:** `Inter` (`var(--font-inter)`), fallback: `-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`.
 2. **Monospace Técnica:** `JetBrains Mono` (`var(--font-jetbrains-mono)`), fallback: `ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace`. Utilizada para códigos de orden (`OT-202609-18`), números de factura, montos de moneda y códigos técnicos.
-
-### 4.2 Escala Tipográfica Canónica (`globals.css`)
-- **Page Title:** `text-2xl sm:text-[26px] font-black tracking-tight` (`.text-page-title`, 24px-26px, weight: 800-900).
-- **Section Title:** `text-xs sm:text-sm font-bold tracking-wider uppercase` (`.text-section-title`, 12px-14px).
-- **Card Title / Value Principal:** `text-lg sm:text-xl font-black tracking-tight` (`.text-card-title`, 18px-20px).
-- **Body / Standard Text:** `text-xs sm:text-sm font-normal leading-relaxed` (12px-14px, weight: 400-500).
-- **Secondary / Descriptor:** `text-[11px] sm:text-xs text-slate-500 font-medium` (11px-12px).
-- **Field Label (Uppercase):** `text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400` (`.text-field-label`).
-- **Badge / Pill:** `text-[10px] sm:text-[11px] font-bold uppercase tracking-tight` (10px-11px).
 
 ---
 
@@ -118,41 +109,42 @@ Ride Lab utiliza una jerarquía clara de tarjetas:
 4. **Card de Fotos:**
    - Grid de 2 columnas `aspect-[4/3]` con thumbnails redondeados (`rounded-xl`).
 5. **No-Card (Footer):**
-   - El footer **NUNCA** debe ser una tarjeta flotante; se integra al fondo de la página como bloque estructural completo.
+   - El footer se integra al fondo de la página como bloque estructural completo en `#0F0F0F`.
 
 ---
 
 ## 7. Buttons
 
 ### 7.1 Botón Primario (WhatsApp Action)
-- **Fondo:** `#00a884` o verde Ride Lab `#059669`, hover `#008f6f` / `#047857`.
+- **Fondo:** Verde de acciones `#84924A`, hover `#74813e`.
 - **Texto:** `text-white font-bold text-sm sm:text-base`.
-- **Altura:** `py-3.5 px-5`, `rounded-2xl`, con icono oficial de WhatsApp y chevron derecho.
+- **Altura:** `py-3.5 px-5`, `rounded-2xl`, con icono oficial de WhatsApp centrado.
 - **Sombra:** `shadow-sm`, transición activa `active:scale-[0.99]`.
 
 ### 7.2 Botones Secundarios (Descargar Factura / Llamar al Taller)
-- **Fondo:** Blanco `bg-white`, hover `hover:bg-slate-50`, active `active:bg-slate-100`.
-- **Borde:** `border border-slate-300`.
-- **Texto:** `text-slate-800 font-semibold text-[11px] min-[390px]:text-xs sm:text-sm`.
+- **Descargar Factura:**
+  - Habilitada: `bg-white hover:bg-slate-50 border border-slate-300 text-[#0F0F0F]`.
+  - Deshabilitada: `bg-[#eef0f3] border border-slate-200 text-slate-400 cursor-not-allowed`.
+- **Llamar al Taller:**
+  - Fondo: Blanco `bg-white`, hover `hover:bg-[#84924A]/5`, active `active:bg-[#84924A]/10`.
+  - Borde: `border border-[#84924A]`.
+  - Texto & Icono: `text-[#84924A] font-semibold text-[11px] min-[390px]:text-xs sm:text-sm`.
 - **Altura:** `h-11 sm:h-12` consistente en grid 50/50.
 - **Radio:** `rounded-xl`.
-- **Estado Disabled:** `bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed opacity-75`.
 
 ---
 
 ## 8. Badges & Statuses
 
 Reglas de visualización de estados en toda la plataforma:
-- **Forma:** Píldora redondeada `rounded-full`, padding `px-2.5 py-0.5 sm:py-1`.
-- **Indicador de Estado:** Punto de color circular `w-1.5 h-1.5 rounded-full` al inicio del badge.
+- **Forma:** Píldora redondeada `rounded-full`, padding `px-2.5 sm:px-3 py-1`.
+- **Indicador de Estado:** Check circular blanco sobre círculo `#84924A`.
 - **Tipografía:** `text-[11px] sm:text-xs font-semibold`.
 - **Mapeo de Estados de Orden de Trabajo:**
-  1. `PENDIENTE` (Step 1): Color Naranja (`#f97316`).
-  2. `EN REPARACIÓN` (Step 2): Color Naranja (`#f97316`).
-  3. `COMPLETADA` (Step 3): Verde Esmeralda (`#10b981`).
-  4. `ENTREGADA` (Step 4): Verde Esmeralda Profundo (`#059669`).
-  5. `HOLD` / Bloqueada: Rosa / Rojo (`#f43f5e`).
-  6. Pasos no alcanzados: Gris tenue (`bg-slate-100 border-slate-200 text-slate-400`).
+  1. `PENDIENTE` (Step 1): Verde de acciones `#84924A` (si alcanzado) o Gris (`bg-slate-200`).
+  2. `EN REPARACIÓN` (Step 2): Verde de acciones `#84924A` (si alcanzado) o Gris (`bg-slate-200`).
+  3. `COMPLETADA` (Step 3): Verde de acciones `#84924A`.
+  4. `ENTREGADA` (Step 4): Verde de acciones `#84924A`.
 
 ---
 
@@ -160,24 +152,17 @@ Reglas de visualización de estados en toda la plataforma:
 
 - **Librería Oficial:** `lucide-react`.
 - **Grosor habitual:** `strokeWidth={2}` por defecto, `stroke-[3]` únicamente en checks de confirmación.
-- **Tamaños:**
-  - Micro / Metadatos: `w-3.5 h-3.5` (14px).
-  - Estándar / Botones: `w-4 h-4` (16px).
-  - Destacado: `w-5 h-5` (20px).
-- **Regla Estricta:** No usar iconos decorativos al lado de servicios o ítems de inventario (evitar llaves, estrellas, engranajes innecesarios). Los iconos se reservan exclusivamente para acciones (Teléfono, Descarga, WhatsApp, Check de estado, Mapa).
 
 ---
 
 ## 10. Light / Dark Surfaces
 
-- **Aplicación Interna (Taller, CRM, Inventario, Facturación, Ajustes):**
-  - Utiliza el motor de temas `ThemeContext.tsx` con soporte dinámico para Modo Oscuro (predeterminado) y Modo Claro.
-  - La interfaz interna se adapta mediante variables CSS (`--bg-surface`, `--border-default`, etc.).
 - **Portal Público de Seguimiento (`/s/[code]` y `/[code]`):**
   - Diseñado en una versión clara profesional optimizada para clientes en smartphones.
-  - Fondo: `#f8fafc`.
+  - Header: `#0F0F0F` (Oscuro oficial con logo centrado).
+  - Fondo general: `#f8fafc`.
   - Cards: `#ffffff`.
-  - Footer: `#0a0d14` (Integrado estructuralmente, proporcionando peso y anclaje al final de la página).
+  - Footer: `#0F0F0F` (Integrado estructuralmente, borde `#1f1f1f`).
 
 ---
 
@@ -185,27 +170,29 @@ Reglas de visualización de estados en toda la plataforma:
 
 Flujo visual estricto del portal de clientes:
 ```
-[ HEADER FIJO BLANCO ]
-Logo Ride Lab  |  TIENDA Y TALLER DE BICICLETAS
+[ HEADER OSCURO #0F0F0F ]
+Logo Ride Lab (#868243 / #FF4E00) Centrado
          ↓
 [ CARD PRINCIPAL (Dominante) ]
 - Izquierda: ORDEN DE TRABAJO (Código)  |  BICICLETA (Marca, modelo, tipo, año)
 - Derecha:   CLIENTE (Nombre)           |  FECHA DE INGRESO (Fecha + hora en 1 sola línea)
          ↓
-[ ESTADO DE LA REPARACIÓN ]
+[ ESTATUS DE LA ORDEN ]
 Stepper 4 pasos (Pendiente -> En Reparación -> Completada -> Entregada)
+- Pasos alcanzados/completados: #84924A
+- Línea activa: #84924A
          ↓
 [ SERVICIOS CONTRATADOS ]
-Filas limpias sin iconos (Nombre destacado, descripción secundaria, badge a la derecha)
+Filas limpias (Nombre destacado, descripción secundaria, badge #84924A a la derecha)
          ↓
 [ FOTOS DE RECEPCIÓN ]
 Grid de 2 columnas con thumbnails de fotos reales (si existen)
          ↓
 [ BOTONES DE ACCIÓN ]
-- Primario: Consultar por WhatsApp
-- Secundarios: Descargar Factura (habilitado solo en Entregada)  |  Llamar al Taller
+- Primario: Consultar por WhatsApp (#84924A)
+- Secundarios: Descargar Factura (habilitado en Entregada)  |  Llamar al Taller (borde y texto #84924A)
          ↓
-[ FOOTER OSCURO ESTRUCTURAL ]
+[ FOOTER OSCURO #0F0F0F ESTRUCTURAL ]
 Datos dinámicos de admin.empresa (dirección, teléfono, horario, copyright)
 ```
 

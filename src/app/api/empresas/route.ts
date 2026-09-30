@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { validateRNC, validatePhoneDR, validateEmail, validateURL, validateRequiredText } from "@/lib/validations";
+import { validateRNC, validatePhoneDR, formatPhoneDR, validateEmail, validateURL, validateRequiredText } from "@/lib/validations";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
 
 export async function GET() {
@@ -32,6 +32,7 @@ export async function GET() {
         e.color_identificador,
         e.direccion,
         e.telefono,
+        e.whatsapp,
         e.email,
         e.descripcion,
         e.fecha_registro,
@@ -70,6 +71,7 @@ export async function GET() {
       color_identificador: r.color_identificador || '#bfce7f',
       direccion: r.direccion || '',
       telefono: r.telefono || '',
+      whatsapp: r.whatsapp || '',
       email: r.email || '',
       descripcion: r.descripcion || '',
       fecha_registro: r.fecha_registro ? String(r.fecha_registro).substring(0, 10) : null,
@@ -107,6 +109,7 @@ export async function POST(req: Request) {
     const color_identificador = body.color_identificador || '#bfce7f';
     const direccion = (body.direccion || '').trim();
     const telefonoRaw = (body.telefono || '').trim();
+    const whatsappRaw = (body.whatsapp || '').trim();
     const emailRaw = (body.email || '').trim();
     const descripcion = (body.descripcion || '').trim();
 
@@ -133,7 +136,14 @@ export async function POST(req: Request) {
     if (!phoneVal.isValid) {
       return NextResponse.json({ error: phoneVal.message }, { status: 400 });
     }
-    const telefono = phoneVal.digits;
+    const telefono = telefonoRaw ? (formatPhoneDR(telefonoRaw).formatted || telefonoRaw) : null;
+
+    // 4.1. WhatsApp Validation
+    const whatsappVal = validatePhoneDR(whatsappRaw, false);
+    if (!whatsappVal.isValid) {
+      return NextResponse.json({ error: whatsappVal.message.replace(/teléfono|telefónico/gi, "WhatsApp") }, { status: 400 });
+    }
+    const whatsapp = whatsappRaw ? (formatPhoneDR(whatsappRaw).formatted || whatsappRaw) : null;
 
     // 5. Email Validation (auto lowercase & trim)
     const emailVal = validateEmail(emailRaw, false);
@@ -187,14 +197,14 @@ export async function POST(req: Request) {
       const sql1 = `
         INSERT INTO admin.empresa (
           rnc, codigo, nombre_comercial, alias, tipo_empresa_id, empresa_padre_id,
-          logotipo_url, estado, color_identificador, direccion, telefono, email, descripcion, fecha_registro
+          logotipo_url, estado, color_identificador, direccion, telefono, whatsapp, email, descripcion, fecha_registro
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())
         RETURNING *
       `;
       const res1 = await query(sql1, [
         rnc, codigo || null, nombre_comercial, alias || null, tipo_empresa_id, empresa_padre_id || null,
-        logotipo_url || null, estado, color_identificador, direccion || null, telefono || null, email || null, descripcion || null
+        logotipo_url || null, estado, color_identificador, direccion || null, telefono || null, whatsapp || null, email || null, descripcion || null
       ]);
       return NextResponse.json({ success: true, item: res1[0] || {} });
     } catch (err1: any) {
@@ -205,17 +215,17 @@ export async function POST(req: Request) {
         const sql2 = `
           INSERT INTO admin.empresa (
             empresa_id, rnc, codigo, nombre_comercial, alias, tipo_empresa_id, empresa_padre_id,
-            logotipo_url, estado, color_identificador, direccion, telefono, email, descripcion, fecha_registro
+            logotipo_url, estado, color_identificador, direccion, telefono, whatsapp, email, descripcion, fecha_registro
           )
           VALUES (
             (SELECT COALESCE(MAX(empresa_id), 0) + 1 FROM admin.empresa),
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW()
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW()
           )
           RETURNING *
         `;
         const res2 = await query(sql2, [
           rnc, codigo || null, nombre_comercial, alias || null, tipo_empresa_id, empresa_padre_id || null,
-          logotipo_url || null, estado, color_identificador, direccion || null, telefono || null, email || null, descripcion || null
+          logotipo_url || null, estado, color_identificador, direccion || null, telefono || null, whatsapp || null, email || null, descripcion || null
         ]);
         return NextResponse.json({ success: true, item: res2[0] || {} });
       } catch (err2: any) {
