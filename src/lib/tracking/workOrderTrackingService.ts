@@ -109,6 +109,7 @@ export interface PublicWorkOrderDTO {
     estadoLabel: string;
     completado: boolean;
   }>;
+  totalOrden: number;
 }
 
 const BASE62_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
@@ -579,6 +580,7 @@ export async function getPublicTrackingData(
        ot.descripcion_cliente,
        ot.diagnostico_inicial,
        ot.estado_orden_id,
+       COALESCE(ot.total_orden, ot.subtotal_general, 0)::numeric AS total_orden,
        eot.codigo AS estado_codigo,
        eot.nombre AS estado_nombre,
        eot.color_estado AS estado_color,
@@ -847,6 +849,11 @@ export async function getPublicTrackingData(
     },
     timeline,
     servicios,
+    totalOrden: typeof order.total_orden === "number"
+      ? order.total_orden
+      : !isNaN(parseFloat(order.total_orden))
+      ? Math.max(0, parseFloat(order.total_orden))
+      : 0,
   };
 }
 

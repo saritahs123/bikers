@@ -53,6 +53,12 @@ function formatFriendlyDateParts(
   }
 }
 
+function formatMoney(amount?: number | string | null): string {
+  const num = typeof amount === "number" ? amount : parseFloat(String(amount || 0));
+  if (isNaN(num)) return "RD$ 0.00";
+  return `RD$ ${num.toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 export default function PublicTrackingView({
   params,
   paramKey = "code",
@@ -525,6 +531,18 @@ export default function PublicTrackingView({
                   </div>
                 );
               })}
+            </div>
+
+            {/* RESUMEN FINANCIERO INTEGRADO: TOTAL DE LA ORDEN */}
+            <div className="pt-3 border-t border-slate-100">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[11px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  TOTAL DE LA ORDEN
+                </span>
+                <span className="text-base sm:text-lg font-bold text-[#0F0F0F] tracking-tight text-right whitespace-nowrap">
+                  {formatMoney(order.totalOrden)}
+                </span>
+              </div>
             </div>
           </div>
         )}
