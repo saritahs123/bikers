@@ -789,25 +789,11 @@ export async function getPublicTrackingData(
     });
   }
 
-  const isDelivered = pipelineRes.currentStepIndex === 4;
-  let canDownloadInvoice = false;
-  if (isDelivered) {
-    try {
-      const activeFacturaRes = await query<any>(
-        `SELECT factura_id
-         FROM admin.facturas
-         WHERE orden_trabajo_id = $1
-           AND estado != 'ANULADA'
-         LIMIT 1`,
-        [ordenTrabajoId]
-      );
-      if (activeFacturaRes && activeFacturaRes.length > 0) {
-        canDownloadInvoice = true;
-      }
-    } catch (e) {
-      console.error("Error checking active invoice for tracking:", e);
-    }
-  }
+  const isDelivered =
+    pipelineRes.currentStepIndex === 4 ||
+    order.estado_codigo === "ENTREGADA" ||
+    Number(order.estado_orden_id) === 8;
+  const canDownloadInvoice = isDelivered;
 
   const ultimaActualizacion = order.fecha_actualizacion || timeline[timeline.length - 1]?.fecha || order.fecha_recepcion;
 
@@ -1027,45 +1013,26 @@ export async function getPublicInvoicePdfData(
     };
   }
 
-  // 3. Resolve active Invoice for this order
-  const facturasRes = await query<any>(
-    `SELECT factura_id, numero_factura, codigo_factura, fecha_factura, subtotal, descuento_total, impuesto_total, total_factura, monto_pagado, balance_pendiente, estado
-     FROM admin.facturas
-     WHERE orden_trabajo_id = $1
-     ORDER BY factura_id ASC`,
-    [ordenId]
-  );
+  // 3. Resolve active Invoice for this order (if persisted in admin.facturas)
+  let persistedFactura: any = null;
+  try {
+    const facturasRes = await query<any>(
+      `SELECT factura_id, numero_factura, codigo_factura, fecha_factura, subtotal, descuento_total, impuesto_total, total_factura, monto_pagado, balance_pendiente, estado
+       FROM admin.facturas
+       WHERE orden_trabajo_id = $1
+       ORDER BY factura_id DESC`,
+      [ordenId]
+    );
 
-  if (!facturasRes || facturasRes.length === 0) {
-    return {
-      success: false,
-      status: 404,
-      error: "NO_INVOICE",
-      message: "No se encontró una factura asociada a esta orden de trabajo."
-    };
+    if (facturasRes && facturasRes.length > 0) {
+      const activeFacturas = facturasRes.filter((f: any) => f.estado !== "ANULADA");
+      if (activeFacturas.length > 0) {
+        persistedFactura = activeFacturas[0];
+      }
+    }
+  } catch (facErr) {
+    console.warn("Could not query admin.facturas for public invoice:", facErr);
   }
-
-  const activeFacturas = facturasRes.filter((f: any) => f.estado !== "ANULADA");
-
-  if (activeFacturas.length === 0) {
-    return {
-      success: false,
-      status: 409,
-      error: "INVOICE_CANCELLED",
-      message: "La factura asociada no está disponible."
-    };
-  }
-
-  if (activeFacturas.length > 1) {
-    return {
-      success: false,
-      status: 409,
-      error: "AMBIGUOUS_INVOICE",
-      message: "Existe más de una factura activa asociada a esta orden."
-    };
-  }
-
-  const persistedFactura = activeFacturas[0];
 
   // 4. Fetch Company Info
   let empresaInfo = {
@@ -1102,36 +1069,44 @@ export async function getPublicInvoicePdfData(
   }
 
   // 5. Fetch line items
-  const numeroFactura = persistedFactura.numero_factura || `FAC-${orderData.codigo_orden.replace(/^OT-/, "")}`;
-  const codigoFactura = persistedFactura.codigo_factura || persistedFactura.numero_factura || numeroFactura;
-  const fechaFactura = persistedFactura.fecha_factura || orderData.fecha_facturacion || orderData.fecha_entrega_real || new Date().toISOString();
-  const balancePendiente = persistedFactura.balance_pendiente != null ? parseFloat(persistedFactura.balance_pendiente) : 0;
-  const totalOrden = parseFloat(persistedFactura.total_factura || orderData.total_orden || 0);
-  const montoPagado = persistedFactura.monto_pagado != null ? parseFloat(persistedFactura.monto_pagado) : totalOrden;
-  const estadoFactura = persistedFactura.estado || "PAGADA";
+  const numeroFactura = persistedFactura?.numero_factura || `FAC-${orderData.codigo_orden.replace(/^OT-/, "")}`;
+  const codigoFactura = persistedFactura?.codigo_factura || persistedFactura?.numero_factura || numeroFactura;
+  const fechaFactura = persistedFactura?.fecha_factura || orderData.fecha_facturacion || orderData.fecha_entrega_real || new Date().toISOString();
+  const balancePendiente = persistedFactura?.balance_pendiente != null ? parseFloat(persistedFactura.balance_pendiente) : 0;
+  const totalOrden = parseFloat(persistedFactura?.total_factura || orderData.total_orden || 0);
+  const montoPagado = persistedFactura?.monto_pagado != null ? parseFloat(persistedFactura.monto_pagado) : totalOrden;
+  const estadoFactura = persistedFactura?.estado || "PAGADA";
 
-  const detRes = await query<any>(
-    `SELECT
-       df.detalle_factura_id AS item_id,
-       df.tipo_detalle,
-       df.servicio_id,
-       df.producto_id,
-       df.descripcion,
-       df.cantidad,
-       df.precio_unitario,
-       df.descuento,
-       df.subtotal
-     FROM admin.detalle_factura df
-     WHERE df.factura_id = $1
-     ORDER BY df.detalle_factura_id ASC`,
-    [persistedFactura.factura_id]
-  );
+  let detRes: any[] = [];
+  if (persistedFactura?.factura_id) {
+    try {
+      const res = await query<any>(
+        `SELECT
+           df.detalle_factura_id AS item_id,
+           df.tipo_detalle,
+           df.servicio_id,
+           df.producto_id,
+           df.descripcion,
+           df.cantidad,
+           df.precio_unitario,
+           df.descuento,
+           df.subtotal
+         FROM admin.detalle_factura df
+         WHERE df.factura_id = $1
+         ORDER BY df.detalle_factura_id ASC`,
+        [persistedFactura.factura_id]
+      );
+      detRes = res || [];
+    } catch (detErr) {
+      console.warn("Could not query admin.detalle_factura:", detErr);
+    }
+  }
 
   let conceptos: any[] = [];
   let subtotalServicios = 0;
   let subtotalRepuestos = 0;
-  let descuentoTotal = parseFloat(persistedFactura.descuento_total || 0);
-  let impuestoTotal = parseFloat(persistedFactura.impuesto_total || 0);
+  let descuentoTotal = parseFloat(persistedFactura?.descuento_total || 0);
+  let impuestoTotal = parseFloat(persistedFactura?.impuesto_total || 0);
 
   if (detRes && detRes.length > 0) {
     conceptos = detRes.map((d: any) => {
