@@ -61,7 +61,10 @@ export async function POST(
     if (result.success) {
       return NextResponse.json({
         success: true,
-        message: "Notificación enviada al cliente.",
+        estadoEnvio: result.estadoEnvio,
+        estadoProveedor: result.estadoProveedor,
+        smsBatchId: result.smsBatchId,
+        message: result.message || "Notificación enviada a la cola de envío.",
       });
     }
 

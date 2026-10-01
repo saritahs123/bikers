@@ -36,7 +36,7 @@ import {
   ExternalLink,
   MoreVertical,
   Power,
-  Send
+  MessageSquare
 } from "lucide-react";
 import WorkOrderServicesView from "./WorkOrderServicesView";
 import WorkOrderHistoryView from "./WorkOrderHistoryView";
@@ -386,7 +386,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        showSuccessToast("Notificación enviada al cliente.");
+        showSuccessToast(data.message || "Notificación enviada a la cola de envío.");
       } else if (data.missingPhone || data.error === "MISSING_PHONE") {
         showErrorToast("El cliente no tiene un teléfono válido registrado.");
       } else {
@@ -1401,19 +1401,20 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
             </button>
           )}
 
-          {/* Botón Enviar Estado por SMS */}
+          {/* Botón Reenviar Notificación por SMS */}
           <button
+            type="button"
             onClick={handleSendStatusNotification}
             disabled={isSendingStatus}
-            className="flex items-center gap-2 px-3.5 py-2 bg-sky-500/10 text-sky-400 hover:bg-sky-500/20 rounded-xl border border-sky-500/30 transition-all font-mono text-xs font-bold uppercase tracking-wider cursor-pointer shadow-lg shadow-sky-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Enviar notificación SMS del estado actual al cliente"
+            className="flex items-center gap-2 px-3.5 py-2 bg-sky-500/15 text-sky-400 hover:bg-sky-500/25 hover:text-sky-300 rounded-xl border border-sky-500/40 transition-all font-mono text-xs font-bold uppercase tracking-wider cursor-pointer shadow-lg shadow-sky-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Reenviar notificación SMS al cliente"
           >
             {isSendingStatus ? (
               <Loader2 className="w-4 h-4 animate-spin text-sky-400" />
             ) : (
-              <Send className="w-4 h-4 text-sky-400" />
+              <MessageSquare className="w-4 h-4 text-sky-400" />
             )}
-            {isSendingStatus ? "Enviando..." : "Enviar Estado"}
+            {isSendingStatus ? "Enviando..." : "Reenviar Notificación"}
           </button>
 
           {permissions.puede_eliminar && (

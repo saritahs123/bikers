@@ -697,6 +697,11 @@ export async function deleteWorkOrderWithSnapshot(
       WHERE orden_trabajo_id = $1
     `, [ordenTrabajoId]);
 
+    await client.query(`
+      DELETE FROM admin.notificacion_orden_trabajo
+      WHERE orden_trabajo_id = $1
+    `, [ordenTrabajoId]);
+
     // 7. Delete Work Order Operational Record
     const delOtRes = await client.query(`
       DELETE FROM admin.ordenes_trabajo
