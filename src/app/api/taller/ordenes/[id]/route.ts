@@ -12,6 +12,7 @@ import { recordUserActivity, recordUserAudit, computeDiff } from "@/lib/auditLog
 import { deleteWorkOrderWithSnapshot } from "@/lib/workshop/workOrderDeletionService";
 import { generarCodigoMovimiento, INVENTORY_SYSTEM_CODES } from "@/lib/inventory/inventoryConstants";
 import { getOrCreateInvoiceForWorkOrder } from "@/lib/billing/billingService";
+import { sendCompletionNotification } from "@/lib/notifications/workOrderNotificationService";
 
 // Helper for cleaning dates safely
 function cleanFecha(val: any) {
@@ -1846,6 +1847,15 @@ export async function PUT(
     }
 
     await client.query("COMMIT");
+
+    // CIERRE Automático cuando la OT pasa a estado COMPLETADA (LISTA_ENTREGA)
+    if (targetStateId === estadoListaEntregaId && currentStateId !== estadoListaEntregaId) {
+      sendCompletionNotification({
+        ordenTrabajoId: ordenId,
+        usuarioId: session.usuario_id,
+        empresaId: session.empresa_id,
+      }).catch((err) => console.error("Error al enviar notificación de cierre SMS:", err));
+    }
 
     if (isReopening) {
       await recordUserActivity({

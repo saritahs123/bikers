@@ -3,6 +3,7 @@ import { getPool, query } from "@/lib/db";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
 import { recordUserActivity, recordUserAudit } from "@/lib/auditLogger";
 import { ensureWorkOrderTracking } from "@/lib/tracking/workOrderTrackingService";
+import { sendWelcomeNotification } from "@/lib/notifications/workOrderNotificationService";
 
 // GET /api/taller/ordenes
 export async function GET(req: NextRequest) {
@@ -551,6 +552,12 @@ export async function POST(req: NextRequest) {
       });
 
       await client.query("COMMIT");
+
+      sendWelcomeNotification({
+        ordenTrabajoId,
+        usuarioId: session.usuario_id,
+        empresaId: session.empresa_id
+      }).catch((err) => console.error("Error al enviar notificación de bienvenida SMS:", err));
 
       await recordUserActivity({
         userId: session.usuario_id,
