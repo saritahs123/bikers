@@ -140,7 +140,7 @@ export default function PublicTrackingView({
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
   const handleDownloadInvoice = async () => {
-    if (!order || !order.esEntregada || !order.canDownloadInvoice || isDownloadingInvoice) {
+    if (!order || !order.esEntregada || isDownloadingInvoice) {
       return;
     }
 
@@ -609,17 +609,15 @@ export default function PublicTrackingView({
           <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
             <button
               type="button"
-              disabled={!order.esEntregada || !order.canDownloadInvoice || isDownloadingInvoice}
+              disabled={!order.esEntregada || isDownloadingInvoice}
               title={
                 !order.esEntregada
                   ? "Disponible cuando la orden sea entregada."
-                  : !order.canDownloadInvoice
-                  ? "La factura asociada no está disponible."
                   : undefined
               }
               onClick={handleDownloadInvoice}
               className={`h-11 sm:h-12 py-2.5 px-2 sm:px-3 rounded-xl font-semibold text-[11px] min-[390px]:text-xs sm:text-sm flex items-center justify-center gap-1.5 sm:gap-2 shadow-2xs transition-all ${
-                order.esEntregada && order.canDownloadInvoice
+                order.esEntregada
                   ? "bg-white hover:bg-slate-50 active:bg-slate-100 border border-slate-300 text-[#0F0F0F] cursor-pointer"
                   : "bg-[#eef0f3] border border-slate-200 text-slate-400 cursor-not-allowed"
               }`}
@@ -629,7 +627,7 @@ export default function PublicTrackingView({
                   <RefreshCw className="w-4 h-4 animate-spin text-slate-500 shrink-0" />
                   <span className="whitespace-nowrap">Generando...</span>
                 </>
-              ) : order.esEntregada && order.canDownloadInvoice ? (
+              ) : order.esEntregada ? (
                 <>
                   <Download className="w-4 h-4 shrink-0 text-[#334155]" />
                   <span className="whitespace-nowrap">Descargar Factura</span>
