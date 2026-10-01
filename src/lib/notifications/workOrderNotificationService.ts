@@ -167,7 +167,20 @@ async function recordNotificationAudit({
 }
 
 /**
+ * Status priority hierarchy to prevent state degradation (Section 3).
+ * PENDIENTE (1) < ENVIADO (2) < ENTREGADO (3)
+ */
+export const STATUS_PRIORITY: Record<DeliveryStatus, number> = {
+  NO_ENVIADO: 0,
+  ERROR: 0,
+  PENDIENTE: 1,
+  ENVIADO: 2,
+  ENTREGADO: 3,
+};
+
+/**
  * Updates an audit record with provider batch inquiry results.
+ * Respects status hierarchy: never downgrades ENTREGADO -> ENVIADO/PENDIENTE, nor ENVIADO -> PENDIENTE.
  */
 async function updateNotificationAudit({
   notificacionId,
@@ -187,7 +200,11 @@ async function updateNotificationAudit({
   try {
     await query(
       `UPDATE admin.notificacion_orden_trabajo
-       SET estado_envio = $1,
+       SET estado_envio = CASE
+             WHEN estado_envio = 'ENTREGADO' THEN 'ENTREGADO'
+             WHEN estado_envio = 'ENVIADO' AND $1 IN ('PENDIENTE', 'ERROR') THEN 'ENVIADO'
+             ELSE $1
+           END,
            estado_proveedor = $2,
            respuesta_proveedor = COALESCE($3, respuesta_proveedor),
            fecha_envio = COALESCE($4, fecha_envio),
@@ -432,10 +449,10 @@ async function processOrderNotification(
           if (batchStatus.success) {
             if (batchStatus.status === "sent") {
               currentEstadoEnvio = "ENVIADO";
-              fechaEnvio = new Date();
+              fechaEnvio = batchStatus.sentAt || new Date();
             } else if (batchStatus.status === "delivered") {
               currentEstadoEnvio = "ENTREGADO";
-              fechaEnvio = new Date();
+              fechaEnvio = batchStatus.deliveredAt || batchStatus.sentAt || new Date();
             } else if (batchStatus.status === "failed") {
               currentEstadoEnvio = "ERROR";
               finalErrorMessage = batchStatus.errorMessage || "Fallo en envío de SMS";
@@ -537,4 +554,235 @@ export async function sendCompletionNotification(
   params: SendNotificationParams
 ): Promise<SendNotificationResult> {
   return processOrderNotification("CIERRE", params);
+}
+
+export interface SyncNotificationRow {
+  notificacion_orden_trabajo_id: number;
+  orden_trabajo_id: number;
+  tipo_notificacion: NotificationType;
+  telefono_destino: string | null;
+  estado_envio: DeliveryStatus;
+  estado_proveedor: string | null;
+  textbee_batch_id: string;
+  fecha_registro: Date | string;
+  fecha_envio?: Date | string | null;
+}
+
+export interface SyncNotificationResult {
+  notificacionId: number;
+  batchId: string;
+  previousEstadoEnvio: DeliveryStatus;
+  newEstadoEnvio: DeliveryStatus;
+  previousEstadoProveedor: string | null;
+  newEstadoProveedor: string | null;
+  updated: boolean;
+  fechaEnvioReal: Date | null;
+  error?: string | null;
+}
+
+export interface SyncRecentBatchResult {
+  totalPending: number;
+  processed: number;
+  updatedCount: number;
+  results: SyncNotificationResult[];
+}
+
+/**
+ * Core synchronization unit for a single TextBee notification record.
+ * Checks real TextBee batch state, maps to delivery status, uses real provider
+ * timestamps (sentAt / deliveredAt), and prevents state degradation.
+ */
+export async function syncPendingTextBeeNotification(
+  row: SyncNotificationRow
+): Promise<SyncNotificationResult> {
+  const notificacionId = row.notificacion_orden_trabajo_id;
+  const batchId = row.textbee_batch_id?.trim();
+
+  if (!batchId) {
+    return {
+      notificacionId,
+      batchId: "",
+      previousEstadoEnvio: row.estado_envio,
+      newEstadoEnvio: row.estado_envio,
+      previousEstadoProveedor: row.estado_proveedor,
+      newEstadoProveedor: row.estado_proveedor,
+      updated: false,
+      fechaEnvioReal: null,
+      error: "Sin textbee_batch_id registrado",
+    };
+  }
+
+  const batchStatus = await getTextBeeBatchStatus(batchId);
+
+  if (!batchStatus.success) {
+    return {
+      notificacionId,
+      batchId,
+      previousEstadoEnvio: row.estado_envio,
+      newEstadoEnvio: row.estado_envio,
+      previousEstadoProveedor: row.estado_proveedor,
+      newEstadoProveedor: row.estado_proveedor,
+      updated: false,
+      fechaEnvioReal: null,
+      error: batchStatus.errorMessage || "Fallo al consultar TextBee",
+    };
+  }
+
+  let targetEstadoEnvio: DeliveryStatus = row.estado_envio;
+  let finalFechaEnvio: Date | null = row.fecha_envio ? new Date(row.fecha_envio) : null;
+  let errorMsg: string | null = null;
+
+  if (batchStatus.status === "sent") {
+    targetEstadoEnvio = "ENVIADO";
+    finalFechaEnvio = batchStatus.sentAt || finalFechaEnvio || new Date();
+  } else if (batchStatus.status === "delivered") {
+    targetEstadoEnvio = "ENTREGADO";
+    finalFechaEnvio = batchStatus.deliveredAt || batchStatus.sentAt || finalFechaEnvio || new Date();
+  } else if (batchStatus.status === "failed") {
+    targetEstadoEnvio = "ERROR";
+    errorMsg = batchStatus.errorMessage || "Fallo en envío de SMS";
+  } else if (batchStatus.status === "dispatched" || batchStatus.status === "pending" || batchStatus.status === "unknown") {
+    targetEstadoEnvio = "PENDIENTE";
+  }
+
+  // Prevenir degradación de estados (Sección 3):
+  // PENDIENTE (1) < ENVIADO (2) < ENTREGADO (3)
+  const currentRank = STATUS_PRIORITY[row.estado_envio] || 0;
+  const targetRank = STATUS_PRIORITY[targetEstadoEnvio] || 0;
+
+  let resolvedEstadoEnvio = targetEstadoEnvio;
+  if (currentRank > targetRank && currentRank >= 2) {
+    resolvedEstadoEnvio = row.estado_envio;
+  }
+
+  const rawProvStatus = batchStatus.rawStatus || batchStatus.status;
+
+  await updateNotificationAudit({
+    notificacionId,
+    estadoEnvio: resolvedEstadoEnvio,
+    estadoProveedor: rawProvStatus,
+    respuestaProveedor: batchStatus.providerResponse,
+    fechaEnvio: finalFechaEnvio,
+    errorMensaje: errorMsg,
+  });
+
+  const wasUpdated =
+    resolvedEstadoEnvio !== row.estado_envio ||
+    rawProvStatus !== row.estado_proveedor;
+
+  return {
+    notificacionId,
+    batchId,
+    previousEstadoEnvio: row.estado_envio,
+    newEstadoEnvio: resolvedEstadoEnvio,
+    previousEstadoProveedor: row.estado_proveedor,
+    newEstadoProveedor: rawProvStatus,
+    updated: wasUpdated,
+    fechaEnvioReal: finalFechaEnvio,
+  };
+}
+
+/**
+ * On-demand synchronization for a specific work order (Section 4).
+ * Checks pending notifications with age >= 10 seconds and updates them server-side.
+ * Safe and non-blocking: never throws to the caller.
+ */
+export async function syncOrderPendingNotifications(
+  ordenTrabajoId: number
+): Promise<{ checked: number; updated: number }> {
+  try {
+    if (!ordenTrabajoId || isNaN(Number(ordenTrabajoId))) {
+      return { checked: 0, updated: 0 };
+    }
+
+    const pendingRows = await query<SyncNotificationRow>(
+      `SELECT
+         notificacion_orden_trabajo_id,
+         orden_trabajo_id,
+         tipo_notificacion,
+         telefono_destino,
+         estado_envio,
+         estado_proveedor,
+         textbee_batch_id,
+         fecha_registro,
+         fecha_envio
+       FROM admin.notificacion_orden_trabajo
+       WHERE orden_trabajo_id = $1
+         AND estado_envio = 'PENDIENTE'
+         AND textbee_batch_id IS NOT NULL
+         AND fecha_registro <= NOW() - INTERVAL '10 seconds'
+       ORDER BY notificacion_orden_trabajo_id ASC`,
+      [ordenTrabajoId]
+    );
+
+    if (!pendingRows || pendingRows.length === 0) {
+      return { checked: 0, updated: 0 };
+    }
+
+    let updatedCount = 0;
+    for (const row of pendingRows) {
+      try {
+        const res = await syncPendingTextBeeNotification(row);
+        if (res.updated) updatedCount++;
+      } catch (rowErr) {
+        console.warn(`Error al sincronizar notificación ${row.notificacion_orden_trabajo_id}:`, rowErr);
+      }
+    }
+
+    return { checked: pendingRows.length, updated: updatedCount };
+  } catch (err) {
+    console.warn(`Fallo silencioso en syncOrderPendingNotifications para OT ${ordenTrabajoId}:`, err);
+    return { checked: 0, updated: 0 };
+  }
+}
+
+/**
+ * Periodic / Cron synchronization service (Section 5).
+ * Queries recent pending notifications (within last 2 hours) and synchronizes them in small batches.
+ * Idempotent, safe, and returns diagnostic metrics.
+ */
+export async function syncRecentPendingTextBeeNotifications(
+  limit: number = 50
+): Promise<SyncRecentBatchResult> {
+  const safeLimit = Math.min(Math.max(1, limit), 200);
+
+  const pendingRows = await query<SyncNotificationRow>(
+    `SELECT
+       notificacion_orden_trabajo_id,
+       orden_trabajo_id,
+       tipo_notificacion,
+       telefono_destino,
+       estado_envio,
+       estado_proveedor,
+       textbee_batch_id,
+       fecha_registro,
+       fecha_envio
+     FROM admin.notificacion_orden_trabajo
+     WHERE estado_envio = 'PENDIENTE'
+       AND textbee_batch_id IS NOT NULL
+       AND fecha_registro >= NOW() - INTERVAL '2 hours'
+     ORDER BY notificacion_orden_trabajo_id ASC
+     LIMIT $1`,
+    [safeLimit]
+  );
+
+  const results: SyncNotificationResult[] = [];
+  let updatedCount = 0;
+
+  for (const row of pendingRows) {
+    try {
+      const res = await syncPendingTextBeeNotification(row);
+      results.push(res);
+      if (res.updated) updatedCount++;
+    } catch (rowErr) {
+      console.warn(`Error al sincronizar batch reciente ${row.textbee_batch_id}:`, rowErr);
+    }
+  }
+
+  return {
+    totalPending: pendingRows.length,
+    processed: results.length,
+    updatedCount,
+    results,
+  };
 }
