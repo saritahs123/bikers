@@ -35,6 +35,9 @@ export interface TextBeeBatchStatusResult {
   providerResponse?: unknown;
   errorCode?: string | null;
   errorMessage?: string | null;
+  sentAt?: Date | null;
+  deliveredAt?: Date | null;
+  dispatchedAt?: Date | null;
 }
 
 export interface TextBeeDeviceStatusResult {
@@ -286,6 +289,9 @@ export async function getTextBeeBatchStatus(
     let rawStatus: string | null = null;
     let errorCode: string | null = null;
     let errorMessage: string | null = null;
+    let sentAt: Date | null = null;
+    let deliveredAt: Date | null = null;
+    let dispatchedAt: Date | null = null;
 
     if (parsedResponse && typeof parsedResponse === "object") {
       const respObj = parsedResponse as Record<string, unknown>;
@@ -294,7 +300,7 @@ export async function getTextBeeBatchStatus(
       const messages = (dataObj?.messages || respObj.messages) as Array<Record<string, unknown>> | undefined;
       const batch = (dataObj?.batch || respObj.batch) as Record<string, unknown> | undefined;
 
-      // Primary: examine first message status in batch
+      // Primary: examine first message in batch
       if (Array.isArray(messages) && messages.length > 0) {
         const msg = messages[0];
         if (typeof msg.status === "string") {
@@ -308,11 +314,29 @@ export async function getTextBeeBatchStatus(
         } else if (typeof msg.error === "string") {
           errorMessage = msg.error;
         }
+
+        // Extract real timestamps from TextBee message
+        if (typeof msg.sentAt === "string" && msg.sentAt) {
+          const d = new Date(msg.sentAt);
+          if (!isNaN(d.getTime())) sentAt = d;
+        }
+        if (typeof msg.deliveredAt === "string" && msg.deliveredAt) {
+          const d = new Date(msg.deliveredAt);
+          if (!isNaN(d.getTime())) deliveredAt = d;
+        }
+        if (typeof msg.dispatchedAt === "string" && msg.dispatchedAt) {
+          const d = new Date(msg.dispatchedAt);
+          if (!isNaN(d.getTime())) dispatchedAt = d;
+        }
       }
 
-      // Secondary fallback to batch level status
+      // Secondary fallback to batch level status and timestamps
       if (!rawStatus && batch && typeof batch.status === "string") {
         rawStatus = batch.status.toLowerCase().trim();
+      }
+      if (!sentAt && batch && typeof batch.sentAt === "string") {
+        const d = new Date(batch.sentAt);
+        if (!isNaN(d.getTime())) sentAt = d;
       }
     }
 
@@ -341,6 +365,9 @@ export async function getTextBeeBatchStatus(
       providerResponse: parsedResponse,
       errorCode,
       errorMessage,
+      sentAt,
+      deliveredAt,
+      dispatchedAt,
     };
   } catch (error: unknown) {
     clearTimeout(timeoutId);

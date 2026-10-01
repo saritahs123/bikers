@@ -12,7 +12,10 @@ import { recordUserActivity, recordUserAudit, computeDiff } from "@/lib/auditLog
 import { deleteWorkOrderWithSnapshot } from "@/lib/workshop/workOrderDeletionService";
 import { generarCodigoMovimiento, INVENTORY_SYSTEM_CODES } from "@/lib/inventory/inventoryConstants";
 import { getOrCreateInvoiceForWorkOrder } from "@/lib/billing/billingService";
-import { sendCompletionNotification } from "@/lib/notifications/workOrderNotificationService";
+import {
+  sendCompletionNotification,
+  syncOrderPendingNotifications,
+} from "@/lib/notifications/workOrderNotificationService";
 
 // Helper for cleaning dates safely
 function cleanFecha(val: any) {
@@ -95,6 +98,13 @@ export async function GET(
         { error: "NOT_FOUND", message: "La orden solicitada no existe o no pertenece a su empresa." },
         { status: 404 }
       );
+    }
+
+    // Sincronización on-demand de notificaciones TextBee pendientes (Sección 4)
+    try {
+      await syncOrderPendingNotifications(ordenId);
+    } catch (syncErr) {
+      console.warn(`Error no bloqueante en sincronización on-demand de OT ${ordenId}:`, syncErr);
     }
 
     // Load full order details joining mecanico_id from admin.ordenes_trabajo
