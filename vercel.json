@@ -3,6 +3,10 @@
     {
       "path": "/api/internal/storage/s3-cleanup",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/internal/notifications/textbee/sync",
+      "schedule": "*/5 * * * *"
     }
   ]
 }
