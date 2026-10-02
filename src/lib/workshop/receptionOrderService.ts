@@ -917,11 +917,15 @@ export async function executeReceptionWithWorkOrder(
     }).catch((err) => console.error("Error logging user activity:", err));
 
     if (resultData.orden_trabajo_id) {
-      sendWelcomeNotification({
-        ordenTrabajoId: resultData.orden_trabajo_id,
-        usuarioId: session.usuario_id,
-        empresaId: session.empresa_id
-      }).catch((err) => console.error("Error al enviar notificación de bienvenida SMS:", err));
+      try {
+        await sendWelcomeNotification({
+          ordenTrabajoId: resultData.orden_trabajo_id,
+          usuarioId: session.usuario_id,
+          empresaId: session.empresa_id
+        });
+      } catch (err) {
+        console.error("[receptionOrderService] Error al enviar notificación de bienvenida SMS:", err);
+      }
     }
   }
 

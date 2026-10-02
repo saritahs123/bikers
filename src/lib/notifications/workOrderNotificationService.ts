@@ -229,7 +229,7 @@ async function updateNotificationAudit({
  * Core notification dispatcher handling data gathering, phone validation,
  * idempotency checks, TextBee SMS transmission, batch status verification, and audit logging.
  */
-async function processOrderNotification(
+export async function sendWorkOrderSmsNotification(
   tipo: NotificationType,
   { ordenTrabajoId, usuarioId = null, empresaId = null }: SendNotificationParams
 ): Promise<SendNotificationResult> {
@@ -243,27 +243,36 @@ async function processOrderNotification(
       };
     }
 
-    // 1. Idempotency check:
-    // BIENVENIDA and CIERRE can only have ONE successful delivery per order.
-    // ESTADO can be sent multiple times.
+    // 1. Idempotencia automática (Sección 6)
+    // BIENVENIDA y CIERRE: verificar si ya existe registro con:
+    // estado_envio IN ('PENDIENTE', 'ENVIADO', 'ENTREGADO') O con textbee_batch_id válido.
+    // Si ya existe con batch válido -> NO duplicar.
+    // Si existe con ERROR y textbee_batch_id IS NULL -> permitir reintento controlado.
     if (tipo === "BIENVENIDA" || tipo === "CIERRE") {
-      const priorSendRes = await query<{ count: string }>(
-        `SELECT COUNT(*)::int AS count
+      const priorSendRes = await query<{
+        notificacion_orden_trabajo_id: number;
+        estado_envio: DeliveryStatus;
+        textbee_batch_id: string | null;
+      }>(
+        `SELECT notificacion_orden_trabajo_id, estado_envio, textbee_batch_id
          FROM admin.notificacion_orden_trabajo
          WHERE orden_trabajo_id = $1
            AND tipo_notificacion = $2
-           AND estado_envio IN ('ENVIADO', 'ENTREGADO', 'PENDIENTE')`,
+           AND (estado_envio IN ('ENVIADO', 'ENTREGADO', 'PENDIENTE') OR textbee_batch_id IS NOT NULL)
+         ORDER BY notificacion_orden_trabajo_id DESC
+         LIMIT 1`,
         [ordenTrabajoId, tipo]
       );
 
-      const alreadySent = parseInt(priorSendRes[0]?.count || "0", 10) > 0;
-      if (alreadySent) {
+      if (priorSendRes && priorSendRes.length > 0) {
+        const prior = priorSendRes[0];
         return {
           success: true,
           tipoNotificacion: tipo,
-          estadoEnvio: "ENVIADO",
+          estadoEnvio: prior.estado_envio,
+          smsBatchId: prior.textbee_batch_id,
           skipped: true,
-          message: `Notificación ${tipo} ya fue procesada previamente para esta orden.`,
+          message: `Notificación ${tipo} ya fue procesada previamente para esta orden (Batch: ${prior.textbee_batch_id || "N/A"}).`,
         };
       }
     }
@@ -313,11 +322,12 @@ async function processOrderNotification(
       };
     }
 
-    // 3. Resolve public short link via canonical tracking engine
+    // 3. Resolve public short link via canonical tracking engine (Sección 7)
     let trackingRes = await query<{ short_code: string; public_token: string }>(
       `SELECT short_code, public_token
        FROM admin.orden_tracking
-       WHERE orden_trabajo_id = $1`,
+       WHERE orden_trabajo_id = $1
+         AND activo = true`,
       [ordenTrabajoId]
     );
 
@@ -327,17 +337,18 @@ async function processOrderNotification(
         trackingRes = await query<{ short_code: string; public_token: string }>(
           `SELECT short_code, public_token
            FROM admin.orden_tracking
-           WHERE orden_trabajo_id = $1`,
+           WHERE orden_trabajo_id = $1
+             AND activo = true`,
           [ordenTrabajoId]
         );
       } catch (ensureErr) {
-        console.error("Error al asegurar tracking para notificación SMS:", ensureErr);
+        console.error("[workOrderNotificationService] Error al asegurar tracking para notificación SMS:", ensureErr);
       }
     }
 
     const shortCode = trackingRes && trackingRes[0] ? trackingRes[0].short_code : null;
     if (!shortCode) {
-      const errorMsg = "No se pudo obtener el short_code de seguimiento para la orden.";
+      const errorMsg = "No se pudo obtener el short_code de seguimiento válido y activo para la orden.";
       await recordNotificationAudit({
         empresaId: resolvedEmpresaId,
         ordenTrabajoId,
@@ -383,7 +394,7 @@ async function processOrderNotification(
       };
     }
 
-    // 5. Resolve and normalize client phone
+    // 5. Resolve and normalize client phone (Sección 8: OT -> cliente -> telefono)
     const rawPhone = order.telefono_principal?.trim() || order.telefono_secundario?.trim() || null;
     const normalizedPhone = normalizeDominicanPhone(rawPhone);
 
@@ -409,7 +420,7 @@ async function processOrderNotification(
       };
     }
 
-    // 6. Send SMS via TextBee Gateway
+    // 6. Send SMS via TextBee Gateway (Sección 2, 4, 5)
     const sendResult: TextBeeSendSmsResult = await sendTextBeeSms({
       recipient: normalizedPhone,
       message,
@@ -423,7 +434,7 @@ async function processOrderNotification(
       let finalErrorMessage: string | null = null;
 
       // HTTP 200 en TextBee indica que la solicitud fue encolada correctamente.
-      // Se registra inicialmente como PENDIENTE con fecha_envio = NULL.
+      // Se registra como PENDIENTE con fecha_envio = NULL, batchId y codigoHttp = 200.
       const auditId = await recordNotificationAudit({
         empresaId: resolvedEmpresaId,
         ordenTrabajoId,
@@ -433,34 +444,40 @@ async function processOrderNotification(
         estadoEnvio: currentEstadoEnvio,
         estadoProveedor: currentEstadoProveedor,
         textbeeBatchId: smsBatchId,
-        codigoHttp: sendResult.statusCode,
+        codigoHttp: sendResult.statusCode || 200,
         respuestaProveedor: sendResult.providerResponse,
         fechaEnvio: null,
         usuarioRegistro: usuarioId,
       });
 
-      // 7. Sincronización Inmediata controlada (Section 7)
+      // 7. Sincronización Inmediata controlada (Sección 9 y 10)
+      // Si el POST inicial fue aceptado y ya existe smsBatchId:
+      // un fallo o timeout consultando estado posteriormente NO DEBE convertir el envío en ERROR/failed.
+      // Debe quedar en PENDIENTE y luego el cron sincroniza.
       if (smsBatchId && auditId) {
         try {
-          // Espera breve controlada (1.5 segundos) antes de verificar estado de cola
           await new Promise((resolve) => setTimeout(resolve, 1500));
-          const batchStatus = await getTextBeeBatchStatus(smsBatchId);
+          const batchStatus = await getTextBeeBatchStatus(smsBatchId, 6000);
 
           if (batchStatus.success) {
             if (batchStatus.status === "sent") {
               currentEstadoEnvio = "ENVIADO";
               fechaEnvio = batchStatus.sentAt || new Date();
+              currentEstadoProveedor = batchStatus.rawStatus || "sent";
             } else if (batchStatus.status === "delivered") {
               currentEstadoEnvio = "ENTREGADO";
               fechaEnvio = batchStatus.deliveredAt || batchStatus.sentAt || new Date();
+              currentEstadoProveedor = batchStatus.rawStatus || "delivered";
             } else if (batchStatus.status === "failed") {
+              // Dispositivo TextBee explícitamente reportó fallo
               currentEstadoEnvio = "ERROR";
-              finalErrorMessage = batchStatus.errorMessage || "Fallo en envío de SMS";
-            } else if (batchStatus.status === "dispatched" || batchStatus.status === "pending") {
+              currentEstadoProveedor = batchStatus.rawStatus || "failed";
+              finalErrorMessage = batchStatus.errorMessage || "Fallo en envío reportado por dispositivo TextBee";
+            } else {
+              // dispatched, pending, unknown -> se mantiene en PENDIENTE
               currentEstadoEnvio = "PENDIENTE";
+              currentEstadoProveedor = batchStatus.rawStatus || batchStatus.status;
             }
-
-            currentEstadoProveedor = batchStatus.rawStatus || batchStatus.status;
 
             await updateNotificationAudit({
               notificacionId: auditId,
@@ -472,7 +489,8 @@ async function processOrderNotification(
             });
           }
         } catch (syncErr) {
-          console.warn("Advertencia en sincronización inmediata de batch TextBee:", syncErr);
+          // Timeout o error en consulta posterior NUNCA degrada a ERROR si existe smsBatchId
+          console.warn("[workOrderNotificationService] Advertencia en verificación inmediata de batch (cron sincronizará):", syncErr);
         }
       }
 
@@ -487,11 +505,12 @@ async function processOrderNotification(
         estadoEnvio: currentEstadoEnvio,
         estadoProveedor: currentEstadoProveedor,
         smsBatchId,
-        statusCode: sendResult.statusCode,
+        statusCode: sendResult.statusCode || 200,
         message: userMessage,
         errorMessage: finalErrorMessage,
       };
     } else {
+      // Falló ANTES de obtener smsBatchId -> Registrar ERROR de envío inicial
       await recordNotificationAudit({
         empresaId: resolvedEmpresaId,
         ordenTrabajoId,
@@ -518,7 +537,7 @@ async function processOrderNotification(
     }
   } catch (error: unknown) {
     const errorDetail = error instanceof Error ? error.message : "Error inesperado en servicio de notificaciones";
-    console.error("Excepción en processOrderNotification:", error);
+    console.error("Excepción en sendWorkOrderSmsNotification:", error);
 
     return {
       success: false,
@@ -529,13 +548,15 @@ async function processOrderNotification(
   }
 }
 
+export const processOrderNotification = sendWorkOrderSmsNotification;
+
 /**
  * 1. BIENVENIDA: Automático al crear la OT.
  */
 export async function sendWelcomeNotification(
   params: SendNotificationParams
 ): Promise<SendNotificationResult> {
-  return processOrderNotification("BIENVENIDA", params);
+  return sendWorkOrderSmsNotification("BIENVENIDA", params);
 }
 
 /**
@@ -544,7 +565,7 @@ export async function sendWelcomeNotification(
 export async function sendStatusNotification(
   params: SendNotificationParams
 ): Promise<SendNotificationResult> {
-  return processOrderNotification("ESTADO", params);
+  return sendWorkOrderSmsNotification("ESTADO", params);
 }
 
 /**
@@ -553,7 +574,7 @@ export async function sendStatusNotification(
 export async function sendCompletionNotification(
   params: SendNotificationParams
 ): Promise<SendNotificationResult> {
-  return processOrderNotification("CIERRE", params);
+  return sendWorkOrderSmsNotification("CIERRE", params);
 }
 
 export interface SyncNotificationRow {
