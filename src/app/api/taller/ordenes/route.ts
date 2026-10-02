@@ -553,11 +553,16 @@ export async function POST(req: NextRequest) {
 
       await client.query("COMMIT");
 
-      sendWelcomeNotification({
-        ordenTrabajoId,
-        usuarioId: session.usuario_id,
-        empresaId: session.empresa_id
-      }).catch((err) => console.error("Error al enviar notificación de bienvenida SMS:", err));
+      // Notificación de bienvenida SMS (Fuera de transacción BD)
+      try {
+        await sendWelcomeNotification({
+          ordenTrabajoId,
+          usuarioId: session.usuario_id,
+          empresaId: session.empresa_id
+        });
+      } catch (err) {
+        console.error("[taller/ordenes] Error al enviar notificación de bienvenida SMS:", err);
+      }
 
       await recordUserActivity({
         userId: session.usuario_id,
