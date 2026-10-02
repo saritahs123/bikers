@@ -1858,13 +1858,17 @@ export async function PUT(
 
     await client.query("COMMIT");
 
-    // CIERRE Automático cuando la OT pasa a estado COMPLETADA (LISTA_ENTREGA)
+    // CIERRE Automático cuando la OT pasa a estado COMPLETADA (LISTA_ENTREGA) - Fuera de transacción BD
     if (targetStateId === estadoListaEntregaId && currentStateId !== estadoListaEntregaId) {
-      sendCompletionNotification({
-        ordenTrabajoId: ordenId,
-        usuarioId: session.usuario_id,
-        empresaId: session.empresa_id,
-      }).catch((err) => console.error("Error al enviar notificación de cierre SMS:", err));
+      try {
+        await sendCompletionNotification({
+          ordenTrabajoId: ordenId,
+          usuarioId: session.usuario_id,
+          empresaId: session.empresa_id,
+        });
+      } catch (err) {
+        console.error("[taller/ordenes/[id]] Error al enviar notificación de cierre SMS:", err);
+      }
     }
 
     if (isReopening) {

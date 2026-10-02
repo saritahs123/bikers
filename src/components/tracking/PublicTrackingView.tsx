@@ -317,7 +317,7 @@ export default function PublicTrackingView({
       <style>{`
         @media (max-height: 500px) {
           .portal-header-box { padding-top: 4px !important; padding-bottom: 4px !important; }
-          .portal-logo-img { max-width: 130px !important; width: 28% !important; }
+          .portal-logo-img { max-height: 24px !important; }
           .portal-footer-box { padding-top: 4px !important; }
         }
       `}</style>
@@ -326,12 +326,12 @@ export default function PublicTrackingView({
         style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
         className="w-full flex-none shrink-0 m-0 bg-[#0F0F0F] border-b border-[#1f1f1f] z-30 print:hidden"
       >
-        <div className="portal-header-box w-full py-1.5 min-[390px]:py-2 flex items-center justify-center">
+        <div className="portal-header-box w-full py-2 sm:py-2.5 px-4 flex items-center justify-center">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/ridelab-logo.png"
             alt="Ride Lab"
-            className="portal-logo-img w-[43%] min-w-[140px] max-w-[185px] sm:max-w-[198px] h-auto object-contain block"
+            className="portal-logo-img w-auto h-7 min-[360px]:h-7.5 sm:h-8 md:h-9 max-w-[170px] min-[360px]:max-w-[190px] sm:max-w-[210px] object-contain block"
           />
         </div>
       </header>
@@ -341,338 +341,338 @@ export default function PublicTrackingView({
         style={{ WebkitOverflowScrolling: "touch" }}
         className="flex-1 min-h-0 w-full overflow-y-auto overscroll-y-contain custom-scrollbar"
       >
-        <div className="w-full max-w-[430px] sm:max-w-[450px] mx-auto px-3.5 min-[390px]:px-4 pt-3.5 sm:pt-4 pb-6 space-y-4">
-        {/* CARD PRINCIPAL */}
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_2px_8px_rgba(0,0,0,0.03)] p-4 sm:p-5 space-y-3.5">
-          {/* Top Row: CLIENTE (Left) and ORDEN DE TRABAJO (Right) */}
-          <div className="flex justify-between gap-3 sm:gap-4 items-start">
-            <div className="min-w-0 flex-1">
-              <span className="font-mono text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
-                CLIENTE
-              </span>
-              <div
-                className="text-sm min-[390px]:text-[15px] sm:text-base font-black text-[#0F0F0F] uppercase tracking-tight mt-0.5 truncate"
-                title={clientName}
-              >
-                {clientName}
-              </div>
-            </div>
-
-            <div className="text-right shrink-0">
-              <span className="font-mono text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
-                ORDEN DE TRABAJO
-              </span>
-              <div className="font-mono text-[11px] min-[390px]:text-xs sm:text-[13px] font-bold text-[#0F0F0F] mt-0.5 truncate">
-                {order.codigoOrden}
-              </div>
-            </div>
-          </div>
-
-          {/* Bottom Row: BICICLETA (Left) and FECHA DE INGRESO (Right) */}
-          <div className="border-t border-slate-100/90 pt-3.5 flex justify-between gap-2.5 sm:gap-4 items-start">
-            {/* LADO IZQUIERDO: BICICLETA */}
-            <div className="flex items-start gap-2.5 sm:gap-3 min-w-0 flex-1">
-              {fotoPrincipal && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={fotoPrincipal}
-                  alt={bikeTitle}
-                  className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl object-cover border border-slate-100 shrink-0 mt-0.5"
-                />
-              )}
-              <div className="min-w-0 flex-1">
+        <div className="w-full max-w-[460px] md:max-w-[560px] lg:max-w-[620px] mx-auto px-3 min-[360px]:px-3.5 min-[390px]:px-4 sm:px-6 pt-3.5 sm:pt-5 pb-6 space-y-3.5 sm:space-y-4">
+          {/* CARD PRINCIPAL */}
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_2px_8px_rgba(0,0,0,0.03)] p-3.5 min-[360px]:p-4 sm:p-5 space-y-3.5">
+            {/* Top Section: CLIENTE and ORDEN DE TRABAJO */}
+            <div className="flex flex-col min-[380px]:flex-row justify-between items-start gap-1.5 min-[380px]:gap-3 sm:gap-4">
+              <div className="min-w-0 flex-1 w-full min-[380px]:w-auto">
                 <span className="font-mono text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
-                  BICICLETA
+                  CLIENTE
                 </span>
                 <div
-                  className="text-sm min-[390px]:text-[15px] sm:text-base font-black text-[#0F0F0F] uppercase tracking-tight truncate mt-0.5"
-                  title={bikeTitle}
+                  className="text-sm min-[390px]:text-[15px] sm:text-base font-black text-[#0F0F0F] uppercase tracking-tight mt-0.5 break-words"
+                  title={clientName}
                 >
-                  {bikeTitle}
+                  {clientName}
                 </div>
-                {bikeSubtitle && (
-                  <div
-                    className="text-[10px] sm:text-[11px] font-medium text-slate-400 uppercase tracking-wider truncate mt-0.5"
-                    title={bikeSubtitle}
-                  >
-                    {bikeSubtitle}
-                  </div>
+              </div>
+
+              <div className="min-[380px]:text-right shrink-0 w-full min-[380px]:w-auto pt-1 min-[380px]:pt-0 border-t border-slate-100/60 min-[380px]:border-none">
+                <span className="font-mono text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
+                  ORDEN DE TRABAJO
+                </span>
+                <div className="font-mono text-xs sm:text-[13px] font-bold text-[#0F0F0F] mt-0.5">
+                  {order.codigoOrden}
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom Section: BICICLETA and FECHA DE INGRESO */}
+            <div className="border-t border-slate-100/90 pt-3.5 flex flex-col min-[410px]:flex-row justify-between gap-3 sm:gap-4 items-start">
+              {/* LADO IZQUIERDO: BICICLETA */}
+              <div className="flex items-start gap-2.5 sm:gap-3 min-w-0 flex-1 w-full min-[410px]:w-auto">
+                {fotoPrincipal && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={fotoPrincipal}
+                    alt={bikeTitle}
+                    className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl object-cover border border-slate-100 shrink-0 mt-0.5"
+                  />
                 )}
-              </div>
-            </div>
-
-            {/* LADO DERECHO: FECHA DE INGRESO */}
-            <div className="text-right shrink-0">
-              <span className="font-mono text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
-                FECHA DE INGRESO
-              </span>
-              <div className="text-[10.5px] min-[390px]:text-[11.5px] sm:text-xs font-bold text-[#0F0F0F] whitespace-nowrap mt-0.5">
-                {ingresoTexto}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* CARD ESTATUS DE LA ORDEN */}
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_2px_8px_rgba(0,0,0,0.03)] p-4 sm:p-5">
-          <div className="mb-4">
-            <span className="text-xs font-bold text-[#0F0F0F] tracking-wider uppercase block">
-              ESTATUS DE LA ORDEN
-            </span>
-          </div>
-
-          <div className="relative flex justify-between items-start pt-1 pb-1">
-            {/* Background Track connecting step centers */}
-            <div className="absolute left-[12%] right-[12%] top-3.5 h-[2px] bg-slate-200 -z-0">
-              <div
-                className="h-full bg-[#84924A] transition-all duration-500"
-                style={{
-                  width: `${Math.min(
-                    100,
-                    Math.max(0, ((currentStep - 1) / (trackingSteps.length - 1)) * 100)
-                  )}%`,
-                }}
-              />
-            </div>
-
-            {trackingSteps.map((s) => {
-              const isCompleted = s.isCompleted;
-              const isActive = s.isActive;
-
-              return (
-                <div
-                  key={s.stepIndex}
-                  className="flex-1 flex flex-col items-center relative z-10 min-w-0 px-0.5"
-                >
-                  <div
-                    className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center transition-all ${
-                      isCompleted || isActive
-                        ? "bg-[#84924A] text-white shadow-xs"
-                        : "bg-slate-200 text-slate-400"
-                    }`}
-                  >
-                    {isCompleted || isActive ? (
-                      <Check className="w-4 h-4 stroke-[3]" />
-                    ) : null}
-                  </div>
-
-                  <span
-                    className={`text-[9px] min-[390px]:text-[10px] sm:text-[11px] mt-2 tracking-tight text-center truncate max-w-full leading-tight uppercase ${
-                      isCompleted || isActive
-                        ? "text-[#334155] font-bold"
-                        : "text-slate-400 font-medium"
-                    }`}
-                  >
-                    {s.label}
+                <div className="min-w-0 flex-1">
+                  <span className="font-mono text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
+                    BICICLETA
                   </span>
+                  <div
+                    className="text-sm min-[390px]:text-[15px] sm:text-base font-black text-[#0F0F0F] uppercase tracking-tight break-words mt-0.5"
+                    title={bikeTitle}
+                  >
+                    {bikeTitle}
+                  </div>
+                  {bikeSubtitle && (
+                    <div
+                      className="text-[10px] sm:text-[11px] font-medium text-slate-500 uppercase tracking-wider break-words mt-0.5"
+                      title={bikeSubtitle}
+                    >
+                      {bikeSubtitle}
+                    </div>
+                  )}
                 </div>
-              );
-            })}
-          </div>
-        </div>
+              </div>
 
-        {/* CARD SERVICIOS CONTRATADOS */}
-        {order.servicios && order.servicios.length > 0 && (
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_2px_8px_rgba(0,0,0,0.03)] p-4 sm:p-5 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-[#0F0F0F] tracking-wider uppercase">
-                SERVICIOS CONTRATADOS
-              </span>
-              <span className="text-[11px] sm:text-xs font-medium text-slate-400">
-                Total: {order.servicios.length} ítems
+              {/* LADO DERECHO: FECHA DE INGRESO */}
+              <div className="min-[410px]:text-right shrink-0 w-full min-[410px]:w-auto pt-1 min-[410px]:pt-0 border-t border-dashed border-slate-100 min-[410px]:border-none">
+                <span className="font-mono text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
+                  FECHA DE INGRESO
+                </span>
+                <div className="text-[11px] sm:text-xs font-bold text-[#0F0F0F] mt-0.5">
+                  {ingresoTexto}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* CARD ESTATUS DE LA ORDEN */}
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_2px_8px_rgba(0,0,0,0.03)] p-3.5 min-[360px]:p-4 sm:p-5">
+            <div className="mb-3 sm:mb-4">
+              <span className="text-xs font-bold text-[#0F0F0F] tracking-wider uppercase block">
+                ESTATUS DE LA ORDEN
               </span>
             </div>
 
-            <div className="space-y-2">
-              {order.servicios.map((srv, idx) => {
-                const isDone = srv.completado || srv.estado === "COMPLETADO" || srv.estado === "FINALIZADO";
-                const isEnCola =
-                  srv.estado === "EN_COLA" ||
-                  srv.estado === "PENDIENTE" ||
-                  srv.estadoLabel?.toLowerCase().includes("cola") ||
-                  srv.estadoLabel?.toLowerCase().includes("pendiente");
+            <div className="relative flex justify-between items-start pt-1 pb-1">
+              {/* Background Track connecting step centers */}
+              <div className="absolute left-[12%] right-[12%] top-3 min-[360px]:top-3.5 sm:top-4 h-[2px] bg-slate-200 -z-0">
+                <div
+                  className="h-full bg-[#84924A] transition-all duration-500"
+                  style={{
+                    width: `${Math.min(
+                      100,
+                      Math.max(0, ((currentStep - 1) / (trackingSteps.length - 1)) * 100)
+                    )}%`,
+                  }}
+                />
+              </div>
+
+              {trackingSteps.map((s) => {
+                const isCompleted = s.isCompleted;
+                const isActive = s.isActive;
 
                 return (
                   <div
-                    key={idx}
-                    className="p-3 sm:p-3.5 rounded-xl bg-slate-50/80 border border-slate-100/90 flex items-center justify-between gap-3 transition-colors hover:bg-slate-50"
+                    key={s.stepIndex}
+                    className="flex-1 flex flex-col items-center relative z-10 min-w-0 px-0.5"
                   >
-                    <div className="min-w-0 flex-1">
-                      <div className="text-xs sm:text-sm font-bold text-[#0F0F0F] truncate">
-                        {srv.nombre}
-                      </div>
-                      {srv.descripcion && (
-                        <div className="text-[11px] text-slate-500 truncate mt-0.5">
-                          {srv.descripcion}
-                        </div>
-                      )}
+                    <div
+                      className={`w-6 h-6 min-[360px]:w-7 min-[360px]:h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center transition-all shrink-0 ${
+                        isCompleted || isActive
+                          ? "bg-[#84924A] text-white shadow-xs"
+                          : "bg-slate-200 text-slate-400"
+                      }`}
+                    >
+                      {isCompleted || isActive ? (
+                        <Check className="w-3.5 h-3.5 min-[360px]:w-4 min-[360px]:h-4 stroke-[3]" />
+                      ) : null}
                     </div>
 
-                    {isDone ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full text-[11px] sm:text-xs font-semibold bg-[#84924A]/15 text-[#5e6931] border border-[#84924A]/30 shrink-0">
-                        <span className="w-4 h-4 rounded-full bg-[#84924A] flex items-center justify-center text-white shrink-0">
-                          <Check className="w-2.5 h-2.5 stroke-[3]" />
-                        </span>
-                        <span>{srv.estadoLabel || "Completado"}</span>
-                      </span>
-                    ) : isEnCola ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200 shrink-0">
-                        <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-                        <span>{srv.estadoLabel || "En Cola"}</span>
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full text-[11px] sm:text-xs font-semibold bg-[#84924A]/15 text-[#5e6931] border border-[#84924A]/30 shrink-0">
-                        <span className="w-4 h-4 rounded-full bg-[#84924A] flex items-center justify-center text-white shrink-0">
-                          <Check className="w-2.5 h-2.5 stroke-[3]" />
-                        </span>
-                        <span>{srv.estadoLabel}</span>
-                      </span>
-                    )}
+                    <span
+                      className={`text-[8.5px] min-[360px]:text-[9.5px] sm:text-[11px] mt-1.5 sm:mt-2 tracking-tight text-center max-w-full leading-tight uppercase break-words hyphens-auto ${
+                        isCompleted || isActive
+                          ? "text-[#334155] font-bold"
+                          : "text-slate-400 font-medium"
+                      }`}
+                    >
+                      {s.label}
+                    </span>
                   </div>
                 );
               })}
             </div>
+          </div>
 
-            {/* RESUMEN FINANCIERO INTEGRADO: TOTAL DE LA ORDEN */}
-            <div className="pt-3 border-t border-slate-100">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-[11px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider">
-                  TOTAL DE LA ORDEN
+          {/* CARD SERVICIOS CONTRATADOS */}
+          {order.servicios && order.servicios.length > 0 && (
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_2px_8px_rgba(0,0,0,0.03)] p-3.5 min-[360px]:p-4 sm:p-5 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-bold text-[#0F0F0F] tracking-wider uppercase">
+                  SERVICIOS CONTRATADOS
                 </span>
-                <span className="text-base sm:text-lg font-bold text-[#0F0F0F] tracking-tight text-right whitespace-nowrap">
-                  {formatMoney(order.totalOrden)}
+                <span className="text-[11px] sm:text-xs font-medium text-slate-400 shrink-0">
+                  Total: {order.servicios.length} {order.servicios.length === 1 ? "ítem" : "ítems"}
                 </span>
               </div>
-            </div>
-          </div>
-        )}
 
-        {/* FOTOS DE RECEPCIÓN */}
-        {order.fotos && order.fotos.length > 0 ? (
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_2px_8px_rgba(0,0,0,0.03)] p-4 sm:p-5 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-[#0F0F0F] tracking-wider uppercase">
-                FOTOS DE RECEPCIÓN
-              </span>
-              <span className="text-[11px] sm:text-xs font-semibold text-[#84924A]">
-                {order.fotos.length} {order.fotos.length === 1 ? "foto adjunta" : "fotos adjuntas"}
-              </span>
-            </div>
+              <div className="space-y-2">
+                {order.servicios.map((srv, idx) => {
+                  const isDone = srv.completado || srv.estado === "COMPLETADO" || srv.estado === "FINALIZADO";
+                  const isEnCola =
+                    srv.estado === "EN_COLA" ||
+                    srv.estado === "PENDIENTE" ||
+                    srv.estadoLabel?.toLowerCase().includes("cola") ||
+                    srv.estadoLabel?.toLowerCase().includes("pendiente");
 
-            <div className="grid grid-cols-2 gap-3 pt-1">
-              {order.fotos.map((f) => (
-                <div
-                  key={f.id}
-                  className="relative aspect-[4/3] rounded-xl overflow-hidden border border-slate-200/80 bg-slate-100 group shadow-2xs"
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={f.url}
-                    alt={f.descripcion || "Foto de recepción"}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  />
-                  <div className="absolute bottom-2 left-2 right-2">
-                    <span className="inline-block max-w-full truncate px-2.5 py-0.5 rounded-full bg-[#0F0F0F]/80 backdrop-blur-md text-white text-[10px] font-medium shadow-sm">
-                      {f.descripcion || (f.esPrincipal ? "Foto Principal" : "Foto Recepción")}
-                    </span>
-                  </div>
+                  return (
+                    <div
+                      key={idx}
+                      className="p-3 sm:p-3.5 rounded-xl bg-slate-50/80 border border-slate-100/90 flex flex-col min-[390px]:flex-row min-[390px]:items-center justify-between gap-2 min-[390px]:gap-3 transition-colors hover:bg-slate-50"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs sm:text-sm font-bold text-[#0F0F0F] break-words">
+                          {srv.nombre}
+                        </div>
+                        {srv.descripcion && (
+                          <div className="text-[11px] text-slate-500 break-words mt-0.5">
+                            {srv.descripcion}
+                          </div>
+                        )}
+                      </div>
+
+                      {isDone ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full text-[11px] sm:text-xs font-semibold bg-[#84924A]/15 text-[#5e6931] border border-[#84924A]/30 shrink-0 self-start min-[390px]:self-center">
+                          <span className="w-4 h-4 rounded-full bg-[#84924A] flex items-center justify-center text-white shrink-0">
+                            <Check className="w-2.5 h-2.5 stroke-[3]" />
+                          </span>
+                          <span>{srv.estadoLabel || "Completado"}</span>
+                        </span>
+                      ) : isEnCola ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200 shrink-0 self-start min-[390px]:self-center">
+                          <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                          <span>{srv.estadoLabel || "En Cola"}</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full text-[11px] sm:text-xs font-semibold bg-[#84924A]/15 text-[#5e6931] border border-[#84924A]/30 shrink-0 self-start min-[390px]:self-center">
+                          <span className="w-4 h-4 rounded-full bg-[#84924A] flex items-center justify-center text-white shrink-0">
+                            <Check className="w-2.5 h-2.5 stroke-[3]" />
+                          </span>
+                          <span>{srv.estadoLabel}</span>
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* RESUMEN FINANCIERO INTEGRADO: TOTAL DE LA ORDEN */}
+              <div className="pt-3 border-t border-slate-100">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-[11px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    TOTAL DE LA ORDEN
+                  </span>
+                  <span className="text-base sm:text-lg font-bold text-[#0F0F0F] tracking-tight text-right whitespace-nowrap">
+                    {formatMoney(order.totalOrden)}
+                  </span>
                 </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        {/* BOTONES DE ACCIÓN: WHATSAPP, DESCARGAR FACTURA, LLAMADA */}
-        <div className="space-y-2.5 pt-1 print:hidden">
-          {downloadError && (
-            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium text-center">
-              {downloadError}
+              </div>
             </div>
           )}
 
-          {/* WhatsApp Button - PRIMARY: verde Ride Lab real #84924A */}
-          {order.empresa?.whatsappUrl && (
-            <a
-              href={order.empresa.whatsappUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full py-3.5 px-5 rounded-2xl bg-[#84924A] hover:bg-[#74813e] active:scale-[0.99] text-white font-bold text-sm sm:text-base flex items-center justify-center gap-2.5 shadow-sm transition-all"
-            >
-              <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
-                <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z" />
-              </svg>
-              <span>Consultar por WhatsApp</span>
-            </a>
-          )}
+          {/* FOTOS DE RECEPCIÓN */}
+          {order.fotos && order.fotos.length > 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_2px_8px_rgba(0,0,0,0.03)] p-3.5 min-[360px]:p-4 sm:p-5 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-bold text-[#0F0F0F] tracking-wider uppercase">
+                  FOTOS DE RECEPCIÓN
+                </span>
+                <span className="text-[11px] sm:text-xs font-semibold text-[#84924A] shrink-0">
+                  {order.fotos.length} {order.fotos.length === 1 ? "foto adjunta" : "fotos adjuntas"}
+                </span>
+              </div>
 
-          {/* Two Buttons: Descargar Factura & Llamar al Taller */}
-          <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
-            <button
-              type="button"
-              disabled={!order.esEntregada || isDownloadingInvoice}
-              title={
-                !order.esEntregada
-                  ? "Disponible cuando la orden sea entregada."
-                  : undefined
-              }
-              onClick={handleDownloadInvoice}
-              className={`h-11 sm:h-12 py-2.5 px-2 sm:px-3 rounded-xl font-semibold text-[11px] min-[390px]:text-xs sm:text-sm flex items-center justify-center gap-1.5 sm:gap-2 shadow-2xs transition-all ${
-                order.esEntregada
-                  ? "bg-white hover:bg-slate-50 active:bg-slate-100 border border-slate-300 text-[#0F0F0F] cursor-pointer"
-                  : "bg-[#eef0f3] border border-slate-200 text-slate-400 cursor-not-allowed"
-              }`}
-            >
-              {isDownloadingInvoice ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin text-slate-500 shrink-0" />
-                  <span className="whitespace-nowrap">Generando...</span>
-                </>
-              ) : order.esEntregada ? (
-                <>
-                  <Download className="w-4 h-4 shrink-0 text-[#334155]" />
-                  <span className="whitespace-nowrap">Descargar Factura</span>
-                </>
-              ) : (
-                <>
-                  <FileText className="w-4 h-4 shrink-0 text-slate-400" />
-                  <span className="whitespace-nowrap">Descargar Factura</span>
-                </>
-              )}
-            </button>
+              <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-2.5 sm:gap-3 pt-1">
+                {order.fotos.map((f) => (
+                  <div
+                    key={f.id}
+                    className="relative aspect-[4/3] rounded-xl overflow-hidden border border-slate-200/80 bg-slate-100 group shadow-2xs"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={f.url}
+                      alt={f.descripcion || "Foto de recepción"}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                    <div className="absolute bottom-2 left-2 right-2">
+                      <span className="inline-block max-w-full truncate px-2.5 py-0.5 rounded-full bg-[#0F0F0F]/80 backdrop-blur-md text-white text-[10px] font-medium shadow-sm">
+                        {f.descripcion || (f.esPrincipal ? "Foto Principal" : "Foto Recepción")}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
-            {order.empresa?.telefonoLlamada ? (
-              <a
-                href={order.empresa.telefonoLlamada}
-                className="h-11 sm:h-12 py-2.5 px-2 sm:px-3 rounded-xl bg-white hover:bg-[#84924A]/5 active:bg-[#84924A]/10 border border-[#84924A] text-[#84924A] font-semibold text-[11px] min-[390px]:text-xs sm:text-sm flex items-center justify-center gap-1.5 sm:gap-2 shadow-2xs transition-all"
-              >
-                <Phone className="w-4 h-4 text-[#84924A] shrink-0" />
-                <span className="whitespace-nowrap">Llamar al Taller</span>
-              </a>
-            ) : (
-              <button
-                disabled
-                className="h-11 sm:h-12 py-2.5 px-2 sm:px-3 rounded-xl bg-slate-100 border border-slate-200 text-slate-400 font-semibold text-[11px] min-[390px]:text-xs sm:text-sm flex items-center justify-center gap-1.5 sm:gap-2 cursor-not-allowed opacity-75"
-              >
-                <Phone className="w-4 h-4 text-slate-400 shrink-0" />
-                <span className="whitespace-nowrap">Llamar al Taller</span>
-              </button>
+          {/* BOTONES DE ACCIÓN: WHATSAPP, DESCARGAR FACTURA, LLAMADA */}
+          <div className="space-y-2.5 pt-1 print:hidden">
+            {downloadError && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium text-center">
+                {downloadError}
+              </div>
             )}
+
+            {/* WhatsApp Button - PRIMARY: verde Ride Lab real #84924A */}
+            {order.empresa?.whatsappUrl && (
+              <a
+                href={order.empresa.whatsappUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full min-h-[46px] sm:min-h-[48px] py-3 px-4 rounded-2xl bg-[#84924A] hover:bg-[#74813e] active:scale-[0.99] text-white font-bold text-sm sm:text-base flex items-center justify-center gap-2.5 shadow-sm transition-all"
+              >
+                <svg className="w-5 h-5 fill-current shrink-0" viewBox="0 0 24 24">
+                  <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z" />
+                </svg>
+                <span>Consultar por WhatsApp</span>
+              </a>
+            )}
+
+            {/* Two Buttons: Descargar Factura & Llamar al Taller */}
+            <div className="grid grid-cols-1 min-[380px]:grid-cols-2 gap-2.5 sm:gap-3">
+              <button
+                type="button"
+                disabled={!order.esEntregada || isDownloadingInvoice}
+                title={
+                  !order.esEntregada
+                    ? "Disponible cuando la orden sea entregada."
+                    : undefined
+                }
+                onClick={handleDownloadInvoice}
+                className={`w-full min-h-[44px] sm:min-h-[48px] py-2.5 px-3 rounded-xl font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-2xs transition-all ${
+                  order.esEntregada
+                    ? "bg-white hover:bg-slate-50 active:bg-slate-100 border border-slate-300 text-[#0F0F0F] cursor-pointer"
+                    : "bg-[#eef0f3] border border-slate-200 text-slate-400 cursor-not-allowed"
+                }`}
+              >
+                {isDownloadingInvoice ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin text-slate-500 shrink-0" />
+                    <span>Generando...</span>
+                  </>
+                ) : order.esEntregada ? (
+                  <>
+                    <Download className="w-4 h-4 shrink-0 text-[#334155]" />
+                    <span>Descargar Factura</span>
+                  </>
+                ) : (
+                  <>
+                    <FileText className="w-4 h-4 shrink-0 text-slate-400" />
+                    <span>Descargar Factura</span>
+                  </>
+                )}
+              </button>
+
+              {order.empresa?.telefonoLlamada ? (
+                <a
+                  href={order.empresa.telefonoLlamada}
+                  className="w-full min-h-[44px] sm:min-h-[48px] py-2.5 px-3 rounded-xl bg-white hover:bg-[#84924A]/5 active:bg-[#84924A]/10 border border-[#84924A] text-[#84924A] font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-2xs transition-all"
+                >
+                  <Phone className="w-4 h-4 text-[#84924A] shrink-0" />
+                  <span>Llamar al Taller</span>
+                </a>
+              ) : (
+                <button
+                  disabled
+                  className="w-full min-h-[44px] sm:min-h-[48px] py-2.5 px-3 rounded-xl bg-slate-100 border border-slate-200 text-slate-400 font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 cursor-not-allowed opacity-75"
+                >
+                  <Phone className="w-4 h-4 text-slate-400 shrink-0" />
+                  <span>Llamar al Taller</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
-      </div>
-    </main>
+      </main>
 
-      {/* FOOTER OSCURO INTEGRADO (BASE #0F0F0F) - FIJO Y COMPACTO (~10% MÁS COMPACTO) */}
+      {/* FOOTER OSCURO INTEGRADO (BASE #0F0F0F) - FIJO Y COMPACTO */}
       <footer
         style={{
           height: "auto",
           paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom, 0px))",
         }}
-        className="portal-footer-box w-full h-auto flex-none shrink-0 bg-[#0F0F0F] text-slate-400 border-t border-[#1f1f1f] z-30 pt-2 min-[390px]:pt-2.5 sm:pt-3 print:hidden"
+        className="portal-footer-box w-full h-auto flex-none shrink-0 bg-[#0F0F0F] text-slate-400 border-t border-[#1f1f1f] z-30 pt-2.5 sm:pt-3.5 print:hidden"
       >
         <div className="w-full max-w-xl mx-auto px-3.5 sm:px-4 space-y-1.5 min-[390px]:space-y-2 text-center flex flex-col items-center">
           {order.empresa?.descripcion && (
-            <p className="portal-footer-desc text-[10px] min-[370px]:text-[10.5px] min-[390px]:text-[11px] sm:text-xs text-slate-300 font-normal leading-tight line-clamp-2 max-w-full tracking-tight">
+            <p className="portal-footer-desc text-[10px] min-[370px]:text-[10.5px] min-[390px]:text-[11px] sm:text-xs text-slate-300 font-normal leading-tight line-clamp-2 max-w-full tracking-tight break-words">
               {order.empresa.descripcion}
             </p>
           )}
@@ -693,7 +693,7 @@ export default function PublicTrackingView({
             )}
 
             {order.empresa?.direccion && (
-              <div className="flex items-center gap-1 text-center">
+              <div className="flex items-center gap-1 text-center break-words max-w-full">
                 <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
                 <span>{order.empresa.direccion}</span>
               </div>

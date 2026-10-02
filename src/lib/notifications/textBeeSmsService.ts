@@ -59,7 +59,18 @@ export interface TextBeeDeviceStatusResult {
 
 const DEFAULT_TEXTBEE_URL = "https://api.textbee.dev/api/v1/gateway/send-sms";
 const DEFAULT_GATEWAY_BASE = "https://api.textbee.dev/api/v1/gateway";
-const DEFAULT_TIMEOUT_MS = 12000;
+const DEFAULT_TIMEOUT_MS = 25000;
+
+export function getTextBeeTimeoutMs(): number {
+  const envVal = process.env.TEXTBEE_TIMEOUT_MS?.trim();
+  if (envVal) {
+    const parsed = parseInt(envVal, 10);
+    if (!isNaN(parsed) && parsed >= 5000 && parsed <= 60000) {
+      return parsed;
+    }
+  }
+  return DEFAULT_TIMEOUT_MS;
+}
 
 function getGatewayBaseUrl(): string {
   const apiUrl = process.env.TEXTBEE_API_URL?.trim() || DEFAULT_TEXTBEE_URL;
@@ -70,15 +81,16 @@ function getGatewayBaseUrl(): string {
 }
 
 /**
- * Enqueues an SMS to TextBee gateway.
+ * Enqueues an SMS to TextBee gateway with controlled retries for transient errors.
  * Note: HTTP 200 means the SMS is queued in TextBee (smsBatchId created),
  * NOT that it has been sent by the device SIM yet.
  */
 export async function sendTextBeeSms({
   recipient,
   message,
-  timeoutMs = DEFAULT_TIMEOUT_MS,
+  timeoutMs,
 }: TextBeeSendSmsParams): Promise<TextBeeSendSmsResult> {
+  const effectiveTimeout = timeoutMs || getTextBeeTimeoutMs();
   const apiUrl = process.env.TEXTBEE_API_URL?.trim() || DEFAULT_TEXTBEE_URL;
   const apiKey = process.env.TEXTBEE_API_KEY?.trim();
   const deviceId = process.env.TEXTBEE_DEVICE_ID?.trim();
@@ -124,93 +136,132 @@ export async function sendTextBeeSms({
     };
   }
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const maxAttempts = 3; // 1 initial + up to 2 retries for transient errors
+  let lastResult: TextBeeSendSmsResult = {
+    success: false,
+    statusCode: null,
+    smsBatchId: null,
+    providerResponse: null,
+    errorMessage: "No se pudo conectar con TextBee.",
+  };
 
-  try {
-    const payload = {
-      deviceId,
-      recipients: [recipient.trim()],
-      message,
-    };
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const startTime = Date.now();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), effectiveTimeout);
 
-    const response = await fetch(apiUrl, {
-      method: "POST",
-      headers: {
-        "x-api-key": apiKey,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    let parsedResponse: unknown = null;
-    const responseText = await response.text();
     try {
-      parsedResponse = responseText ? JSON.parse(responseText) : null;
-    } catch {
-      parsedResponse = responseText ? { raw: responseText.slice(0, 500) } : null;
-    }
-
-    if (!response.ok) {
-      const statusText = response.statusText || "HTTP Error";
-      const detail =
-        parsedResponse && typeof parsedResponse === "object" && "message" in parsedResponse
-          ? String((parsedResponse as Record<string, unknown>).message)
-          : responseText.slice(0, 200);
-
-      return {
-        success: false,
-        statusCode: response.status,
-        smsBatchId: null,
-        providerResponse: parsedResponse,
-        errorMessage: `TextBee respondió con error ${response.status} (${statusText})${detail ? `: ${detail}` : ""}`,
+      const payload = {
+        deviceId,
+        recipients: [recipient.trim()],
+        message,
       };
-    }
 
-    // Extract smsBatchId from response structure
-    let smsBatchId: string | null = null;
-    if (parsedResponse && typeof parsedResponse === "object") {
-      const respObj = parsedResponse as Record<string, unknown>;
-      const dataObj = respObj.data as Record<string, unknown> | undefined;
-      if (dataObj && typeof dataObj.smsBatchId === "string") {
-        smsBatchId = dataObj.smsBatchId;
-      } else if (typeof respObj.smsBatchId === "string") {
-        smsBatchId = respObj.smsBatchId;
+      const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+      const durationMs = Date.now() - startTime;
+
+      let parsedResponse: unknown = null;
+      const responseText = await response.text();
+      try {
+        parsedResponse = responseText ? JSON.parse(responseText) : null;
+      } catch {
+        parsedResponse = responseText ? { raw: responseText.slice(0, 500) } : null;
       }
-    }
 
-    return {
-      success: true,
-      statusCode: response.status,
-      smsBatchId,
-      providerResponse: parsedResponse,
-      errorMessage: null,
-    };
-  } catch (error: unknown) {
-    clearTimeout(timeoutId);
+      if (!response.ok) {
+        const statusText = response.statusText || "HTTP Error";
+        const detail =
+          parsedResponse && typeof parsedResponse === "object" && "message" in parsedResponse
+            ? String((parsedResponse as Record<string, unknown>).message)
+            : responseText.slice(0, 200);
 
-    if (error instanceof Error && error.name === "AbortError") {
+        const errorMsg = `TextBee respondió con error ${response.status} (${statusText})${detail ? `: ${detail}` : ""}`;
+        console.warn(`[TextBee SMS] Intento ${attempt}/${maxAttempts} falló (HTTP ${response.status}) en ${durationMs}ms`);
+
+        lastResult = {
+          success: false,
+          statusCode: response.status,
+          smsBatchId: null,
+          providerResponse: parsedResponse,
+          errorMessage: errorMsg,
+        };
+
+        // Only retry transient errors: HTTP 429 or 5xx
+        const isTransientStatus = response.status === 429 || response.status >= 500;
+        if (isTransientStatus && attempt < maxAttempts) {
+          const backoffMs = attempt * 1000; // 1s, 2s
+          await new Promise((res) => setTimeout(res, backoffMs));
+          continue;
+        }
+
+        // Permanent 4xx error (e.g. 400, 401, 403, 404): DO NOT RETRY
+        return lastResult;
+      }
+
+      // Extract smsBatchId from response structure
+      let smsBatchId: string | null = null;
+      if (parsedResponse && typeof parsedResponse === "object") {
+        const respObj = parsedResponse as Record<string, unknown>;
+        const dataObj = respObj.data as Record<string, unknown> | undefined;
+        if (dataObj && typeof dataObj.smsBatchId === "string") {
+          smsBatchId = dataObj.smsBatchId;
+        } else if (typeof respObj.smsBatchId === "string") {
+          smsBatchId = respObj.smsBatchId;
+        }
+      }
+
+      console.info(`[TextBee SMS] Intento ${attempt}/${maxAttempts} exitoso (HTTP ${response.status}) en ${durationMs}ms. BatchId: ${smsBatchId ? "PRESENTE" : "NULL"}`);
+
       return {
+        success: true,
+        statusCode: response.status,
+        smsBatchId,
+        providerResponse: parsedResponse,
+        errorMessage: null,
+      };
+    } catch (error: unknown) {
+      clearTimeout(timeoutId);
+      const durationMs = Date.now() - startTime;
+
+      const isTimeout = error instanceof Error && error.name === "AbortError";
+      const errorDetail = isTimeout
+        ? `Tiempo de espera agotado (${effectiveTimeout}ms) al conectar con TextBee.`
+        : `Error de red al comunicarse con TextBee: ${error instanceof Error ? error.message : "Error desconocido"}`;
+
+      console.warn(`[TextBee SMS] Intento ${attempt}/${maxAttempts} falló (${isTimeout ? "TIMEOUT" : "RED"}) en ${durationMs}ms`);
+
+      lastResult = {
         success: false,
         statusCode: null,
         smsBatchId: null,
         providerResponse: null,
-        errorMessage: `Tiempo de espera agotado (${timeoutMs}ms) al conectar con TextBee.`,
+        errorMessage: attempt === maxAttempts && isTimeout
+          ? `Tiempo de espera agotado (${effectiveTimeout}ms) al conectar con TextBee tras ${maxAttempts} intentos.`
+          : errorDetail,
       };
-    }
 
-    const messageDetail = error instanceof Error ? error.message : "Error de red desconocido";
-    return {
-      success: false,
-      statusCode: null,
-      smsBatchId: null,
-      providerResponse: null,
-      errorMessage: `Error de red al comunicarse con TextBee: ${messageDetail}`,
-    };
+      // Timeout or network error is transient: retry if attempts left
+      if (attempt < maxAttempts) {
+        const backoffMs = attempt * 1000; // 1s, 2s
+        await new Promise((res) => setTimeout(res, backoffMs));
+        continue;
+      }
+
+      return lastResult;
+    }
   }
+
+  return lastResult;
 }
 
 /**

@@ -10,6 +10,7 @@ interface SubMenuItem {
   href?: string;
   label: string;
   isHeader?: boolean;
+  icon?: string | React.ReactNode;
 }
 
 interface NavItem {
@@ -112,7 +113,8 @@ function SidebarContent({
         { href: "/inventory/suppliers", label: "PROVEEDORES" },
         { href: "/inventory/initial", label: "INVENTARIO INICIAL" },
         { href: "/crm/component-categories", label: "CATEGORÍAS COMPONENTES" },
-        { href: "/crm/component-states", label: "ESTADOS COMPONENTES" }
+        { href: "/crm/component-states", label: "ESTADOS COMPONENTES" },
+        { href: "/settings/order-notifications", label: "Notificaciones de Órdenes", icon: "mail" }
       ]
     },
     {
@@ -256,6 +258,7 @@ function SidebarContent({
                 }
 
                 const isSubActive = isSubmenuActive(sub.href);
+                const isLongLabel = sub.label.length > 20;
 
                 return (
                   <Link
@@ -265,13 +268,20 @@ function SidebarContent({
                     onClick={() => {
                       onNavigate();
                     }}
-                    className={`text-xs py-2 px-3 rounded-lg border transition-all duration-200 whitespace-nowrap truncate block uppercase ${
+                    className={`py-1.5 px-2.5 rounded-lg border transition-all duration-200 flex items-center gap-2 ${
+                      isLongLabel ? "text-[11px] leading-tight tracking-tight" : "text-xs"
+                    } ${
                       isSubActive
                         ? "bg-primary/10 border-primary/40 text-primary font-bold"
                         : "border-transparent text-foreground-muted hover:text-foreground hover:bg-hover hover:border-border"
                     }`}
                   >
-                    {sub.label}
+                    {sub.icon && typeof sub.icon === "string" ? (
+                      <span className="material-symbols-outlined text-[16px] shrink-0">{sub.icon}</span>
+                    ) : sub.icon ? (
+                      <span className="shrink-0">{sub.icon}</span>
+                    ) : null}
+                    <span className="flex-1 leading-tight break-words">{sub.label}</span>
                   </Link>
                 );
               })}
