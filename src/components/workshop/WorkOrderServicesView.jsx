@@ -76,27 +76,27 @@ function WorkshopItemModalShell({
       <button
         type="button"
         aria-label="Cerrar modal"
-        className="absolute inset-0 h-full w-full cursor-default bg-slate-950/80 backdrop-blur-sm transition-opacity"
+        className="absolute inset-0 h-full w-full cursor-default bg-black/60 backdrop-blur-sm transition-opacity"
         onClick={onClose}
       />
 
       <section
-        className="relative z-10 flex min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 text-slate-100 shadow-2xl font-sans"
+        className="relative z-10 flex min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-card text-foreground shadow-2xl font-sans"
         style={{
           width: `min(${maxWidth}, calc(100vw - 32px))`,
           maxHeight: "calc(100vh - 32px)"
         }}
       >
-        <header className="shrink-0 border-b border-slate-800 bg-slate-950/80 px-6 py-4 flex items-center justify-between font-mono">
+        <header className="shrink-0 border-b border-border bg-surface-subtle px-6 py-4 flex items-center justify-between font-mono">
           <div>
             <h2
               id="workshop-item-modal-title"
-              className="text-base font-bold text-slate-100 uppercase tracking-wider flex items-center gap-2"
+              className="text-base font-bold text-foreground uppercase tracking-wider flex items-center gap-2"
             >
               {title}
             </h2>
             {description ? (
-              <p className="mt-1 text-xs text-slate-400 font-sans">
+              <p className="mt-1 text-xs text-foreground-muted font-sans">
                 {description}
               </p>
             ) : null}
@@ -105,7 +105,7 @@ function WorkshopItemModalShell({
             type="button"
             onClick={onClose}
             aria-label="Cerrar modal"
-            className="p-1.5 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
+            className="p-1.5 text-foreground-muted hover:text-foreground hover:bg-hover rounded-lg transition-colors cursor-pointer"
           >
             <X size={18} />
           </button>
@@ -115,7 +115,7 @@ function WorkshopItemModalShell({
           {children}
         </div>
 
-        <footer className="shrink-0 border-t border-slate-800 bg-slate-950/80 px-6 py-4 font-sans">
+        <footer className="shrink-0 border-t border-border bg-surface-subtle px-6 py-4 font-sans">
           {footer}
         </footer>
       </section>
@@ -1386,7 +1386,7 @@ export default function WorkOrderServicesView({
   const totalItemsCount = activeServices.length + orderProducts.length;
 
   return (
-    <div className="space-y-5 font-sans text-slate-100">
+    <div className="space-y-5 font-sans text-foreground">
       {/* Global Floating Toast */}
       {toast && (
         <div
@@ -1417,10 +1417,10 @@ export default function WorkOrderServicesView({
             <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-400 mt-0.5" />
           )}
           <div className="flex-1 min-w-0">
-            <span className="font-bold block text-xs uppercase tracking-wider mb-1 font-mono text-slate-100">
+            <span className="font-bold block text-xs uppercase tracking-wider mb-1 font-mono text-foreground">
               {toast.title || (toast.type === "error" ? "Error u Operación" : toast.type === "warning" ? "Aviso de Operación" : toast.type === "info" ? "Información" : "Confirmación")}
             </span>
-            <span className="leading-relaxed font-sans text-xs block text-slate-200">{toast.text}</span>
+            <span className="leading-relaxed font-sans text-xs block text-foreground-secondary">{toast.text}</span>
             {toast.subtext && (
               <span className="leading-relaxed font-sans text-[11px] block text-cyan-300 mt-2 font-medium bg-cyan-950/50 border border-cyan-500/30 px-2.5 py-1 rounded-lg">
                 {toast.subtext}
@@ -1430,7 +1430,7 @@ export default function WorkOrderServicesView({
           <button
             type="button"
             onClick={() => setToast(null)}
-            className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors ml-1 shrink-0 cursor-pointer"
+            className="text-foreground-muted hover:text-foreground p-1 rounded-lg transition-colors ml-1 shrink-0 cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -1439,22 +1439,22 @@ export default function WorkOrderServicesView({
 
       {/* Top Controls Header */}
       {/* HEADER CARD: SERVICIOS Y REPUESTOS DE LA ORDEN */}
-      <div className="bg-[#161a21] border border-[#2d3748] p-4 sm:p-5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
+      <div className="bg-card border border-border p-4 sm:p-5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
         <div className="flex items-center gap-3">
           {backUrl && (
             <Link
               href={backUrl}
-              className="p-2 bg-[#161a21] border border-[#2d3748] rounded-xl text-slate-300 hover:text-white hover:border-[#bfce7f] transition-all shrink-0"
+              className="p-2 bg-surface-subtle border border-border rounded-xl text-foreground-muted hover:text-foreground hover:border-primary transition-all shrink-0"
               title="Volver"
             >
               <ArrowLeft className="w-4 h-4" />
             </Link>
           )}
           <div>
-            <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2 font-mono uppercase tracking-tight">
-              <Wrench className="w-5 h-5 text-[#bfce7f]" /> SERVICIOS Y REPUESTOS DE LA ORDEN
+            <h3 className="text-lg font-bold text-foreground flex items-center gap-2 font-mono uppercase tracking-tight">
+              <Wrench className="w-5 h-5 text-primary" /> SERVICIOS Y REPUESTOS DE LA ORDEN
             </h3>
-            <p className="text-xs text-slate-400 font-sans">
+            <p className="text-xs text-foreground-muted font-sans">
               Gestión de servicios, repuestos asociados, tiempos de ejecución y componentes afectados.
             </p>
           </div>
@@ -1465,7 +1465,7 @@ export default function WorkOrderServicesView({
           <button
             type="button"
             onClick={handleOpenAddItem}
-            className="flex items-center gap-2 px-4 py-2 bg-[#bfce7f] hover:bg-[#aab86e] text-slate-950 font-bold rounded-xl text-xs shadow-lg transition-all cursor-pointer font-mono uppercase shrink-0"
+            className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-primary-foreground font-bold rounded-xl text-xs shadow-lg transition-all cursor-pointer font-mono uppercase shrink-0"
           >
             <Plus className="w-4 h-4 stroke-[3]" />
             <span>AGREGAR REPUESTO O SERVICIO</span>
@@ -1476,11 +1476,11 @@ export default function WorkOrderServicesView({
 
 
       {/* Main Single Card - 100% Width "DETALLE DE SERVICIOS Y REPUESTOS" */}
-      <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl shadow-xl overflow-hidden">
-        <div className="p-4 border-b border-[#2d3748] bg-[#0a0c10]/40 flex items-center justify-between">
+      <div className="bg-card border border-border rounded-2xl shadow-sm overflow-hidden">
+        <div className="p-4 border-b border-border bg-surface-subtle flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Layers className="w-4 h-4 text-[#bfce7f]" />
-            <h4 className="text-xs font-bold font-mono text-slate-100 uppercase tracking-wider">
+            <Layers className="w-4 h-4 text-primary" />
+            <h4 className="text-xs font-bold font-mono text-foreground uppercase tracking-wider">
               DETALLE DE SERVICIOS Y REPUESTOS ({totalItemsCount})
             </h4>
           </div>
@@ -1489,7 +1489,7 @@ export default function WorkOrderServicesView({
         <div className="overflow-x-auto custom-scrollbar">
           <table className="w-full text-left text-xs font-sans border-collapse">
             <thead>
-              <tr className="bg-[#0a0c10]/60 border-b border-[#2d3748] text-slate-400 font-mono text-[11px] uppercase tracking-wider">
+              <tr className="bg-surface-subtle border-b border-border text-foreground-muted font-mono text-[11px] uppercase tracking-wider">
                 <th className="p-3.5 pl-4">Código</th>
                 <th className="p-3.5">Tipo / Descripción</th>
                 <th className="p-3.5">Componente Afectado</th>
@@ -1501,10 +1501,10 @@ export default function WorkOrderServicesView({
                 <th className="p-3.5 pr-4 text-center">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#2d3748]/60 font-mono">
+            <tbody className="divide-y divide-border font-mono">
               {totalItemsCount === 0 ? (
                 <tr>
-                  <td colSpan={9} className="p-8 text-center text-slate-400 text-xs italic">
+                  <td colSpan={9} className="p-8 text-center text-foreground-muted text-xs italic">
                     {orderStateCode === "LISTA_ENTREGA" || Number(order?.estado_orden_id) === 7 ? (
                       "Esta orden no tiene servicios ni repuestos registrados. Reabre la reparación para agregar elementos."
                     ) : isOrderInRepair ? (
@@ -1530,38 +1530,38 @@ export default function WorkOrderServicesView({
                     const isCompletado = Number(svc.estado_servicio_id) === 3 || svc.estado_servicio_codigo === "COMPLETADO";
 
                     return (
-                      <tr key={`svc-${sId}`} className="hover:bg-[#1c2129]/60 transition-colors">
+                      <tr key={`svc-${sId}`} className="hover:bg-hover transition-colors">
                         {/* Código */}
-                        <td className="p-3.5 pl-4 font-bold text-[#bfce7f] whitespace-nowrap font-mono">
+                        <td className="p-3.5 pl-4 font-bold text-primary whitespace-nowrap font-mono">
                           {srvCode}
                         </td>
 
                         {/* Tipo / Descripción */}
                         <td className="p-3.5">
-                          <div className="font-bold text-slate-100 font-sans text-xs flex items-center gap-2">
+                          <div className="font-bold text-foreground font-sans text-xs flex items-center gap-2">
                             <span>{svc.tipo_servicio_nombre}</span>
-                            <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-[#bfce7f]/10 text-[#bfce7f] border border-[#bfce7f]/30">SERVICIO</span>
+                            <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-primary/10 text-primary border border-primary/30">SERVICIO</span>
                           </div>
                           {svc.observacion_tecnica || svc.tipo_servicio_descripcion ? (
-                            <div className="text-[11px] text-slate-400 line-clamp-1 mt-0.5 font-sans">
+                            <div className="text-[11px] text-foreground-muted line-clamp-1 mt-0.5 font-sans">
                               {svc.observacion_tecnica || svc.tipo_servicio_descripcion}
                             </div>
                           ) : null}
                         </td>
 
                         {/* Componente Afectado */}
-                        <td className="p-3.5 whitespace-nowrap text-xs text-slate-300">
+                        <td className="p-3.5 whitespace-nowrap text-xs text-foreground-secondary">
                           {svc.componente ? (
                             <div>
-                              <div className="font-semibold text-slate-200">
+                              <div className="font-semibold text-foreground">
                                 {svc.componente.categoria} - {svc.componente.marca} {svc.componente.modelo}
                               </div>
-                              <div className="text-[10px] text-emerald-400">
+                              <div className="text-[10px] text-emerald-500 dark:text-emerald-400">
                                 Estado: {svc.componente.estado_actual_nombre || "Bueno"}
                               </div>
                             </div>
                           ) : (
-                            <span className="text-slate-500 italic font-normal">Servicio general</span>
+                            <span className="text-foreground-muted italic font-normal">Servicio general</span>
                           )}
                         </td>
 
@@ -1573,17 +1573,17 @@ export default function WorkOrderServicesView({
                         </td>
 
                         {/* Precio */}
-                        <td className="p-3.5 text-right font-bold text-slate-100 whitespace-nowrap">
+                        <td className="p-3.5 text-right font-bold text-foreground whitespace-nowrap">
                           RD$ {Number(svc.precio_unitario || svc.precio_acordado || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })}
                         </td>
 
                         {/* Fecha Inicio */}
-                        <td className="p-3.5 text-center text-slate-300 text-[11px] whitespace-nowrap">
+                        <td className="p-3.5 text-center text-foreground-secondary text-[11px] whitespace-nowrap">
                           {formatDate(svc.fecha_inicio)}
                         </td>
 
                         {/* Fecha Fin */}
-                        <td className="p-3.5 text-center text-slate-300 text-[11px] whitespace-nowrap">
+                        <td className="p-3.5 text-center text-foreground-secondary text-[11px] whitespace-nowrap">
                           {formatDate(svc.fecha_finalizacion)}
                         </td>
 
@@ -1591,12 +1591,12 @@ export default function WorkOrderServicesView({
                         <td className="p-3.5 text-center whitespace-nowrap">
                           <span className={`px-2 py-1 rounded border text-xs font-bold font-mono tracking-wider ${
                             isEnProceso
-                              ? "bg-amber-500/10 text-amber-300 border-amber-500/40 animate-pulse"
+                              ? "bg-amber-500/10 text-amber-500 dark:text-amber-300 border-amber-500/40 animate-pulse"
                               : isPausado
-                              ? "bg-cyan-500/10 text-cyan-300 border-cyan-500/40"
+                              ? "bg-cyan-500/10 text-cyan-600 dark:text-cyan-300 border-cyan-500/40"
                               : isCompletado
-                              ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/40"
-                              : "bg-slate-900 text-slate-400 border-slate-800"
+                              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 border-emerald-500/40"
+                              : "bg-surface-subtle text-foreground-muted border-border"
                           }`}>
                             {formatSecondsToHHMMSS(elapsedSec)}
                           </span>
@@ -1611,7 +1611,7 @@ export default function WorkOrderServicesView({
                                 type="button"
                                 onClick={() => executeOperativeAction(svc, "INICIAR")}
                                 disabled={isOrderRecibida || isProcessing || !isOrderInRepair}
-                                className="p-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                                className="p-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-600 dark:text-emerald-300 rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                                 title="Iniciar servicio"
                                 aria-label="Iniciar servicio"
                               >
@@ -1626,7 +1626,7 @@ export default function WorkOrderServicesView({
                                   type="button"
                                   onClick={() => executeOperativeAction(svc, "PAUSAR")}
                                   disabled={isProcessing || !isOrderInRepair}
-                                  className="p-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                                  className="p-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-600 dark:text-amber-300 rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                                   title="Pausar servicio"
                                   aria-label="Pausar servicio"
                                 >
@@ -1636,7 +1636,7 @@ export default function WorkOrderServicesView({
                                   type="button"
                                   onClick={() => handleFinishServiceTrigger(svc)}
                                   disabled={isProcessing || !isOrderInRepair}
-                                  className="p-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                                  className="p-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-600 dark:text-emerald-300 rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                                   title="Finalizar servicio"
                                   aria-label="Finalizar servicio"
                                 >
@@ -1652,7 +1652,7 @@ export default function WorkOrderServicesView({
                                   type="button"
                                   onClick={() => executeOperativeAction(svc, "REANUDAR")}
                                   disabled={isProcessing || !isOrderInRepair}
-                                  className="p-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                                  className="p-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-600 dark:text-amber-300 rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                                   title="Reanudar servicio"
                                   aria-label="Reanudar servicio"
                                 >
@@ -1662,7 +1662,7 @@ export default function WorkOrderServicesView({
                                   type="button"
                                   onClick={() => handleFinishServiceTrigger(svc)}
                                   disabled={isProcessing || !isOrderInRepair}
-                                  className="p-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                                  className="p-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-600 dark:text-emerald-300 rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                                   title="Finalizar servicio"
                                   aria-label="Finalizar servicio"
                                 >
@@ -1676,7 +1676,7 @@ export default function WorkOrderServicesView({
                               <button
                                 type="button"
                                 onClick={() => handleOpenEditItem(svc, "SERVICIO")}
-                                className="p-1.5 bg-slate-800 text-slate-300 hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors cursor-pointer"
+                                className="p-1.5 bg-surface-subtle text-foreground-secondary hover:bg-hover hover:text-foreground rounded-lg border border-border transition-colors cursor-pointer"
                                 title="Editar servicio"
                                 aria-label="Editar servicio"
                               >
@@ -1689,7 +1689,7 @@ export default function WorkOrderServicesView({
                               <button
                                 type="button"
                                 onClick={() => handleDeleteService(svc)}
-                                className="p-1.5 bg-rose-500/10 border border-rose-500/30 text-rose-400 hover:bg-rose-500/20 rounded-lg transition-colors cursor-pointer"
+                                className="p-1.5 bg-rose-500/10 border border-rose-500/30 text-rose-500 dark:text-rose-400 hover:bg-rose-500/20 rounded-lg transition-colors cursor-pointer"
                                 title="Eliminar servicio"
                                 aria-label="Eliminar servicio"
                               >
@@ -1718,63 +1718,63 @@ export default function WorkOrderServicesView({
                     );
 
                     return (
-                      <tr key={`prod-${prodId}`} className="hover:bg-[#1c2129]/60 transition-colors">
+                      <tr key={`prod-${prodId}`} className="hover:bg-hover transition-colors">
                         {/* Código */}
-                        <td className="p-3.5 pl-4 font-bold text-cyan-400 whitespace-nowrap font-mono">
+                        <td className="p-3.5 pl-4 font-bold text-cyan-600 dark:text-cyan-400 whitespace-nowrap font-mono">
                           {prodCode}
                         </td>
 
                         {/* Tipo / Descripción */}
                         <td className="p-3.5">
-                          <div className="font-bold text-slate-100 font-sans text-xs flex items-center gap-2">
+                          <div className="font-bold text-foreground font-sans text-xs flex items-center gap-2">
                             <span className="flex items-center gap-1.5">
-                              <Package className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                              <Package className="w-3.5 h-3.5 text-cyan-500 dark:text-cyan-400 shrink-0" />
                               {prodName}
                             </span>
-                            <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
+                            <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30">
                               REPUESTO
                             </span>
                             {prod.almacen_nombre && (
-                              <span className="px-1.5 py-0.5 text-[9px] font-medium rounded bg-slate-800 text-slate-400 border border-slate-700">
+                              <span className="px-1.5 py-0.5 text-[9px] font-medium rounded bg-surface-subtle text-foreground-muted border border-border">
                                 {prod.almacen_nombre}
                               </span>
                             )}
                           </div>
-                          <div className="text-[11px] text-slate-400 font-sans mt-0.5">
+                          <div className="text-[11px] text-foreground-muted font-sans mt-0.5">
                             Cant: <strong>{prodQty}</strong> • Unit: RD$ {prodPrice.toLocaleString("es-DO", { minimumFractionDigits: 2 })}
                             {prod.observacion ? ` • ${prod.observacion}` : ""}
                           </div>
                         </td>
 
                         {/* Componente Afectado */}
-                        <td className="p-3.5 whitespace-nowrap text-slate-500 text-xs italic">No aplica</td>
+                        <td className="p-3.5 whitespace-nowrap text-foreground-muted text-xs italic">No aplica</td>
 
                         {/* Estado del Servicio / Repuesto */}
                         <td className="p-3.5 whitespace-nowrap text-xs text-center">
                           {isConsumido ? (
-                            <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-mono">
+                            <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 font-mono">
                               Consumido
                             </span>
                           ) : (
-                            <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded bg-amber-500/10 text-amber-400 border border-amber-500/30 font-mono">
+                            <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 font-mono">
                               Reservado
                             </span>
                           )}
                         </td>
 
                         {/* Precio Subtotal */}
-                        <td className="p-3.5 text-right font-bold text-slate-100 whitespace-nowrap">
+                        <td className="p-3.5 text-right font-bold text-foreground whitespace-nowrap">
                           RD$ {prodSubtotal.toLocaleString("es-DO", { minimumFractionDigits: 2 })}
                         </td>
 
                         {/* Fecha Inicio */}
-                        <td className="p-3.5 text-center text-slate-500 whitespace-nowrap text-xs">—</td>
+                        <td className="p-3.5 text-center text-foreground-muted whitespace-nowrap text-xs">—</td>
 
                         {/* Fecha Fin */}
-                        <td className="p-3.5 text-center text-slate-500 whitespace-nowrap text-xs">—</td>
+                        <td className="p-3.5 text-center text-foreground-muted whitespace-nowrap text-xs">—</td>
 
                         {/* Tiempo Transcurrido */}
-                        <td className="p-3.5 text-center text-slate-500 whitespace-nowrap text-xs">—</td>
+                        <td className="p-3.5 text-center text-foreground-muted whitespace-nowrap text-xs">—</td>
 
                         {/* Actions (Consume / Edit / Delete Product) */}
                         <td className="p-3.5 pr-4 text-center whitespace-nowrap">
@@ -1783,7 +1783,7 @@ export default function WorkOrderServicesView({
                             <button
                               type="button"
                               onClick={() => handleOpenProductHistory(prod)}
-                              className="p-1.5 rounded-lg border transition-colors bg-cyan-500/10 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 cursor-pointer"
+                              className="p-1.5 rounded-lg border transition-colors bg-cyan-500/10 border-cyan-500/30 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/20 cursor-pointer"
                               title="Ver historial de inventario (Kardex)"
                               aria-label="Ver historial de inventario"
                             >
@@ -1798,8 +1798,8 @@ export default function WorkOrderServicesView({
                                 disabled={!isOrderInRepair}
                                 className={`p-1.5 rounded-lg border transition-colors ${
                                   !isOrderInRepair
-                                    ? "opacity-30 cursor-not-allowed bg-slate-900 border-slate-800 text-slate-600"
-                                    : "bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20 cursor-pointer"
+                                    ? "opacity-30 cursor-not-allowed bg-surface-subtle border-border text-foreground-muted"
+                                    : "bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 cursor-pointer"
                                 }`}
                                 title={!isOrderInRepair ? "La orden debe estar en Reparación para reversar consumo" : "Reversar consumo y restaurar reserva"}
                                 aria-label="Reversar consumo"
@@ -1815,8 +1815,8 @@ export default function WorkOrderServicesView({
                               disabled={!isOrderInRepair || isConsumido}
                               className={`p-1.5 rounded-lg border transition-colors ${
                                 !isOrderInRepair || isConsumido
-                                  ? "opacity-30 cursor-not-allowed bg-slate-900 border-slate-800 text-slate-600"
-                                  : "bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700 cursor-pointer"
+                                  ? "opacity-30 cursor-not-allowed bg-surface-subtle border-border text-foreground-muted"
+                                  : "bg-surface-subtle text-foreground-secondary border-border hover:bg-hover hover:text-foreground cursor-pointer"
                               }`}
                               title={isConsumido ? "Repuesto consumido - No puede ser editado" : !isOrderInRepair ? "La orden debe estar en Reparación" : "Editar repuesto"}
                               aria-label="Editar repuesto"
@@ -1831,8 +1831,8 @@ export default function WorkOrderServicesView({
                               disabled={!isOrderInRepair || isConsumido}
                               className={`p-1.5 rounded-lg border transition-colors ${
                                 !isOrderInRepair || isConsumido
-                                  ? "opacity-30 cursor-not-allowed bg-slate-900 border-slate-800 text-slate-600"
-                                  : "bg-rose-500/10 border-rose-500/30 text-rose-400 hover:bg-rose-500/20 cursor-pointer"
+                                  ? "opacity-30 cursor-not-allowed bg-surface-subtle border-border text-foreground-muted"
+                                  : "bg-rose-500/10 border-rose-500/30 text-rose-500 dark:text-rose-400 hover:bg-rose-500/20 cursor-pointer"
                               }`}
                               title={isConsumido ? "Repuesto consumido - No puede ser eliminado" : !isOrderInRepair ? "La orden debe estar en Reparación" : "Eliminar repuesto"}
                               aria-label="Eliminar repuesto"
@@ -1903,7 +1903,7 @@ export default function WorkOrderServicesView({
                 type="submit"
                 form="workshop-item-form"
                 disabled={submitting || (itemType === "PRODUCTO" && (!formAlmacenId || !formProductoId || Boolean(currentWarehouseStock?.isInsufficient)))}
-                className="px-5 py-2 bg-[#bfce7f] hover:bg-[#aab86e] text-slate-950 font-bold rounded-xl text-xs shadow-lg transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 font-mono uppercase"
+                className="px-5 py-2 bg-primary hover:bg-primary-hover text-primary-foreground font-bold rounded-xl text-xs shadow-lg transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 font-mono uppercase"
               >
                 {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
                 <span>
@@ -1924,7 +1924,7 @@ export default function WorkOrderServicesView({
           <fieldset disabled={refreshFailed || submitting} className="space-y-4 w-full">
           {/* Type Switcher */}
           <div>
-            <label className="text-[11px] text-slate-400 block mb-1.5 font-semibold uppercase">Tipo de Ítem *</label>
+            <label className="text-[11px] text-foreground-muted block mb-1.5 font-semibold uppercase">Tipo de Ítem *</label>
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
@@ -1935,8 +1935,8 @@ export default function WorkOrderServicesView({
                 }}
                 className={`py-2 px-3 rounded-xl border font-bold flex items-center justify-center gap-2 transition-all ${
                   itemType === "SERVICIO"
-                    ? "bg-[#bfce7f]/20 border-[#bfce7f] text-[#bfce7f]"
-                    : "bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700"
+                    ? "bg-primary/20 border-primary text-primary"
+                    : "bg-input border-border text-foreground-muted hover:border-foreground-muted/40"
                 } ${isEditing ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
               >
                 <Wrench className="w-4 h-4" />
@@ -1952,8 +1952,8 @@ export default function WorkOrderServicesView({
                 }}
                 className={`py-2 px-3 rounded-xl border font-bold flex items-center justify-center gap-2 transition-all ${
                   itemType === "PRODUCTO"
-                    ? "bg-cyan-500/20 border-cyan-400 text-cyan-300"
-                    : "bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700"
+                    ? "bg-cyan-500/20 border-cyan-400 text-cyan-600 dark:text-cyan-300"
+                    : "bg-input border-border text-foreground-muted hover:border-foreground-muted/40"
                 } ${isEditing ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
               >
                 <Package className="w-4 h-4" />
@@ -1964,14 +1964,14 @@ export default function WorkOrderServicesView({
 
           {/* Error Message */}
           {modalError && (
-            <div className="p-3 bg-rose-950/80 border border-rose-500/50 rounded-xl text-rose-200 text-xs flex flex-col gap-2 font-mono">
+            <div className="p-3 bg-rose-500/10 border border-rose-500/40 rounded-xl text-rose-600 dark:text-rose-200 text-xs flex flex-col gap-2 font-mono">
               <div className="flex items-start gap-2.5">
-                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
                 <span>{modalError}</span>
               </div>
               {existingComponentSuggestionId && (
-                <div className="pt-2 border-t border-rose-800/60 flex items-center justify-between font-sans">
-                  <span className="text-[11px] text-rose-300">¿Deseas usar el componente de esa categoría ya registrado en esta bicicleta?</span>
+                <div className="pt-2 border-t border-rose-500/20 flex items-center justify-between font-sans">
+                  <span className="text-[11px] text-rose-500 dark:text-rose-300">¿Deseas usar el componente de esa categoría ya registrado en esta bicicleta?</span>
                   <button
                     type="button"
                     onClick={() => {
@@ -1981,7 +1981,7 @@ export default function WorkOrderServicesView({
                       setExistingComponentSuggestionId(null);
                       setModalError(null);
                     }}
-                    className="px-3 py-1 bg-[#bfce7f] hover:bg-[#aab86e] text-slate-950 font-bold rounded-lg text-xs font-mono uppercase cursor-pointer shrink-0"
+                    className="px-3 py-1 bg-primary hover:opacity-90 text-primary-foreground font-bold rounded-lg text-xs font-mono uppercase cursor-pointer shrink-0"
                   >
                     Usar el componente existente
                   </button>
@@ -1996,7 +1996,7 @@ export default function WorkOrderServicesView({
             {itemType === "SERVICIO" && (
               <>
                 <div className="md:col-span-2">
-                  <label className="text-[11px] text-slate-400 block mb-1 font-semibold uppercase">Tipo de Servicio *</label>
+                  <label className="text-[11px] text-foreground-muted block mb-1 font-semibold uppercase">Tipo de Servicio *</label>
                   {(() => {
                     const selectedServiceObj = tiposServicio.find(t => String(t.tipo_servicio_id) === String(formTipoServicioId));
                     const normalizeText = (text) => String(text || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -2056,7 +2056,7 @@ export default function WorkOrderServicesView({
                     return !selectedServiceObj ? (
                       <div className="relative" ref={serviceComboboxRef}>
                         <div className="relative">
-                          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-foreground-muted pointer-events-none" />
                           <input
                             ref={serviceSearchInputRef}
                             type="text"
@@ -2069,15 +2069,15 @@ export default function WorkOrderServicesView({
                             onFocus={() => setIsServiceDropdownOpen(true)}
                             onKeyDown={handleServiceKeyDown}
                             placeholder="Buscar tipo de servicio..."
-                            className="w-full pl-9 pr-8 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-[#bfce7f] font-mono transition-all"
+                            className="w-full pl-9 pr-8 py-2 bg-input border border-border rounded-xl text-xs text-foreground placeholder:text-foreground-muted/60 focus:outline-none focus:border-primary font-mono transition-all"
                           />
-                          <ChevronDown className="w-4 h-4 absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                          <ChevronDown className="w-4 h-4 absolute right-2.5 top-1/2 -translate-y-1/2 text-foreground-muted pointer-events-none" />
                         </div>
 
                         {isServiceDropdownOpen && (
-                          <div className="absolute left-0 right-0 top-full mt-1.5 bg-slate-950 border border-slate-800 rounded-xl shadow-2xl z-50 overflow-hidden font-mono text-xs max-h-60 overflow-y-auto custom-scrollbar animate-in fade-in duration-100">
+                          <div className="absolute left-0 right-0 top-full mt-1.5 bg-popover border border-border rounded-xl shadow-2xl z-50 overflow-hidden font-mono text-xs max-h-60 overflow-y-auto custom-scrollbar animate-in fade-in duration-100">
                             {filteredServices.length === 0 ? (
-                              <div className="p-3 text-center text-slate-500 text-xs">
+                              <div className="p-3 text-center text-foreground-muted text-xs">
                                 Sin coincidencias para &quot;{serviceSearch}&quot;
                               </div>
                             ) : (
@@ -2085,22 +2085,22 @@ export default function WorkOrderServicesView({
                                 <div
                                   key={t.tipo_servicio_id}
                                   onClick={() => handleSelectServiceCombobox(t)}
-                                  className={`p-2.5 flex items-center justify-between cursor-pointer border-b border-slate-900 last:border-0 transition-colors ${
-                                    activeServiceIndex === idx ? "bg-slate-900 text-slate-100" : "hover:bg-slate-900"
+                                  className={`p-2.5 flex items-center justify-between cursor-pointer border-b border-border last:border-0 transition-colors ${
+                                    activeServiceIndex === idx ? "bg-hover text-foreground" : "hover:bg-hover"
                                   }`}
                                 >
                                   <div className="flex items-center gap-2.5 min-w-0">
-                                    <div className="w-7 h-7 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center font-bold text-[#bfce7f] shrink-0">
+                                    <div className="w-7 h-7 rounded-lg bg-surface-subtle border border-border flex items-center justify-center font-bold text-primary shrink-0">
                                       <Wrench size={14} />
                                     </div>
                                     <div className="truncate">
-                                      <p className="font-bold text-slate-200 truncate">{t.nombre}</p>
-                                      <p className="text-[10px] text-slate-500 truncate">
+                                      <p className="font-bold text-foreground truncate">{t.nombre}</p>
+                                      <p className="text-[10px] text-foreground-muted truncate">
                                         {t.codigo} {t.duracion_estimada_horas ? `• ${Number(t.duracion_estimada_horas).toFixed(1)}h` : ""}
                                       </p>
                                     </div>
                                   </div>
-                                  <span className="text-[11px] font-bold text-emerald-400 font-mono ml-2 shrink-0">
+                                  <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 font-mono ml-2 shrink-0">
                                     RD$ {Number(t.precio_base || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })}
                                   </span>
                                 </div>
@@ -2110,14 +2110,14 @@ export default function WorkOrderServicesView({
                         )}
                       </div>
                     ) : (
-                      <div className="p-2.5 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-between">
+                      <div className="p-2.5 bg-surface-subtle border border-border rounded-xl flex items-center justify-between">
                         <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="w-7 h-7 rounded-lg bg-[#bfce7f]/10 border border-[#bfce7f]/30 flex items-center justify-center font-bold text-[#bfce7f] shrink-0 font-mono">
+                          <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/30 flex items-center justify-center font-bold text-primary shrink-0 font-mono">
                             <Wrench size={14} />
                           </div>
                           <div className="truncate">
-                            <p className="font-bold text-slate-200 text-xs truncate">{selectedServiceObj.nombre}</p>
-                            <p className="text-[10px] text-slate-400 font-mono truncate">
+                            <p className="font-bold text-foreground text-xs truncate">{selectedServiceObj.nombre}</p>
+                            <p className="text-[10px] text-foreground-muted font-mono truncate">
                               {selectedServiceObj.codigo} • Base: RD$ {Number(selectedServiceObj.precio_base || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })}
                             </p>
                           </div>
@@ -2125,7 +2125,7 @@ export default function WorkOrderServicesView({
                         <button
                           type="button"
                           onClick={handleClearServiceCombobox}
-                          className="p-1 text-slate-400 hover:text-rose-400 hover:bg-rose-950/30 rounded-lg transition-colors cursor-pointer shrink-0 ml-1"
+                          className="p-1 text-foreground-muted hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer shrink-0 ml-1"
                           title="Cambiar tipo de servicio"
                         >
                           <X size={14} />
@@ -2138,12 +2138,12 @@ export default function WorkOrderServicesView({
                 {/* Componente Afectado with Inline Creator */}
                 <div className="md:col-span-2 space-y-1">
                   <div className="flex items-center justify-between">
-                    <label className="text-[11px] text-slate-400 font-semibold uppercase">Componente Afectado (Opcional)</label>
+                    <label className="text-[11px] text-foreground-muted font-semibold uppercase">Componente Afectado (Opcional)</label>
                     {canCreateInlineComponent && !showInlineComponentForm && !pendingNewComponent && (
                       <button
                         type="button"
                         onClick={handleOpenInlineComponentForm}
-                        className="text-[11px] text-[#bfce7f] hover:underline flex items-center gap-1 font-mono cursor-pointer"
+                        className="text-[11px] text-primary hover:underline flex items-center gap-1 font-mono cursor-pointer"
                       >
                         <Plus size={12} />
                         <span>No encuentro el componente · Agregalo</span>
@@ -2161,7 +2161,7 @@ export default function WorkOrderServicesView({
                       }
                     }}
                     disabled={loadingComponents || Boolean(pendingNewComponent)}
-                    className="w-full min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-[#bfce7f] disabled:opacity-60"
+                    className="w-full min-w-0 bg-input border border-border rounded-xl px-3 py-2 text-foreground focus:outline-none focus:border-primary disabled:opacity-60"
                   >
                     <option value="">Sin componente específico (Servicio General)</option>
 
@@ -2186,11 +2186,11 @@ export default function WorkOrderServicesView({
 
                   {/* CARD: NUEVO COMPONENTE PENDIENTE DE GUARDAR */}
                   {pendingNewComponent && (
-                    <div className="mt-2 p-3 bg-[#bfce7f]/10 border border-[#bfce7f]/40 rounded-xl space-y-2 font-mono text-xs shadow-lg animate-in fade-in duration-200">
-                      <div className="flex items-center justify-between border-b border-[#bfce7f]/20 pb-2">
+                    <div className="mt-2 p-3 bg-primary/10 border border-primary/40 rounded-xl space-y-2 font-mono text-xs shadow-lg animate-in fade-in duration-200">
+                      <div className="flex items-center justify-between border-b border-primary/20 pb-2">
                         <div className="flex items-center gap-2">
-                          <Sparkles className="w-4 h-4 text-[#bfce7f]" />
-                          <span className="font-bold text-[#bfce7f] uppercase text-[11px]">
+                          <Sparkles className="w-4 h-4 text-primary" />
+                          <span className="font-bold text-primary uppercase text-[11px]">
                             NUEVO COMPONENTE — PENDIENTE DE GUARDAR
                           </span>
                         </div>
@@ -2198,41 +2198,41 @@ export default function WorkOrderServicesView({
                           <button
                             type="button"
                             onClick={handleEditPendingComponent}
-                            className="text-[10px] text-[#bfce7f] hover:underline cursor-pointer"
+                            className="text-[10px] text-primary hover:underline cursor-pointer"
                           >
                             Editar borrador
                           </button>
-                          <span className="text-slate-600">•</span>
+                          <span className="text-foreground-muted">•</span>
                           <button
                             type="button"
                             onClick={handleRemovePendingComponent}
-                            className="text-[10px] text-rose-400 hover:underline cursor-pointer"
+                            className="text-[10px] text-rose-500 hover:underline cursor-pointer"
                           >
                             Quitar borrador
                           </button>
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-300">
+                      <div className="grid grid-cols-2 gap-2 text-[11px] text-foreground">
                         <div>
-                          <span className="text-slate-400 font-semibold block">Categoría:</span>
-                          <span className="font-bold text-slate-100">{pendingNewComponent.categoria_nombre}</span>
+                          <span className="text-foreground-muted font-semibold block">Categoría:</span>
+                          <span className="font-bold text-foreground">{pendingNewComponent.categoria_nombre}</span>
                         </div>
                         <div>
-                          <span className="text-slate-400 font-semibold block">Marca:</span>
+                          <span className="text-foreground-muted font-semibold block">Marca:</span>
                           <span>{pendingNewComponent.marca || "—"}</span>
                         </div>
                         <div>
-                          <span className="text-slate-400 font-semibold block">Estado actual:</span>
+                          <span className="text-foreground-muted font-semibold block">Estado actual:</span>
                           <span>{pendingNewComponent.estado_nombre} ({pendingNewComponent.nivel_desgaste}% desgaste)</span>
                         </div>
                         <div>
-                          <span className="text-slate-400 font-semibold block">Número de serie:</span>
+                          <span className="text-foreground-muted font-semibold block">Número de serie:</span>
                           <span>{pendingNewComponent.numero_serie || "—"}</span>
                         </div>
                       </div>
 
-                      <p className="text-[10px] text-amber-300/90 italic pt-1 border-t border-[#bfce7f]/20">
+                      <p className="text-[10px] text-amber-500 dark:text-amber-300 italic pt-1 border-t border-primary/20">
                         Este componente se registrará cuando agregues el servicio.
                       </p>
                     </div>
@@ -2240,7 +2240,7 @@ export default function WorkOrderServicesView({
 
                   {/* Error Messages */}
                   {componentsError && (
-                    <p className="text-[11px] text-rose-400 font-mono mt-1 flex items-center gap-1">
+                    <p className="text-[11px] text-rose-500 font-mono mt-1 flex items-center gap-1">
                       <AlertCircle size={12} />
                       <span>{componentsError}</span>
                     </p>
@@ -2248,35 +2248,35 @@ export default function WorkOrderServicesView({
 
                   {/* INLINE NEW COMPONENT FORM (LOCAL DRAFT ONLY) */}
                   {canCreateInlineComponent && showInlineComponentForm && (
-                    <div className="mt-3 rounded-xl border border-[#bfce7f]/40 bg-slate-950/90 p-4 space-y-3 font-mono text-xs shadow-xl animate-in fade-in slide-in-from-top-2 duration-200">
-                      <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                        <h4 className="font-bold text-[#bfce7f] uppercase text-[11px] flex items-center gap-1.5">
+                    <div className="mt-3 rounded-xl border border-primary/40 bg-card p-4 space-y-3 font-mono text-xs shadow-xl animate-in fade-in slide-in-from-top-2 duration-200">
+                      <div className="flex items-center justify-between border-b border-border pb-2">
+                        <h4 className="font-bold text-primary uppercase text-[11px] flex items-center gap-1.5">
                           <Sparkles size={14} /> REGISTRAR NUEVO COMPONENTE DE LA BICICLETA
                         </h4>
                         <button
                           type="button"
                           onClick={handleCancelInlineComponentForm}
-                          className="text-slate-400 hover:text-white p-1 rounded transition-colors"
+                          className="text-foreground-muted hover:text-foreground p-1 rounded transition-colors"
                           title="Cancelar registro de componente"
                         >
                           <X size={14} />
                         </button>
                       </div>
 
-                      <p className="text-[10px] text-slate-400 font-sans leading-relaxed">
+                      <p className="text-[10px] text-foreground-muted font-sans leading-relaxed">
                         El componente se registrará cuando agregues el servicio.
                       </p>
 
                       {allCategoriesRegistered && (
-                        <div className="p-2.5 bg-amber-950/80 border border-amber-500/50 rounded-lg text-amber-200 text-[11px] flex items-center gap-2 font-mono">
-                          <AlertTriangle size={14} className="text-amber-400 shrink-0" />
+                        <div className="p-2.5 bg-amber-500/10 border border-amber-500/40 rounded-lg text-amber-600 dark:text-amber-200 text-[11px] flex items-center gap-2 font-mono">
+                          <AlertTriangle size={14} className="text-amber-500 shrink-0" />
                           <span>Esta bicicleta ya tiene registrados todos los tipos de componentes disponibles.</span>
                         </div>
                       )}
 
                       {newComponentErrors.general && (
-                        <div className="p-2 bg-rose-950/80 border border-rose-500/50 rounded-lg text-rose-200 text-[11px] flex items-center gap-1.5 font-mono">
-                          <AlertCircle size={13} className="text-rose-400 shrink-0" />
+                        <div className="p-2 bg-rose-500/10 border border-rose-500/40 rounded-lg text-rose-600 dark:text-rose-200 text-[11px] flex items-center gap-1.5 font-mono">
+                          <AlertCircle size={13} className="text-rose-500 shrink-0" />
                           <span>{newComponentErrors.general}</span>
                         </div>
                       )}
@@ -2284,12 +2284,12 @@ export default function WorkOrderServicesView({
                       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                         {/* Categoría */}
                         <div>
-                          <label className="text-[10px] text-slate-400 block mb-1 font-semibold uppercase">Categoría *</label>
+                          <label className="text-[10px] text-foreground-muted block mb-1 font-semibold uppercase">Categoría *</label>
                           <select
                             value={newComponentDraft.categoria_componente_id}
                             disabled={allCategoriesRegistered}
                             onChange={(e) => setNewComponentDraft(prev => ({ ...prev, categoria_componente_id: e.target.value }))}
-                            className={`w-full bg-slate-900 border rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none ${newComponentErrors.categoria_componente_id ? "border-rose-500" : "border-slate-800 focus:border-[#bfce7f]"} disabled:opacity-50 cursor-pointer`}
+                            className={`w-full bg-input border rounded-lg px-2.5 py-1.5 text-foreground focus:outline-none ${newComponentErrors.categoria_componente_id ? "border-rose-500" : "border-border focus:border-primary"} disabled:opacity-50 cursor-pointer`}
                           >
                             <option value="">-- Seleccionar categoría --</option>
                             {categoriasComponenteCatalog.map((cat) => {
@@ -2307,17 +2307,17 @@ export default function WorkOrderServicesView({
                             })}
                           </select>
                           {newComponentErrors.categoria_componente_id && (
-                            <p className="text-[10px] text-rose-400 mt-0.5 font-mono">{newComponentErrors.categoria_componente_id}</p>
+                            <p className="text-[10px] text-rose-500 mt-0.5 font-mono">{newComponentErrors.categoria_componente_id}</p>
                           )}
                         </div>
 
                         {/* Estado de Uso */}
                         <div>
-                          <label className="text-[10px] text-slate-400 block mb-1 font-semibold uppercase">Estado de Uso *</label>
+                          <label className="text-[10px] text-foreground-muted block mb-1 font-semibold uppercase">Estado de Uso *</label>
                           <select
                             value={newComponentDraft.estado_componente_id}
                             onChange={(e) => setNewComponentDraft(prev => ({ ...prev, estado_componente_id: e.target.value }))}
-                            className={`w-full bg-slate-900 border rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none ${newComponentErrors.estado_componente_id ? "border-rose-500" : "border-slate-800 focus:border-[#bfce7f]"}`}
+                            className={`w-full bg-input border rounded-lg px-2.5 py-1.5 text-foreground focus:outline-none ${newComponentErrors.estado_componente_id ? "border-rose-500" : "border-border focus:border-primary"}`}
                           >
                             <option value="">-- Seleccionar estado --</option>
                             {estadosComponenteCatalog.map((est) => (
@@ -2327,50 +2327,50 @@ export default function WorkOrderServicesView({
                             ))}
                           </select>
                           {newComponentErrors.estado_componente_id && (
-                            <p className="text-[10px] text-rose-400 mt-0.5">{newComponentErrors.estado_componente_id}</p>
+                            <p className="text-[10px] text-rose-500 mt-0.5">{newComponentErrors.estado_componente_id}</p>
                           )}
                         </div>
 
                         {/* Marca */}
                         <div>
-                          <label className="text-[10px] text-slate-400 block mb-1 font-semibold uppercase">Marca (Opcional)</label>
+                          <label className="text-[10px] text-foreground-muted block mb-1 font-semibold uppercase">Marca (Opcional)</label>
                           <input
                             type="text"
                             placeholder="Ej. Shimano, SRAM, Fox"
                             value={newComponentDraft.marca}
                             onChange={(e) => setNewComponentDraft(prev => ({ ...prev, marca: e.target.value }))}
-                            className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-[#bfce7f]"
+                            className="w-full bg-input border border-border rounded-lg px-2.5 py-1.5 text-foreground focus:outline-none focus:border-primary"
                           />
                         </div>
 
                         {/* Número de Serie */}
                         <div>
-                          <label className="text-[10px] text-slate-400 block mb-1 font-semibold uppercase">Número de Serie (Opcional)</label>
+                          <label className="text-[10px] text-foreground-muted block mb-1 font-semibold uppercase">Número de Serie (Opcional)</label>
                           <input
                             type="text"
                             placeholder="SN-123456"
                             value={newComponentDraft.numero_serie}
                             onChange={(e) => setNewComponentDraft(prev => ({ ...prev, numero_serie: e.target.value }))}
-                            className={`w-full bg-slate-900 border rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none ${newComponentErrors.numero_serie ? "border-rose-500" : "border-slate-800 focus:border-[#bfce7f]"}`}
+                            className={`w-full bg-input border rounded-lg px-2.5 py-1.5 text-foreground focus:outline-none ${newComponentErrors.numero_serie ? "border-rose-500" : "border-border focus:border-primary"}`}
                           />
                           {newComponentErrors.numero_serie && (
-                            <p className="text-[10px] text-rose-400 mt-0.5">{newComponentErrors.numero_serie}</p>
+                            <p className="text-[10px] text-rose-500 mt-0.5">{newComponentErrors.numero_serie}</p>
                           )}
                         </div>
                       </div>
 
-                      <div className="pt-2 border-t border-slate-800 flex items-center justify-end gap-2 font-sans">
+                      <div className="pt-2 border-t border-border flex items-center justify-end gap-2 font-sans">
                         <button
                           type="button"
                           onClick={handleCancelInlineComponentForm}
-                          className="px-3 py-1 text-xs text-slate-400 hover:text-white transition-colors cursor-pointer"
+                          className="px-3 py-1 text-xs text-foreground-muted hover:text-foreground transition-colors cursor-pointer"
                         >
                           Cancelar
                         </button>
                         <button
                           type="button"
                           onClick={handleSaveInlineComponentLocal}
-                          className="px-3.5 py-1.5 bg-[#bfce7f] hover:bg-[#aab86e] text-slate-950 font-bold rounded-lg text-xs transition-all cursor-pointer font-mono uppercase flex items-center gap-1.5"
+                          className="px-3.5 py-1.5 bg-primary hover:opacity-90 text-primary-foreground font-bold rounded-lg text-xs transition-all cursor-pointer font-mono uppercase flex items-center gap-1.5"
                         >
                           <span>Agregar</span>
                         </button>
@@ -2380,50 +2380,50 @@ export default function WorkOrderServicesView({
                 </div>
 
                 <div className="md:col-span-1">
-                  <label className="text-[11px] text-slate-400 block mb-1 font-semibold uppercase">Cantidad *</label>
+                  <label className="text-[11px] text-foreground-muted block mb-1 font-semibold uppercase">Cantidad *</label>
                   <input
                     type="number"
                     min="1"
                     value={formCantidad}
                     onChange={(e) => setFormCantidad(e.target.value)}
-                    className="w-full min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-[#bfce7f]"
+                    className="w-full min-w-0 bg-input border border-border rounded-xl px-3 py-2 text-foreground focus:outline-none focus:border-primary"
                   />
                 </div>
 
                 <div className="md:col-span-1">
-                  <label className="text-[11px] text-slate-400 block mb-1 font-semibold uppercase">Precio Catálogo (RD$) *</label>
+                  <label className="text-[11px] text-foreground-muted block mb-1 font-semibold uppercase">Precio Catálogo (RD$) *</label>
                   <input
                     type="number"
                     readOnly={true}
                     value={formPrecioUnitario}
                     placeholder="0.00"
-                    className="w-full min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-400 cursor-not-allowed"
+                    className="w-full min-w-0 bg-input/60 border border-border rounded-xl px-3 py-2 text-foreground-muted cursor-not-allowed"
                   />
-                  <p className="text-[10px] text-slate-500 mt-1">Precio vigente del catálogo (No editable)</p>
+                  <p className="text-[10px] text-foreground-muted mt-1">Precio vigente del catálogo (No editable)</p>
                 </div>
 
                 <div className="md:col-span-2">
-                  <label className="text-[11px] text-slate-400 block mb-1 font-semibold uppercase">Diagnóstico / Observación</label>
+                  <label className="text-[11px] text-foreground-muted block mb-1 font-semibold uppercase">Diagnóstico / Observación</label>
                   <textarea
                     rows={2}
                     value={formObservaciones}
                     onChange={(e) => setFormObservaciones(e.target.value)}
                     placeholder="Observaciones iniciales o diagnóstico..."
-                    className="w-full min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-[#bfce7f] font-sans text-xs"
+                    className="w-full min-w-0 bg-input border border-border rounded-xl px-3 py-2 text-foreground focus:outline-none focus:border-primary font-sans text-xs"
                   />
                 </div>
 
                 {/* Nuevo Estado del Componente (SOLO en Edición de Servicio EN_PROCESO o PAUSADO con componente) */}
                 {showFinalComponentStateField && (
                   <div className="md:col-span-2">
-                    <label className="text-[11px] text-slate-400 block mb-1 font-semibold uppercase">Nuevo estado del componente (al finalizar)</label>
+                    <label className="text-[11px] text-foreground-muted block mb-1 font-semibold uppercase">Nuevo estado del componente (al finalizar)</label>
                     {(!estadosComponenteCatalog || estadosComponenteCatalog.length === 0) ? (
-                      <p className="text-[11px] text-rose-400 font-mono py-1">No fue posible cargar los estados del componente.</p>
+                      <p className="text-[11px] text-rose-500 font-mono py-1">No fue posible cargar los estados del componente.</p>
                     ) : (
                       <select
                         value={formNuevoEstadoComponenteId}
                         onChange={(e) => setFormNuevoEstadoComponenteId(e.target.value)}
-                        className="w-full min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-[#bfce7f]"
+                        className="w-full min-w-0 bg-input border border-border rounded-xl px-3 py-2 text-foreground focus:outline-none focus:border-primary"
                       >
                         <option value="">-- Seleccionar nuevo estado resultante --</option>
                         {estadosComponenteCatalog.map((ec) => (
@@ -2438,8 +2438,8 @@ export default function WorkOrderServicesView({
 
                 {/* Resultado de Solo Lectura si el servicio está COMPLETADO */}
                 {isEditing && itemType === "SERVICIO" && String(editingItem?.estado_servicio_codigo || "").toUpperCase() === "COMPLETADO" && editingItem?.nuevo_estado_componente_nombre && (
-                  <div className="md:col-span-2 p-3 bg-emerald-950/40 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs font-mono">
-                    <span className="font-semibold block uppercase text-[10px] text-emerald-400">Estado Resultante Aplicado:</span>
+                  <div className="md:col-span-2 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-600 dark:text-emerald-300 text-xs font-mono">
+                    <span className="font-semibold block uppercase text-[10px] text-emerald-500">Estado Resultante Aplicado:</span>
                     <span className="font-bold">{editingItem.nuevo_estado_componente_nombre}</span>
                   </div>
                 )}
@@ -2450,7 +2450,7 @@ export default function WorkOrderServicesView({
             {itemType === "PRODUCTO" && (
               <>
                 <div className="md:col-span-2">
-                  <label className="text-[11px] text-slate-400 block mb-1 font-semibold uppercase">Producto / Repuesto *</label>
+                  <label className="text-[11px] text-foreground-muted block mb-1 font-semibold uppercase">Producto / Repuesto *</label>
                   {(() => {
                     const selectedProdObj = productosList.find(p => String(p.producto_id) === String(formProductoId));
                     const normalizeText = (text) => String(text || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -2508,7 +2508,7 @@ export default function WorkOrderServicesView({
                     return !selectedProdObj ? (
                       <div className="relative" ref={productComboboxRef}>
                         <div className="relative">
-                          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-foreground-muted pointer-events-none" />
                           <input
                             ref={productSearchInputRef}
                             type="text"
@@ -2521,15 +2521,15 @@ export default function WorkOrderServicesView({
                             onFocus={() => setIsProductDropdownOpen(true)}
                             onKeyDown={handleProductKeyDown}
                             placeholder="Buscar repuesto por nombre o código..."
-                            className="w-full pl-9 pr-8 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-400 font-mono transition-all"
+                            className="w-full pl-9 pr-8 py-2 bg-input border border-border rounded-xl text-xs text-foreground placeholder:text-foreground-muted/60 focus:outline-none focus:border-cyan-500 font-mono transition-all"
                           />
-                          <ChevronDown className="w-4 h-4 absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                          <ChevronDown className="w-4 h-4 absolute right-2.5 top-1/2 -translate-y-1/2 text-foreground-muted pointer-events-none" />
                         </div>
 
                         {isProductDropdownOpen && (
-                          <div className="absolute left-0 right-0 top-full mt-1.5 bg-slate-950 border border-slate-800 rounded-xl shadow-2xl z-50 overflow-hidden font-mono text-xs max-h-60 overflow-y-auto custom-scrollbar animate-in fade-in duration-100">
+                          <div className="absolute left-0 right-0 top-full mt-1.5 bg-popover border border-border rounded-xl shadow-2xl z-50 overflow-hidden font-mono text-xs max-h-60 overflow-y-auto custom-scrollbar animate-in fade-in duration-100">
                             {filteredProducts.length === 0 ? (
-                              <div className="p-3 text-center text-slate-500 text-xs">
+                              <div className="p-3 text-center text-foreground-muted text-xs">
                                 Sin coincidencias para &quot;{productSearch}&quot;
                               </div>
                             ) : (
@@ -2539,22 +2539,22 @@ export default function WorkOrderServicesView({
                                   <div
                                     key={p.producto_id}
                                     onClick={() => handleSelectProductCombobox(p)}
-                                    className={`p-2.5 flex items-center justify-between cursor-pointer border-b border-slate-900 last:border-0 transition-colors ${
-                                      activeProductIndex === idx ? "bg-slate-900 text-slate-100" : "hover:bg-slate-900"
+                                    className={`p-2.5 flex items-center justify-between cursor-pointer border-b border-border last:border-0 transition-colors ${
+                                      activeProductIndex === idx ? "bg-hover text-foreground" : "hover:bg-hover"
                                     }`}
                                   >
                                     <div className="flex items-center gap-2.5 min-w-0">
-                                      <div className="w-7 h-7 rounded-lg bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center font-bold text-cyan-400 shrink-0">
+                                      <div className="w-7 h-7 rounded-lg bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center font-bold text-cyan-500 shrink-0">
                                         <Package size={14} />
                                       </div>
                                       <div className="truncate">
-                                        <p className="font-bold text-slate-200 truncate">{p.nombre}</p>
-                                        <p className="text-[10px] text-slate-500 truncate">
+                                        <p className="font-bold text-foreground truncate">{p.nombre}</p>
+                                        <p className="text-[10px] text-foreground-muted truncate">
                                           {p.codigo || `REP-${p.producto_id}`} • Stock: {stock} {p.unidad_medida || "UND"}
                                         </p>
                                       </div>
                                     </div>
-                                    <span className="text-[11px] font-bold text-cyan-400 font-mono ml-2 shrink-0">
+                                    <span className="text-[11px] font-bold text-cyan-600 dark:text-cyan-400 font-mono ml-2 shrink-0">
                                       RD$ {Number(p.precio_venta || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })}
                                     </span>
                                   </div>
@@ -2565,14 +2565,14 @@ export default function WorkOrderServicesView({
                         )}
                       </div>
                     ) : (
-                      <div className="p-2.5 bg-slate-950 border border-cyan-500/40 rounded-xl flex items-center justify-between">
+                      <div className="p-2.5 bg-surface-subtle border border-cyan-500/40 rounded-xl flex items-center justify-between">
                         <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="w-7 h-7 rounded-lg bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center font-bold text-cyan-400 shrink-0 font-mono">
+                          <div className="w-7 h-7 rounded-lg bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center font-bold text-cyan-500 shrink-0 font-mono">
                             <Package size={14} />
                           </div>
                           <div className="truncate">
-                            <p className="font-bold text-slate-200 text-xs truncate">{selectedProdObj.nombre}</p>
-                            <p className="text-[10px] text-slate-400 font-mono truncate">
+                            <p className="font-bold text-foreground text-xs truncate">{selectedProdObj.nombre}</p>
+                            <p className="text-[10px] text-foreground-muted font-mono truncate">
                               {selectedProdObj.codigo || `REP-${selectedProdObj.producto_id}`} • Precio: RD$ {Number(selectedProdObj.precio_venta || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })} (Stock: {Number(selectedProdObj.stock_disponible ?? 0)} {selectedProdObj.unidad_medida || "UND"})
                             </p>
                           </div>
@@ -2581,13 +2581,13 @@ export default function WorkOrderServicesView({
                           <button
                             type="button"
                             onClick={handleClearProductCombobox}
-                            className="p-1 text-slate-400 hover:text-rose-400 hover:bg-rose-950/30 rounded-lg transition-colors cursor-pointer shrink-0 ml-1"
+                            className="p-1 text-foreground-muted hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer shrink-0 ml-1"
                             title="Cambiar repuesto"
                           >
                             <X size={14} />
                           </button>
                         ) : (
-                          <span className="px-2 py-0.5 rounded bg-slate-900 text-slate-400 text-[10px] font-mono border border-slate-800 shrink-0 ml-1">
+                          <span className="px-2 py-0.5 rounded bg-surface text-foreground-muted text-[10px] font-mono border border-border shrink-0 ml-1">
                             Fijo en reserva
                           </span>
                         )}
@@ -2598,18 +2598,18 @@ export default function WorkOrderServicesView({
 
                 {/* ALMACÉN SELECTOR (INV-TALLER-1 & INV-TALLER-2) */}
                 <div className="md:col-span-2">
-                  <label className="text-[11px] text-slate-400 block mb-1 font-semibold uppercase flex items-center gap-1.5">
-                    <Warehouse className="w-3.5 h-3.5 text-cyan-400" />
+                  <label className="text-[11px] text-foreground-muted block mb-1 font-semibold uppercase flex items-center gap-1.5">
+                    <Warehouse className="w-3.5 h-3.5 text-cyan-500" />
                     <span>Almacén de Reserva *</span>
                   </label>
                   <select
                     disabled={isEditing}
                     value={formAlmacenId}
                     onChange={(e) => setFormAlmacenId(e.target.value)}
-                    className={`w-full min-w-0 bg-slate-950 border rounded-xl px-3 py-2 text-xs font-mono transition-colors ${
+                    className={`w-full min-w-0 bg-input border rounded-xl px-3 py-2 text-xs font-mono transition-colors ${
                       isEditing
-                        ? "border-slate-800/80 text-slate-400 cursor-not-allowed opacity-80"
-                        : "border-slate-800 text-slate-200 focus:outline-none focus:border-cyan-400"
+                        ? "border-border text-foreground-muted cursor-not-allowed opacity-80"
+                        : "border-border text-foreground focus:outline-none focus:border-cyan-500"
                     }`}
                   >
                     <option value="">-- Seleccionar almacén --</option>
@@ -2620,7 +2620,7 @@ export default function WorkOrderServicesView({
                     ))}
                   </select>
                   {isEditing && (
-                    <p className="text-[10px] text-slate-500 mt-1 font-mono">El almacén no puede modificarse en una reserva existente.</p>
+                    <p className="text-[10px] text-foreground-muted mt-1 font-mono">El almacén no puede modificarse en una reserva existente.</p>
                   )}
                 </div>
 
@@ -2628,41 +2628,41 @@ export default function WorkOrderServicesView({
                 {formProductoId && formAlmacenId && currentWarehouseStock && (
                   <div className={`md:col-span-2 p-3 rounded-xl border text-xs font-mono transition-all ${
                     currentWarehouseStock.isInsufficient
-                      ? "bg-rose-950/20 border-rose-500/40 text-rose-300"
-                      : "bg-slate-950/70 border-slate-800 text-slate-300"
+                      ? "bg-rose-500/10 border-rose-500/40 text-rose-600 dark:text-rose-300"
+                      : "bg-surface-subtle border-border text-foreground"
                   }`}>
-                    <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800/80">
-                      <span className="font-semibold text-slate-400 text-[10px] uppercase tracking-wider flex items-center gap-1.5">
-                        <Warehouse className="w-3 h-3 text-cyan-400" />
+                    <div className="flex items-center justify-between pb-2 mb-2 border-b border-border">
+                      <span className="font-semibold text-foreground-muted text-[10px] uppercase tracking-wider flex items-center gap-1.5">
+                        <Warehouse className="w-3 h-3 text-cyan-500" />
                         {isEditing ? "Ajuste de Reserva en Almacén" : "Disponibilidad en Almacén Seleccionado"}
                       </span>
                       {isEditing ? (
                         currentWarehouseStock.actionType === "AUMENTO" ? (
                           currentWarehouseStock.isInsufficient ? (
-                            <span className="px-2 py-0.5 rounded bg-rose-500/20 text-rose-400 text-[10px] font-bold border border-rose-500/30">
+                            <span className="px-2 py-0.5 rounded bg-rose-500/20 text-rose-600 dark:text-rose-400 text-[10px] font-bold border border-rose-500/30">
                               Stock Insuficiente (+{currentWarehouseStock.delta})
                             </span>
                           ) : (
-                            <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-bold border border-amber-500/30">
+                            <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-600 dark:text-amber-300 text-[10px] font-bold border border-amber-500/30">
                               Aumento de Reserva (+{currentWarehouseStock.delta})
                             </span>
                           )
                         ) : currentWarehouseStock.actionType === "REDUCCION" ? (
-                          <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[10px] font-bold border border-emerald-500/30">
+                          <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold border border-emerald-500/30">
                             Liberación de Reserva ({currentWarehouseStock.delta})
                           </span>
                         ) : (
-                          <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px] font-bold border border-slate-700">
+                          <span className="px-2 py-0.5 rounded bg-surface text-foreground-muted text-[10px] font-bold border border-border">
                             Sin Cambio en Reserva (0)
                           </span>
                         )
                       ) : (
                         currentWarehouseStock.isInsufficient ? (
-                          <span className="px-2 py-0.5 rounded bg-rose-500/20 text-rose-400 text-[10px] font-bold border border-rose-500/30">
+                          <span className="px-2 py-0.5 rounded bg-rose-500/20 text-rose-600 dark:text-rose-400 text-[10px] font-bold border border-rose-500/30">
                             Stock Insuficiente
                           </span>
                         ) : (
-                          <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[10px] font-bold border border-emerald-500/30">
+                          <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold border border-emerald-500/30">
                             Disponible
                           </span>
                         )
@@ -2671,52 +2671,52 @@ export default function WorkOrderServicesView({
 
                     {isEditing ? (
                       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-[11px]">
-                        <div className="bg-slate-900/60 p-1.5 rounded-lg border border-slate-800">
-                          <p className="text-[9px] text-slate-400 uppercase">Cant. Actual</p>
-                          <p className="font-bold text-slate-200 mt-0.5">{currentWarehouseStock.prevQty}</p>
+                        <div className="bg-card p-1.5 rounded-lg border border-border">
+                          <p className="text-[9px] text-foreground-muted uppercase">Cant. Actual</p>
+                          <p className="font-bold text-foreground mt-0.5">{currentWarehouseStock.prevQty}</p>
                         </div>
-                        <div className="bg-slate-900/60 p-1.5 rounded-lg border border-slate-800">
-                          <p className="text-[9px] text-slate-400 uppercase">Cant. Nueva</p>
-                          <p className="font-bold text-slate-100 mt-0.5">{currentWarehouseStock.qtySolicitada}</p>
+                        <div className="bg-card p-1.5 rounded-lg border border-border">
+                          <p className="text-[9px] text-foreground-muted uppercase">Cant. Nueva</p>
+                          <p className="font-bold text-foreground mt-0.5">{currentWarehouseStock.qtySolicitada}</p>
                         </div>
-                        <div className="bg-slate-900/60 p-1.5 rounded-lg border border-slate-800">
-                          <p className="text-[9px] text-slate-400 uppercase">Diferencia</p>
-                          <p className={`font-bold mt-0.5 ${currentWarehouseStock.delta > 0 ? "text-amber-400" : currentWarehouseStock.delta < 0 ? "text-emerald-400" : "text-slate-400"}`}>
+                        <div className="bg-card p-1.5 rounded-lg border border-border">
+                          <p className="text-[9px] text-foreground-muted uppercase">Diferencia</p>
+                          <p className={`font-bold mt-0.5 ${currentWarehouseStock.delta > 0 ? "text-amber-500" : currentWarehouseStock.delta < 0 ? "text-emerald-500" : "text-foreground-muted"}`}>
                             {currentWarehouseStock.delta > 0 ? `+${currentWarehouseStock.delta}` : currentWarehouseStock.delta}
                           </p>
                         </div>
-                        <div className="bg-slate-900/60 p-1.5 rounded-lg border border-slate-800">
-                          <p className="text-[9px] text-slate-400 uppercase">Disponible</p>
-                          <p className="font-bold text-cyan-400 mt-0.5">{currentWarehouseStock.disponible}</p>
+                        <div className="bg-card p-1.5 rounded-lg border border-border">
+                          <p className="text-[9px] text-foreground-muted uppercase">Disponible</p>
+                          <p className="font-bold text-cyan-500 mt-0.5">{currentWarehouseStock.disponible}</p>
                         </div>
-                        <div className="bg-slate-900/60 p-1.5 rounded-lg border border-slate-800 col-span-2 sm:col-span-1">
-                          <p className="text-[9px] text-slate-400 uppercase">Disp. Proyectado</p>
-                          <p className={`font-bold mt-0.5 ${currentWarehouseStock.disponibleProyectado < 0 ? "text-rose-400" : "text-emerald-400"}`}>
+                        <div className="bg-card p-1.5 rounded-lg border border-border col-span-2 sm:col-span-1">
+                          <p className="text-[9px] text-foreground-muted uppercase">Disp. Proyectado</p>
+                          <p className={`font-bold mt-0.5 ${currentWarehouseStock.disponibleProyectado < 0 ? "text-rose-500" : "text-emerald-500"}`}>
                             {currentWarehouseStock.disponibleProyectado}
                           </p>
                         </div>
                       </div>
                     ) : (
                       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-[11px]">
-                        <div className="bg-slate-900/60 p-1.5 rounded-lg border border-slate-800">
-                          <p className="text-[9px] text-slate-400 uppercase">Stock Actual</p>
-                          <p className="font-bold text-slate-200 mt-0.5">{currentWarehouseStock.stockActual}</p>
+                        <div className="bg-card p-1.5 rounded-lg border border-border">
+                          <p className="text-[9px] text-foreground-muted uppercase">Stock Actual</p>
+                          <p className="font-bold text-foreground mt-0.5">{currentWarehouseStock.stockActual}</p>
                         </div>
-                        <div className="bg-slate-900/60 p-1.5 rounded-lg border border-slate-800">
-                          <p className="text-[9px] text-slate-400 uppercase">Reservado</p>
-                          <p className="font-bold text-amber-400 mt-0.5">{currentWarehouseStock.reservado}</p>
+                        <div className="bg-card p-1.5 rounded-lg border border-border">
+                          <p className="text-[9px] text-foreground-muted uppercase">Reservado</p>
+                          <p className="font-bold text-amber-500 mt-0.5">{currentWarehouseStock.reservado}</p>
                         </div>
-                        <div className="bg-slate-900/60 p-1.5 rounded-lg border border-slate-800">
-                          <p className="text-[9px] text-slate-400 uppercase">Disponible</p>
-                          <p className="font-bold text-cyan-400 mt-0.5">{currentWarehouseStock.disponible}</p>
+                        <div className="bg-card p-1.5 rounded-lg border border-border">
+                          <p className="text-[9px] text-foreground-muted uppercase">Disponible</p>
+                          <p className="font-bold text-cyan-500 mt-0.5">{currentWarehouseStock.disponible}</p>
                         </div>
-                        <div className="bg-slate-900/60 p-1.5 rounded-lg border border-slate-800">
-                          <p className="text-[9px] text-slate-400 uppercase">A Reservar</p>
-                          <p className="font-bold text-indigo-300 mt-0.5">{currentWarehouseStock.qtySolicitada}</p>
+                        <div className="bg-card p-1.5 rounded-lg border border-border">
+                          <p className="text-[9px] text-foreground-muted uppercase">A Reservar</p>
+                          <p className="font-bold text-primary mt-0.5">{currentWarehouseStock.qtySolicitada}</p>
                         </div>
-                        <div className="bg-slate-900/60 p-1.5 rounded-lg border border-slate-800 col-span-2 sm:col-span-1">
-                          <p className="text-[9px] text-slate-400 uppercase">Disp. Proyectado</p>
-                          <p className={`font-bold mt-0.5 ${currentWarehouseStock.disponibleProyectado < 0 ? "text-rose-400" : "text-emerald-400"}`}>
+                        <div className="bg-card p-1.5 rounded-lg border border-border col-span-2 sm:col-span-1">
+                          <p className="text-[9px] text-foreground-muted uppercase">Disp. Proyectado</p>
+                          <p className={`font-bold mt-0.5 ${currentWarehouseStock.disponibleProyectado < 0 ? "text-rose-500" : "text-emerald-500"}`}>
                             {currentWarehouseStock.disponibleProyectado}
                           </p>
                         </div>
@@ -2724,27 +2724,27 @@ export default function WorkOrderServicesView({
                     )}
 
                     {isEditing && currentWarehouseStock.actionType === "REDUCCION" && (
-                      <p className="text-[10px] text-emerald-400 mt-2 text-center font-sans">
+                      <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-2 text-center font-sans">
                         ✓ Se liberarán {Math.abs(currentWarehouseStock.delta)} unidades reservadas al inventario disponible.
                       </p>
                     )}
                     {isEditing && currentWarehouseStock.actionType === "AUMENTO" && currentWarehouseStock.isInsufficient && (
-                      <p className="text-[10px] text-rose-400 mt-2 text-center font-sans">
+                      <p className="text-[10px] text-rose-500 mt-2 text-center font-sans">
                         El incremento solicitado (+{currentWarehouseStock.delta}) supera las existencias disponibles ({currentWarehouseStock.disponible}).
                       </p>
                     )}
                     {isEditing && currentWarehouseStock.actionType === "AUMENTO" && !currentWarehouseStock.isInsufficient && (
-                      <p className="text-[10px] text-cyan-300 mt-2 text-center font-sans">
+                      <p className="text-[10px] text-cyan-600 dark:text-cyan-300 mt-2 text-center font-sans">
                         Se incrementará la reserva en +{currentWarehouseStock.delta} unidades.
                       </p>
                     )}
                     {!isEditing && currentWarehouseStock.isInsufficient && (
-                      <p className="text-[10px] text-rose-400 mt-2 text-center font-sans">
+                      <p className="text-[10px] text-rose-500 mt-2 text-center font-sans">
                         La cantidad a reservar supera las existencias disponibles en el almacén seleccionado.
                       </p>
                     )}
                     {!currentWarehouseStock.hasRecord && (
-                      <p className="text-[10px] text-amber-400 mt-2 text-center font-sans">
+                      <p className="text-[10px] text-amber-500 mt-2 text-center font-sans">
                         No hay existencias registradas para este producto en el almacén seleccionado (Disponible: 0).
                       </p>
                     )}
@@ -2752,43 +2752,43 @@ export default function WorkOrderServicesView({
                 )}
 
                 <div className="md:col-span-1">
-                  <label className="text-[11px] text-slate-400 block mb-1 font-semibold uppercase">Cantidad *</label>
+                  <label className="text-[11px] text-foreground-muted block mb-1 font-semibold uppercase">Cantidad *</label>
                   <input
                     type="number"
                     min="1"
                     value={formCantidad}
                     onChange={(e) => setFormCantidad(e.target.value)}
-                    className="w-full min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-cyan-400"
+                    className="w-full min-w-0 bg-input border border-border rounded-xl px-3 py-2 text-foreground focus:outline-none focus:border-cyan-500"
                   />
                 </div>
 
                 <div className="md:col-span-1">
-                  <label className="text-[11px] text-slate-400 block mb-1 font-semibold uppercase">Precio Catálogo (RD$) *</label>
+                  <label className="text-[11px] text-foreground-muted block mb-1 font-semibold uppercase">Precio Catálogo (RD$) *</label>
                   <input
                     type="number"
                     readOnly={true}
                     value={formPrecioUnitario}
                     placeholder="0.00"
-                    className="w-full min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-400 cursor-not-allowed"
+                    className="w-full min-w-0 bg-input/60 border border-border rounded-xl px-3 py-2 text-foreground-muted cursor-not-allowed"
                   />
-                  <p className="text-[10px] text-slate-500 mt-1">Precio vigente del catálogo (No editable)</p>
+                  <p className="text-[10px] text-foreground-muted mt-1">Precio vigente del catálogo (No editable)</p>
                 </div>
 
-                <div className="md:col-span-2 bg-slate-950 p-3 rounded-xl border border-slate-800 flex justify-between items-center font-mono">
-                  <span className="text-slate-400 font-semibold uppercase text-[11px]">Subtotal Estimado:</span>
-                  <span className="text-sm font-bold text-cyan-300">
+                <div className="md:col-span-2 bg-surface-subtle p-3 rounded-xl border border-border flex justify-between items-center font-mono">
+                  <span className="text-foreground-muted font-semibold uppercase text-[11px]">Subtotal Estimado:</span>
+                  <span className="text-sm font-bold text-cyan-600 dark:text-cyan-300">
                     RD$ {((parseFloat(formCantidad || "0") || 0) * (parseFloat(formPrecioUnitario || "0") || 0)).toLocaleString("es-DO", { minimumFractionDigits: 2 })}
                   </span>
                 </div>
 
                 <div className="md:col-span-2">
-                  <label className="text-[11px] text-slate-400 block mb-1 font-semibold uppercase">Observaciones (Opcional)</label>
+                  <label className="text-[11px] text-foreground-muted block mb-1 font-semibold uppercase">Observaciones (Opcional)</label>
                   <textarea
                     rows={2}
                     value={formObservaciones}
                     onChange={(e) => setFormObservaciones(e.target.value)}
                     placeholder="Notas adicionales..."
-                    className="w-full min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-cyan-400 font-sans text-xs"
+                    className="w-full min-w-0 bg-input border border-border rounded-xl px-3 py-2 text-foreground focus:outline-none focus:border-cyan-500 font-sans text-xs"
                   />
                 </div>
               </>
@@ -2809,14 +2809,14 @@ export default function WorkOrderServicesView({
             <button
               type="button"
               onClick={() => setCompleteComponentModalOpen(false)}
-              className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors cursor-pointer"
+              className="px-4 py-2 text-xs font-semibold text-foreground-muted hover:text-foreground transition-colors cursor-pointer"
             >
               Cancelar
             </button>
             <button
               type="submit"
               form="complete-component-form"
-              className="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-xs font-mono uppercase cursor-pointer"
+              className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs font-mono uppercase cursor-pointer"
             >
               Confirmar y Finalizar
             </button>
@@ -2825,24 +2825,24 @@ export default function WorkOrderServicesView({
       >
         {completeTargetService && (
           <form id="complete-component-form" onSubmit={handleSaveCompleteComponentStatus} className="space-y-4 font-mono text-xs">
-            <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1">
-              <p className="text-slate-400 text-[11px]">Servicio:</p>
-              <p className="font-bold text-slate-100">{completeTargetService.tipo_servicio_nombre}</p>
+            <div className="p-3 bg-surface-subtle border border-border rounded-xl space-y-1">
+              <p className="text-foreground-muted text-[11px]">Servicio:</p>
+              <p className="font-bold text-foreground">{completeTargetService.tipo_servicio_nombre}</p>
               {completeTargetService.componente && (
-                <p className="text-[11px] text-emerald-400 pt-1 border-t border-slate-800 mt-1">
+                <p className="text-[11px] text-emerald-600 dark:text-emerald-400 pt-1 border-t border-border mt-1">
                   Componente: {completeTargetService.componente.categoria} - {completeTargetService.componente.marca} {completeTargetService.componente.modelo}
                 </p>
               )}
             </div>
 
             <div>
-              <label className="text-[11px] text-slate-400 block mb-1 font-semibold uppercase">
+              <label className="text-[11px] text-foreground-muted block mb-1 font-semibold uppercase">
                 Estado Resultante del Componente *
               </label>
               <select
                 value={selectedFinalStateId}
                 onChange={(e) => setSelectedFinalStateId(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-emerald-400"
+                className="w-full bg-input border border-border rounded-xl px-3 py-2 text-foreground focus:outline-none focus:border-emerald-500"
               >
                 <option value="">-- Seleccionar estado final --</option>
                 {estadosComponenteCatalog.map((ec) => (
@@ -2867,7 +2867,7 @@ export default function WorkOrderServicesView({
             <button
               type="button"
               onClick={() => setConfirmModalOpen(false)}
-              className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors cursor-pointer"
+              className="px-4 py-2 text-xs font-semibold text-foreground-muted hover:text-foreground transition-colors cursor-pointer"
             >
               Cancelar
             </button>
@@ -2877,12 +2877,12 @@ export default function WorkOrderServicesView({
                 setConfirmModalOpen(false);
                 if (confirmModalOnConfirm) confirmModalOnConfirm();
               }}
-              className={`px-5 py-2 font-bold text-slate-950 rounded-xl text-xs font-mono uppercase cursor-pointer ${
+              className={`px-5 py-2 font-bold rounded-xl text-xs font-mono uppercase cursor-pointer ${
                 confirmModalType === "finish"
-                  ? "bg-emerald-400 hover:bg-emerald-300"
+                  ? "bg-emerald-600 hover:bg-emerald-500 text-white"
                   : confirmModalType === "reverse"
                   ? "bg-amber-500 hover:bg-amber-400 text-slate-950"
-                  : "bg-rose-500 hover:bg-rose-400 text-white"
+                  : "bg-rose-600 hover:bg-rose-500 text-white"
               }`}
             >
               {confirmModalType === "reverse"
@@ -2892,13 +2892,13 @@ export default function WorkOrderServicesView({
           </div>
         }
       >
-        <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl flex items-center gap-3">
+        <div className="p-3 bg-surface-subtle border border-border rounded-xl flex items-center gap-3">
           <div className={`p-2.5 rounded-xl shrink-0 ${
             confirmModalType === "finish"
-              ? "bg-emerald-500/20 text-emerald-400"
+              ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
               : confirmModalType === "reverse"
-              ? "bg-amber-500/20 text-amber-400"
-              : "bg-rose-500/20 text-rose-400"
+              ? "bg-amber-500/20 text-amber-600 dark:text-amber-400"
+              : "bg-rose-500/20 text-rose-600 dark:text-rose-400"
           }`}>
             {confirmModalType === "finish" ? (
               <CheckCircle2 className="w-5 h-5" />
@@ -2908,7 +2908,7 @@ export default function WorkOrderServicesView({
               <AlertTriangle className="w-5 h-5" />
             )}
           </div>
-          <p className="text-xs text-slate-200 font-sans leading-relaxed whitespace-pre-line">
+          <p className="text-xs text-foreground font-sans leading-relaxed whitespace-pre-line">
             {confirmModalMessage}
           </p>
         </div>
@@ -2928,7 +2928,7 @@ export default function WorkOrderServicesView({
         }}
         footer={
           <div className="flex items-center justify-between font-sans">
-            <div className="text-[11px] text-slate-400 font-mono">
+            <div className="text-[11px] text-foreground-muted font-mono">
               {historyData?.movimientos?.length > 0
                 ? `${historyData.movimientos.length} movimiento(s) registrado(s)`
                 : "Sin movimientos físicos registrados"}
@@ -2941,7 +2941,7 @@ export default function WorkOrderServicesView({
                 setHistoryData(null);
                 setHistoryError(null);
               }}
-              className="px-4 py-2 text-xs font-semibold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl transition-colors cursor-pointer font-mono"
+              className="px-4 py-2 text-xs font-semibold text-foreground bg-secondary hover:bg-secondary/80 border border-border rounded-xl transition-colors cursor-pointer font-mono"
             >
               Cerrar
             </button>
@@ -2950,32 +2950,32 @@ export default function WorkOrderServicesView({
       >
         {/* Cabecera / Info del Repuesto */}
         {historyProduct && (
-          <div className="mb-5 p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-3">
+          <div className="mb-5 p-4 rounded-xl bg-surface-subtle border border-border space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <div className="text-sm font-bold text-slate-100 flex items-center gap-2">
-                  <Package className="w-4 h-4 text-cyan-400 shrink-0" />
+                <div className="text-sm font-bold text-foreground flex items-center gap-2">
+                  <Package className="w-4 h-4 text-cyan-500 shrink-0" />
                   <span>{historyData?.linea?.producto_nombre || historyProduct.nombre || historyProduct.producto_nombre || "Repuesto"}</span>
                 </div>
-                <div className="text-xs text-slate-400 font-mono mt-0.5 flex flex-wrap items-center gap-3">
-                  <span>Código: <strong className="text-slate-300">{historyData?.linea?.codigo_producto || historyProduct.codigo_producto || historyProduct.codigo || `PROD-${historyProduct.producto_id}`}</strong></span>
+                <div className="text-xs text-foreground-muted font-mono mt-0.5 flex flex-wrap items-center gap-3">
+                  <span>Código: <strong className="text-foreground">{historyData?.linea?.codigo_producto || historyProduct.codigo_producto || historyProduct.codigo || `PROD-${historyProduct.producto_id}`}</strong></span>
                   <span>•</span>
-                  <span>Almacén: <strong className="text-slate-300">{historyData?.linea?.almacen_nombre || historyProduct.almacen_nombre || `Almacén #${historyProduct.almacen_id}`}</strong></span>
+                  <span>Almacén: <strong className="text-foreground">{historyData?.linea?.almacen_nombre || historyProduct.almacen_nombre || `Almacén #${historyProduct.almacen_id}`}</strong></span>
                   <span>•</span>
-                  <span>Cantidad línea: <strong className="text-slate-300">{historyData?.linea?.cantidad ?? historyProduct.cantidad} u.</strong></span>
+                  <span>Cantidad línea: <strong className="text-foreground">{historyData?.linea?.cantidad ?? historyProduct.cantidad} u.</strong></span>
                 </div>
               </div>
 
               {/* Estado Actual Badge (fuente de verdad: utilizado) */}
               <div className="shrink-0 flex items-center gap-2">
-                <span className="text-[11px] text-slate-400 uppercase font-mono tracking-wider">Estado actual:</span>
+                <span className="text-[11px] text-foreground-muted uppercase font-mono tracking-wider">Estado actual:</span>
                 {(historyData?.linea?.utilizado ?? historyProduct.utilizado) === true ? (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold font-mono uppercase bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold font-mono uppercase bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
                     <CheckCircle2 className="w-3.5 h-3.5" />
                     CONSUMIDO
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold font-mono uppercase bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold font-mono uppercase bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
                     <Package className="w-3.5 h-3.5" />
                     RESERVADO
                   </span>
@@ -2987,20 +2987,20 @@ export default function WorkOrderServicesView({
 
         {/* Loading State */}
         {historyLoading && (
-          <div className="p-8 flex flex-col items-center justify-center gap-3 text-slate-400">
-            <Loader2 className="w-6 h-6 animate-spin text-cyan-400" />
+          <div className="p-8 flex flex-col items-center justify-center gap-3 text-foreground-muted">
+            <Loader2 className="w-6 h-6 animate-spin text-cyan-500" />
             <p className="text-xs font-mono">Consultando movimientos de inventario...</p>
           </div>
         )}
 
         {/* Error / Retry State */}
         {!historyLoading && historyError && (
-          <div className="p-4 rounded-xl bg-rose-950/60 border border-rose-500/40 text-rose-200 space-y-3">
+          <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/40 text-rose-600 dark:text-rose-200 space-y-3">
             <div className="flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 shrink-0 text-rose-400 mt-0.5" />
+              <AlertTriangle className="w-5 h-5 shrink-0 text-rose-500 mt-0.5" />
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-bold uppercase tracking-wider font-mono">Error al consultar el historial</p>
-                <p className="text-xs font-sans mt-1 text-rose-300">{historyError}</p>
+                <p className="text-xs font-sans mt-1 text-rose-500 dark:text-rose-300">{historyError}</p>
               </div>
             </div>
             <div className="flex justify-end pt-1">
@@ -3018,14 +3018,14 @@ export default function WorkOrderServicesView({
 
         {/* Empty State */}
         {!historyLoading && !historyError && historyData && historyData.movimientos.length === 0 && (
-          <div className="p-8 rounded-xl border border-slate-800 bg-slate-950/50 text-center space-y-2">
-            <div className="w-10 h-10 mx-auto rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+          <div className="p-8 rounded-xl border border-border bg-surface-subtle text-center space-y-2">
+            <div className="w-10 h-10 mx-auto rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500">
               <Package className="w-5 h-5" />
             </div>
-            <p className="text-xs font-semibold text-slate-300">
+            <p className="text-xs font-semibold text-foreground">
               No hay movimientos físicos registrados para este repuesto. Actualmente se encuentra reservado.
             </p>
-            <p className="text-[11px] text-slate-500 font-sans max-w-md mx-auto">
+            <p className="text-[11px] text-foreground-muted font-sans max-w-md mx-auto">
               La reserva compromete la disponibilidad en el almacén pero no descuenta stock físico hasta que el repuesto sea consumido.
             </p>
           </div>
@@ -3034,10 +3034,10 @@ export default function WorkOrderServicesView({
         {/* Movements Timeline / Table */}
         {!historyLoading && !historyError && historyData && historyData.movimientos.length > 0 && (
           <div className="space-y-3">
-            <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/60">
+            <div className="overflow-x-auto rounded-xl border border-border bg-card">
               <table className="w-full text-left border-collapse font-sans text-xs">
                 <thead>
-                  <tr className="border-b border-slate-800 bg-slate-900/90 text-slate-400 text-[11px] uppercase font-mono tracking-wider">
+                  <tr className="border-b border-border bg-surface-subtle text-foreground-muted text-[11px] uppercase font-mono tracking-wider">
                     <th className="p-3 pl-4">Fecha / Movimiento</th>
                     <th className="p-3">Tipo</th>
                     <th className="p-3 text-right">Cantidad</th>
@@ -3046,23 +3046,23 @@ export default function WorkOrderServicesView({
                     <th className="p-3 pr-4">Usuario</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/60">
+                <tbody className="divide-y divide-border">
                   {historyData.movimientos.map((m) => {
                     const isEntrada = m.naturaleza === "ENTRADA";
                     const isSalida = m.naturaleza === "SALIDA";
                     const sign = isEntrada ? "+" : isSalida ? "-" : "";
-                    const qtyColor = isEntrada ? "text-emerald-400" : isSalida ? "text-rose-400" : "text-slate-200";
+                    const qtyColor = isEntrada ? "text-emerald-600 dark:text-emerald-400" : isSalida ? "text-rose-600 dark:text-rose-400" : "text-foreground";
 
                     return (
-                      <tr key={m.movimiento_inventario_id} className="hover:bg-slate-900/50 transition-colors">
+                      <tr key={m.movimiento_inventario_id} className="hover:bg-hover transition-colors">
                         {/* Fecha y Código */}
                         <td className="p-3 pl-4">
-                          <div className="font-mono text-slate-200 text-xs font-medium">
+                          <div className="font-mono text-foreground text-xs font-medium">
                             {formatDate(m.fecha_movimiento)}
                           </div>
-                          <div className="font-mono text-[11px] text-slate-400 flex items-center gap-1.5 mt-0.5">
-                            <span className="text-cyan-400 font-semibold">{m.codigo_movimiento}</span>
-                            {m.referencia && <span className="text-slate-500">• {m.referencia}</span>}
+                          <div className="font-mono text-[11px] text-foreground-muted flex items-center gap-1.5 mt-0.5">
+                            <span className="text-cyan-600 dark:text-cyan-400 font-semibold">{m.codigo_movimiento}</span>
+                            {m.referencia && <span className="text-foreground-muted/60">• {m.referencia}</span>}
                           </div>
                         </td>
 
@@ -3071,15 +3071,15 @@ export default function WorkOrderServicesView({
                           <div className="flex flex-col gap-1 items-start">
                             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold tracking-wider uppercase border ${
                               m.tipo_movimiento_codigo === "DEV_TALLER"
-                                ? "bg-amber-500/10 text-amber-300 border-amber-500/30"
+                                ? "bg-amber-500/10 text-amber-600 dark:text-amber-300 border-amber-500/30"
                                 : m.tipo_movimiento_codigo === "SAL_ORDEN"
-                                ? "bg-rose-500/10 text-rose-300 border-rose-500/30"
-                                : "bg-slate-800 text-slate-300 border-slate-700"
+                                ? "bg-rose-500/10 text-rose-600 dark:text-rose-300 border-rose-500/30"
+                                : "bg-secondary text-foreground border-border"
                             }`}>
                               {m.tipo_movimiento_nombre || m.tipo_movimiento_codigo}
                             </span>
                             {m.es_reverso && (
-                              <span className="text-[10px] text-amber-400 font-mono flex items-center gap-1">
+                              <span className="text-[10px] text-amber-500 dark:text-amber-400 font-mono flex items-center gap-1">
                                 <RotateCcw className="w-2.5 h-2.5 shrink-0" />
                                 Reversa {m.reversa_a || m.codigo_movimiento_origen}
                               </span>
@@ -3096,23 +3096,23 @@ export default function WorkOrderServicesView({
 
                         {/* Costo Inventario */}
                         <td className="p-3 text-right whitespace-nowrap font-mono text-xs">
-                          <div className="text-slate-200">
+                          <div className="text-foreground">
                             RD$ {m.costo_total.toLocaleString("es-DO", { minimumFractionDigits: 2 })}
                           </div>
-                          <div className="text-[10px] text-slate-500">
+                          <div className="text-[10px] text-foreground-muted">
                             Unit: RD$ {m.costo_unitario.toLocaleString("es-DO", { minimumFractionDigits: 2 })}
                           </div>
                         </td>
 
                         {/* Stock Almacén: stock_anterior -> stock_nuevo */}
-                        <td className="p-3 text-center whitespace-nowrap font-mono text-[11px] text-slate-400">
+                        <td className="p-3 text-center whitespace-nowrap font-mono text-[11px] text-foreground-muted">
                           <span>{m.stock_anterior}</span>
-                          <span className="text-slate-600 mx-1">→</span>
-                          <span className="text-slate-200 font-semibold">{m.stock_nuevo}</span>
+                          <span className="text-foreground-muted/60 mx-1">→</span>
+                          <span className="text-foreground font-semibold">{m.stock_nuevo}</span>
                         </td>
 
                         {/* Usuario */}
-                        <td className="p-3 pr-4 text-xs font-sans text-slate-400">
+                        <td className="p-3 pr-4 text-xs font-sans text-foreground-muted">
                           <div className="truncate max-w-[140px]" title={m.usuario_nombre}>
                             {m.usuario_nombre}
                           </div>
@@ -3125,8 +3125,8 @@ export default function WorkOrderServicesView({
             </div>
 
             {/* Note banner */}
-            <div className="text-[11px] text-slate-500 font-sans flex items-center gap-1.5 px-1">
-              <Info className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+            <div className="text-[11px] text-foreground-muted font-sans flex items-center gap-1.5 px-1">
+              <Info className="w-3.5 h-3.5 shrink-0 text-foreground-muted" />
               <span>
                 Los costos visualizados corresponden a la valuación contable del inventario al momento del movimiento.
               </span>

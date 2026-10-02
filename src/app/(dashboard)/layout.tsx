@@ -139,10 +139,10 @@ export default async function DashboardLayout({
 
   if (dbError) {
     return (
-      <div className="flex h-screen items-center justify-center bg-[#090b0e] text-slate-300 font-mono text-xs p-4">
-        <div className="p-8 bg-[#161a21] border border-rose-500/30 rounded-2xl max-w-md text-center shadow-2xl">
-          <h2 className="text-base font-bold text-rose-400 mb-2">Servicio No Disponible</h2>
-          <p className="text-slate-400">No fue posible validar la sesión con el servidor de base de datos. Por favor reintente más tarde.</p>
+      <div className="flex h-screen items-center justify-center bg-background text-foreground-secondary font-mono text-xs p-4">
+        <div className="p-8 bg-card border border-rose-500/30 rounded-2xl max-w-md text-center shadow-2xl">
+          <h2 className="text-base font-bold text-rose-500 dark:text-rose-400 mb-2">Servicio No Disponible</h2>
+          <p className="text-foreground-muted">No fue posible validar la sesión con el servidor de base de datos. Por favor reintente más tarde.</p>
         </div>
       </div>
     );
