@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { syncRecentPendingTextBeeNotifications } from "@/lib/notifications/workOrderNotificationService";
 
 interface SummaryResult {
   total: number;
@@ -91,6 +92,9 @@ export async function GET(req: NextRequest) {
     }
 
     const { searchParams } = new URL(req.url);
+
+    // Auto-sincronizar lotes recientes no confirmados para asegurar datos en tiempo real
+    await syncRecentPendingTextBeeNotifications(15).catch(() => {});
 
     // 4. Parse Pagination Parameters
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10) || 1);

@@ -963,7 +963,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
 
   if (loading || (!order && !error)) {
     return (
-      <div className="p-12 flex flex-col items-center justify-center bg-[#161a21] border border-[#2d3748] rounded-xl text-slate-400 gap-3 font-mono">
+      <div className="p-12 flex flex-col items-center justify-center bg-card border border-border rounded-xl text-foreground-muted gap-3 font-mono">
         <Loader2 className="w-8 h-8 animate-spin text-[#bfce7f]" />
         <span className="text-xs">Cargando Detalle de Orden de Trabajo...</span>
       </div>
@@ -994,11 +994,11 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
               <button
                 onClick={() => fetchOrderDetail()}
                 disabled={loading}
-                className="px-4 py-2 bg-[#bfce7f] hover:bg-[#a6b66b] text-slate-950 rounded-xl font-bold uppercase transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                className="px-4 py-2 bg-primary hover:bg-primary-hover text-primary-foreground rounded-xl font-bold uppercase transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {loading ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+                    <Loader2 className="w-4 h-4 animate-spin text-primary-foreground" />
                     <span>Cargando...</span>
                   </>
                 ) : (
@@ -1200,10 +1200,10 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
             <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-400 mt-0.5" />
           )}
           <div className="flex-1 min-w-0">
-            <span className="font-bold block text-xs uppercase tracking-wider mb-1 font-mono text-slate-100">
+            <span className="font-bold block text-xs uppercase tracking-wider mb-1 font-mono text-foreground">
               {toast.title || (toast.type === "error" ? "Error u Operación" : toast.type === "warning" ? "Aviso de Operación" : toast.type === "info" ? "Información" : "Confirmación")}
             </span>
-            <span className="leading-relaxed font-sans text-xs block text-slate-200">{toast.text}</span>
+            <span className="leading-relaxed font-sans text-xs block text-foreground-secondary">{toast.text}</span>
             {toast.subtext && (
               <span className="leading-relaxed font-sans text-[11px] block text-cyan-300 mt-2 font-medium bg-cyan-950/50 border border-cyan-500/30 px-2.5 py-1 rounded-lg">
                 {toast.subtext}
@@ -1212,7 +1212,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
           </div>
           <button
             onClick={() => setToast(null)}
-            className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors ml-1 shrink-0 cursor-pointer"
+            className="text-foreground-muted hover:text-foreground p-1 rounded-lg transition-colors ml-1 shrink-0 cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -1224,16 +1224,16 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
           <div className="flex items-center gap-2 mb-2 flex-wrap font-mono">
             <button
               onClick={handleBackClick}
-              className="text-xs text-slate-400 hover:text-slate-200 flex items-center gap-1 uppercase tracking-wider font-semibold mr-2 transition-colors"
+              className="text-xs text-foreground-muted hover:text-foreground flex items-center gap-1 uppercase tracking-wider font-semibold mr-2 transition-colors"
             >
               <ArrowLeft className="w-3.5 h-3.5" /> VOLVER
             </button>
-            <span className="text-xs text-slate-400 uppercase tracking-widest font-bold">
+            <span className="text-xs text-foreground-muted uppercase tracking-widest font-bold">
               DETALLE DE ORDEN
             </span>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-3xl md:text-4xl font-extrabold text-slate-100 font-mono tracking-tight">
+            <h1 className="text-3xl md:text-4xl font-extrabold text-foreground font-mono tracking-tight">
               {order.codigo_orden}
             </h1>
             <span
@@ -1258,7 +1258,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
             <button
               onClick={() => handleTransitionState(5)}
               disabled={loadingStateChange}
-              className="flex items-center gap-2 px-4 py-2 bg-[#bfce7f] text-slate-950 hover:bg-[#a6b66b] rounded-xl transition-all font-mono text-xs font-extrabold uppercase tracking-wider border-t border-[#d8e899] shadow-lg shadow-[#bfce7f]/20 disabled:opacity-50 cursor-pointer"
+              className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground hover:bg-primary-hover rounded-xl transition-all font-mono text-xs font-extrabold uppercase tracking-wider border-t border-primary/30 shadow-lg shadow-primary/20 disabled:opacity-50 cursor-pointer"
             >
               {loadingStateChange ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -1272,7 +1272,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
             <button
               onClick={() => handleTransitionState(5, "Reparación reanudada")}
               disabled={loadingStateChange}
-              className="flex items-center gap-2 px-4 py-2 bg-[#bfce7f] text-slate-950 hover:bg-[#a6b66b] rounded-xl transition-all font-mono text-xs font-extrabold uppercase tracking-wider border-t border-[#d8e899] shadow-lg shadow-[#bfce7f]/20 disabled:opacity-50 cursor-pointer"
+              className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground hover:bg-primary-hover rounded-xl transition-all font-mono text-xs font-extrabold uppercase tracking-wider border-t border-primary/30 shadow-lg shadow-primary/20 disabled:opacity-50 cursor-pointer"
               title="Reanudar reparación de la orden"
             >
               {loadingStateChange ? (
@@ -1394,7 +1394,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
           {Number(order.estado_orden_id) !== 7 && Number(order.estado_orden_id) !== 8 && (
             <button
               onClick={() => setStatusModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-[#84924a] text-white rounded-xl hover:brightness-110 transition-all font-mono text-xs font-bold uppercase tracking-wider border-t border-[#a6b66b] shadow-lg shadow-[#84924a]/20 cursor-pointer"
+              className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl hover:bg-primary-hover transition-all font-mono text-xs font-bold uppercase tracking-wider border-t border-primary/30 shadow-lg shadow-primary/20 cursor-pointer"
             >
               <Edit className="w-4 h-4" />
               EDITAR OT
@@ -1435,10 +1435,10 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
       </div>
 
       {/* Progress Pipeline Stepper */}
-      <div className="bg-[#161a21] border border-[#2d3748] rounded-xl p-6 shadow-xl">
+      <div className="bg-card border border-border rounded-xl p-6 shadow-sm">
         <div className="flex justify-between items-center relative">
           {/* Background Track */}
-          <div className="absolute left-[12%] right-[12%] top-1/2 h-1 bg-[#2d3748] -z-0 -translate-y-1/2">
+          <div className="absolute left-[12%] right-[12%] top-1/2 h-1 bg-border -z-0 -translate-y-1/2">
             {/* Active Progress Fill */}
             <div
               className="h-full bg-emerald-500 transition-all duration-500 rounded-full"
@@ -1485,10 +1485,10 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                   }
                   className={`flex items-center justify-center transition-all ${
                     isActive
-                      ? "w-10 h-10 rounded-full border-2 border-[#161a21]"
+                      ? "w-10 h-10 rounded-full border-2 border-card"
                       : isCompleted
-                      ? "w-8 h-8 rounded-full border-2 border-[#161a21]"
-                      : "w-8 h-8 rounded-full bg-[#1c2129] text-slate-500 border border-[#2d3748]"
+                      ? "w-8 h-8 rounded-full border-2 border-card"
+                      : "w-8 h-8 rounded-full bg-surface-subtle text-foreground-muted border border-border"
                   }`}
                 >
                   <StepIcon className={isActive ? "w-5 h-5" : "w-4 h-4"} />
@@ -1499,8 +1499,8 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                     isActive
                       ? "font-extrabold"
                       : isCompleted
-                      ? "text-slate-200 font-semibold"
-                      : "text-slate-500"
+                      ? "text-foreground-secondary font-semibold"
+                      : "text-foreground-muted"
                   }`}
                 >
                   {stepLabel}
@@ -1512,13 +1512,13 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
       </div>
 
       {/* Sub-Navigation Tabs */}
-      <div className="border-b border-[#2d3748] flex gap-2 overflow-x-auto custom-scrollbar pb-1">
+      <div className="border-b border-border flex gap-2 overflow-x-auto custom-scrollbar pb-1">
         <button
           onClick={() => setActiveTab("resumen")}
           className={`px-6 py-3 font-mono text-xs uppercase tracking-wider whitespace-nowrap transition-all border-b-2 ${
             activeTab === "resumen"
-              ? "text-[#bfce7f] border-[#bfce7f] font-bold bg-[#bfce7f]/5 rounded-t-lg"
-              : "text-slate-400 border-transparent hover:text-slate-200"
+              ? "text-primary border-primary font-bold bg-primary/10 rounded-t-lg"
+              : "text-foreground-muted border-transparent hover:text-foreground"
           }`}
         >
           RESUMEN
@@ -1527,8 +1527,8 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
           onClick={() => setActiveTab("servicios")}
           className={`px-6 py-3 font-mono text-xs uppercase tracking-wider whitespace-nowrap transition-all border-b-2 ${
             activeTab === "servicios"
-              ? "text-[#bfce7f] border-[#bfce7f] font-bold bg-[#bfce7f]/5 rounded-t-lg"
-              : "text-slate-400 border-transparent hover:text-slate-200"
+              ? "text-primary border-primary font-bold bg-primary/10 rounded-t-lg"
+              : "text-foreground-muted border-transparent hover:text-foreground"
           }`}
         >
           SERVICIOS ({totalServiciosYRepuestos})
@@ -1537,8 +1537,8 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
           onClick={() => setActiveTab("historial")}
           className={`px-6 py-3 font-mono text-xs uppercase tracking-wider whitespace-nowrap transition-all border-b-2 ${
             activeTab === "historial"
-              ? "text-[#bfce7f] border-[#bfce7f] font-bold bg-[#bfce7f]/5 rounded-t-lg"
-              : "text-slate-400 border-transparent hover:text-slate-200"
+              ? "text-primary border-primary font-bold bg-primary/10 rounded-t-lg"
+              : "text-foreground-muted border-transparent hover:text-foreground"
           }`}
         >
           HISTORIAL ({order.historial?.length || 0})
@@ -1553,40 +1553,40 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
             {/* Bento Row: Columna 1 (50%) = CLIENTE + EQUIPO (BICICLETA) juntos en el mismo recuadro; Columna 2 (50%) = SEGUIMIENTO DEL CLIENTE */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Recuadro Unificado 50%: CLIENTE y EQUIPO (BICICLETA) uno debajo de otro */}
-              <div className="bg-[#161a21] border border-[#2d3748] p-5 rounded-xl hover:border-slate-500 transition-colors flex flex-col justify-between shadow-lg h-full">
+              <div className="bg-card border border-border p-5 rounded-xl hover:border-primary/40 transition-colors flex flex-col justify-between shadow-sm h-full">
                 <div className="space-y-4">
                   {/* Bloque Superior: CLIENTE */}
                   <div>
-                    <div className="flex items-center justify-between mb-3 pb-2 border-b border-[#2d3748]">
+                    <div className="flex items-center justify-between mb-3 pb-2 border-b border-border">
                       <div className="flex items-center gap-2 min-w-0">
-                        <User className="w-4 h-4 text-[#bfce7f] shrink-0" />
-                        <h3 className="font-mono text-xs font-bold text-slate-300 uppercase tracking-widest truncate">
+                        <User className="w-4 h-4 text-primary shrink-0" />
+                        <h3 className="font-mono text-xs font-bold text-foreground-secondary uppercase tracking-widest truncate">
                           CLIENTE
                         </h3>
                       </div>
-                      <span className="text-[10px] text-[#bfce7f] font-mono font-semibold shrink-0">
+                      <span className="text-[10px] text-primary font-mono font-semibold shrink-0">
                         Socio Activo
                       </span>
                     </div>
 
                     <div className="flex items-start gap-3.5">
-                      <div className="w-11 h-11 rounded-lg bg-[#1c2129] border border-[#2d3748] flex items-center justify-center text-[#bfce7f] shrink-0 font-mono text-base font-bold shadow-inner">
+                      <div className="w-11 h-11 rounded-lg bg-surface-subtle border border-border flex items-center justify-center text-primary shrink-0 font-mono text-base font-bold shadow-inner">
                         {order.cliente_nombre ? order.cliente_nombre.substring(0, 2).toUpperCase() : "CL"}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="font-bold text-slate-100 text-sm sm:text-base font-sans truncate">
+                        <div className="font-bold text-foreground text-sm sm:text-base font-sans truncate">
                           {order.cliente_nombre}
                         </div>
-                        <div className="text-xs text-slate-400 font-mono mt-0.5 truncate">
+                        <div className="text-xs text-foreground-muted font-mono mt-0.5 truncate">
                           {order.cliente_telefono || "Sin teléfono registrado"}
                         </div>
                         {order.cliente_email && (
-                          <div className="text-[11px] text-slate-500 font-mono mt-0.5 truncate">
+                          <div className="text-[11px] text-foreground-muted font-mono mt-0.5 truncate">
                             {order.cliente_email}
                           </div>
                         )}
                         {order.cliente_direccion && (
-                          <div className="text-[11px] text-slate-500 font-sans mt-0.5 truncate">
+                          <div className="text-[11px] text-foreground-muted font-sans mt-0.5 truncate">
                             {order.cliente_direccion}
                           </div>
                         )}
@@ -1595,29 +1595,29 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                   </div>
 
                   {/* Separador entre Cliente y Equipo */}
-                  <div className="border-t border-[#2d3748]/80 pt-3">
+                  <div className="border-t border-border pt-3">
                     {/* Bloque Inferior: EQUIPO (BICICLETA) */}
-                    <div className="flex items-center justify-between mb-3 pb-2 border-b border-[#2d3748]">
+                    <div className="flex items-center justify-between mb-3 pb-2 border-b border-border">
                       <div className="flex items-center gap-2 min-w-0">
-                        <Bike className="w-4 h-4 text-[#bfce7f] shrink-0" />
-                        <h3 className="font-mono text-xs font-bold text-slate-300 uppercase tracking-widest truncate">
+                        <Bike className="w-4 h-4 text-primary shrink-0" />
+                        <h3 className="font-mono text-xs font-bold text-foreground-secondary uppercase tracking-widest truncate">
                           EQUIPO (BICICLETA)
                         </h3>
                       </div>
                     </div>
 
                     <div className="flex items-start gap-3.5">
-                      <div className="w-11 h-11 rounded-lg bg-[#1c2129] border border-[#2d3748] flex items-center justify-center text-[#bfce7f] shrink-0 shadow-inner">
+                      <div className="w-11 h-11 rounded-lg bg-surface-subtle border border-border flex items-center justify-center text-primary shrink-0 shadow-inner">
                         <Bike className="w-5 h-5" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="font-bold text-slate-100 text-sm sm:text-base font-sans truncate">
+                        <div className="font-bold text-foreground text-sm sm:text-base font-sans truncate">
                           {order.bicicleta_marca} {order.bicicleta_modelo}
                         </div>
-                        <div className="text-xs text-slate-400 font-mono mt-0.5 truncate">
+                        <div className="text-xs text-foreground-muted font-mono mt-0.5 truncate">
                           {order.bicicleta_ano || "N/A"} • {order.tipo_bicicleta || "Bicicleta"} • {order.bicicleta_color || "Color Estándar"}
                         </div>
-                        <div className="text-[11px] text-slate-400 font-mono mt-0.5 uppercase tracking-wider truncate">
+                        <div className="text-[11px] text-foreground-muted font-mono mt-0.5 uppercase tracking-wider truncate">
                           SN: {order.bicicleta_serie || "N/A"}
                         </div>
                       </div>
@@ -1627,13 +1627,13 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
               </div>
 
               {/* Recuadro Derecho 50%: SEGUIMIENTO DEL CLIENTE */}
-              <div className="bg-[#161a21] border border-[#2d3748] p-5 rounded-xl hover:border-slate-500 transition-colors relative flex flex-col justify-between shadow-lg h-full">
+              <div className="bg-card border border-border p-5 rounded-xl hover:border-primary/40 transition-colors relative flex flex-col justify-between shadow-sm h-full">
                 <div>
                   {/* Header */}
-                  <div className="flex items-center justify-between mb-4 pb-2 border-b border-[#2d3748]">
+                  <div className="flex items-center justify-between mb-4 pb-2 border-b border-border">
                     <div className="flex items-center gap-2 min-w-0">
-                      <QrCode className="w-4 h-4 text-[#bfce7f] shrink-0" />
-                      <h3 className="font-mono text-xs font-bold text-slate-300 uppercase tracking-widest truncate">
+                      <QrCode className="w-4 h-4 text-primary shrink-0" />
+                      <h3 className="font-mono text-xs font-bold text-foreground-secondary uppercase tracking-widest truncate">
                         SEGUIMIENTO DEL CLIENTE
                       </h3>
                     </div>
@@ -1650,7 +1650,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                           {trackingData.activo ? "Activo" : "Inactivo"}
                         </span>
                       ) : (
-                        <span className="text-[10px] font-mono text-slate-500">
+                        <span className="text-[10px] font-mono text-foreground-muted">
                           {loadingTracking ? "Cargando..." : "Sin registrar"}
                         </span>
                       )}
@@ -1660,7 +1660,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                         <button
                           type="button"
                           onClick={() => setSecondaryTrackingMenuOpen((prev) => !prev)}
-                          className="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-[#1c2129] transition-colors"
+                          className="p-1 rounded text-foreground-muted hover:text-foreground hover:bg-hover transition-colors"
                           title="Opciones secundarias de seguimiento"
                         >
                           <MoreVertical className="w-4 h-4" />
@@ -1668,7 +1668,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
 
                         {secondaryTrackingMenuOpen && (
                           <div
-                            className="absolute right-0 top-7 z-20 w-48 bg-[#1c2129] border border-[#2d3748] rounded-xl shadow-2xl p-1.5 space-y-1 text-xs font-mono"
+                            className="absolute right-0 top-7 z-20 w-48 bg-popover border border-border rounded-xl shadow-2xl p-1.5 space-y-1 text-xs font-mono"
                             onMouseLeave={() => setSecondaryTrackingMenuOpen(false)}
                           >
                             <button
@@ -1678,7 +1678,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                                 handleRegenerateTracking();
                               }}
                               disabled={trackingActionLoading}
-                              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-slate-300 hover:text-amber-400 hover:bg-[#161a21] transition-colors text-left"
+                              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-foreground-secondary hover:text-amber-400 hover:bg-hover transition-colors text-left"
                             >
                               <RotateCcw className={`w-3.5 h-3.5 ${trackingActionLoading ? "animate-spin" : ""}`} />
                               <span>Regenerar</span>
@@ -1709,7 +1709,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                   {trackingData?.activo ? (
                     <div className="flex items-center gap-4 py-2">
                       {/* Direct QR Display */}
-                      <div className="p-2 bg-white rounded-xl shadow-md border border-slate-700 shrink-0">
+                      <div className="p-2 bg-white rounded-xl shadow-md border border-border shrink-0">
                         {trackingData.qrDataUrl ? (
                           /* eslint-disable-next-line @next/next/no-img-element */
                           <img
@@ -1720,7 +1720,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                             title="Clic para ampliar código QR"
                           />
                         ) : (
-                          <div className="w-24 h-24 sm:w-28 sm:h-28 flex items-center justify-center text-[10px] text-slate-500 font-mono">
+                          <div className="w-24 h-24 sm:w-28 sm:h-28 flex items-center justify-center text-[10px] text-foreground-muted font-mono">
                             Cargando QR...
                           </div>
                         )}
@@ -1731,18 +1731,18 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                           <span>Portal en vivo</span>
                         </div>
-                        <p className="text-xs text-slate-300 font-sans leading-relaxed">
+                        <p className="text-xs text-foreground-secondary font-sans leading-relaxed">
                           El cliente puede escanear el QR o acceder con su enlace directo en tiempo real sin credenciales.
                         </p>
-                        <div className="text-[11px] font-mono text-slate-400 truncate pt-0.5" title={trackingData.publicUrl}>
-                          Enlace: <span className="text-[#bfce7f] font-semibold select-all">{trackingData.publicUrl || "Cargando..."}</span>
+                        <div className="text-[11px] font-mono text-foreground-muted truncate pt-0.5" title={trackingData.publicUrl}>
+                          Enlace: <span className="text-primary font-semibold select-all">{trackingData.publicUrl || "Cargando..."}</span>
                         </div>
                       </div>
                     </div>
                   ) : (
                     <div className="flex items-center gap-4 py-3">
                       {trackingData?.qrDataUrl ? (
-                        <div className="p-2 bg-white/20 rounded-xl border border-slate-700 shrink-0 opacity-30 grayscale">
+                        <div className="p-2 bg-surface-subtle rounded-xl border border-border shrink-0 opacity-30 grayscale">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={trackingData.qrDataUrl}
@@ -1751,7 +1751,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                           />
                         </div>
                       ) : (
-                        <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl bg-slate-800/40 border border-slate-700 flex items-center justify-center shrink-0 text-slate-600">
+                        <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl bg-surface-subtle border border-border flex items-center justify-center shrink-0 text-foreground-muted">
                           <QrCode className="w-10 h-10 opacity-40" />
                         </div>
                       )}
@@ -1760,7 +1760,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                           <span className="w-2 h-2 rounded-full bg-rose-400" />
                           INACTIVO
                         </div>
-                        <p className="text-xs text-slate-400 font-sans leading-relaxed">
+                        <p className="text-xs text-foreground-muted font-sans leading-relaxed">
                           El enlace público está deshabilitado. No responderá hasta ser activado nuevamente.
                         </p>
                       </div>
@@ -1775,7 +1775,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                       type="button"
                       onClick={handleCopyTrackingLink}
                       disabled={trackingActionLoading}
-                      className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg bg-[#1c2129] border border-[#2d3748] hover:border-slate-500 text-slate-200 transition-all active:scale-95 cursor-pointer font-medium"
+                      className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg bg-surface-subtle border border-border hover:border-primary/40 text-foreground transition-all active:scale-95 cursor-pointer font-medium"
                       title="Copiar enlace público de seguimiento"
                     >
                       {copiedLink ? (
@@ -1785,7 +1785,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                         </>
                       ) : (
                         <>
-                          <Copy className="w-4 h-4 text-[#bfce7f] shrink-0" />
+                          <Copy className="w-4 h-4 text-primary shrink-0" />
                           <span className="truncate">Copiar</span>
                         </>
                       )}
@@ -1795,7 +1795,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                       href={trackingData.publicUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg bg-[#84924a] hover:bg-[#96a655] text-white font-semibold transition-all active:scale-95 shadow-sm shadow-[#84924a]/20"
+                      className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg bg-primary hover:bg-primary-hover text-primary-foreground font-semibold transition-all active:scale-95 shadow-sm shadow-primary/20"
                       title="Abrir portal público en nueva pestaña"
                     >
                       <ExternalLink className="w-4 h-4 shrink-0" />
@@ -1819,28 +1819,28 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
             </div>
 
             {/* Row 2: Technical Diagnostic Panel */}
-            <div className="bg-[#161a21] border border-[#2d3748] p-4 rounded-xl space-y-3">
-              <div className="flex items-center justify-between pb-2 border-b border-[#2d3748]">
-                <h3 className="font-mono text-xs font-bold text-slate-300 uppercase tracking-widest">
+            <div className="bg-card border border-border p-4 rounded-xl space-y-3 shadow-sm">
+              <div className="flex items-center justify-between pb-2 border-b border-border">
+                <h3 className="font-mono text-xs font-bold text-foreground-secondary uppercase tracking-widest">
                   DIAGNÓSTICO
                 </h3>
-                <FileText className="w-4 h-4 text-slate-400" />
+                <FileText className="w-4 h-4 text-foreground-muted" />
               </div>
-              <p className="text-xs text-slate-300 leading-relaxed font-sans">
+              <p className="text-xs text-foreground-secondary leading-relaxed font-sans">
                 {order.descripcion_cliente || order.diagnostico_inicial || order.motivo_ingreso || "Sin diagnóstico registrado."}
               </p>
 
               <div className="space-y-1.5 pt-1">
                 <div className="flex items-center justify-between text-xs font-mono">
-                  <span className="text-slate-300 font-semibold uppercase text-[11px]">Progreso de Reparación</span>
-                  <span className="text-[#bfce7f] font-bold text-[11px]">
+                  <span className="text-foreground-secondary font-semibold uppercase text-[11px]">Progreso de Reparación</span>
+                  <span className="text-primary font-bold text-[11px]">
                     {repairProgressPercent % 1 === 0 ? Math.round(repairProgressPercent) : repairProgressPercent.toFixed(1)}% COMPLETADO
                   </span>
                 </div>
                 {/* Segmented Progress Bar */}
-                <div className="h-2.5 w-full bg-[#1c2129] border border-[#2d3748] rounded overflow-hidden relative">
+                <div className="h-2.5 w-full bg-surface-subtle border border-border rounded overflow-hidden relative">
                   <div
-                    className="h-full bg-[#84924a] relative transition-all duration-500"
+                    className="h-full bg-primary relative transition-all duration-500"
                     style={{ width: `${repairProgressPercent}%` }}
                   >
                     <div
@@ -1854,10 +1854,10 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-4 pt-0.5 text-xs font-mono text-slate-400">
+              <div className="flex flex-wrap gap-4 pt-0.5 text-xs font-mono text-foreground-muted">
                 <div className="flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-[#bfce7f]" />
-                  <span>Tiempo transcurrido total: <strong aria-live="polite" className="text-slate-200">{horasRegistradasText}</strong></span>
+                  <Clock className="w-3.5 h-3.5 text-primary" />
+                  <span>Tiempo transcurrido total: <strong aria-live="polite" className="text-foreground">{horasRegistradasText}</strong></span>
                 </div>
               </div>
 
@@ -1875,23 +1875,23 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                       className="w-3.5 h-3.5 shrink-0"
                       style={{ color: order.estado_color || order.color_estado || "#3B82F6" }}
                     />
-                    <span className="font-bold uppercase tracking-wider text-slate-200 text-[11px]">
+                    <span className="font-bold uppercase tracking-wider text-foreground text-[11px]">
                       MOTIVO DE HOLD
                     </span>
                   </div>
-                  <p className="text-xs font-sans text-slate-100 font-medium leading-relaxed pl-5">
+                  <p className="text-xs font-sans text-foreground-secondary font-medium leading-relaxed pl-5">
                     {latestHoldEvent.comentario}
                   </p>
                   {(latestHoldEvent.fecha || latestHoldEvent.usuario_nombre) && (
-                    <div className="text-[10px] text-slate-400 pl-5 flex flex-wrap items-center gap-1.5 font-sans">
+                    <div className="text-[10px] text-foreground-muted pl-5 flex flex-wrap items-center gap-1.5 font-sans">
                       <span>Puesto en Hold:</span>
-                      <span className="text-slate-300 font-mono">
+                      <span className="text-foreground-secondary font-mono">
                         {formatHoldDate(latestHoldEvent.fecha)}
                       </span>
                       {latestHoldEvent.usuario_nombre && (
                         <>
-                          <span className="text-slate-500">·</span>
-                          <span className="text-slate-300 font-semibold">
+                          <span className="text-foreground-muted">·</span>
+                          <span className="text-foreground-secondary font-semibold">
                             {latestHoldEvent.usuario_nombre}
                           </span>
                         </>
@@ -1905,48 +1905,48 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                   <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
                   <div>
                     <span className="font-bold block uppercase tracking-wider mb-0.5">Inconsistencia de Sesiones Detectada</span>
-                    <span className="text-slate-300">Hay múltiples temporizadores activos simultáneamente para el mismo servicio (IDs: {JSON.stringify(order?.servicios_con_sesiones_duplicadas)}). Se ha congelado el cálculo del tiempo en vivo para evitar valores erróneos.</span>
+                    <span className="text-foreground-secondary">Hay múltiples temporizadores activos simultáneamente para el mismo servicio (IDs: {JSON.stringify(order?.servicios_con_sesiones_duplicadas)}). Se ha congelado el cálculo del tiempo en vivo para evitar valores erróneos.</span>
                   </div>
                 </div>
               )}
             </div>
 
             {/* Row 3: Financial Summary Table */}
-            <div className="bg-[#161a21] border border-[#2d3748] rounded-xl overflow-hidden shadow-xl">
-              <div className="p-5 border-b border-[#2d3748] flex items-center justify-between bg-[#1c2129]">
-                <h3 className="font-mono text-xs font-bold text-slate-200 uppercase tracking-widest">
+            <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm">
+              <div className="p-5 border-b border-border flex items-center justify-between bg-surface-subtle">
+                <h3 className="font-mono text-xs font-bold text-foreground uppercase tracking-widest">
                   RESUMEN FINANCIERO
                 </h3>
-                <DollarSign className="w-4 h-4 text-[#bfce7f]" />
+                <DollarSign className="w-4 h-4 text-primary" />
               </div>
 
               <table className="w-full text-left border-collapse font-mono text-xs">
                 <thead>
-                  <tr className="bg-[#161a21] border-b border-[#2d3748] text-slate-400 font-semibold uppercase">
+                  <tr className="bg-surface-subtle border-b border-border text-foreground-muted font-semibold uppercase">
                     <th className="py-3 px-5">CONCEPTO / DETALLE</th>
                     <th className="py-3 px-5 text-right">CANT</th>
                     <th className="py-3 px-5 text-right">PRECIO UNIT.</th>
                     <th className="py-3 px-5 text-right">TOTAL (RD$)</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#2d3748]">
+                <tbody className="divide-y divide-border">
                   {servicesList.length === 0 && productsList.length === 0 ? (
-                    <tr className="bg-[#1c2129]">
-                      <td colSpan={4} className="py-6 text-center text-slate-500 font-mono">
+                    <tr className="bg-card">
+                      <td colSpan={4} className="py-6 text-center text-foreground-muted font-mono">
                         No hay servicios ni productos registrados en esta orden.
                       </td>
                     </tr>
                   ) : (
                     <>
                       {/* GROUP 1: SERVICIOS */}
-                      <tr className="bg-[#1c2129]/80 border-t border-[#2d3748]">
-                        <td colSpan={4} className="py-2.5 px-5 font-bold text-[#bfce7f] text-[11px] uppercase tracking-wider">
+                      <tr className="bg-surface-subtle border-t border-border">
+                        <td colSpan={4} className="py-2.5 px-5 font-bold text-primary text-[11px] uppercase tracking-wider">
                           SERVICIOS
                         </td>
                       </tr>
                       {servicesList.length === 0 ? (
-                        <tr className="bg-[#161a21]">
-                          <td colSpan={4} className="py-2 px-5 text-slate-500 italic">
+                        <tr className="bg-card">
+                          <td colSpan={4} className="py-2 px-5 text-foreground-muted italic">
                             Sin servicios registrados
                           </td>
                         </tr>
@@ -1954,22 +1954,22 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                         servicesList.map((s, idx) => {
                           const techNote = (s.observacion_tecnica || s.observaciones || "").trim();
                           return (
-                            <tr key={`s-${idx}`} className="bg-[#161a21]">
+                            <tr key={`s-${idx}`} className="bg-card hover:bg-hover transition-colors">
                               <td className="py-2.5 px-5 pl-7">
-                                <div className="font-medium text-slate-200">
+                                <div className="font-medium text-foreground">
                                   {s.descripcion || s.tipo_servicio_nombre || "Servicio de Taller"}
                                 </div>
                                 {techNote ? (
-                                  <div className="text-[11px] text-slate-400 font-sans mt-0.5">
-                                    <span className="text-[#bfce7f] font-semibold">Nota técnica:</span> {techNote}
+                                  <div className="text-[11px] text-foreground-muted font-sans mt-0.5">
+                                    <span className="text-primary font-semibold">Nota técnica:</span> {techNote}
                                   </div>
                                 ) : null}
                               </td>
-                              <td className="py-2.5 px-5 text-right text-slate-400">{s.cantidad}</td>
-                              <td className="py-2.5 px-5 text-right text-slate-400">
+                              <td className="py-2.5 px-5 text-right text-foreground-muted">{s.cantidad}</td>
+                              <td className="py-2.5 px-5 text-right text-foreground-muted">
                                 RD$ {(Number(s.precio_unitario) || 0).toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </td>
-                              <td className="py-2.5 px-5 text-right font-semibold text-slate-200">
+                              <td className="py-2.5 px-5 text-right font-semibold text-foreground">
                                 RD$ {(Number(s.subtotal) || 0).toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </td>
                             </tr>
@@ -1978,28 +1978,28 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                       )}
 
                       {/* GROUP 2: PRODUCTOS / REPUESTOS */}
-                      <tr className="bg-[#1c2129]/80 border-t border-[#2d3748]">
-                        <td colSpan={4} className="py-2.5 px-5 font-bold text-cyan-400 text-[11px] uppercase tracking-wider">
+                      <tr className="bg-surface-subtle border-t border-border">
+                        <td colSpan={4} className="py-2.5 px-5 font-bold text-cyan-500 dark:text-cyan-400 text-[11px] uppercase tracking-wider">
                           PRODUCTOS / REPUESTOS
                         </td>
                       </tr>
                       {productsList.length === 0 ? (
-                        <tr className="bg-[#161a21]">
-                          <td colSpan={4} className="py-2 px-5 text-slate-500 italic">
+                        <tr className="bg-card">
+                          <td colSpan={4} className="py-2 px-5 text-foreground-muted italic">
                             Sin productos registrados
                           </td>
                         </tr>
                       ) : (
                         productsList.map((p, idx) => (
-                          <tr key={`p-${idx}`} className="bg-[#161a21]">
-                            <td className="py-2.5 px-5 font-medium text-slate-200 pl-7">
+                          <tr key={`p-${idx}`} className="bg-card hover:bg-hover transition-colors">
+                            <td className="py-2.5 px-5 font-medium text-foreground pl-7">
                               {p.producto_nombre || p.nombre || "Producto / Repuesto"}
                             </td>
-                            <td className="py-2.5 px-5 text-right text-slate-400">{p.cantidad}</td>
-                            <td className="py-2.5 px-5 text-right text-slate-400">
+                            <td className="py-2.5 px-5 text-right text-foreground-muted">{p.cantidad}</td>
+                            <td className="py-2.5 px-5 text-right text-foreground-muted">
                               RD$ {(Number(p.precio_unitario) || 0).toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </td>
-                            <td className="py-2.5 px-5 text-right font-semibold text-slate-200">
+                            <td className="py-2.5 px-5 text-right font-semibold text-foreground">
                               RD$ {(Number(p.subtotal) || 0).toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </td>
                           </tr>
@@ -2010,9 +2010,9 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                 </tbody>
               </table>
 
-              <div className="p-5 bg-[#1c2129] border-t-2 border-[#2d3748] flex justify-between items-center font-mono text-xs">
-                <span className="text-base font-bold text-[#bfce7f] uppercase tracking-wider">TOTAL GENERAL:</span>
-                <span className="text-xl font-extrabold text-[#bfce7f]">
+              <div className="p-5 bg-surface-subtle border-t-2 border-border flex justify-between items-center font-mono text-xs">
+                <span className="text-base font-bold text-primary uppercase tracking-wider">TOTAL GENERAL:</span>
+                <span className="text-xl font-extrabold text-primary">
                   RD$ {totalEstimado.toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
@@ -2022,40 +2022,38 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
           {/* Right Sidebar Column (4/12 width) */}
           <div className="lg:col-span-4 flex flex-col gap-6">
             {/* Assigned Mechanic Card (Singular: MECÁNICO RESPONSABLE per Section 5) */}
-            <div className="bg-[#161a21] border border-[#2d3748] p-5 rounded-xl space-y-3">
-              <div className="flex items-center gap-2 pb-2 border-b border-[#2d3748]">
-                <Wrench className="w-4 h-4 text-[#bfce7f]" />
-                <h3 className="font-mono text-xs font-bold text-slate-300 uppercase tracking-widest">
+            <div className="bg-card border border-border p-5 rounded-xl space-y-3 shadow-sm">
+              <div className="flex items-center gap-2 pb-2 border-b border-border">
+                <Wrench className="w-4 h-4 text-primary" />
+                <h3 className="font-mono text-xs font-bold text-foreground-secondary uppercase tracking-widest">
                   MECÁNICO RESPONSABLE
                 </h3>
               </div>
               {order.mecanico_id || order.mecanico_nombre ? (
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-[#1c2129] border border-[#2d3748] flex items-center justify-center font-mono font-bold text-xs text-[#bfce7f] shrink-0">
+                  <div className="w-10 h-10 rounded-full bg-surface-subtle border border-border flex items-center justify-center font-mono font-bold text-xs text-primary shrink-0">
                     {order.mecanico?.iniciales || (order.mecanico_nombre ? order.mecanico_nombre.split(" ").map(n => n[0]).join("").substring(0,2).toUpperCase() : "MC")}
                   </div>
                   <div>
-                    <div className="font-bold text-sm text-slate-100 font-sans">
+                    <div className="font-bold text-sm text-foreground font-sans">
                       {order.mecanico_nombre || order.mecanico?.nombre_completo}
                     </div>
-                    <div className="text-[11px] text-slate-400 font-mono">
+                    <div className="text-[11px] text-foreground-muted font-mono">
                       {order.mecanico?.cargo_nombre || "Técnico de Taller"}
                     </div>
                   </div>
                 </div>
               ) : (
                 <div className="space-y-1">
-                  <div className="text-xs text-amber-400 font-mono font-bold">
+                  <div className="text-xs text-amber-500 font-mono font-bold">
                     Sin asignar
                   </div>
-                  <p className="text-[11px] text-slate-400 font-sans leading-normal">
+                  <p className="text-[11px] text-foreground-muted font-sans leading-normal">
                     Se asignará al usuario que inicie la reparación.
                   </p>
                 </div>
               )}
             </div>
-
-
 
             {/* Spare Parts Alert Card */}
             {order.alertas_repuestos && order.alertas_repuestos.length > 0 ? (
@@ -2068,19 +2066,19 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                       ALERTA DE REPUESTO
                     </h3>
                   </div>
-                  <p className="text-xs text-slate-300 leading-relaxed font-sans">
+                  <p className="text-xs text-foreground-secondary leading-relaxed font-sans">
                     El producto {alertItem.producto_nombre} (SKU: {alertItem.producto_sku}) presenta un nivel crítico de stock ({alertItem.stock_actual} en inventario, mínimo {alertItem.stock_minimo}).
                   </p>
                 </div>
               ))
             ) : (
-              <div className="bg-[#161a21] border border-[#2d3748] p-5 rounded-xl flex items-center gap-3">
+              <div className="bg-card border border-border p-5 rounded-xl flex items-center gap-3 shadow-sm">
                 <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
                 <div>
-                  <h3 className="font-mono text-xs font-bold text-slate-300 uppercase tracking-wider">
+                  <h3 className="font-mono text-xs font-bold text-foreground-secondary uppercase tracking-wider">
                     ESTADO DE REPUESTOS
                   </h3>
-                  <p className="text-xs text-slate-400 font-sans mt-0.5">
+                  <p className="text-xs text-foreground-muted font-sans mt-0.5">
                     Sin alertas de repuestos ni faltantes de stock.
                   </p>
                 </div>
@@ -2088,16 +2086,16 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
             )}
 
             {/* Recommended Actions Card */}
-            <div className="bg-[#1c2129] border border-[#2d3748] p-5 rounded-xl space-y-4">
-              <div className="flex items-center justify-between pb-2 border-b border-[#2d3748]">
-                <h3 className="font-mono text-xs font-bold text-slate-200 uppercase tracking-widest">
+            <div className="bg-card border border-border p-5 rounded-xl space-y-4 shadow-sm">
+              <div className="flex items-center justify-between pb-2 border-b border-border">
+                <h3 className="font-mono text-xs font-bold text-foreground-secondary uppercase tracking-widest">
                   ACCIONES SUGERIDAS
                 </h3>
-                <span className="text-[10px] text-slate-400 font-mono bg-[#161a21] px-2 py-0.5 rounded border border-[#2d3748]">
+                <span className="text-[10px] text-foreground-muted font-mono bg-surface-subtle px-2 py-0.5 rounded border border-border">
                   Sugerencias
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 font-sans">
+              <p className="text-[11px] text-foreground-muted font-sans">
                 Recomendaciones operativas calculadas automáticamente según el estado de la orden y sus servicios.
               </p>
 
@@ -2105,17 +2103,17 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                 {nextTasks.map((task) => (
                   <label
                     key={task.id}
-                    className="flex items-start gap-3 p-3 bg-[#161a21] border border-[#2d3748] rounded-lg cursor-pointer hover:border-slate-500 transition-colors select-none"
+                    className="flex items-start gap-3 p-3 bg-surface-subtle border border-border rounded-lg cursor-pointer hover:border-primary/40 transition-colors select-none"
                   >
                     <input
                       type="checkbox"
                       checked={task.done}
                       onChange={() => toggleTask(task.id)}
-                      className="mt-0.5 rounded border-[#2d3748] bg-[#0a0c10] text-[#bfce7f] focus:ring-0"
+                      className="mt-0.5 rounded border-border bg-input text-primary focus:ring-0"
                     />
                     <span
                       className={`text-xs ${
-                        task.done ? "line-through text-slate-500 font-mono" : "text-slate-200 font-sans"
+                        task.done ? "line-through text-foreground-muted font-mono" : "text-foreground font-sans"
                       }`}
                     >
                       {task.text}
@@ -2131,20 +2129,20 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                     value={newTaskInput}
                     onChange={(e) => setNewTaskInput(e.target.value)}
                     placeholder="Escribe una nueva tarea..."
-                    className="w-full p-2 bg-[#0a0c10] border border-[#2d3748] rounded-lg text-xs text-slate-200 focus:border-[#bfce7f] outline-none"
+                    className="w-full p-2 bg-input border border-border rounded-lg text-xs text-foreground focus:border-primary outline-none"
                     autoFocus
                   />
                   <div className="flex justify-end gap-2 text-xs font-mono">
                     <button
                       type="button"
                       onClick={() => setShowAddTaskInput(false)}
-                      className="px-3 py-1 text-slate-400 hover:text-slate-200"
+                      className="px-3 py-1 text-foreground-muted hover:text-foreground"
                     >
                       Cancelar
                     </button>
                     <button
                       type="submit"
-                      className="px-3 py-1 bg-[#84924a] text-white font-bold rounded-lg hover:brightness-110"
+                      className="px-3 py-1 bg-primary text-primary-foreground font-bold rounded-lg hover:bg-primary-hover"
                     >
                       Agregar
                     </button>
@@ -2153,9 +2151,9 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
               ) : (
                 <button
                   onClick={() => setShowAddTaskInput(true)}
-                  className="w-full py-2 border border-[#2d3748] rounded-lg font-mono text-xs font-bold text-slate-300 hover:bg-[#161a21] hover:text-white transition-colors flex items-center justify-center gap-2 uppercase tracking-wider"
+                  className="w-full py-2 border border-border rounded-lg font-mono text-xs font-bold text-foreground-secondary hover:bg-hover hover:text-foreground transition-colors flex items-center justify-center gap-2 uppercase tracking-wider"
                 >
-                  <Plus className="w-4 h-4 text-slate-400" />
+                  <Plus className="w-4 h-4 text-foreground-muted" />
                   AGREGAR TAREA
                 </button>
               )}
@@ -2200,18 +2198,18 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
               }
             }}
           />
-          <div className="relative z-10 w-full max-w-lg bg-[#161a21] border border-amber-500/30 rounded-2xl shadow-2xl overflow-hidden font-sans text-slate-100 animate-in fade-in zoom-in-95 duration-200">
+          <div className="relative z-10 w-full max-w-lg bg-card border border-amber-500/40 rounded-2xl shadow-2xl overflow-hidden font-sans text-foreground animate-in fade-in zoom-in-95 duration-200">
             {/* Modal Header */}
-            <div className="p-5 border-b border-[#2d3748] bg-[#0a0c10]/60 flex items-start justify-between gap-4">
+            <div className="p-5 border-b border-border bg-surface-subtle flex items-start justify-between gap-4">
               <div className="flex items-start gap-3">
-                <div className="p-2.5 bg-amber-500/15 border border-amber-500/30 rounded-xl text-amber-400 shrink-0 mt-0.5">
+                <div className="p-2.5 bg-amber-500/15 border border-amber-500/30 rounded-xl text-amber-500 dark:text-amber-400 shrink-0 mt-0.5">
                   <RotateCcw className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 id="reopen-repair-modal-title" className="text-base font-bold text-slate-100 font-mono tracking-tight flex items-center gap-2">
+                  <h3 id="reopen-repair-modal-title" className="text-base font-bold text-foreground font-mono tracking-tight flex items-center gap-2">
                     REABRIR REPARACIÓN
                   </h3>
-                  <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                  <p className="text-xs text-foreground-muted mt-1 leading-relaxed">
                     La orden volverá al estado En Reparación para permitir modificaciones en sus servicios y repuestos.
                   </p>
                 </div>
@@ -2224,7 +2222,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                     setReopenModalError(null);
                   }
                 }}
-                className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-[#1c2129] rounded-lg transition-colors cursor-pointer"
+                className="p-1.5 text-foreground-muted hover:text-foreground hover:bg-hover rounded-lg transition-colors cursor-pointer"
                 title="Cerrar modal"
               >
                 <X className="w-5 h-5" />
@@ -2233,11 +2231,11 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
 
             {/* Modal Error Banner */}
             {reopenModalError && (
-              <div className="mx-5 mt-5 p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 text-xs font-sans flex items-start gap-2.5">
-                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
+              <div className="mx-5 mt-5 p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-500 dark:text-rose-300 text-xs font-sans flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-500 dark:text-rose-400" />
                 <div className="space-y-0.5">
-                  <span className="font-bold text-rose-200 block text-xs">Error al reabrir orden</span>
-                  <span className="text-rose-300 text-xs block leading-relaxed">{reopenModalError}</span>
+                  <span className="font-bold text-rose-600 dark:text-rose-200 block text-xs">Error al reabrir orden</span>
+                  <span className="text-rose-600 dark:text-rose-300 text-xs block leading-relaxed">{reopenModalError}</span>
                 </div>
               </div>
             )}
@@ -2245,18 +2243,18 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
             {/* Modal Form */}
             <form onSubmit={handleConfirmReopen} className="p-5 space-y-4 text-xs font-sans">
               {/* Order State Transition Badges */}
-              <div className="grid grid-cols-3 gap-2 p-3 bg-[#0a0c10]/80 border border-[#2d3748] rounded-xl font-mono text-xs">
+              <div className="grid grid-cols-3 gap-2 p-3 bg-surface-subtle border border-border rounded-xl font-mono text-xs">
                 <div>
-                  <span className="text-[10px] text-slate-500 uppercase tracking-wider block">Orden</span>
-                  <span className="font-bold text-slate-200">{order.codigo_orden}</span>
+                  <span className="text-[10px] text-foreground-muted uppercase tracking-wider block">Orden</span>
+                  <span className="font-bold text-foreground">{order.codigo_orden}</span>
                 </div>
                 <div>
-                  <span className="text-[10px] text-slate-500 uppercase tracking-wider block">Estado Actual</span>
-                  <span className="font-semibold text-emerald-400">Lista para Entrega</span>
+                  <span className="text-[10px] text-foreground-muted uppercase tracking-wider block">Estado Actual</span>
+                  <span className="font-semibold text-emerald-600 dark:text-emerald-400">Lista para Entrega</span>
                 </div>
                 <div>
-                  <span className="text-[10px] text-slate-500 uppercase tracking-wider block">Estado Destino</span>
-                  <span className="font-semibold text-amber-400">En Reparación</span>
+                  <span className="text-[10px] text-foreground-muted uppercase tracking-wider block">Estado Destino</span>
+                  <span className="font-semibold text-amber-600 dark:text-amber-400">En Reparación</span>
                 </div>
               </div>
 
@@ -2270,8 +2268,8 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
 
                 if (activeServices.length === 0) {
                   return (
-                    <div className="p-3.5 bg-sky-950/30 border border-sky-500/30 rounded-xl text-sky-200 text-xs flex items-start gap-2.5">
-                      <Info className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
+                    <div className="p-3.5 bg-sky-500/10 border border-sky-500/30 rounded-xl text-sky-700 dark:text-sky-200 text-xs flex items-start gap-2.5">
+                      <Info className="w-4 h-4 text-sky-500 dark:text-sky-400 shrink-0 mt-0.5" />
                       <p className="leading-relaxed font-sans text-xs">
                         Esta orden no tiene servicios registrados. Al reabrirla podrás agregar servicios o repuestos desde la pestaña <strong>Servicios</strong>.
                       </p>
@@ -2282,13 +2280,13 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                 if (closedServices.length > 0) {
                   return (
                     <div className="space-y-1.5 font-mono text-xs">
-                      <label className="block text-slate-300 font-semibold">
+                      <label className="block text-foreground-secondary font-semibold">
                         Servicio que también deseas reabrir (opcional)
                       </label>
                       <select
                         value={reopenSelectedServiceId}
                         onChange={(e) => setReopenSelectedServiceId(e.target.value)}
-                        className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 text-xs focus:outline-none focus:border-[#bfce7f]"
+                        className="w-full p-2.5 bg-input border border-border rounded-xl text-foreground text-xs focus:outline-none focus:border-primary"
                       >
                         <option value="">-- Reabrir solo la orden (sin seleccionar servicio) --</option>
                         {closedServices.map((s, idx) => (
@@ -2306,8 +2304,8 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
 
               {/* Motivo de reapertura (Obligatorio) */}
               <div className="space-y-1.5">
-                <label className="block text-slate-200 font-semibold font-mono text-xs">
-                  Motivo de reapertura <span className="text-rose-400">*</span>
+                <label className="block text-foreground font-semibold font-mono text-xs">
+                  Motivo de reapertura <span className="text-rose-500">*</span>
                 </label>
                 <textarea
                   rows={3}
@@ -2318,12 +2316,12 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                   }}
                   required
                   placeholder="Indica por qué es necesario reabrir esta orden…"
-                  className="w-full p-3 bg-[#0a0c10] border border-[#2d3748] rounded-xl text-slate-200 focus:outline-none focus:border-amber-400 text-xs resize-none font-sans"
+                  className="w-full p-3 bg-input border border-border rounded-xl text-foreground placeholder:text-foreground-muted focus:outline-none focus:border-amber-500 text-xs resize-none font-sans"
                 />
               </div>
 
               {/* Modal Actions */}
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#2d3748]">
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-border">
                 <button
                   type="button"
                   onClick={() => {
@@ -2331,7 +2329,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                     setReopenModalError(null);
                   }}
                   disabled={submittingReopen}
-                  className="px-4 py-2 bg-[#1c2129] border border-[#2d3748] text-slate-300 rounded-xl hover:bg-[#252b36] transition-colors font-mono text-xs cursor-pointer disabled:opacity-50"
+                  className="px-4 py-2 bg-surface-subtle border border-border text-foreground-secondary rounded-xl hover:bg-hover transition-colors font-mono text-xs cursor-pointer disabled:opacity-50"
                 >
                   Cancelar
                 </button>
@@ -2373,18 +2371,18 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
             }
           }}
         >
-          <div className="bg-[#161a21] border border-amber-500/40 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+          <div className="bg-card border border-amber-500/40 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
             {/* Modal Header */}
-            <div className="p-5 border-b border-[#2d3748] flex items-center justify-between bg-[#12151b]">
+            <div className="p-5 border-b border-border flex items-center justify-between bg-surface-subtle">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-500 dark:text-amber-400">
                   <Pause className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 id="hold-modal-title" className="text-base font-bold text-slate-100 font-mono tracking-tight">
+                  <h3 id="hold-modal-title" className="text-base font-bold text-foreground font-mono tracking-tight">
                     Poner Orden en HOLD
                   </h3>
-                  <span className="text-xs text-slate-400 font-mono">
+                  <span className="text-xs text-foreground-muted font-mono">
                     {order?.codigo_orden} {order?.codigo_recepcion ? `• Rec: ${order.codigo_recepcion}` : ""}
                   </span>
                 </div>
@@ -2397,7 +2395,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                   }
                 }}
                 disabled={submittingHold}
-                className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-[#1f242d] rounded-lg transition-colors disabled:opacity-40 cursor-pointer"
+                className="p-1.5 text-foreground-muted hover:text-foreground hover:bg-hover rounded-lg transition-colors disabled:opacity-40 cursor-pointer"
                 title="Cerrar modal"
               >
                 <X className="w-4 h-4" />
@@ -2407,25 +2405,25 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
             {/* Modal Form */}
             <form onSubmit={handleConfirmHold} className="p-6 space-y-4 overflow-y-auto custom-scrollbar">
               <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-                <div className="space-y-1 text-slate-300 leading-relaxed font-sans text-xs">
-                  <p className="font-bold text-amber-300 font-mono text-xs">Pausar Reparación de la Orden</p>
-                  <p className="text-[11px] text-slate-300">
+                <AlertCircle className="w-5 h-5 text-amber-500 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div className="space-y-1 text-foreground-secondary leading-relaxed font-sans text-xs">
+                  <p className="font-bold text-amber-600 dark:text-amber-300 font-mono text-xs">Pausar Reparación de la Orden</p>
+                  <p className="text-[11px] text-foreground-secondary">
                     Al poner la orden en HOLD, los servicios y adición de repuestos quedarán bloqueados hasta que la orden sea reanudada.
                   </p>
                 </div>
               </div>
 
               {holdModalError && (
-                <div className="p-3 bg-rose-500/15 border border-rose-500/40 rounded-xl flex items-center gap-2 text-rose-300 font-sans text-xs">
-                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                <div className="p-3 bg-rose-500/15 border border-rose-500/40 rounded-xl flex items-center gap-2 text-rose-500 dark:text-rose-300 font-sans text-xs">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-500 dark:text-rose-400" />
                   <span>{holdModalError}</span>
                 </div>
               )}
 
               <div className="space-y-2 font-mono text-xs">
-                <label htmlFor="motivo_hold" className="block text-slate-200 font-semibold">
-                  Motivo de Hold <span className="text-rose-400">*</span>
+                <label htmlFor="motivo_hold" className="block text-foreground font-semibold">
+                  Motivo de Hold <span className="text-rose-500">*</span>
                 </label>
                 <textarea
                   id="motivo_hold"
@@ -2437,15 +2435,15 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                   }}
                   disabled={submittingHold}
                   placeholder="Ej: Esperando disponibilidad del repuesto / Esperando autorización de presupuesto adicional del cliente..."
-                  className="w-full bg-[#0a0c10] border border-[#2d3748] focus:border-amber-400 rounded-xl px-3.5 py-2.5 text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-amber-400/50 resize-none text-xs transition-colors font-sans"
+                  className="w-full bg-input border border-border focus:border-amber-500 rounded-xl px-3.5 py-2.5 text-foreground placeholder:text-foreground-muted focus:outline-none focus:ring-1 focus:ring-amber-500/50 resize-none text-xs transition-colors font-sans"
                 />
-                <div className="flex justify-between items-center text-[10px] text-slate-500">
+                <div className="flex justify-between items-center text-[10px] text-foreground-muted">
                   <span>Mínimo 5 caracteres (Máx. 500)</span>
                   <span>{holdReason.trim().length} / 500</span>
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#2d3748]">
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-border">
                 <button
                   type="button"
                   onClick={() => {
@@ -2453,7 +2451,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                     setHoldModalError(null);
                   }}
                   disabled={submittingHold}
-                  className="px-4 py-2 bg-[#1c2129] border border-[#2d3748] text-slate-300 rounded-xl hover:bg-[#252b36] transition-colors font-mono text-xs cursor-pointer disabled:opacity-50"
+                  className="px-4 py-2 bg-surface-subtle border border-border text-foreground-secondary rounded-xl hover:bg-hover transition-colors font-mono text-xs cursor-pointer disabled:opacity-50"
                 >
                   Cancelar
                 </button>
@@ -2489,18 +2487,18 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
           aria-labelledby="delete-order-modal-title"
           className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 animate-in fade-in duration-200"
         >
-          <div className="bg-[#161a21] border border-rose-500/40 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+          <div className="bg-card border border-rose-500/40 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
             {/* Modal Header */}
-            <div className="p-5 border-b border-[#2d3748] flex items-center justify-between bg-[#12151b]">
+            <div className="p-5 border-b border-border flex items-center justify-between bg-surface-subtle">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-rose-500/20 border border-rose-500/30 flex items-center justify-center text-rose-400">
+                <div className="w-9 h-9 rounded-xl bg-rose-500/20 border border-rose-500/30 flex items-center justify-center text-rose-500 dark:text-rose-400">
                   <Trash2 className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 id="delete-order-modal-title" className="text-base font-bold text-slate-100 font-mono tracking-tight">
+                  <h3 id="delete-order-modal-title" className="text-base font-bold text-foreground font-mono tracking-tight">
                     Eliminar Orden de Trabajo
                   </h3>
-                  <span className="text-xs text-slate-400 font-mono">
+                  <span className="text-xs text-foreground-muted font-mono">
                     {order.codigo_orden} {order.codigo_recepcion ? `• Rec: ${order.codigo_recepcion}` : ""}
                   </span>
                 </div>
@@ -2513,7 +2511,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                   }
                 }}
                 disabled={isDeletingOrder}
-                className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-[#1f242d] rounded-lg transition-colors disabled:opacity-40 cursor-pointer"
+                className="p-1.5 text-foreground-muted hover:text-foreground hover:bg-hover rounded-lg transition-colors disabled:opacity-40 cursor-pointer"
                 title="Cerrar modal"
               >
                 <X className="w-4 h-4" />
@@ -2524,10 +2522,10 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
             <div className="p-6 space-y-4 overflow-y-auto custom-scrollbar text-xs font-mono">
               {/* Warning Banner */}
               <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl flex items-start gap-3">
-                <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
-                <div className="space-y-1 text-slate-300 leading-relaxed font-sans text-xs">
-                  <p className="font-bold text-rose-300 font-mono text-xs">¡Acción Irreversible!</p>
-                  <p className="text-[11px] text-slate-300">
+                <AlertTriangle className="w-5 h-5 text-rose-500 dark:text-rose-400 shrink-0 mt-0.5" />
+                <div className="space-y-1 text-foreground-secondary leading-relaxed font-sans text-xs">
+                  <p className="font-bold text-rose-600 dark:text-rose-300 font-mono text-xs">¡Acción Irreversible!</p>
+                  <p className="text-[11px] text-foreground-secondary">
                     Se eliminará permanentemente la orden de trabajo, la recepción asociada, los servicios, repuestos, mano de obra y facturación dependiente.
                   </p>
                 </div>
@@ -2535,16 +2533,16 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
 
               {/* Error Display */}
               {deleteError && (
-                <div className="p-3 bg-rose-500/15 border border-rose-500/40 rounded-xl flex items-center gap-2 text-rose-300 font-sans text-xs">
-                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                <div className="p-3 bg-rose-500/15 border border-rose-500/40 rounded-xl flex items-center gap-2 text-rose-500 dark:text-rose-300 font-sans text-xs">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-500 dark:text-rose-400" />
                   <span>{deleteError}</span>
                 </div>
               )}
 
               {/* Reason Form */}
               <div className="space-y-2">
-                <label htmlFor="motivo_eliminacion" className="block text-slate-300 font-bold uppercase tracking-wider text-[11px]">
-                  Motivo de Eliminación <span className="text-rose-400">*</span>
+                <label htmlFor="motivo_eliminacion" className="block text-foreground-secondary font-bold uppercase tracking-wider text-[11px]">
+                  Motivo de Eliminación <span className="text-rose-500">*</span>
                 </label>
                 <textarea
                   id="motivo_eliminacion"
@@ -2556,9 +2554,9 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                   }}
                   disabled={isDeletingOrder}
                   placeholder="Ej: Orden creada por error, Registro duplicado, Prueba interna, Cliente canceló proceso..."
-                  className="w-full bg-[#0a0c10] border border-[#2d3748] focus:border-rose-500 rounded-xl px-3.5 py-2.5 text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-rose-500/50 resize-none text-xs transition-colors font-sans"
+                  className="w-full bg-input border border-border focus:border-rose-500 rounded-xl px-3.5 py-2.5 text-foreground placeholder:text-foreground-muted focus:outline-none focus:ring-1 focus:ring-rose-500/50 resize-none text-xs transition-colors font-sans"
                 />
-                <div className="flex justify-between items-center text-[10px] text-slate-500">
+                <div className="flex justify-between items-center text-[10px] text-foreground-muted">
                   <span>Mínimo 5 caracteres</span>
                   <span>{deleteReason.trim().length} / 1000</span>
                 </div>
@@ -2566,7 +2564,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
             </div>
 
             {/* Modal Footer */}
-            <div className="p-4 border-t border-[#2d3748] bg-[#12151b] flex items-center justify-end gap-2.5">
+            <div className="p-4 border-t border-border bg-surface-subtle flex items-center justify-end gap-2.5">
               <button
                 type="button"
                 onClick={() => {
@@ -2574,7 +2572,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                   setDeleteError(null);
                 }}
                 disabled={isDeletingOrder}
-                className="px-4 py-2 bg-[#1c2129] border border-[#2d3748] text-slate-300 hover:text-white hover:bg-[#252b36] rounded-xl font-mono text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-40 cursor-pointer"
+                className="px-4 py-2 bg-surface-subtle border border-border text-foreground-secondary hover:text-foreground hover:bg-hover rounded-xl font-mono text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-40 cursor-pointer"
               >
                 Cancelar
               </button>
@@ -2613,27 +2611,27 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
       {/* Modal Mostrar Código QR Seguimiento */}
       {showQrModal && trackingData && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl max-w-sm w-full p-6 text-center space-y-5 shadow-2xl relative">
+          <div className="bg-card border border-border rounded-2xl max-w-sm w-full p-6 text-center space-y-5 shadow-2xl relative">
             <button
               onClick={() => setShowQrModal(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-slate-100 p-1 rounded-lg bg-[#1c2129] border border-[#2d3748] transition-colors"
+              className="absolute top-4 right-4 text-foreground-muted hover:text-foreground p-1 rounded-lg bg-surface-subtle border border-border transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
 
             <div>
-              <span className="font-mono text-[10px] font-bold text-[#bfce7f] uppercase tracking-widest">
+              <span className="font-mono text-[10px] font-bold text-primary uppercase tracking-widest">
                 RIDE LAB • PORTAL PÚBLICO
               </span>
-              <h3 className="text-lg font-bold text-slate-100 mt-1">
+              <h3 className="text-lg font-bold text-foreground mt-1">
                 Seguimiento de Orden
               </h3>
-              <p className="text-xs text-slate-400 font-mono mt-0.5">
+              <p className="text-xs text-foreground-muted font-mono mt-0.5">
                 {order?.codigo_orden}
               </p>
             </div>
 
-            <div className="p-4 bg-white rounded-2xl mx-auto inline-block shadow-lg border-4 border-slate-900">
+            <div className="p-4 bg-white rounded-2xl mx-auto inline-block shadow-lg border-4 border-border">
               {trackingData.qrDataUrl ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img
@@ -2642,30 +2640,30 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
                   className="w-56 h-56 mx-auto object-contain"
                 />
               ) : (
-                <div className="w-56 h-56 flex items-center justify-center text-slate-500 font-mono text-xs">
+                <div className="w-56 h-56 flex items-center justify-center text-foreground-muted font-mono text-xs">
                   Generando código QR...
                 </div>
               )}
             </div>
 
             <div className="space-y-3">
-              <p className="text-xs text-slate-300 font-sans">
+              <p className="text-xs text-foreground-secondary font-sans">
                 Escanea este código con cualquier teléfono móvil para ver el estado de la reparación en vivo.
               </p>
               <div className="flex items-center gap-2 pt-1 font-mono">
                 <button
                   type="button"
                   onClick={handleCopyTrackingLink}
-                  className="flex-1 py-2 px-3 rounded-lg bg-[#1c2129] border border-[#2d3748] text-xs text-slate-200 hover:border-slate-500 transition-colors flex items-center justify-center gap-1.5"
+                  className="flex-1 py-2 px-3 rounded-lg bg-surface-subtle border border-border text-xs text-foreground hover:border-primary/40 transition-colors flex items-center justify-center gap-1.5"
                 >
-                  {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-[#bfce7f]" />}
+                  {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-primary" />}
                   <span>{copiedLink ? "Copiado" : "Copiar Enlace"}</span>
                 </button>
                 <a
                   href={trackingData.publicUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="py-2 px-3 rounded-lg bg-[#84924a] text-white hover:brightness-110 text-xs font-bold transition-all flex items-center gap-1"
+                  className="py-2 px-3 rounded-lg bg-primary text-primary-foreground hover:bg-primary-hover text-xs font-bold transition-all flex items-center gap-1"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
                   <span>Abrir</span>

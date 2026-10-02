@@ -457,7 +457,16 @@ export async function sendWorkOrderSmsNotification(
       if (smsBatchId && auditId) {
         try {
           await new Promise((resolve) => setTimeout(resolve, 1500));
-          const batchStatus = await getTextBeeBatchStatus(smsBatchId, 6000);
+          let batchStatus = await getTextBeeBatchStatus(smsBatchId, 6000);
+
+          // Si el proveedor responde 'sent', la entrega al celular del cliente suele confirmarse en 1-2 segundos adicionales:
+          if (batchStatus.success && batchStatus.status === "sent") {
+            await new Promise((resolve) => setTimeout(resolve, 1500));
+            const secondCheck = await getTextBeeBatchStatus(smsBatchId, 4000);
+            if (secondCheck.success && secondCheck.status === "delivered") {
+              batchStatus = secondCheck;
+            }
+          }
 
           if (batchStatus.success) {
             if (batchStatus.status === "sent") {
@@ -729,9 +738,10 @@ export async function syncOrderPendingNotifications(
          fecha_envio
        FROM admin.notificacion_orden_trabajo
        WHERE orden_trabajo_id = $1
-         AND estado_envio = 'PENDIENTE'
+         AND estado_envio IN ('PENDIENTE', 'ENVIADO')
+         AND (estado_proveedor IS NULL OR estado_proveedor != 'delivered')
          AND textbee_batch_id IS NOT NULL
-         AND fecha_registro <= NOW() - INTERVAL '10 seconds'
+         AND fecha_registro <= NOW() - INTERVAL '3 seconds'
        ORDER BY notificacion_orden_trabajo_id ASC`,
       [ordenTrabajoId]
     );
@@ -779,9 +789,10 @@ export async function syncRecentPendingTextBeeNotifications(
        fecha_registro,
        fecha_envio
      FROM admin.notificacion_orden_trabajo
-     WHERE estado_envio = 'PENDIENTE'
+     WHERE estado_envio IN ('PENDIENTE', 'ENVIADO')
+       AND (estado_proveedor IS NULL OR estado_proveedor != 'delivered')
        AND textbee_batch_id IS NOT NULL
-       AND fecha_registro >= NOW() - INTERVAL '2 hours'
+       AND fecha_registro >= NOW() - INTERVAL '24 hours'
      ORDER BY notificacion_orden_trabajo_id ASC
      LIMIT $1`,
     [safeLimit]

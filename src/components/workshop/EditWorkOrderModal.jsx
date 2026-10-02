@@ -754,19 +754,19 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/80 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-[#161a21] border border-[#2d3748] rounded-2xl w-full max-w-4xl shadow-2xl flex flex-col max-h-[92vh] font-sans text-slate-100 relative my-auto animate-in fade-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/60 dark:bg-black/80 backdrop-blur-sm overflow-y-auto">
+      <div className="bg-card border border-border rounded-2xl w-full max-w-4xl shadow-2xl flex flex-col max-h-[92vh] font-sans text-foreground relative my-auto animate-in fade-in zoom-in-95 duration-200">
         {/* Header */}
-        <div className="p-5 border-b border-[#2d3748] flex items-center justify-between bg-[#12151b] rounded-t-2xl">
+        <div className="p-5 border-b border-border flex items-center justify-between bg-surface rounded-t-2xl">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#bfce7f]/15 border border-[#bfce7f]/30 flex items-center justify-center text-[#bfce7f]">
+            <div className="w-10 h-10 rounded-xl bg-primary/15 border border-primary/30 flex items-center justify-center text-primary">
               <Edit className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-slate-100 font-mono tracking-tight flex items-center gap-2">
-                Editar Orden de Trabajo — <span className="text-[#bfce7f]">{orderCode}</span>
+              <h2 className="text-lg font-bold text-foreground font-mono tracking-tight flex items-center gap-2">
+                Editar Orden de Trabajo — <span className="text-primary">{orderCode}</span>
               </h2>
-              <p className="text-xs text-slate-400 font-sans">
+              <p className="text-xs text-foreground-muted font-sans">
                 Edición de recepción, cliente, bicicleta, parámetros operativos, servicios y repuestos.
               </p>
             </div>
@@ -775,7 +775,7 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
             type="button"
             onClick={onClose}
             disabled={submitting}
-            className="p-2 text-slate-400 hover:text-slate-200 hover:bg-[#1c2129] rounded-xl transition-colors cursor-pointer"
+            className="p-2 text-foreground-muted hover:text-foreground hover:bg-hover rounded-xl transition-colors cursor-pointer"
             title="Cerrar"
           >
             <X className="w-5 h-5" />
@@ -784,40 +784,40 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
 
         {/* Content Body */}
         {loadingInit ? (
-          <div className="p-16 flex flex-col items-center justify-center text-slate-400 gap-3 font-mono">
-            <Loader2 className="w-8 h-8 animate-spin text-[#bfce7f]" />
+          <div className="p-16 flex flex-col items-center justify-center text-foreground-muted gap-3 font-mono">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
             <span className="text-xs">Cargando información operativa de la orden...</span>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-6 custom-scrollbar">
             {error && (
-              <div className="p-3.5 bg-rose-500/15 border border-rose-500/40 rounded-xl text-rose-300 text-xs flex items-start gap-2.5">
-                <AlertTriangle className="w-5 h-5 shrink-0 text-rose-400 mt-0.5" />
+              <div className="p-3.5 bg-rose-500/15 border border-rose-500/40 rounded-xl text-rose-600 dark:text-rose-300 text-xs flex items-start gap-2.5">
+                <AlertTriangle className="w-5 h-5 shrink-0 text-rose-500 mt-0.5" />
                 <div className="space-y-0.5">
-                  <span className="font-bold text-rose-200 block">Error al actualizar</span>
+                  <span className="font-bold text-rose-700 dark:text-rose-200 block">Error al actualizar</span>
                   <span className="leading-relaxed">{error}</span>
                 </div>
               </div>
             )}
 
             {/* SECCIÓN 1: RECEPCIÓN Y DATOS PRINCIPALES */}
-            <div className="bg-[#12151b] border border-[#2d3748] rounded-xl p-4.5 space-y-4">
-              <div className="flex items-center justify-between pb-2 border-b border-[#2d3748]">
-                <h3 className="font-mono text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-[#bfce7f]" />
+            <div className="bg-surface border border-border rounded-xl p-4.5 space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-border">
+                <h3 className="font-mono text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-primary" />
                   1. RECEPCIÓN Y DATOS PRINCIPALES
                 </h3>
               </div>
 
               {/* Fila 1: Recepción Asociada */}
               <div className="space-y-1.5 font-mono text-xs">
-                <label className="block text-slate-300 font-bold uppercase tracking-wider text-[11px]">
-                  Recepción Asociada <span className="text-[#bfce7f]">*</span>
+                <label className="block text-foreground-muted font-bold uppercase tracking-wider text-[11px]">
+                  Recepción Asociada <span className="text-primary">*</span>
                 </label>
                 <select
                   value={selectedReceptionId}
                   onChange={handleReceptionChange}
-                  className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] focus:border-[#bfce7f] rounded-xl text-slate-200 text-xs focus:outline-none transition-colors cursor-pointer"
+                  className="w-full p-2.5 bg-input border border-border focus:border-primary rounded-xl text-foreground text-xs focus:outline-none transition-colors cursor-pointer"
                 >
                   {availableReceptions.map((rec) => (
                     <option key={rec.recepcion_id} value={String(rec.recepcion_id)}>
@@ -835,11 +835,11 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
                 {/* Cliente Combobox */}
                 <div ref={clientComboboxRef} className="relative space-y-1.5">
-                  <label className="block font-mono text-xs font-bold uppercase tracking-wider text-slate-300">
-                    Cliente <span className="text-rose-400">*</span>
+                  <label className="block font-mono text-xs font-bold uppercase tracking-wider text-foreground-muted">
+                    Cliente <span className="text-rose-500">*</span>
                   </label>
                   <div className="relative">
-                    <User className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <User className="w-4 h-4 text-foreground-muted absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                     <input
                       type="text"
                       value={clientSearch}
@@ -849,30 +849,30 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
                       }}
                       onFocus={() => setIsClientDropdownOpen(true)}
                       placeholder="Buscar cliente por nombre o teléfono..."
-                      className="w-full bg-[#0a0c10] border border-[#2d3748] focus:border-[#bfce7f] rounded-xl py-2.5 pl-9 pr-8 text-xs text-slate-200 placeholder-slate-500 focus:outline-none"
+                      className="w-full bg-input border border-border focus:border-primary rounded-xl py-2.5 pl-9 pr-8 text-xs text-foreground placeholder:text-foreground-muted/60 focus:outline-none"
                     />
                     {selectedClient && (
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-400">
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-500">
                         <Check size={14} />
                       </span>
                     )}
                   </div>
 
                   {isClientDropdownOpen && filteredClients.length > 0 && (
-                    <div className="absolute top-full left-0 right-0 z-30 mt-1 bg-[#161a21] border border-[#2d3748] rounded-xl shadow-2xl max-h-48 overflow-y-auto custom-scrollbar font-mono text-xs">
+                    <div className="absolute top-full left-0 right-0 z-30 mt-1 bg-popover border border-border rounded-xl shadow-2xl max-h-48 overflow-y-auto custom-scrollbar font-mono text-xs">
                       {filteredClients.map((cli, idx) => (
                         <div
                           key={cli.cliente_id || cli.id}
                           onClick={() => handleSelectClient(cli)}
-                          className={`p-2.5 hover:bg-[#1f242d] cursor-pointer flex items-center justify-between border-b border-[#2d3748]/50 last:border-b-0 ${
-                            idx === activeClientIndex ? "bg-[#1f242d]" : ""
+                          className={`p-2.5 hover:bg-hover cursor-pointer flex items-center justify-between border-b border-border/50 last:border-b-0 ${
+                            idx === activeClientIndex ? "bg-hover" : ""
                           }`}
                         >
                           <div>
-                            <span className="font-bold text-slate-100 block">
+                            <span className="font-bold text-foreground block">
                               {cli.nombre_completo || `${cli.nombre || ""} ${cli.apellido || ""}`}
                             </span>
-                            <span className="text-[10px] text-slate-400">
+                            <span className="text-[10px] text-foreground-muted">
                               Tel: {cli.telefono_principal || cli.telefono || "N/A"}
                             </span>
                           </div>
@@ -884,8 +884,8 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
 
                 {/* Bicicleta Select */}
                 <div className="space-y-1.5 font-mono text-xs">
-                  <label className="block text-slate-300 font-bold uppercase tracking-wider text-[11px]">
-                    Bicicleta <span className="text-rose-400">*</span>
+                  <label className="block text-foreground-muted font-bold uppercase tracking-wider text-[11px]">
+                    Bicicleta <span className="text-rose-500">*</span>
                   </label>
                   <div className="relative">
                     <select
@@ -898,7 +898,7 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
                         setSelectedBike(bikeObj || null);
                       }}
                       disabled={loadingBikes || clientBicycles.length === 0}
-                      className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] focus:border-[#bfce7f] rounded-xl text-slate-200 text-xs focus:outline-none transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-full p-2.5 bg-input border border-border focus:border-primary rounded-xl text-foreground text-xs focus:outline-none transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {loadingBikes ? (
                         <option value="">Cargando bicicletas del cliente...</option>
@@ -925,8 +925,8 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
 
               {/* Informative notice if client or bike differs from reception */}
               {isDataDivergentFromReception && (
-                <div className="p-3 bg-sky-500/10 border border-sky-500/30 rounded-xl text-sky-300 text-xs flex items-start gap-2 font-sans animate-in fade-in duration-200">
-                  <Info className="w-4 h-4 shrink-0 text-sky-400 mt-0.5" />
+                <div className="p-3 bg-sky-500/10 border border-sky-500/30 rounded-xl text-sky-600 dark:text-sky-300 text-xs flex items-start gap-2 font-sans animate-in fade-in duration-200">
+                  <Info className="w-4 h-4 shrink-0 text-sky-500 mt-0.5" />
                   <p className="leading-relaxed">
                     Los datos de cliente o bicicleta de esta orden difieren de la recepción asociada.
                   </p>
@@ -935,10 +935,10 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
             </div>
 
             {/* SECCIÓN 2: PARÁMETROS OPERATIVOS */}
-            <div className="bg-[#12151b] border border-[#2d3748] rounded-xl p-4.5 space-y-4">
-              <div className="flex items-center justify-between pb-2 border-b border-[#2d3748]">
-                <h3 className="font-mono text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
-                  <Wrench className="w-4 h-4 text-[#bfce7f]" />
+            <div className="bg-surface border border-border rounded-xl p-4.5 space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-border">
+                <h3 className="font-mono text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
+                  <Wrench className="w-4 h-4 text-primary" />
                   2. PARÁMETROS OPERATIVOS
                 </h3>
               </div>
@@ -947,13 +947,13 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-mono text-xs">
                 {/* Estado */}
                 <div className="space-y-1.5">
-                  <label className="block text-slate-300 font-bold uppercase tracking-wider text-[11px]">
+                  <label className="block text-foreground-muted font-bold uppercase tracking-wider text-[11px]">
                     Estado
                   </label>
                   <select
                     value={selectedEstadoId}
                     onChange={(e) => setSelectedEstadoId(e.target.value)}
-                    className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] focus:border-[#bfce7f] rounded-xl text-slate-200 text-xs focus:outline-none cursor-pointer"
+                    className="w-full p-2.5 bg-input border border-border focus:border-primary rounded-xl text-foreground text-xs focus:outline-none cursor-pointer"
                   >
                     {catalogs.estados?.map((est) => (
                       <option key={est.estado_orden_id} value={String(est.estado_orden_id)}>
@@ -965,13 +965,13 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
 
                 {/* Prioridad */}
                 <div className="space-y-1.5">
-                  <label className="block text-slate-300 font-bold uppercase tracking-wider text-[11px]">
+                  <label className="block text-foreground-muted font-bold uppercase tracking-wider text-[11px]">
                     Prioridad
                   </label>
                   <select
                     value={selectedPrioridadId}
                     onChange={(e) => setSelectedPrioridadId(e.target.value)}
-                    className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] focus:border-[#bfce7f] rounded-xl text-slate-200 text-xs focus:outline-none cursor-pointer"
+                    className="w-full p-2.5 bg-input border border-border focus:border-primary rounded-xl text-foreground text-xs focus:outline-none cursor-pointer"
                   >
                     {catalogs.prioridades?.map((p) => (
                       <option
@@ -986,13 +986,13 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
 
                 {/* Mecánico */}
                 <div className="space-y-1.5">
-                  <label className="block text-slate-300 font-bold uppercase tracking-wider text-[11px]">
+                  <label className="block text-foreground-muted font-bold uppercase tracking-wider text-[11px]">
                     Mecánico Asignado
                   </label>
                   <select
                     value={selectedMecanicoId}
                     onChange={(e) => setSelectedMecanicoId(e.target.value)}
-                    className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] focus:border-[#bfce7f] rounded-xl text-slate-200 text-xs focus:outline-none cursor-pointer"
+                    className="w-full p-2.5 bg-input border border-border focus:border-primary rounded-xl text-foreground text-xs focus:outline-none cursor-pointer"
                   >
                     <option value="">Por asignar</option>
                     {catalogs.mecanicos?.map((m) => (
@@ -1006,7 +1006,7 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
 
               {/* Debajo: Diagnóstico Inicial */}
               <div className="space-y-1.5 font-mono text-xs">
-                <label className="block text-slate-300 font-bold uppercase tracking-wider text-[11px]">
+                <label className="block text-foreground-muted font-bold uppercase tracking-wider text-[11px]">
                   Diagnóstico Inicial
                 </label>
                 <textarea
@@ -1014,19 +1014,19 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
                   value={diagnostico}
                   onChange={(e) => setDiagnostico(e.target.value)}
                   placeholder="Descripción técnica o diagnóstico de la bicicleta..."
-                  className="w-full p-2.5 bg-[#0a0c10] border border-[#2d3748] focus:border-[#bfce7f] rounded-xl text-slate-200 text-xs resize-none font-sans focus:outline-none"
+                  className="w-full p-2.5 bg-input border border-border focus:border-primary rounded-xl text-foreground text-xs resize-none font-sans focus:outline-none"
                 />
               </div>
             </div>
 
             {/* SECCIÓN 3: SERVICIOS Y PRODUCTOS (BUSCADORES Y TABLA UNIFICADA) */}
-            <div className="bg-[#12151b] border border-[#2d3748] rounded-xl p-4.5 space-y-4">
-              <div className="flex items-center justify-between pb-2 border-b border-[#2d3748]">
-                <h3 className="font-mono text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
-                  <Package className="w-4 h-4 text-[#bfce7f]" />
+            <div className="bg-surface border border-border rounded-xl p-4.5 space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-border">
+                <h3 className="font-mono text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
+                  <Package className="w-4 h-4 text-primary" />
                   3. SERVICIOS Y PRODUCTOS A UTILIZAR
                 </h3>
-                <span className="text-[10px] font-mono text-slate-400 uppercase">
+                <span className="text-[10px] font-mono text-foreground-muted uppercase">
                   {itemsList.length} Item(s) en la Orden
                 </span>
               </div>
@@ -1035,11 +1035,11 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Search Service */}
                 <div ref={serviceComboboxRef} className="relative space-y-1.5">
-                  <label className="block font-mono text-xs font-bold uppercase tracking-wider text-slate-300">
+                  <label className="block font-mono text-xs font-bold uppercase tracking-wider text-foreground-muted">
                     Buscar Servicio (Agregar a la orden)
                   </label>
                   <div className="relative">
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <Search className="w-4 h-4 text-foreground-muted absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                     <input
                       type="text"
                       value={serviceSearch}
@@ -1049,7 +1049,7 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
                       }}
                       onFocus={() => setIsServiceDropdownOpen(true)}
                       placeholder="Escribe el nombre del servicio..."
-                      className="w-full bg-[#0a0c10] border border-[#2d3748] focus:border-[#bfce7f] rounded-xl py-2.5 pl-9 pr-8 text-xs text-slate-200 placeholder-slate-500 focus:outline-none"
+                      className="w-full bg-input border border-border focus:border-primary rounded-xl py-2.5 pl-9 pr-8 text-xs text-foreground placeholder:text-foreground-muted/60 focus:outline-none"
                     />
                     {serviceSearch && (
                       <button
@@ -1058,7 +1058,7 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
                           setServiceSearch("");
                           setIsServiceDropdownOpen(false);
                         }}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-foreground-muted hover:text-foreground"
                       >
                         <X size={14} />
                       </button>
@@ -1066,20 +1066,20 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
                   </div>
 
                   {isServiceDropdownOpen && filteredServices.length > 0 && (
-                    <div className="absolute top-full left-0 right-0 z-30 mt-1 bg-[#161a21] border border-[#2d3748] rounded-xl shadow-2xl max-h-48 overflow-y-auto custom-scrollbar font-mono text-xs">
+                    <div className="absolute top-full left-0 right-0 z-30 mt-1 bg-popover border border-border rounded-xl shadow-2xl max-h-48 overflow-y-auto custom-scrollbar font-mono text-xs">
                       {filteredServices.map((svc, idx) => (
                         <div
                           key={svc.tipo_servicio_id}
                           onClick={() => handleSelectService(svc)}
-                          className={`p-2.5 hover:bg-[#1f242d] cursor-pointer flex items-center justify-between border-b border-[#2d3748]/50 last:border-b-0 ${
-                            idx === activeServiceIndex ? "bg-[#1f242d]" : ""
+                          className={`p-2.5 hover:bg-hover cursor-pointer flex items-center justify-between border-b border-border/50 last:border-b-0 ${
+                            idx === activeServiceIndex ? "bg-hover" : ""
                           }`}
                         >
                           <div>
-                            <span className="font-bold text-slate-100 block">{svc.nombre}</span>
-                            <span className="text-[10px] text-slate-400">{svc.codigo}</span>
+                            <span className="font-bold text-foreground block">{svc.nombre}</span>
+                            <span className="text-[10px] text-foreground-muted">{svc.codigo}</span>
                           </div>
-                          <span className="font-bold text-[#bfce7f]">
+                          <span className="font-bold text-primary">
                             RD${" "}
                             {Number(svc.precio_base || 0).toLocaleString("es-DO", {
                               minimumFractionDigits: 2
@@ -1094,18 +1094,18 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
                 {/* Search Product */}
                 <div ref={productComboboxRef} className="relative space-y-1.5">
                   <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <label className="block font-mono text-xs font-bold uppercase tracking-wider text-slate-300">
+                    <label className="block font-mono text-xs font-bold uppercase tracking-wider text-foreground-muted">
                       Buscar Producto / Repuesto
                     </label>
                     {catalogs.almacenes && catalogs.almacenes.length > 1 && (
                       <div className="flex items-center gap-1.5">
-                        <label className="text-[10px] text-slate-400 font-mono whitespace-nowrap">
+                        <label className="text-[10px] text-foreground-muted font-mono whitespace-nowrap">
                           Almacén:
                         </label>
                         <select
                           value={selectedAlmacenId}
                           onChange={(e) => setSelectedAlmacenId(e.target.value)}
-                          className="px-2 py-0.5 bg-[#0a0c10] border border-[#2d3748] rounded-lg text-[11px] text-slate-200 font-mono focus:outline-none focus:border-[#bfce7f] cursor-pointer"
+                          className="px-2 py-0.5 bg-input border border-border rounded-lg text-[11px] text-foreground font-mono focus:outline-none focus:border-primary cursor-pointer"
                         >
                           {catalogs.almacenes.map((alm) => (
                             <option key={alm.almacen_id} value={alm.almacen_id}>
@@ -1117,7 +1117,7 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
                     )}
                   </div>
                   <div className="relative">
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <Search className="w-4 h-4 text-foreground-muted absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                     <input
                       type="text"
                       value={productSearch}
@@ -1127,7 +1127,7 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
                       }}
                       onFocus={() => setIsProductDropdownOpen(true)}
                       placeholder="Escribe el nombre o código del producto..."
-                      className="w-full bg-[#0a0c10] border border-[#2d3748] focus:border-[#bfce7f] rounded-xl py-2.5 pl-9 pr-8 text-xs text-slate-200 placeholder-slate-500 focus:outline-none"
+                      className="w-full bg-input border border-border focus:border-primary rounded-xl py-2.5 pl-9 pr-8 text-xs text-foreground placeholder:text-foreground-muted/60 focus:outline-none"
                     />
                     {productSearch && (
                       <button
@@ -1136,7 +1136,7 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
                           setProductSearch("");
                           setIsProductDropdownOpen(false);
                         }}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-foreground-muted hover:text-foreground"
                       >
                         <X size={14} />
                       </button>
@@ -1144,20 +1144,20 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
                   </div>
 
                   {isProductDropdownOpen && filteredProducts.length > 0 && (
-                    <div className="absolute top-full left-0 right-0 z-30 mt-1 bg-[#161a21] border border-[#2d3748] rounded-xl shadow-2xl max-h-48 overflow-y-auto custom-scrollbar font-mono text-xs">
+                    <div className="absolute top-full left-0 right-0 z-30 mt-1 bg-popover border border-border rounded-xl shadow-2xl max-h-48 overflow-y-auto custom-scrollbar font-mono text-xs">
                       {filteredProducts.map((prod, idx) => (
                         <div
                           key={prod.producto_id}
                           onClick={() => handleSelectProduct(prod)}
-                          className={`p-2.5 hover:bg-[#1f242d] cursor-pointer flex items-center justify-between border-b border-[#2d3748]/50 last:border-b-0 ${
-                            idx === activeProductIndex ? "bg-[#1f242d]" : ""
+                          className={`p-2.5 hover:bg-hover cursor-pointer flex items-center justify-between border-b border-border/50 last:border-b-0 ${
+                            idx === activeProductIndex ? "bg-hover" : ""
                           }`}
                         >
                           <div>
-                            <span className="font-bold text-slate-100 block">{prod.nombre}</span>
-                            <span className="text-[10px] text-slate-400">{prod.codigo}</span>
+                            <span className="font-bold text-foreground block">{prod.nombre}</span>
+                            <span className="text-[10px] text-foreground-muted">{prod.codigo}</span>
                           </div>
-                          <span className="font-bold text-cyan-400">
+                          <span className="font-bold text-cyan-600 dark:text-cyan-400">
                             RD${" "}
                             {Number(prod.precio_venta || 0).toLocaleString("es-DO", {
                               minimumFractionDigits: 2
@@ -1172,17 +1172,17 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
 
               {/* Error on product quantity inline edit */}
               {editingProductError && (
-                <div className="p-2.5 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-300 text-xs font-mono">
+                <div className="p-2.5 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-600 dark:text-rose-300 text-xs font-mono">
                   {editingProductError}
                 </div>
               )}
 
               {/* Unified Items Table */}
-              <div className="border border-[#2d3748] rounded-xl overflow-hidden bg-[#161a21]">
+              <div className="border border-border rounded-xl overflow-hidden bg-card">
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse font-mono text-xs">
                     <thead>
-                      <tr className="border-b border-[#2d3748] bg-[#0a0c10] text-slate-400 text-[10px] uppercase tracking-wider">
+                      <tr className="border-b border-border bg-surface-subtle text-foreground-muted text-[10px] uppercase tracking-wider">
                         <th className="py-2.5 px-3 w-10 text-center">#</th>
                         <th className="py-2.5 px-3 w-24 text-center">TIPO</th>
                         <th className="py-2.5 px-4">DESCRIPCIÓN</th>
@@ -1192,10 +1192,10 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
                         <th className="py-2.5 px-3 text-center w-24">ACCIONES</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[#2d3748]">
+                    <tbody className="divide-y divide-border">
                       {itemsList.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="p-6 text-center text-slate-500 italic">
+                          <td colSpan={7} className="p-6 text-center text-foreground-muted italic">
                             No hay servicios ni productos agregados a esta orden de trabajo.
                           </td>
                         </tr>
@@ -1220,26 +1220,26 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
                           }
 
                           return (
-                            <tr key={item.temp_id} className="hover:bg-[#1f242d]/50 transition-colors">
-                              <td className="py-2.5 px-3 text-center text-slate-500 font-bold">
+                            <tr key={item.temp_id} className="hover:bg-hover transition-colors">
+                              <td className="py-2.5 px-3 text-center text-foreground-muted font-bold">
                                 {index + 1}
                               </td>
                               <td className="py-2.5 px-3 text-center">
                                 <span
                                   className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
                                     isProduct
-                                      ? "bg-cyan-500/10 text-cyan-400 border-cyan-500/30"
-                                      : "bg-[#bfce7f]/15 text-[#bfce7f] border-[#bfce7f]/30"
+                                      ? "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/30"
+                                      : "bg-primary/15 text-primary border-primary/30"
                                   }`}
                                 >
                                   {isProduct ? "PRODUCTO" : "SERVICIO"}
                                 </span>
                               </td>
-                              <td className="py-2.5 px-4 text-slate-100 font-sans">
+                              <td className="py-2.5 px-4 text-foreground font-sans">
                                 <span className="font-semibold block">{item.nombre}</span>
                                 {isProduct && (item.almacen_nombre || item.almacen_id) && (
-                                  <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1 mt-0.5">
-                                    <span className="text-[9px] px-1.5 py-0.2 bg-[#1f242d] border border-[#2d3748] rounded text-[#bfce7f] font-bold">
+                                  <div className="text-[10px] text-foreground-muted font-mono flex items-center gap-1 mt-0.5">
+                                    <span className="text-[9px] px-1.5 py-0.5 bg-surface-subtle border border-border rounded text-primary font-bold">
                                       {item.almacen_codigo || "ALM"}: {item.almacen_nombre || `Almacén #${item.almacen_id}`}
                                     </span>
                                   </div>
@@ -1268,13 +1268,13 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
                                             handleCancelEditQuantity();
                                           }
                                         }}
-                                        className="w-14 bg-[#0a0c10] border border-[#bfce7f] rounded px-1 py-0.5 text-center text-xs font-bold text-slate-100 focus:outline-none"
+                                        className="w-14 bg-input border border-primary rounded px-1 py-0.5 text-center text-xs font-bold text-foreground focus:outline-none"
                                       />
                                       <button
                                         type="button"
                                         onMouseDown={(e) => e.preventDefault()}
                                         onClick={() => handleSaveQuantity(item.temp_id)}
-                                        className="p-1 bg-[#bfce7f] text-slate-950 rounded hover:brightness-110 cursor-pointer"
+                                        className="p-1 bg-primary text-primary-foreground rounded hover:opacity-90 cursor-pointer"
                                         title="Confirmar cantidad"
                                       >
                                         <Check size={12} />
@@ -1283,7 +1283,7 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
                                         type="button"
                                         onMouseDown={(e) => e.preventDefault()}
                                         onClick={handleCancelEditQuantity}
-                                        className="p-1 bg-slate-800 text-slate-300 rounded hover:bg-slate-700 cursor-pointer"
+                                        className="p-1 bg-secondary text-foreground rounded hover:bg-secondary/80 cursor-pointer border border-border"
                                         title="Cancelar edición"
                                       >
                                         <X size={12} />
@@ -1295,7 +1295,7 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
                                         type="button"
                                         onClick={() => handleQuickQuantityChange(item.temp_id, -1)}
                                         disabled={item.cantidad <= (allowsDecimals ? 0.01 : 1)}
-                                        className="w-5 h-5 flex items-center justify-center rounded bg-[#1f242d] hover:bg-[#2d3748] text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed text-xs font-bold transition-colors cursor-pointer"
+                                        className="w-5 h-5 flex items-center justify-center rounded bg-surface-subtle hover:bg-hover text-foreground disabled:opacity-30 disabled:cursor-not-allowed text-xs font-bold transition-colors cursor-pointer border border-border"
                                         title="Disminuir cantidad"
                                       >
                                         -
@@ -1303,7 +1303,7 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
                                       <button
                                         type="button"
                                         onClick={() => handleStartEditQuantity(item)}
-                                        className="px-1.5 py-0.5 hover:bg-[#1f242d] rounded cursor-pointer font-bold text-slate-200 hover:text-[#bfce7f] transition-colors"
+                                        className="px-1.5 py-0.5 hover:bg-hover rounded cursor-pointer font-bold text-foreground hover:text-primary transition-colors"
                                         title="Click para editar cantidad"
                                       >
                                         {item.cantidad}
@@ -1311,7 +1311,7 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
                                       <button
                                         type="button"
                                         onClick={() => handleQuickQuantityChange(item.temp_id, 1)}
-                                        className="w-5 h-5 flex items-center justify-center rounded bg-[#1f242d] hover:bg-[#2d3748] text-slate-300 text-xs font-bold transition-colors cursor-pointer"
+                                        className="w-5 h-5 flex items-center justify-center rounded bg-surface-subtle hover:bg-hover text-foreground text-xs font-bold transition-colors cursor-pointer border border-border"
                                         title="Aumentar cantidad"
                                       >
                                         +
@@ -1322,13 +1322,13 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
                                   <span className="font-bold">{item.cantidad}</span>
                                 )}
                               </td>
-                              <td className="py-2.5 px-4 text-right text-slate-300">
+                              <td className="py-2.5 px-4 text-right text-foreground-muted">
                                 RD${" "}
                                 {Number(item.precio_unitario || 0).toLocaleString("es-DO", {
                                   minimumFractionDigits: 2
                                 })}
                               </td>
-                              <td className="py-2.5 px-4 text-right font-bold text-emerald-400">
+                              <td className="py-2.5 px-4 text-right font-bold text-emerald-600 dark:text-emerald-400">
                                 RD${" "}
                                 {rowSubtotal.toLocaleString("es-DO", {
                                   minimumFractionDigits: 2
@@ -1340,7 +1340,7 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
                                     <button
                                       type="button"
                                       onClick={() => handleStartEditQuantity(item)}
-                                      className="p-1.5 text-slate-400 hover:text-[#bfce7f] hover:bg-[#0a0c10] rounded-lg transition-colors cursor-pointer"
+                                      className="p-1.5 text-foreground-muted hover:text-primary hover:bg-hover rounded-lg transition-colors cursor-pointer"
                                       title="Editar cantidad"
                                     >
                                       <Edit2 size={13} />
@@ -1350,7 +1350,7 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
                                     type="button"
                                     onMouseDown={(e) => e.preventDefault()}
                                     onClick={() => handleRemoveItem(item.temp_id)}
-                                    className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-[#0a0c10] rounded-lg transition-colors cursor-pointer"
+                                    className="p-1.5 text-foreground-muted hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
                                     title="Eliminar de la orden"
                                   >
                                     <Trash2 size={13} />
@@ -1366,11 +1366,11 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
                 </div>
 
                 {/* Total Footer */}
-                <div className="p-4 border-t border-[#2d3748] bg-[#12151b] flex items-center justify-between font-mono text-xs">
-                  <span className="text-slate-400 font-bold uppercase tracking-wider">
+                <div className="p-4 border-t border-border bg-surface flex items-center justify-between font-mono text-xs">
+                  <span className="text-foreground-muted font-bold uppercase tracking-wider">
                     TOTAL ESTIMADO DE LA ORDEN:
                   </span>
-                  <span className="text-base font-extrabold text-[#bfce7f]">
+                  <span className="text-base font-extrabold text-primary">
                     RD${" "}
                     {totalCalculado.toLocaleString("es-DO", {
                       minimumFractionDigits: 2,
@@ -1382,19 +1382,19 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
             </div>
 
             {/* Modal Actions Footer */}
-            <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#2d3748] bg-[#12151b] -mx-5 -mb-5 sm:-mx-6 sm:-mb-6 p-4 sm:p-5 rounded-b-2xl">
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-border bg-surface -mx-5 -mb-5 sm:-mx-6 sm:-mb-6 p-4 sm:p-5 rounded-b-2xl">
               <button
                 type="button"
                 onClick={onClose}
                 disabled={submitting}
-                className="px-4 py-2.5 bg-[#1c2129] border border-[#2d3748] text-slate-300 rounded-xl hover:bg-[#252b36] transition-colors font-mono text-xs font-bold uppercase tracking-wider cursor-pointer disabled:opacity-50"
+                className="px-4 py-2.5 bg-secondary border border-border text-foreground rounded-xl hover:bg-secondary/80 transition-colors font-mono text-xs font-bold uppercase tracking-wider cursor-pointer disabled:opacity-50"
               >
                 Cancelar
               </button>
               <button
                 type="submit"
                 disabled={submitting}
-                className="px-6 py-2.5 bg-[#84924a] text-white font-bold rounded-xl hover:brightness-110 transition-all font-mono text-xs font-bold uppercase tracking-wider flex items-center gap-2 border-t border-[#a6b66b] shadow-lg shadow-[#84924a]/20 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-6 py-2.5 bg-primary text-primary-foreground font-bold rounded-xl hover:opacity-90 transition-all font-mono text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {submitting ? (
                   <>

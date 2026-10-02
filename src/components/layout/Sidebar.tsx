@@ -114,7 +114,7 @@ function SidebarContent({
         { href: "/inventory/initial", label: "INVENTARIO INICIAL" },
         { href: "/crm/component-categories", label: "CATEGORÍAS COMPONENTES" },
         { href: "/crm/component-states", label: "ESTADOS COMPONENTES" },
-        { href: "/settings/order-notifications", label: "Notificaciones de Órdenes", icon: "mail" }
+        { href: "/settings/order-notifications", label: "NOTIFICACIONES DE ÓRDENES" }
       ]
     },
     {
@@ -258,7 +258,6 @@ function SidebarContent({
                 }
 
                 const isSubActive = isSubmenuActive(sub.href);
-                const isLongLabel = sub.label.length > 20;
 
                 return (
                   <Link
@@ -268,9 +267,7 @@ function SidebarContent({
                     onClick={() => {
                       onNavigate();
                     }}
-                    className={`py-1.5 px-2.5 rounded-lg border transition-all duration-200 flex items-center gap-2 ${
-                      isLongLabel ? "text-[11px] leading-tight tracking-tight" : "text-xs"
-                    } ${
+                    className={`text-xs py-1.5 px-2.5 rounded-lg border transition-all duration-200 flex items-center gap-2 uppercase ${
                       isSubActive
                         ? "bg-primary/10 border-primary/40 text-primary font-bold"
                         : "border-transparent text-foreground-muted hover:text-foreground hover:bg-hover hover:border-border"

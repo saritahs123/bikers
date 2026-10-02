@@ -233,14 +233,14 @@ export default function BicycleComponentsEditor({
     <div className="space-y-5 font-mono text-xs">
       {/* Header & Add Button */}
       {!readOnly && (
-        <div className="flex justify-between items-center bg-[#161a21] border border-[#2d3748] rounded-2xl p-4">
+        <div className="flex justify-between items-center bg-card border border-border rounded-2xl p-4">
           <div className="flex items-center gap-2">
-            <Layers size={18} className="text-[#bfce7f]" />
+            <Layers size={18} className="text-primary" />
             <div>
-              <h4 className="font-bold text-white uppercase text-xs">
+              <h4 className="font-bold text-foreground uppercase text-xs">
                 Componentes de la Bicicleta ({components.length})
               </h4>
-              <p className="text-slate-400 text-[10px]">
+              <p className="text-foreground-muted text-[10px]">
                 {mode === "draft"
                   ? "Agregue los componentes que forman parte de este activo antes de guardar"
                   : "Registro técnico de componentes y desgaste del activo"}
@@ -252,7 +252,7 @@ export default function BicycleComponentsEditor({
             <button
               type="button"
               onClick={handleOpenNewForm}
-              className="px-4 py-2 bg-[#bfce7f] hover:bg-[#a9ba6b] text-[#1d1f18] font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-lg active:scale-95 shrink-0"
+              className="px-4 py-2 bg-primary hover:opacity-90 text-primary-foreground font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-lg active:scale-95 shrink-0"
             >
               <Plus size={15} />
               <span>Registrar Componente</span>
@@ -391,11 +391,11 @@ export default function BicycleComponentsEditor({
       )}
 
       {/* Components Table */}
-      <div className="border border-[#2d3748] rounded-2xl overflow-hidden bg-[#161a21] shadow-xl">
+      <div className="border border-border rounded-2xl overflow-hidden bg-card shadow-xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse min-w-[600px]">
             <thead>
-              <tr className="bg-[#0e1117] border-b border-[#2d3748] text-slate-400 text-[11px]">
+              <tr className="bg-surface-subtle border-b border-border text-foreground-muted text-[11px]">
                 <th className="py-3.5 px-4 font-bold uppercase">MÓDULO COMPONENTE</th>
                 <th className="py-3.5 px-4 font-bold uppercase">ESPECIFICACIÓN / MODELO</th>
                 <th className="py-3.5 px-4 font-bold uppercase">NÚMERO DE SERIE</th>
@@ -403,10 +403,10 @@ export default function BicycleComponentsEditor({
                 {!readOnly && <th className="py-3.5 px-4 text-right font-bold uppercase">ACCIONES</th>}
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#2d3748]">
+            <tbody className="divide-y divide-border">
               {components.length === 0 ? (
                 <tr>
-                  <td colSpan={readOnly ? 4 : 5} className="py-10 text-center text-slate-400">
+                  <td colSpan={readOnly ? 4 : 5} className="py-10 text-center text-foreground-muted">
                     No hay componentes agregados todavía.
                   </td>
                 </tr>
@@ -421,40 +421,40 @@ export default function BicycleComponentsEditor({
                   const desgaste = comp.nivel_desgaste !== undefined ? comp.nivel_desgaste : (stateObj?.nivel_desgaste ?? 0);
 
                   return (
-                    <tr key={key} className="hover:bg-[#1f242d] transition-colors">
-                      <td className="py-3.5 px-4 font-bold text-[#bfce7f]">
+                    <tr key={key} className="hover:bg-hover transition-colors">
+                      <td className="py-3.5 px-4 font-bold text-primary">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span>{catName}</span>
                           {comp.status === 'saved' || comp.persisted || comp.persistedId ? (
-                            <span className="text-[9px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 px-1.5 py-0.5 rounded font-bold uppercase">
+                            <span className="text-[9px] bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/40 px-1.5 py-0.5 rounded font-bold uppercase">
                               GUARDADO
                             </span>
                           ) : comp.status === 'saving' ? (
-                            <span className="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded font-bold uppercase flex items-center gap-1">
+                            <span className="text-[9px] bg-amber-500/20 text-amber-600 dark:text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded font-bold uppercase flex items-center gap-1">
                               <RefreshCw size={10} className="animate-spin" /> GUARDANDO...
                             </span>
                           ) : comp.status === 'error' ? (
-                            <span className="text-[9px] bg-rose-500/20 text-rose-300 border border-rose-500/40 px-1.5 py-0.5 rounded font-bold uppercase">
+                            <span className="text-[9px] bg-rose-500/20 text-rose-600 dark:text-rose-300 border border-rose-500/40 px-1.5 py-0.5 rounded font-bold uppercase">
                               ERROR AL GUARDAR
                             </span>
                           ) : (
-                            <span className="text-[9px] bg-slate-500/20 text-slate-400 border border-slate-500/40 px-1.5 py-0.5 rounded font-bold uppercase">
+                            <span className="text-[9px] bg-secondary text-foreground-muted border border-border px-1.5 py-0.5 rounded font-bold uppercase">
                               PENDIENTE
                             </span>
                           )}
                         </div>
                         {comp.errorMessage && (
-                          <p className="text-[10px] text-rose-400 font-normal mt-1">
+                          <p className="text-[10px] text-rose-500 font-normal mt-1">
                             {comp.errorMessage}
                           </p>
                         )}
                       </td>
 
-                      <td className="py-3.5 px-4 text-white font-bold">
+                      <td className="py-3.5 px-4 text-foreground font-bold">
                         {spec}
                       </td>
 
-                      <td className="py-3.5 px-4 text-slate-300">
+                      <td className="py-3.5 px-4 text-foreground-muted">
                         {comp.numero_serie || "—"}
                       </td>
 
@@ -477,7 +477,7 @@ export default function BicycleComponentsEditor({
                             <button
                               type="button"
                               onClick={() => handleEditClick(comp)}
-                              className="p-1.5 text-slate-400 hover:text-white hover:bg-[#2d3748] rounded-lg transition-colors cursor-pointer"
+                              className="p-1.5 text-foreground-muted hover:text-foreground hover:bg-hover rounded-lg transition-colors cursor-pointer"
                               title="Editar componente"
                             >
                               <Edit2 size={15} />
@@ -485,7 +485,7 @@ export default function BicycleComponentsEditor({
                             <button
                               type="button"
                               onClick={() => handleDeleteClick(comp)}
-                              className="p-1.5 text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
+                              className="p-1.5 text-rose-500 hover:text-rose-600 dark:hover:text-rose-300 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
                               title="Eliminar componente"
                             >
                               <Trash2 size={15} />

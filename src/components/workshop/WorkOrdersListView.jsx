@@ -336,26 +336,26 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
   return (
     <div className="space-y-6">
       {/* Breadcrumb */}
-      <div className="text-xs font-mono text-slate-400 font-medium flex items-center gap-1.5 uppercase tracking-wider">
-        <span className="hover:text-slate-200 transition-colors cursor-pointer" onClick={handleClearFilters}>TALLER</span>
+      <div className="text-xs font-mono text-foreground-muted font-medium flex items-center gap-1.5 uppercase tracking-wider">
+        <span className="hover:text-foreground transition-colors cursor-pointer" onClick={handleClearFilters}>TALLER</span>
         <span>/</span>
-        <span className="text-[#bfce7f] font-semibold">ÓRDENES DE TRABAJO</span>
+        <span className="text-primary font-semibold">ÓRDENES DE TRABAJO</span>
       </div>
 
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl md:text-4xl font-extrabold text-slate-100 tracking-tight font-sans">
+          <h1 className="text-3xl md:text-4xl font-extrabold text-foreground tracking-tight font-sans">
             Órdenes de Trabajo
           </h1>
-          <p className="text-sm text-slate-400 mt-1 max-w-2xl font-sans">
+          <p className="text-sm text-foreground-muted mt-1 max-w-2xl font-sans">
             Administra las recepciones, servicios, reparaciones y entregas del taller.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <button
             onClick={onOpenNewModal}
-            className="flex items-center gap-2 px-4 py-2 bg-[#84924a] text-white rounded-xl hover:brightness-110 transition-all font-mono text-xs font-bold tracking-wider uppercase border-t border-[#a5b467] shadow-lg shadow-[#84924a]/20 cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2 bg-primary-button-bg text-primary-foreground rounded-xl hover:bg-primary-button-hover transition-all font-mono text-xs font-bold tracking-wider uppercase shadow-md shadow-primary/20 cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             NUEVA ORDEN
@@ -368,34 +368,34 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
         {/* Card 1: TOTAL DE ÓRDENES */}
         <div
           onClick={() => updateUrlParams({ estado: null, estado_id: null })}
-          className={`bg-[#161a21] border rounded-xl px-4 py-3 transition-all relative overflow-hidden group cursor-pointer flex flex-col justify-between ${
+          className={`bg-card border rounded-xl px-4 py-3 transition-all relative overflow-hidden group cursor-pointer flex flex-col justify-between ${
             !selectedEstado || selectedEstado === STATUS_FILTERS.TOTAL
-              ? "border-[#bfce7f] shadow-[0_0_15px_rgba(191,206,127,0.15)] ring-1 ring-[#bfce7f]/30"
-              : "border-[#2d3748] hover:border-[#4a5568]"
+              ? "border-primary shadow-[0_0_15px_var(--color-primary-muted)] ring-1 ring-primary/30"
+              : "border-border hover:border-primary/40"
           }`}
         >
           <div>
             <div className="flex justify-between items-start mb-1.5">
               <span
                 className="font-mono text-[11px] font-bold tracking-wider uppercase truncate"
-                style={{ color: (!selectedEstado || selectedEstado === STATUS_FILTERS.TOTAL) ? "#bfce7f" : "#94a3b8" }}
+                style={{ color: (!selectedEstado || selectedEstado === STATUS_FILTERS.TOTAL) ? "var(--color-primary)" : "var(--text-foreground-muted)" }}
               >
                 TOTAL DE ÓRDENES
               </span>
-              <Inbox className="w-4 h-4 text-[#bfce7f] shrink-0" />
+              <Inbox className="w-4 h-4 text-primary shrink-0" />
             </div>
-            <div className="text-2xl font-extrabold text-slate-100 font-mono leading-none tracking-tight">{metrics.total || 0}</div>
+            <div className="text-2xl font-extrabold text-foreground font-mono leading-none tracking-tight">{metrics.total || 0}</div>
           </div>
-          <div className="text-[11px] text-slate-400 mt-2 font-medium leading-tight">Todas las órdenes registradas</div>
+          <div className="text-[11px] text-foreground-muted mt-2 font-medium leading-tight">Todas las órdenes registradas</div>
         </div>
 
         {/* Card 2: RECIBIDAS */}
         <div
           onClick={() => updateUrlParams({ estado: STATUS_FILTERS.RECIBIDAS, estado_id: null })}
-          className={`bg-[#161a21] border rounded-xl px-4 py-3 transition-all relative overflow-hidden group cursor-pointer flex flex-col justify-between ${
+          className={`bg-card border rounded-xl px-4 py-3 transition-all relative overflow-hidden group cursor-pointer flex flex-col justify-between ${
             selectedEstado === STATUS_FILTERS.RECIBIDAS
               ? "ring-1"
-              : "border-[#2d3748] hover:border-[#4a5568]"
+              : "border-border hover:border-primary/40"
           }`}
           style={selectedEstado === STATUS_FILTERS.RECIBIDAS ? {
             borderColor: colorRecibida,
@@ -407,24 +407,24 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
             <div className="flex justify-between items-start mb-1.5">
               <span
                 className="font-mono text-[11px] font-bold tracking-wider uppercase truncate"
-                style={{ color: selectedEstado === STATUS_FILTERS.RECIBIDAS ? colorRecibida : "#94a3b8" }}
+                style={{ color: selectedEstado === STATUS_FILTERS.RECIBIDAS ? colorRecibida : "var(--text-foreground-muted)" }}
               >
                 {titleRecibida}
               </span>
               <Clock className="w-4 h-4 shrink-0" style={{ color: colorRecibida }} />
             </div>
-            <div className="text-2xl font-extrabold text-slate-100 font-mono leading-none tracking-tight">{metrics.recibidas || 0}</div>
+            <div className="text-2xl font-extrabold text-foreground font-mono leading-none tracking-tight">{metrics.recibidas || 0}</div>
           </div>
-          <div className="text-[11px] text-slate-400 mt-2 font-medium leading-tight">Pendientes de inicio</div>
+          <div className="text-[11px] text-foreground-muted mt-2 font-medium leading-tight">Pendientes de inicio</div>
         </div>
 
         {/* Card 3: EN REPARACIÓN */}
         <div
           onClick={() => updateUrlParams({ estado: STATUS_FILTERS.REPARACION, estado_id: null })}
-          className={`bg-[#161a21] border rounded-xl px-4 py-3 transition-all relative overflow-hidden group cursor-pointer flex flex-col justify-between ${
+          className={`bg-card border rounded-xl px-4 py-3 transition-all relative overflow-hidden group cursor-pointer flex flex-col justify-between ${
             selectedEstado === STATUS_FILTERS.REPARACION
               ? "ring-1"
-              : "border-[#2d3748] hover:border-[#4a5568]"
+              : "border-border hover:border-primary/40"
           }`}
           style={selectedEstado === STATUS_FILTERS.REPARACION ? {
             borderColor: colorReparacion,
@@ -436,18 +436,18 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
             <div className="flex justify-between items-start mb-1.5">
               <span
                 className="font-mono text-[11px] font-bold tracking-wider uppercase truncate"
-                style={{ color: selectedEstado === STATUS_FILTERS.REPARACION ? colorReparacion : "#94a3b8" }}
+                style={{ color: selectedEstado === STATUS_FILTERS.REPARACION ? colorReparacion : "var(--text-foreground-muted)" }}
               >
                 {titleReparacion}
               </span>
               <Wrench className="w-4 h-4 shrink-0" style={{ color: colorReparacion }} />
             </div>
-            <div className="text-2xl font-extrabold text-slate-100 font-mono leading-none tracking-tight">{metrics.en_proceso || 0}</div>
-            <div className="text-[11px] text-slate-400 mt-1 font-medium leading-tight">Trabajo técnico activo</div>
+            <div className="text-2xl font-extrabold text-foreground font-mono leading-none tracking-tight">{metrics.en_proceso || 0}</div>
+            <div className="text-[11px] text-foreground-muted mt-1 font-medium leading-tight">Trabajo técnico activo</div>
           </div>
 
-          <div className="mt-2 pt-1.5 border-t border-[#2d3748]/60 flex items-center justify-between text-[11px] font-mono leading-none">
-            <span className="text-slate-400 font-medium uppercase tracking-wider">
+          <div className="mt-2 pt-1.5 border-t border-border flex items-center justify-between text-[11px] font-mono leading-none">
+            <span className="text-foreground-muted font-medium uppercase tracking-wider">
               {titleHold}:
             </span>
             <span
@@ -462,10 +462,10 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
         {/* Card 4: LISTAS PARA ENTREGA */}
         <div
           onClick={() => updateUrlParams({ estado: STATUS_FILTERS.LISTAS_ENTREGA, estado_id: null })}
-          className={`bg-[#161a21] border rounded-xl px-4 py-3 transition-all relative overflow-hidden group cursor-pointer flex flex-col justify-between ${
+          className={`bg-card border rounded-xl px-4 py-3 transition-all relative overflow-hidden group cursor-pointer flex flex-col justify-between ${
             selectedEstado === STATUS_FILTERS.LISTAS_ENTREGA
               ? "ring-1"
-              : "border-[#2d3748] hover:border-[#4a5568]"
+              : "border-border hover:border-primary/40"
           }`}
           style={selectedEstado === STATUS_FILTERS.LISTAS_ENTREGA ? {
             borderColor: colorListaEntrega,
@@ -477,24 +477,24 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
             <div className="flex justify-between items-start mb-1.5">
               <span
                 className="font-mono text-[11px] font-bold tracking-wider uppercase truncate"
-                style={{ color: selectedEstado === STATUS_FILTERS.LISTAS_ENTREGA ? colorListaEntrega : "#94a3b8" }}
+                style={{ color: selectedEstado === STATUS_FILTERS.LISTAS_ENTREGA ? colorListaEntrega : "var(--text-foreground-muted)" }}
               >
                 {titleListaEntrega}
               </span>
               <ClipboardList className="w-4 h-4 shrink-0" style={{ color: colorListaEntrega }} />
             </div>
-            <div className="text-2xl font-extrabold text-slate-100 font-mono leading-none tracking-tight">{metrics.listas_entrega || 0}</div>
+            <div className="text-2xl font-extrabold text-foreground font-mono leading-none tracking-tight">{metrics.listas_entrega || 0}</div>
           </div>
-          <div className="text-[11px] text-slate-400 mt-2 font-medium leading-tight">Listas para cliente</div>
+          <div className="text-[11px] text-foreground-muted mt-2 font-medium leading-tight">Listas para cliente</div>
         </div>
 
         {/* Card 5: ENTREGADAS */}
         <div
           onClick={() => updateUrlParams({ estado: STATUS_FILTERS.ENTREGADAS, estado_id: null })}
-          className={`bg-[#161a21] border rounded-xl px-4 py-3 transition-all relative overflow-hidden group cursor-pointer flex flex-col justify-between ${
+          className={`bg-card border rounded-xl px-4 py-3 transition-all relative overflow-hidden group cursor-pointer flex flex-col justify-between ${
             selectedEstado === STATUS_FILTERS.ENTREGADAS
               ? "ring-1"
-              : "border-[#2d3748] hover:border-[#4a5568]"
+              : "border-border hover:border-primary/40"
           }`}
           style={selectedEstado === STATUS_FILTERS.ENTREGADAS ? {
             borderColor: colorEntregada,
@@ -506,24 +506,24 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
             <div className="flex justify-between items-start mb-1.5">
               <span
                 className="font-mono text-[11px] font-bold tracking-wider uppercase truncate"
-                style={{ color: selectedEstado === STATUS_FILTERS.ENTREGADAS ? colorEntregada : "#94a3b8" }}
+                style={{ color: selectedEstado === STATUS_FILTERS.ENTREGADAS ? colorEntregada : "var(--text-foreground-muted)" }}
               >
                 {titleEntregada}
               </span>
               <CheckCircle2 className="w-4 h-4 shrink-0" style={{ color: colorEntregada }} />
             </div>
-            <div className="text-2xl font-extrabold text-slate-100 font-mono leading-none tracking-tight">{metrics.entregadas || 0}</div>
+            <div className="text-2xl font-extrabold text-foreground font-mono leading-none tracking-tight">{metrics.entregadas || 0}</div>
           </div>
-          <div className="text-[11px] text-slate-400 mt-2 font-medium leading-tight">Completadas / entregadas</div>
+          <div className="text-[11px] text-foreground-muted mt-2 font-medium leading-tight">Completadas / entregadas</div>
         </div>
       </div>
 
       {/* Filters & Search Bar */}
       <div className="space-y-3">
-        <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-[#1c2129] border border-[#2d3748] p-3.5 rounded-xl">
+        <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-card border border-border p-3.5 rounded-xl shadow-sm">
           {/* Search Bar */}
           <div className="relative w-full sm:flex-1">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-foreground-muted absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={search}
@@ -532,7 +532,7 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
                 updateUrlParams({ search: e.target.value || null });
               }}
               placeholder="Buscar código, cliente, bicicleta, serie..."
-              className="w-full bg-[#0a0c10] border border-[#2d3748] rounded-xl py-2.5 pl-10 pr-4 text-xs text-slate-200 placeholder-slate-500 focus:border-[#bfce7f] outline-none font-sans transition-all"
+              className="w-full bg-input border border-border rounded-xl py-2.5 pl-10 pr-4 text-xs text-foreground placeholder:text-foreground-muted focus:border-primary outline-none font-sans transition-all"
             />
           </div>
 
@@ -544,7 +544,7 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
                 setSelectedMecanico(e.target.value);
                 updateUrlParams({ mecanico_id: e.target.value || null });
               }}
-              className="w-full sm:w-auto bg-[#0a0c10] border border-[#2d3748] rounded-xl py-2.5 px-3.5 text-xs text-slate-200 focus:border-[#bfce7f] outline-none font-sans transition-all cursor-pointer"
+              className="w-full sm:w-auto bg-input border border-border rounded-xl py-2.5 px-3.5 text-xs text-foreground focus:border-primary outline-none font-sans transition-all cursor-pointer"
             >
               <option value="">Todos los Mecánicos</option>
               {catalogs.mecanicos?.map((m) => (
@@ -556,27 +556,27 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
 
             <button
               onClick={() => fetchOrders()}
-              className="p-2.5 bg-[#0a0c10] border border-[#2d3748] text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
+              className="p-2.5 bg-surface-subtle border border-border text-foreground-muted hover:text-foreground rounded-xl hover:bg-hover transition-colors cursor-pointer shrink-0"
               title="Refrescar órdenes"
             >
-              <RotateCcw className={`w-4 h-4 ${isFetching ? "animate-spin text-[#bfce7f]" : ""}`} />
+              <RotateCcw className={`w-4 h-4 ${isFetching ? "animate-spin text-primary" : ""}`} />
             </button>
           </div>
         </div>
 
         {/* Active Filters Bar */}
         {hasActiveFilters && (
-          <div className="p-3 bg-[#13171f] border border-[#bfce7f]/40 rounded-xl flex flex-wrap items-center gap-2 font-mono text-xs animate-in fade-in duration-200">
-            <span className="text-[#bfce7f] font-bold flex items-center gap-1.5 mr-1">
+          <div className="p-3 bg-surface-subtle border border-primary/40 rounded-xl flex flex-wrap items-center gap-2 font-mono text-xs animate-in fade-in duration-200">
+            <span className="text-primary font-bold flex items-center gap-1.5 mr-1">
               <Tag size={13} /> Filtros Activos:
             </span>
 
             {/* Date Tag */}
             {(dateFrom || dateTo) && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#bfce7f]/15 border border-[#bfce7f]/30 text-[#bfce7f] font-bold">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/15 border border-primary/30 text-primary font-bold">
                 <Calendar size={12} />
                 Fecha: {dateFrom === dateTo ? dateFrom : `${dateFrom} a ${dateTo}`}
-                <button onClick={() => removeFilter("date")} className="hover:text-white ml-0.5">
+                <button onClick={() => removeFilter("date")} className="hover:text-foreground ml-0.5 cursor-pointer">
                   <X size={12} />
                 </button>
               </span>
@@ -584,10 +584,10 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
 
             {/* Search Tag */}
             {search && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-500/15 border border-sky-500/30 text-sky-400 font-bold">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-500/15 border border-sky-500/30 text-sky-500 dark:text-sky-400 font-bold">
                 <Search size={12} />
                 Búsqueda: &ldquo;{search}&rdquo;
-                <button onClick={() => removeFilter("search")} className="hover:text-white ml-0.5">
+                <button onClick={() => removeFilter("search")} className="hover:text-foreground ml-0.5 cursor-pointer">
                   <X size={12} />
                 </button>
               </span>
@@ -595,10 +595,10 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
 
             {/* Mechanic Tag */}
             {selectedMecanico && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-500/15 border border-purple-500/30 text-purple-400 font-bold">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-500/15 border border-purple-500/30 text-purple-600 dark:text-purple-400 font-bold">
                 <User size={12} />
                 Mecánico: {selectedMecanicoObj?.nombre_completo || `#${selectedMecanico}`}
-                <button onClick={() => removeFilter("mecanico")} className="hover:text-white ml-0.5">
+                <button onClick={() => removeFilter("mecanico")} className="hover:text-foreground ml-0.5 cursor-pointer">
                   <X size={12} />
                 </button>
               </span>
@@ -606,7 +606,7 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
 
             {/* Estado Tag */}
             {selectedEstado && selectedEstado !== STATUS_FILTERS.TOTAL && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-400 font-bold">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 font-bold">
                 Estado: {
                   selectedEstado === STATUS_FILTERS.RECIBIDAS ? titleRecibida :
                   selectedEstado === STATUS_FILTERS.REPARACION ? titleReparacion :
@@ -614,7 +614,7 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
                   selectedEstado === STATUS_FILTERS.ENTREGADAS ? titleEntregada :
                   catalogs.estados?.find(e => e.codigo === selectedEstado || String(e.estado_orden_id) === String(selectedEstado))?.nombre || selectedEstado
                 }
-                <button onClick={() => removeFilter("estado")} className="hover:text-white ml-0.5 cursor-pointer">
+                <button onClick={() => removeFilter("estado")} className="hover:text-foreground ml-0.5 cursor-pointer">
                   <X size={12} />
                 </button>
               </span>
@@ -622,7 +622,7 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
 
             <button
               onClick={handleClearFilters}
-              className="ml-auto text-[11px] text-slate-400 hover:text-white underline font-bold"
+              className="ml-auto text-[11px] text-foreground-muted hover:text-foreground underline font-bold cursor-pointer"
             >
               Limpiar todos los filtros
             </button>
@@ -632,45 +632,45 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
 
       {/* Data Table Container */}
       {initialLoading && orders.length === 0 ? (
-        <div className="p-12 flex flex-col items-center justify-center bg-[#161a21] border border-[#2d3748] rounded-xl text-slate-400 gap-3">
-          <Loader2 className="w-7 h-7 animate-spin text-[#bfce7f]" />
+        <div className="p-12 flex flex-col items-center justify-center bg-card border border-border rounded-xl text-foreground-muted gap-3 font-mono">
+          <Loader2 className="w-7 h-7 animate-spin text-primary" />
           <span className="text-xs font-mono">Cargando órdenes de trabajo...</span>
         </div>
       ) : error && orders.length === 0 ? (
-        <div className="p-8 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs font-mono text-center space-y-3">
+        <div className="p-8 bg-error-muted border border-error/30 rounded-xl text-error text-xs font-mono text-center space-y-3">
           <AlertCircle className="w-6 h-6 mx-auto" />
           <p>{error}</p>
           <button
             onClick={fetchOrders}
-            className="px-4 py-1.5 bg-rose-500/20 rounded-lg hover:bg-rose-500/30 font-bold"
+            className="px-4 py-1.5 bg-error/20 rounded-lg hover:bg-error/30 font-bold cursor-pointer"
           >
             Reintentar
           </button>
         </div>
       ) : !initialLoading && orders.length === 0 ? (
-        <div className="p-12 text-center bg-[#161a21] border border-[#2d3748] rounded-xl text-slate-400 space-y-3 font-mono">
-          <Inbox className="w-8 h-8 mx-auto text-slate-500" />
-          <p className="text-sm font-bold text-slate-300">No se encontraron órdenes de trabajo</p>
-          <p className="text-xs text-slate-500">Prueba ajustando los filtros de búsqueda o fecha.</p>
+        <div className="p-12 text-center bg-card border border-border rounded-xl text-foreground-muted space-y-3 font-mono">
+          <Inbox className="w-8 h-8 mx-auto text-foreground-muted" />
+          <p className="text-sm font-bold text-foreground">No se encontraron órdenes de trabajo</p>
+          <p className="text-xs text-foreground-muted">Prueba ajustando los filtros de búsqueda o fecha.</p>
           {hasActiveFilters && (
             <button
               onClick={handleClearFilters}
-              className="px-4 py-2 bg-[#bfce7f] text-[#1d1f18] rounded-xl font-bold hover:brightness-110 text-xs shadow"
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-xl font-bold hover:brightness-110 text-xs shadow cursor-pointer"
             >
               Limpiar Filtros
             </button>
           )}
         </div>
       ) : (
-        <div className="border border-[#2d3748] rounded-xl overflow-hidden bg-[#161a21]">
+        <div className="border border-border rounded-xl overflow-hidden bg-card shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs" aria-busy={isFetching}>
               <thead>
-                <tr className="border-b border-[#2d3748] bg-[#12151b] font-mono text-[10px] text-slate-400 font-bold uppercase tracking-wider select-none">
+                <tr className="border-b border-border bg-surface-subtle font-mono text-[10px] text-foreground-secondary font-bold uppercase tracking-wider select-none">
                   <th
                     onClick={() => handleSort("codigo")}
                     aria-sort={sortBy === "codigo" ? (sortOrder === "asc" ? "ascending" : "descending") : "none"}
-                    className="py-3 px-4 cursor-pointer hover:text-white transition-colors group"
+                    className="py-3 px-4 cursor-pointer hover:text-foreground transition-colors group"
                   >
                     <div className="inline-flex items-center gap-1.5">
                       <span>CÓDIGO</span>
@@ -680,7 +680,7 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
                   <th
                     onClick={() => handleSort("fecha")}
                     aria-sort={sortBy === "fecha" ? (sortOrder === "asc" ? "ascending" : "descending") : "none"}
-                    className="py-3 px-4 cursor-pointer hover:text-white transition-colors group whitespace-nowrap"
+                    className="py-3 px-4 cursor-pointer hover:text-foreground transition-colors group whitespace-nowrap"
                   >
                     <div className="inline-flex items-center gap-1.5">
                       <span>FECHA CREACIÓN</span>
@@ -690,7 +690,7 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
                   <th
                     onClick={() => handleSort("cliente")}
                     aria-sort={sortBy === "cliente" ? (sortOrder === "asc" ? "ascending" : "descending") : "none"}
-                    className="py-3 px-4 cursor-pointer hover:text-white transition-colors group"
+                    className="py-3 px-4 cursor-pointer hover:text-foreground transition-colors group"
                   >
                     <div className="inline-flex items-center gap-1.5">
                       <span>CLIENTE / VEHÍCULO</span>
@@ -700,7 +700,7 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
                   <th
                     onClick={() => handleSort("estado")}
                     aria-sort={sortBy === "estado" ? (sortOrder === "asc" ? "ascending" : "descending") : "none"}
-                    className="py-3 px-4 text-center cursor-pointer hover:text-white transition-colors group"
+                    className="py-3 px-4 text-center cursor-pointer hover:text-foreground transition-colors group"
                   >
                     <div className="inline-flex items-center justify-center gap-1.5">
                       <span>ESTADO</span>
@@ -710,7 +710,7 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
                   <th
                     onClick={() => handleSort("mecanico")}
                     aria-sort={sortBy === "mecanico" ? (sortOrder === "asc" ? "ascending" : "descending") : "none"}
-                    className="py-3 px-4 cursor-pointer hover:text-white transition-colors group"
+                    className="py-3 px-4 cursor-pointer hover:text-foreground transition-colors group"
                   >
                     <div className="inline-flex items-center gap-1.5">
                       <span>MECÁNICO ASIGNADO</span>
@@ -720,7 +720,7 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
                   <th
                     onClick={() => handleSort("total")}
                     aria-sort={sortBy === "total" ? (sortOrder === "asc" ? "ascending" : "descending") : "none"}
-                    className="py-3 px-4 text-right cursor-pointer hover:text-white transition-colors group"
+                    className="py-3 px-4 text-right cursor-pointer hover:text-foreground transition-colors group"
                   >
                     <div className="inline-flex items-center justify-end gap-1.5 w-full">
                       <span>TOTAL</span>
@@ -732,7 +732,7 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#2d3748]">
+              <tbody className="divide-y divide-border">
                 {orders.map((order) => {
                   const targetId = order.orden_trabajo_id || order.orden_id;
                   const { datePart, timePart } = formatCreationDate(order.fecha_creacion || order.fecha_registro || order.fecha_ingreso || order.fecha_recepcion);
@@ -740,28 +740,28 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
                     <tr
                       key={targetId}
                       onClick={() => onViewDetail && onViewDetail(targetId)}
-                      className="hover:bg-[#1f242d] transition-colors cursor-pointer group"
+                      className="hover:bg-hover transition-colors cursor-pointer group"
                     >
-                      <td className="py-3.5 px-4 font-mono font-bold text-[#bfce7f] whitespace-nowrap">
+                      <td className="py-3.5 px-4 font-mono font-bold text-primary whitespace-nowrap">
                         <div className="flex flex-col">
                           <span>{order.codigo_orden}</span>
                           {order.codigo_recepcion && (
-                            <span className="text-[10px] text-slate-500">Rec: {order.codigo_recepcion}</span>
+                            <span className="text-[10px] text-foreground-muted">Rec: {order.codigo_recepcion}</span>
                           )}
                         </div>
                       </td>
                       <td className="py-3.5 px-4 whitespace-nowrap font-mono text-xs">
                         <div className="flex flex-col">
-                          <span className="font-semibold text-slate-200">{datePart}</span>
+                          <span className="font-semibold text-foreground">{datePart}</span>
                           {timePart && (
-                            <span className="text-[10px] text-slate-500">{timePart}</span>
+                            <span className="text-[10px] text-foreground-muted">{timePart}</span>
                           )}
                         </div>
                       </td>
                       <td className="py-3.5 px-4">
                         <div className="flex flex-col">
-                          <span className="font-bold text-white font-mono">{order.cliente_nombre}</span>
-                          <span className="text-[11px] text-slate-400 font-mono">
+                          <span className="font-bold text-foreground font-mono">{order.cliente_nombre}</span>
+                          <span className="text-[11px] text-foreground-muted font-mono">
                             {order.bicicleta_marca} {order.bicicleta_modelo}
                           </span>
                         </div>
@@ -769,13 +769,13 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
                       <td className="py-3.5 px-4 text-center whitespace-nowrap">
                         <WorkOrderStatusBadge name={order.estado_nombre} color={order.estado_color} />
                       </td>
-                      <td className="py-3.5 px-4 font-mono text-slate-300 whitespace-nowrap">
+                      <td className="py-3.5 px-4 font-mono text-foreground-secondary whitespace-nowrap">
                         <div className="flex items-center gap-2">
-                          <User size={13} className="text-slate-400" />
+                          <User size={13} className="text-foreground-muted" />
                           <span>{order.mecanico_nombre || "Por asignar"}</span>
                         </div>
                       </td>
-                      <td className="py-3.5 px-4 font-mono text-right font-bold text-emerald-400 whitespace-nowrap">
+                      <td className="py-3.5 px-4 font-mono text-right font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
                         RD$ {Number(order.total_estimado || 0).toLocaleString("es-DO", { minimumFractionDigits: 2 })}
                       </td>
                       <td className="py-3.5 px-4 text-center whitespace-nowrap">
@@ -784,7 +784,7 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
                             e.stopPropagation();
                             if (onViewDetail) onViewDetail(targetId);
                           }}
-                          className="px-3 py-1 bg-[#0a0c10] border border-[#2d3748] rounded-lg text-slate-300 hover:text-white hover:border-[#bfce7f] font-mono text-[11px] font-bold transition-colors"
+                          className="px-3 py-1 bg-surface-subtle border border-border rounded-lg text-foreground-secondary hover:text-foreground hover:bg-hover hover:border-primary/50 font-mono text-[11px] font-bold transition-colors cursor-pointer"
                         >
                           Ver detalle
                         </button>
@@ -797,7 +797,7 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
           </div>
 
           {/* Pagination Footer */}
-          <div className="p-4 border-t border-[#2d3748] bg-[#12151b] flex items-center justify-between font-mono text-xs text-slate-400">
+          <div className="p-4 border-t border-border bg-surface-subtle flex items-center justify-between font-mono text-xs text-foreground-muted">
             <span>
               Mostrando {orders.length} de {meta.total} órdenes
             </span>
@@ -805,7 +805,7 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
               <button
                 disabled={page <= 1}
                 onClick={() => updateUrlParams({ page: String(Math.max(1, page - 1)) })}
-                className="p-1.5 bg-[#0a0c10] border border-[#2d3748] rounded-lg disabled:opacity-40 hover:text-white"
+                className="p-1.5 bg-card border border-border rounded-lg disabled:opacity-40 text-foreground-muted hover:text-foreground hover:bg-hover cursor-pointer"
               >
                 <ChevronLeft size={16} />
               </button>
@@ -813,7 +813,7 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
               <button
                 disabled={page >= meta.total_pages}
                 onClick={() => updateUrlParams({ page: String(Math.min(meta.total_pages, page + 1)) })}
-                className="p-1.5 bg-[#0a0c10] border border-[#2d3748] rounded-lg disabled:opacity-40 hover:text-white"
+                className="p-1.5 bg-card border border-border rounded-lg disabled:opacity-40 text-foreground-muted hover:text-foreground hover:bg-hover cursor-pointer"
               >
                 <ChevronRight size={16} />
               </button>
