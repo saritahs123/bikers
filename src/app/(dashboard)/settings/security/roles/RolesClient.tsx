@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { FullRoleData, saveRoleMatrix, MatrixRowUpdate, createRole } from "./actions";
+import { FullRoleData, saveRoleMatrix, createRole } from "./actions";
 import SecurityConfirmDialog from "@/components/security/SecurityConfirmDialog";
 
 type MatrizRow = {
@@ -88,6 +88,7 @@ export default function RolesClient({ data }: { data: FullRoleData }) {
       }
     });
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMatrixState(initialState);
     setRoles(data.roles);
     setHasChanges(false);
@@ -331,8 +332,8 @@ export default function RolesClient({ data }: { data: FullRoleData }) {
                   const isAllChecked = COLUMNS.every(c => row[c.key as keyof typeof row]);
                   
                   return (
-                    <tr key={modulo.modulo_sistema_id} className={`hover:bg-surface-container-high transition-colors ${idx % 2 === 0 ? 'bg-[#0e0f0a]' : 'bg-[#131313]'}`}>
-                      <td className={`py-3 px-4 font-bold text-on-surface border-r border-outline-variant sticky left-0 z-10 ${idx % 2 === 0 ? 'bg-[#0e0f0a]' : 'bg-[#131313]'}`}>
+                    <tr key={modulo.modulo_sistema_id} className={`hover:bg-surface-container-high transition-colors ${idx % 2 === 0 ? 'bg-surface-container-lowest' : 'bg-surface-container-low'}`}>
+                      <td className={`py-3 px-4 font-bold text-on-surface border-r border-outline-variant sticky left-0 z-10 ${idx % 2 === 0 ? 'bg-surface-container-lowest' : 'bg-surface-container-low'}`}>
                         {modulo.nombre}
                       </td>
                       <td className="py-3 px-2 text-center">
@@ -356,7 +357,7 @@ export default function RolesClient({ data }: { data: FullRoleData }) {
                           </td>
                         );
                       })}
-                      <td className={`py-3 px-4 border-l border-outline-variant text-center sticky right-0 z-10 ${idx % 2 === 0 ? 'bg-[#0e0f0a]' : 'bg-[#131313]'}`}>
+                      <td className={`py-3 px-4 border-l border-outline-variant text-center sticky right-0 z-10 ${idx % 2 === 0 ? 'bg-surface-container-lowest' : 'bg-surface-container-low'}`}>
                         <div className="flex justify-center gap-2 text-on-surface-variant">
                           <button className="hover:text-primary transition-colors"><span className="material-symbols-outlined text-[18px]">edit</span></button>
                           <button className="hover:text-error transition-colors"><span className="material-symbols-outlined text-[18px]">delete</span></button>
@@ -371,7 +372,7 @@ export default function RolesClient({ data }: { data: FullRoleData }) {
           
           <div className="p-4 bg-surface-container-low border-t border-outline-variant flex items-start gap-2 text-on-surface-variant text-xs">
             <span className="material-symbols-outlined text-[16px] text-primary">info</span>
-            <p>Nota: Los cambios realizados en esta matriz modificarán el comportamiento heredado predeterminado de los usuarios. Las cuentas que tengan configurados "Permisos Personalizados" en su perfil no se verán afectadas por este cambio.</p>
+            <p>Nota: Los cambios realizados en esta matriz modificarán el comportamiento heredado predeterminado de los usuarios. Las cuentas que tengan configurados &quot;Permisos Personalizados&quot; en su perfil no se verán afectadas por este cambio.</p>
           </div>
         </div>
       </div>

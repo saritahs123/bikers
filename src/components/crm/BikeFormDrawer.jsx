@@ -13,8 +13,6 @@ import {
   AlertTriangle,
   Layers,
   Camera,
-  CheckCircle2,
-  AlertCircle,
   RotateCcw,
   Search,
   ChevronDown,
@@ -78,20 +76,6 @@ export default function BikeFormDrawer({
   const [createdBikeId, setCreatedBikeId] = useState(null);
   const [partialFailureInfo, setPartialFailureInfo] = useState(null);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  // Fetch categories, states and clients when drawer opens
-  useEffect(() => {
-    if (isOpen) {
-      fetchAuxiliaryCatalogs();
-      if (!clientes || clientes.length === 0) {
-        fetchClients();
-      }
-    }
-  }, [isOpen, clientes]);
-
   const fetchAuxiliaryCatalogs = async () => {
     try {
       const [resCat, resEst] = await Promise.all([
@@ -123,6 +107,22 @@ export default function BikeFormDrawer({
       console.error("Error fetching clients for BikeFormDrawer:", err);
     }
   };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMounted(true);
+  }, []);
+
+  // Fetch categories, states and clients when drawer opens
+  useEffect(() => {
+    if (isOpen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      fetchAuxiliaryCatalogs();
+      if (!clientes || clientes.length === 0) {
+        fetchClients();
+      }
+    }
+  }, [isOpen, clientes]);
 
   // Close client dropdown when clicking outside
   useEffect(() => {
@@ -210,6 +210,7 @@ export default function BikeFormDrawer({
   // Reset or Sync drawer state on open/editingItem change
   useEffect(() => {
     if (isOpen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setActiveTab("general");
       setErrors({});
       setPartialFailureInfo(null);
@@ -632,16 +633,16 @@ export default function BikeFormDrawer({
   const formInner = (
     <>
       {/* Drawer / Modal Header */}
-      <div className="p-5 border-b border-[#2d3748] bg-[#0e1117] flex items-center justify-between shrink-0 font-mono">
+      <div className="p-5 border-b border-border bg-card flex items-center justify-between shrink-0 font-mono">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#bfce7f]/10 border border-[#bfce7f]/30 flex items-center justify-center text-[#bfce7f] shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/30 flex items-center justify-center text-primary shrink-0">
               <Bike size={20} />
             </div>
             <div>
-              <h2 className="font-mono text-base font-bold text-white">
+              <h2 className="font-mono text-base font-bold text-foreground">
                 {editingItem ? "Editar Bicicleta" : "Registrar Nueva Bicicleta"}
               </h2>
-              <p className="font-mono text-[11px] text-slate-400 mt-0.5">
+              <p className="font-mono text-[11px] text-foreground-muted mt-0.5">
                 {editingItem ? "Modifique los datos técnicos del activo" : "Complete los datos técnicos, componentes y fotografías de la bicicleta"}
               </p>
             </div>
@@ -650,21 +651,21 @@ export default function BikeFormDrawer({
           <button
             type="button"
             onClick={handleCloseDrawer}
-            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-[#212631] transition-colors cursor-pointer"
+            className="p-1.5 text-foreground-muted hover:text-foreground rounded-lg hover:bg-hover transition-colors cursor-pointer"
           >
             <X size={20} />
           </button>
         </div>
 
         {/* Tab Navigation Bar */}
-        <div className="px-5 border-b border-[#2d3748] bg-[#161a21] flex items-center gap-6 overflow-x-auto shrink-0 font-mono text-xs">
+        <div className="px-5 border-b border-border bg-surface-subtle flex items-center gap-6 overflow-x-auto shrink-0 font-mono text-xs">
           <button
             type="button"
             onClick={() => setActiveTab("general")}
             className={`py-3.5 font-bold border-b-2 transition-colors cursor-pointer flex items-center gap-2 shrink-0 ${
               activeTab === "general"
-                ? "border-[#bfce7f] text-[#bfce7f]"
-                : "border-transparent text-slate-400 hover:text-white"
+                ? "border-primary text-primary"
+                : "border-transparent text-foreground-muted hover:text-foreground"
             }`}
           >
             <Bike size={16} />
@@ -676,13 +677,13 @@ export default function BikeFormDrawer({
             onClick={() => setActiveTab("componentes")}
             className={`py-3.5 font-bold border-b-2 transition-colors cursor-pointer flex items-center gap-2 shrink-0 ${
               activeTab === "componentes"
-                ? "border-[#bfce7f] text-[#bfce7f]"
-                : "border-transparent text-slate-400 hover:text-white"
+                ? "border-primary text-primary"
+                : "border-transparent text-foreground-muted hover:text-foreground"
             }`}
           >
             <Layers size={16} />
             <span>Componentes & Desgaste</span>
-            <span className="px-2 py-0.5 rounded-full bg-[#bfce7f]/20 text-[#bfce7f] text-[10px] font-bold">
+            <span className="px-2 py-0.5 rounded-full bg-primary/20 text-primary text-[10px] font-bold">
               {draftComponents.length}
             </span>
           </button>
@@ -692,13 +693,13 @@ export default function BikeFormDrawer({
             onClick={() => setActiveTab("fotos")}
             className={`py-3.5 font-bold border-b-2 transition-colors cursor-pointer flex items-center gap-2 shrink-0 ${
               activeTab === "fotos"
-                ? "border-[#bfce7f] text-[#bfce7f]"
-                : "border-transparent text-slate-400 hover:text-white"
+                ? "border-primary text-primary"
+                : "border-transparent text-foreground-muted hover:text-foreground"
             }`}
           >
             <Camera size={16} />
             <span>Fotografías del Activo</span>
-            <span className="px-2 py-0.5 rounded-full bg-[#bfce7f]/20 text-[#bfce7f] text-[10px] font-bold">
+            <span className="px-2 py-0.5 rounded-full bg-primary/20 text-primary text-[10px] font-bold">
               {draftPhotos.length}
             </span>
           </button>
@@ -708,12 +709,12 @@ export default function BikeFormDrawer({
         <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
           {/* Partial Error Alert Banner */}
           {partialFailureInfo && (
-            <div className="p-4 bg-amber-950/80 border border-amber-500/50 rounded-2xl text-amber-200 font-mono text-xs space-y-2 shadow-xl animate-in fade-in duration-200">
-              <div className="flex items-center gap-2 text-amber-400 font-bold">
+            <div className="p-4 bg-amber-500/10 border border-amber-500/40 rounded-2xl text-amber-600 dark:text-amber-200 font-mono text-xs space-y-2 shadow-xl animate-in fade-in duration-200">
+              <div className="flex items-center gap-2 text-amber-500 font-bold">
                 <AlertTriangle size={18} />
                 <span>{partialFailureInfo.title}</span>
               </div>
-              <p className="text-amber-200/90 leading-relaxed">
+              <p className="text-amber-600/90 dark:text-amber-200/90 leading-relaxed">
                 {partialFailureInfo.message}
               </p>
             </div>
@@ -723,39 +724,39 @@ export default function BikeFormDrawer({
           {activeTab === "general" && (
             <form onSubmit={handleSaveFlow} className="space-y-5">
               {/* 1. Cliente Propietario */}
-              <div className="space-y-3 bg-[#0e1117]/60 border border-[#2d3748] rounded-2xl p-5">
-                <h3 className="text-[#bfce7f] font-bold uppercase tracking-wider text-[11px] flex items-center gap-2 border-b border-[#2d3748] pb-2">
-                  <User size={14} /> 1. Cliente Propietario <span className="text-rose-400">*</span>
+              <div className="space-y-3 bg-surface border border-border rounded-2xl p-5">
+                <h3 className="text-primary font-bold uppercase tracking-wider text-[11px] flex items-center gap-2 border-b border-border pb-2">
+                  <User size={14} /> 1. Cliente Propietario <span className="text-rose-500">*</span>
                 </h3>
 
                 {lockCliente || preselectedClienteId ? (
-                  <div className="w-full bg-[#0e1117] border border-[#bfce7f]/40 rounded-xl px-3.5 py-2.5 text-white font-bold flex items-center justify-between">
+                  <div className="w-full bg-input border border-primary/40 rounded-xl px-3.5 py-2.5 text-foreground font-bold flex items-center justify-between">
                     <span className="flex items-center gap-2">
-                      <User size={14} className="text-[#bfce7f]" />
+                      <User size={14} className="text-primary" />
                       {clientDisplayName}
                     </span>
-                    <span className="text-[9px] bg-[#bfce7f]/20 text-[#bfce7f] border border-[#bfce7f]/40 px-2 py-0.5 rounded font-mono font-bold uppercase">
+                    <span className="text-[9px] bg-primary/20 text-primary border border-primary/40 px-2 py-0.5 rounded font-mono font-bold uppercase">
                       BLOQUEADO
                     </span>
                   </div>
                 ) : selectedClientObj ? (
-                  <div className="bg-[#0e1117] border border-[#bfce7f]/40 rounded-xl p-3 flex items-center justify-between animate-in fade-in duration-150">
+                  <div className="bg-surface border border-primary/40 rounded-xl p-3 flex items-center justify-between animate-in fade-in duration-150">
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-[#bfce7f]/10 border border-[#bfce7f]/30 flex items-center justify-center font-bold text-xs text-[#bfce7f] shrink-0 font-mono">
+                      <div className="w-9 h-9 rounded-xl bg-primary/10 border border-primary/30 flex items-center justify-center font-bold text-xs text-primary shrink-0 font-mono">
                         {(selectedClientObj.nombre_completo || selectedClientObj.nombre || "C").slice(0, 2).toUpperCase()}
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-bold text-white">
+                          <span className="text-sm font-bold text-foreground">
                             {selectedClientObj.nombre_completo || `${selectedClientObj.nombre || ""} ${selectedClientObj.apellido || ""}`}
                           </span>
                           {selectedClientObj.tipo_cliente && (
-                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 font-mono uppercase">
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-subtle text-foreground-muted font-mono uppercase">
                               {selectedClientObj.tipo_cliente}
                             </span>
                           )}
                         </div>
-                        <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+                        <p className="text-[11px] text-foreground-muted font-mono mt-0.5">
                           {selectedClientObj.identificacion ? `${selectedClientObj.identificacion} • ` : ""}
                           {selectedClientObj.telefono_principal ? `Tel: ${selectedClientObj.telefono_principal}` : (selectedClientObj.correo || "Sin contacto")}
                         </p>
@@ -768,7 +769,7 @@ export default function BikeFormDrawer({
                         setClientSearch("");
                         setIsClientDropdownOpen(false);
                       }}
-                      className="p-1.5 hover:bg-rose-950/40 text-slate-400 hover:text-rose-400 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-rose-500/30"
+                      className="p-1.5 hover:bg-rose-500/10 text-foreground-muted hover:text-rose-500 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-rose-500/30"
                       title="Cambiar de cliente"
                     >
                       <X size={16} />
@@ -776,10 +777,10 @@ export default function BikeFormDrawer({
                   </div>
                 ) : (
                   <div className="space-y-1">
-                    <label className="block text-slate-300 text-xs mb-1">Buscar y Seleccionar Cliente <span className="text-rose-400">*</span></label>
+                    <label className="block text-foreground-muted text-xs mb-1">Buscar y Seleccionar Cliente <span className="text-rose-500">*</span></label>
                     <div className="relative" ref={comboboxRef}>
                       <div className="relative">
-                        <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                        <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-foreground-muted pointer-events-none" />
                         <input
                           ref={clientSearchInputRef}
                           type="text"
@@ -792,45 +793,45 @@ export default function BikeFormDrawer({
                           onFocus={() => setIsClientDropdownOpen(true)}
                           onKeyDown={handleClientKeyDown}
                           placeholder="Buscar por nombre, cédula, RNC o teléfono..."
-                          className={`w-full pl-9.5 pr-9 py-2.5 bg-[#0e1117] border rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none transition-all ${
-                            errors.cliente_id ? "border-rose-500" : "border-[#2d3748] focus:border-[#bfce7f]"
+                          className={`w-full pl-9.5 pr-9 py-2.5 bg-input border rounded-xl text-xs text-foreground placeholder:text-foreground-muted/60 focus:outline-none transition-all ${
+                            errors.cliente_id ? "border-rose-500" : "border-border focus:border-primary"
                           }`}
                         />
-                        <ChevronDown className="w-4 h-4 absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                        <ChevronDown className="w-4 h-4 absolute right-3.5 top-1/2 -translate-y-1/2 text-foreground-muted pointer-events-none" />
                       </div>
 
                       {isClientDropdownOpen && (
-                        <div className="absolute left-0 right-0 top-full mt-1 bg-[#161b22] border border-[#2d3748] rounded-xl shadow-2xl z-50 overflow-hidden text-xs max-h-56 overflow-y-auto custom-scrollbar animate-in fade-in duration-100 font-mono">
+                        <div className="absolute left-0 right-0 top-full mt-1 bg-popover border border-border rounded-xl shadow-2xl z-50 overflow-hidden text-xs max-h-56 overflow-y-auto custom-scrollbar animate-in fade-in duration-100 font-mono">
                           {filteredClients.length === 0 ? (
-                            <div className="p-4 text-center text-slate-400">
-                              <p className="font-semibold text-white text-xs">Sin coincidencias encontradas</p>
-                              <p className="text-[11px] text-slate-500 mt-0.5">No se encontraron clientes que coincidan con &quot;{clientSearch}&quot;.</p>
+                            <div className="p-4 text-center text-foreground-muted">
+                              <p className="font-semibold text-foreground text-xs">Sin coincidencias encontradas</p>
+                              <p className="text-[11px] text-foreground-muted mt-0.5">No se encontraron clientes que coincidan con &quot;{clientSearch}&quot;.</p>
                             </div>
                           ) : (
                             filteredClients.map((client, idx) => (
                               <div
                                 key={client.id || client.cliente_id}
                                 onClick={() => handleSelectClientItem(client)}
-                                className={`p-2.5 flex items-center justify-between cursor-pointer border-b border-[#21262d] last:border-0 transition-colors ${
-                                  activeClientIndex === idx ? "bg-[#21262d] text-white" : "hover:bg-[#1f242c] text-slate-300"
+                                className={`p-2.5 flex items-center justify-between cursor-pointer border-b border-border/50 last:border-0 transition-colors ${
+                                  activeClientIndex === idx ? "bg-hover text-foreground" : "hover:bg-hover text-foreground-muted"
                                 }`}
                               >
                                 <div className="flex items-center gap-2.5">
-                                  <div className="w-7 h-7 rounded-lg bg-[#bfce7f]/10 border border-[#bfce7f]/20 flex items-center justify-center font-bold text-xs text-[#bfce7f] shrink-0">
+                                  <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center font-bold text-xs text-primary shrink-0">
                                     {(client.nombre_completo || client.nombre || "C").slice(0, 2).toUpperCase()}
                                   </div>
                                   <div>
-                                    <p className="font-bold text-white text-xs">
+                                    <p className="font-bold text-foreground text-xs">
                                       {client.nombre_completo || `${client.nombre || ""} ${client.apellido || ""}`}
                                     </p>
-                                    <p className="text-[10px] text-slate-400">
+                                    <p className="text-[10px] text-foreground-muted">
                                       {client.identificacion ? `${client.identificacion} • ` : ""}
                                       Tel: {client.telefono_principal || client.telefono_secundario || "Sin teléfono"}
                                     </p>
                                   </div>
                                 </div>
                                 {String(formData.cliente_id) === String(client.id || client.cliente_id) && (
-                                  <Check size={14} className="text-[#bfce7f]" />
+                                  <Check size={14} className="text-primary" />
                                 )}
                               </div>
                             ))
@@ -838,20 +839,20 @@ export default function BikeFormDrawer({
                         </div>
                       )}
                     </div>
-                    {errors.cliente_id && <p className="text-rose-400 text-[10px] mt-1 font-mono">{errors.cliente_id}</p>}
+                    {errors.cliente_id && <p className="text-rose-500 text-[10px] mt-1 font-mono">{errors.cliente_id}</p>}
                   </div>
                 )}
               </div>
 
               {/* 2. Especificaciones de la Bicicleta */}
-              <div className="space-y-3 bg-[#0e1117]/60 border border-[#2d3748] rounded-2xl p-5">
-                <h3 className="text-[#bfce7f] font-bold uppercase tracking-wider text-[11px] flex items-center gap-2 border-b border-[#2d3748] pb-2">
+              <div className="space-y-3 bg-surface border border-border rounded-2xl p-5">
+                <h3 className="text-primary font-bold uppercase tracking-wider text-[11px] flex items-center gap-2 border-b border-border pb-2">
                   <Bike size={14} /> 2. Especificaciones Técnicas
                 </h3>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-slate-300 mb-1">Marca <span className="text-rose-400">*</span></label>
+                    <label className="block text-foreground-muted mb-1">Marca <span className="text-rose-500">*</span></label>
                     <input
                       type="text"
                       data-invalid={errors.marca ? "true" : undefined}
@@ -861,15 +862,15 @@ export default function BikeFormDrawer({
                         if (errors.marca) setErrors((prev) => ({ ...prev, marca: null }));
                       }}
                       placeholder="Ej: Specialized, Trek"
-                      className={`w-full bg-[#0e1117] border rounded-xl px-3.5 py-2 text-white focus:outline-none ${
-                        errors.marca ? "border-rose-500" : "border-[#2d3748] focus:border-[#bfce7f]"
+                      className={`w-full bg-input border rounded-xl px-3.5 py-2 text-foreground focus:outline-none ${
+                        errors.marca ? "border-rose-500" : "border-border focus:border-primary"
                       }`}
                     />
-                    {errors.marca && <p className="text-rose-400 text-[10px] mt-1">{errors.marca}</p>}
+                    {errors.marca && <p className="text-rose-500 text-[10px] mt-1">{errors.marca}</p>}
                   </div>
 
                   <div>
-                    <label className="block text-slate-300 mb-1">Modelo <span className="text-rose-400">*</span></label>
+                    <label className="block text-foreground-muted mb-1">Modelo <span className="text-rose-500">*</span></label>
                     <input
                       type="text"
                       data-invalid={errors.modelo ? "true" : undefined}
@@ -879,19 +880,19 @@ export default function BikeFormDrawer({
                         if (errors.modelo) setErrors((prev) => ({ ...prev, modelo: null }));
                       }}
                       placeholder="Ej: Stumpjumper, Fuel EX 8"
-                      className={`w-full bg-[#0e1117] border rounded-xl px-3.5 py-2 text-white focus:outline-none ${
-                        errors.modelo ? "border-rose-500" : "border-[#2d3748] focus:border-[#bfce7f]"
+                      className={`w-full bg-input border rounded-xl px-3.5 py-2 text-foreground focus:outline-none ${
+                        errors.modelo ? "border-rose-500" : "border-border focus:border-primary"
                       }`}
                     />
-                    {errors.modelo && <p className="text-rose-400 text-[10px] mt-1">{errors.modelo}</p>}
+                    {errors.modelo && <p className="text-rose-500 text-[10px] mt-1">{errors.modelo}</p>}
                   </div>
 
                   <div>
-                    <label className="block text-slate-300 mb-1">Tipo de Bicicleta</label>
+                    <label className="block text-foreground-muted mb-1">Tipo de Bicicleta</label>
                     <select
                       value={formData.tipo_bicicleta}
                       onChange={(e) => setFormData({ ...formData, tipo_bicicleta: e.target.value })}
-                      className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-[#bfce7f]"
+                      className="w-full bg-input border border-border rounded-xl px-3.5 py-2 text-foreground focus:outline-none focus:border-primary"
                     >
                       <option value="MTB">MTB (Montaña)</option>
                       <option value="ROAD">Road (Ruta)</option>
@@ -903,65 +904,65 @@ export default function BikeFormDrawer({
                   </div>
 
                   <div>
-                    <label className="block text-slate-300 mb-1">Año</label>
+                    <label className="block text-foreground-muted mb-1">Año</label>
                     <input
                       type="number"
                       value={formData.ano}
                       onChange={(e) => setFormData({ ...formData, ano: e.target.value })}
                       placeholder="2026"
-                      className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-[#bfce7f]"
+                      className="w-full bg-input border border-border rounded-xl px-3.5 py-2 text-foreground focus:outline-none focus:border-primary"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-slate-300 mb-1">Color</label>
+                    <label className="block text-foreground-muted mb-1">Color</label>
                     <input
                       type="text"
                       value={formData.color}
                       onChange={(e) => setFormData({ ...formData, color: e.target.value })}
                       placeholder="Ej: Negro Mate / Rojo"
-                      className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-[#bfce7f]"
+                      className="w-full bg-input border border-border rounded-xl px-3.5 py-2 text-foreground focus:outline-none focus:border-primary"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-slate-300 mb-1">Talla Cuadro</label>
+                    <label className="block text-foreground-muted mb-1">Talla Cuadro</label>
                     <input
                       type="text"
                       value={formData.talla}
                       onChange={(e) => setFormData({ ...formData, talla: e.target.value })}
                       placeholder="Ej: M, L, 54cm"
-                      className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-[#bfce7f]"
+                      className="w-full bg-input border border-border rounded-xl px-3.5 py-2 text-foreground focus:outline-none focus:border-primary"
                     />
                   </div>
                 </div>
               </div>
 
               {/* 3. Serie & Odómetro */}
-              <div className="space-y-3 bg-[#0e1117]/60 border border-[#2d3748] rounded-2xl p-5">
-                <h3 className="text-[#bfce7f] font-bold uppercase tracking-wider text-[11px] flex items-center gap-2 border-b border-[#2d3748] pb-2">
+              <div className="space-y-3 bg-surface border border-border rounded-2xl p-5">
+                <h3 className="text-primary font-bold uppercase tracking-wider text-[11px] flex items-center gap-2 border-b border-border pb-2">
                   <Shield size={14} /> 3. Serie & Odómetro
                 </h3>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <label className="block text-slate-300 text-xs font-semibold">N° Serie Cuadro (VIN)</label>
-                      <span className="text-[10px] text-slate-500 font-mono bg-[#161b22] px-1.5 py-0.5 rounded border border-[#2d3748]">Opcional</span>
+                      <label className="block text-foreground-muted text-xs font-semibold">N° Serie Cuadro (VIN)</label>
+                      <span className="text-[10px] text-foreground-muted font-mono bg-surface-subtle px-1.5 py-0.5 rounded border border-border">Opcional</span>
                     </div>
                     <input
                       type="text"
                       value={formData.numero_serie_cuadro}
                       onChange={(e) => setFormData({ ...formData, numero_serie_cuadro: e.target.value })}
                       placeholder="Ej: TRK-12345 (Opcional)"
-                      className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-[#bfce7f]"
+                      className="w-full bg-input border border-border rounded-xl px-3.5 py-2 text-foreground focus:outline-none focus:border-primary"
                     />
                   </div>
 
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <label className="block text-slate-300 text-xs font-semibold">Kilometraje Actual (KM)</label>
-                      <span className="text-[10px] text-slate-500 font-mono bg-[#161b22] px-1.5 py-0.5 rounded border border-[#2d3748]">Opcional</span>
+                      <label className="block text-foreground-muted text-xs font-semibold">Kilometraje Actual (KM)</label>
+                      <span className="text-[10px] text-foreground-muted font-mono bg-surface-subtle px-1.5 py-0.5 rounded border border-border">Opcional</span>
                     </div>
                     <input
                       type="number"
@@ -971,38 +972,38 @@ export default function BikeFormDrawer({
                         setFormData({ ...formData, kilometraje_actual: val === "" ? 0 : val });
                       }}
                       placeholder="0 (Opcional)"
-                      className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl px-3.5 py-2 text-white focus:outline-none focus:border-[#bfce7f]"
+                      className="w-full bg-input border border-border rounded-xl px-3.5 py-2 text-foreground focus:outline-none focus:border-primary"
                     />
                   </div>
                 </div>
               </div>
 
               {/* 4. Observaciones & Notas */}
-              <div className="space-y-3 bg-[#0e1117]/60 border border-[#2d3748] rounded-2xl p-5">
-                <h3 className="text-[#bfce7f] font-bold uppercase tracking-wider text-[11px] flex items-center gap-2 border-b border-[#2d3748] pb-2">
+              <div className="space-y-3 bg-surface border border-border rounded-2xl p-5">
+                <h3 className="text-primary font-bold uppercase tracking-wider text-[11px] flex items-center gap-2 border-b border-border pb-2">
                   <Paperclip size={14} /> 4. Observaciones & Notas
                 </h3>
 
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-slate-300 mb-1">Descripción General</label>
+                    <label className="block text-foreground-muted mb-1">Descripción General</label>
                     <textarea
                       rows={2}
                       value={formData.descripcion}
                       onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
                       placeholder="Descripción general de la bicicleta..."
-                      className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl p-2.5 text-white focus:outline-none focus:border-[#bfce7f]"
+                      className="w-full bg-input border border-border rounded-xl p-2.5 text-foreground focus:outline-none focus:border-primary"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-slate-300 mb-1">Notas Técnicas u Observaciones</label>
+                    <label className="block text-foreground-muted mb-1">Notas Técnicas u Observaciones</label>
                     <textarea
                       rows={2}
                       value={formData.notas_tecnicas}
                       onChange={(e) => setFormData({ ...formData, notas_tecnicas: e.target.value })}
                       placeholder="Notas de taller o accesorios especiales..."
-                      className="w-full bg-[#0e1117] border border-[#2d3748] rounded-xl p-2.5 text-white focus:outline-none focus:border-[#bfce7f]"
+                      className="w-full bg-input border border-border rounded-xl p-2.5 text-foreground focus:outline-none focus:border-primary"
                     />
                   </div>
                 </div>
@@ -1035,15 +1036,15 @@ export default function BikeFormDrawer({
         </div>
 
         {/* Drawer Action Footer */}
-        <div className="p-4 border-t border-[#2d3748] bg-[#0e1117] flex items-center justify-between shrink-0 font-mono">
-          <div className="text-[11px] text-slate-400">
+        <div className="p-4 border-t border-border bg-card flex items-center justify-between shrink-0 font-mono">
+          <div className="text-[11px] text-foreground-muted">
             {savePhaseText ? (
-              <span className="text-[#bfce7f] font-bold flex items-center gap-2">
+              <span className="text-primary font-bold flex items-center gap-2">
                 <RefreshCw size={13} className="animate-spin" />
                 <span>{savePhaseText}</span>
               </span>
             ) : createdBikeId ? (
-              <span className="text-emerald-400 font-bold">
+              <span className="text-emerald-500 font-bold">
                 ✓ Bicicleta ID #{createdBikeId} creada
               </span>
             ) : null}
@@ -1054,7 +1055,7 @@ export default function BikeFormDrawer({
               type="button"
               disabled={isSaving}
               onClick={handleCloseDrawer}
-              className="px-4 py-2 bg-[#212631] text-white border border-[#2d3748] rounded-xl hover:bg-[#2d3748] transition-colors cursor-pointer disabled:opacity-50"
+              className="px-4 py-2 bg-secondary text-foreground border border-border rounded-xl hover:bg-secondary/80 transition-colors cursor-pointer disabled:opacity-50"
             >
               Cancelar
             </button>
@@ -1074,7 +1075,7 @@ export default function BikeFormDrawer({
                 type="button"
                 disabled={isSaving}
                 onClick={handleSaveFlow}
-                className="px-5 py-2 bg-[#bfce7f] hover:bg-[#a9ba6b] text-[#1d1f18] font-bold rounded-xl transition-all cursor-pointer shadow-lg disabled:opacity-50 flex items-center gap-2"
+                className="px-5 py-2 bg-primary hover:opacity-90 text-primary-foreground font-bold rounded-xl transition-all cursor-pointer shadow-lg disabled:opacity-50 flex items-center gap-2"
               >
                 {isSaving ? <RefreshCw className="animate-spin" size={15} /> : <Save size={15} />}
                 <span>{editingItem ? "Guardar Cambios" : "Guardar Bicicleta"}</span>
@@ -1107,14 +1108,12 @@ export default function BikeFormDrawer({
               width: '900px',
               maxWidth: '95vw',
               height: '100vh',
-              backgroundColor: '#161a21',
-              borderLeft: '1px solid #2d3748',
-              boxShadow: '-10px 0 35px rgba(0,0,0,0.7)',
+              boxShadow: '-10px 0 35px rgba(0,0,0,0.5)',
               display: 'flex',
               flexDirection: 'column',
               zIndex: 1000000
             }}
-            className="font-mono text-xs"
+            className="font-mono text-xs bg-card border-l border-border"
           >
             {formInner}
           </div>

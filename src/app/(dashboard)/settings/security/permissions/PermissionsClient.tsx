@@ -106,7 +106,7 @@ export default function PermissionsClient({
         <div className="flex gap-3 w-full sm:w-auto">
           <button 
             disabled
-            className="px-6 py-3 border border-outline-variant text-on-surface-variant font-label-caps text-xs tracking-widest font-semibold hover:bg-[#353534] transition-colors flex-1 sm:flex-none opacity-50 cursor-not-allowed uppercase"
+            className="px-6 py-3 border border-outline-variant text-on-surface-variant font-label-caps text-xs tracking-widest font-semibold hover:bg-surface-container-high transition-colors flex-1 sm:flex-none opacity-50 cursor-not-allowed uppercase"
           >
             EXPORTAR PDF
           </button>
@@ -123,37 +123,37 @@ export default function PermissionsClient({
 
       {/* Dashboard Stats (Technical Chips) */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <div className="p-4 border border-outline-variant bg-[#1b1c17] flex flex-col gap-1 relative overflow-hidden">
+        <div className="p-4 border border-outline-variant bg-surface-container-low flex flex-col gap-1 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-12 h-12 opacity-5 pointer-events-none">
             <span className="material-symbols-outlined text-[48px]">badge</span>
           </div>
           <span className="font-label-caps text-[10px] tracking-widest text-on-surface-variant uppercase">ROLES ACTIVOS</span>
           <span className="text-3xl font-extrabold text-primary">{roles.length}</span>
         </div>
-        <div className="p-4 border border-outline-variant bg-[#1b1c17] flex flex-col gap-1 relative overflow-hidden">
+        <div className="p-4 border border-outline-variant bg-surface-container-low flex flex-col gap-1 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-12 h-12 opacity-5 pointer-events-none">
             <span className="material-symbols-outlined text-[48px]">rule</span>
           </div>
           <span className="font-label-caps text-[10px] tracking-widest text-on-surface-variant uppercase">MÓDULOS DEL SISTEMA</span>
           <span className="text-3xl font-extrabold text-primary">{modulos.length}</span>
         </div>
-        <div className="p-4 border border-outline-variant bg-[#1b1c17] flex flex-col gap-1">
+        <div className="p-4 border border-outline-variant bg-surface-container-low flex flex-col gap-1">
           <span className="font-label-caps text-[10px] tracking-widest text-on-surface-variant uppercase">CAMBIOS PENDIENTES</span>
           <span className={`text-3xl font-extrabold ${hasChanges ? 'text-[#ffb4ab]' : 'text-on-surface'}`}>{hasChanges ? 'SÍ' : 'NO'}</span>
         </div>
-        <div className="p-4 border border-outline-variant bg-[#1b1c17] flex flex-col gap-1">
+        <div className="p-4 border border-outline-variant bg-surface-container-low flex flex-col gap-1">
           <span className="font-label-caps text-[10px] tracking-widest text-on-surface-variant uppercase">ÚLTIMA AUDITORÍA</span>
           <span className="text-3xl font-extrabold text-on-surface">HOY</span>
         </div>
       </div>
 
       {/* Permissions Matrix Table */}
-      <div className="border border-outline-variant bg-[#0e0f0a] overflow-hidden flex-grow shadow-2xl">
+      <div className="border border-outline-variant bg-surface-container-lowest overflow-hidden flex-grow shadow-2xl">
         <div className="overflow-x-auto custom-scrollbar h-[calc(100vh-350px)] min-h-[400px]">
           <table className="w-full border-collapse text-left min-w-max">
             <thead>
-              <tr className="bg-[#353534] border-b border-outline-variant">
-                <th className="p-6 sticky left-0 bg-[#353534] z-20 border-r border-outline-variant">
+              <tr className="bg-surface-container border-b border-outline-variant">
+                <th className="p-6 sticky left-0 bg-surface-container z-20 border-r border-outline-variant">
                   <div className="flex items-center gap-2">
                     <span className="material-symbols-outlined text-primary">security</span>
                     <span className="font-label-caps text-xs tracking-widest font-semibold uppercase text-on-surface">MÓDULOS / ROLES</span>
@@ -171,10 +171,10 @@ export default function PermissionsClient({
             </thead>
             <tbody>
               {modulos.map((modulo, idx) => (
-                <tr key={modulo.modulo_sistema_id} className={`border-b border-outline-variant group hover:bg-[#1b1c17] transition-colors ${idx % 2 === 0 ? 'bg-[#0e0f0a]' : 'bg-[#131313]'}`}>
-                  <td className={`p-6 sticky left-0 z-10 border-r border-outline-variant ${idx % 2 === 0 ? 'bg-[#0e0f0a]' : 'bg-[#131313]'} group-hover:bg-[#1b1c17] transition-colors`}>
+                <tr key={modulo.modulo_sistema_id} className={`border-b border-outline-variant group hover:bg-surface-container-high transition-colors ${idx % 2 === 0 ? 'bg-surface-container-lowest' : 'bg-surface-container-low'}`}>
+                  <td className={`p-6 sticky left-0 z-10 border-r border-outline-variant ${idx % 2 === 0 ? 'bg-surface-container-lowest' : 'bg-surface-container-low'} group-hover:bg-surface-container-high transition-colors`}>
                     <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 bg-[#2a2a2a] border border-[#909282] flex items-center justify-center shadow-inner">
+                      <div className="w-10 h-10 bg-surface-container-high border border-outline-variant flex items-center justify-center shadow-inner">
                         <span className="material-symbols-outlined text-on-surface">
                           {modulo.nombre.toLowerCase().includes('inventario') ? 'inventory_2' : 
                            modulo.nombre.toLowerCase().includes('taller') ? 'construction' : 
@@ -196,7 +196,7 @@ export default function PermissionsClient({
                     return (
                       <td key={role.rol_funcional_id} className="p-4 border-r border-outline-variant last:border-r-0">
                         <div className="flex flex-col gap-3 items-center">
-                          <div className="flex justify-between items-center w-full max-w-[140px] px-2 py-1 rounded hover:bg-white/5 transition-colors">
+                          <div className="flex justify-between items-center w-full max-w-[140px] px-2 py-1 rounded hover:bg-surface-container-high transition-colors">
                             <span className="text-[10px] font-mono text-on-surface-variant font-bold">READ</span>
                             <div className="relative inline-block w-9 h-4">
                               <input 
@@ -205,13 +205,13 @@ export default function PermissionsClient({
                                 className="peer absolute z-10 w-full h-full cursor-pointer opacity-0" 
                                 type="checkbox"
                               />
-                              <div className="absolute top-0 left-0 right-0 bottom-0 bg-[#2a2a2a] transition-all peer-checked:bg-primary border border-outline-variant peer-checked:border-primary">
+                              <div className="absolute top-0 left-0 right-0 bottom-0 bg-surface-container-high transition-all peer-checked:bg-primary border border-outline-variant peer-checked:border-primary">
                                 <div className="absolute h-3 w-3 left-0.5 bottom-0.5 bg-on-surface-variant peer-checked:bg-[#232e00] peer-checked:translate-x-5 transition-all shadow-sm"></div>
                               </div>
                             </div>
                           </div>
                           
-                          <div className="flex justify-between items-center w-full max-w-[140px] px-2 py-1 rounded hover:bg-white/5 transition-colors">
+                          <div className="flex justify-between items-center w-full max-w-[140px] px-2 py-1 rounded hover:bg-surface-container-high transition-colors">
                             <span className="text-[10px] font-mono text-on-surface-variant font-bold">WRITE</span>
                             <div className="relative inline-block w-9 h-4">
                               <input 
@@ -220,13 +220,13 @@ export default function PermissionsClient({
                                 className="peer absolute z-10 w-full h-full cursor-pointer opacity-0" 
                                 type="checkbox"
                               />
-                              <div className="absolute top-0 left-0 right-0 bottom-0 bg-[#2a2a2a] transition-all peer-checked:bg-primary border border-outline-variant peer-checked:border-primary">
+                              <div className="absolute top-0 left-0 right-0 bottom-0 bg-surface-container-high transition-all peer-checked:bg-primary border border-outline-variant peer-checked:border-primary">
                                 <div className="absolute h-3 w-3 left-0.5 bottom-0.5 bg-on-surface-variant peer-checked:bg-[#232e00] peer-checked:translate-x-5 transition-all shadow-sm"></div>
                               </div>
                             </div>
                           </div>
 
-                          <div className="flex justify-between items-center w-full max-w-[140px] px-2 py-1 rounded hover:bg-white/5 transition-colors">
+                          <div className="flex justify-between items-center w-full max-w-[140px] px-2 py-1 rounded hover:bg-surface-container-high transition-colors">
                             <span className="text-[10px] font-mono text-on-surface-variant font-bold">MODIFY</span>
                             <div className="relative inline-block w-9 h-4">
                               <input 
@@ -235,13 +235,13 @@ export default function PermissionsClient({
                                 className="peer absolute z-10 w-full h-full cursor-pointer opacity-0" 
                                 type="checkbox"
                               />
-                              <div className="absolute top-0 left-0 right-0 bottom-0 bg-[#2a2a2a] transition-all peer-checked:bg-primary border border-outline-variant peer-checked:border-primary">
+                              <div className="absolute top-0 left-0 right-0 bottom-0 bg-surface-container-high transition-all peer-checked:bg-primary border border-outline-variant peer-checked:border-primary">
                                 <div className="absolute h-3 w-3 left-0.5 bottom-0.5 bg-on-surface-variant peer-checked:bg-[#232e00] peer-checked:translate-x-5 transition-all shadow-sm"></div>
                               </div>
                             </div>
                           </div>
                           
-                          <div className="flex justify-between items-center w-full max-w-[140px] px-2 py-1 rounded hover:bg-white/5 transition-colors">
+                          <div className="flex justify-between items-center w-full max-w-[140px] px-2 py-1 rounded hover:bg-surface-container-high transition-colors">
                             <span className="text-[10px] font-mono text-on-surface-variant font-bold">DELETE</span>
                             <div className="relative inline-block w-9 h-4">
                               <input 
@@ -250,7 +250,7 @@ export default function PermissionsClient({
                                 className="peer absolute z-10 w-full h-full cursor-pointer opacity-0" 
                                 type="checkbox"
                               />
-                              <div className="absolute top-0 left-0 right-0 bottom-0 bg-[#2a2a2a] transition-all peer-checked:bg-error border border-outline-variant peer-checked:border-error">
+                              <div className="absolute top-0 left-0 right-0 bottom-0 bg-surface-container-high transition-all peer-checked:bg-error border border-outline-variant peer-checked:border-error">
                                 <div className="absolute h-3 w-3 left-0.5 bottom-0.5 bg-on-surface-variant peer-checked:bg-[#690005] peer-checked:translate-x-5 transition-all shadow-sm"></div>
                               </div>
                             </div>

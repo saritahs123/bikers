@@ -1591,7 +1591,7 @@ function InvoiceCancelHelpModal({ isOpen, onClose }) {
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-xs font-mono font-bold uppercase tracking-wider text-white bg-primary hover:bg-primary/90 rounded-xl transition-colors cursor-pointer shadow-sm ml-auto"
+            className="px-4 py-2 text-xs font-mono font-bold uppercase tracking-wider text-primary-foreground bg-primary hover:bg-primary/90 rounded-xl transition-colors cursor-pointer shadow-sm ml-auto"
           >
             Entendido
           </button>

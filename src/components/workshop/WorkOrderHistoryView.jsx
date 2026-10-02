@@ -107,18 +107,18 @@ export default function WorkOrderHistoryView({ history = [] }) {
   }, [history]);
 
   return (
-    <div className="space-y-5 font-sans text-slate-100">
+    <div className="space-y-5 font-sans text-foreground">
       {/* Clean Header Bar */}
-      <div className="bg-[#161a21] border border-[#2d3748] p-4 sm:p-5 rounded-2xl shadow-xl flex items-center justify-between">
+      <div className="bg-card border border-border p-4 sm:p-5 rounded-2xl shadow-sm flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-bold font-mono text-slate-100 flex items-center gap-2.5 uppercase tracking-wider">
-            <History className="w-4 h-4 text-[#bfce7f]" />
+          <h3 className="text-sm font-bold font-mono text-foreground flex items-center gap-2.5 uppercase tracking-wider">
+            <History className="w-4 h-4 text-primary" />
             HISTORIAL DE LA ORDEN
-            <span className="text-xs px-2.5 py-0.5 bg-[#84924a]/20 text-[#bfce7f] border border-[#bfce7f]/30 rounded-full font-mono font-bold">
+            <span className="text-xs px-2.5 py-0.5 bg-primary/20 text-primary border border-primary/30 rounded-full font-mono font-bold">
               ({sortedHistory.length} EVENTOS)
             </span>
           </h3>
-          <p className="text-xs text-slate-400 mt-1 font-sans">
+          <p className="text-xs text-foreground-muted mt-1 font-sans">
             Registro cronológico oficial de auditoría, estados, productos y cambios de la orden de trabajo.
           </p>
         </div>
@@ -126,15 +126,15 @@ export default function WorkOrderHistoryView({ history = [] }) {
 
       {/* Events Timeline */}
       {sortedHistory.length === 0 ? (
-        <div className="p-12 bg-[#161a21] border border-dashed border-[#2d3748] rounded-2xl text-center space-y-3 font-mono">
-          <History className="w-8 h-8 text-slate-600 mx-auto" />
-          <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">SIN EVENTOS DE HISTORIAL REGISTRADOS</h4>
-          <p className="text-xs text-slate-500 max-w-md mx-auto font-sans">
+        <div className="p-12 bg-card border border-dashed border-border rounded-2xl text-center space-y-3 font-mono">
+          <History className="w-8 h-8 text-foreground-muted mx-auto" />
+          <h4 className="text-xs font-bold text-foreground-muted uppercase tracking-wider">SIN EVENTOS DE HISTORIAL REGISTRADOS</h4>
+          <p className="text-xs text-foreground-muted/80 max-w-md mx-auto font-sans">
             Las actividades de la orden generarán registros automáticos con auditoría de usuario.
           </p>
         </div>
       ) : (
-        <div className="relative pl-6 space-y-4 before:absolute before:left-2.5 before:top-3 before:bottom-3 before:w-0.5 before:bg-[#2d3748]">
+        <div className="relative pl-6 space-y-4 before:absolute before:left-2.5 before:top-3 before:bottom-3 before:w-0.5 before:bg-border">
           {sortedHistory.map((item, idx) => {
             const hId = item.historial_id || item.orden_historial_estado_id || idx;
             const formattedDate = formatDate(item);
@@ -143,40 +143,40 @@ export default function WorkOrderHistoryView({ history = [] }) {
             return (
               <div key={hId} className="relative group">
                 {/* Node Dot */}
-                <div className="absolute -left-6 top-2.5 w-5 h-5 rounded-full bg-[#0a0c10] border-2 border-[#bfce7f] flex items-center justify-center text-[#bfce7f] shadow-md">
+                <div className="absolute -left-6 top-2.5 w-5 h-5 rounded-full bg-card border-2 border-primary flex items-center justify-center text-primary shadow-md">
                   {renderIcon(iconType)}
                 </div>
 
                 {/* Event Card */}
-                <div className="bg-[#161a21] border border-[#2d3748] hover:border-[#4a5568] rounded-xl p-4 space-y-2 shadow-lg transition-colors font-sans">
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#2d3748]/60 pb-2">
+                <div className="bg-card border border-border hover:border-foreground-muted/40 rounded-xl p-4 space-y-2 shadow-sm transition-colors font-sans">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2">
                     <div className="flex items-center gap-2 font-mono font-bold text-xs">
-                      <span className="text-slate-100">{title}</span>
+                      <span className="text-foreground">{title}</span>
                       {isRealStateChange && (
                         <div className="flex items-center gap-1.5 text-[11px] ml-1">
-                          <span className="px-2 py-0.5 rounded bg-[#0a0c10] text-slate-400 border border-[#2d3748]">
+                          <span className="px-2 py-0.5 rounded bg-surface-subtle text-foreground-muted border border-border">
                             {item.estado_anterior_nombre}
                           </span>
-                          <ArrowRight className="w-3 h-3 text-[#bfce7f]" />
-                          <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-bold">
+                          <ArrowRight className="w-3 h-3 text-primary" />
+                          <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 font-bold">
                             {item.estado_nuevo_nombre}
                           </span>
                         </div>
                       )}
                     </div>
 
-                    <div className="flex items-center gap-2 text-[11px] text-slate-400 font-mono">
-                      <Clock className="w-3 h-3 text-slate-500" />
+                    <div className="flex items-center gap-2 text-[11px] text-foreground-muted font-mono">
+                      <Clock className="w-3 h-3 text-foreground-muted" />
                       <span>{formattedDate}</span>
                     </div>
                   </div>
 
                   {/* Comment / Detail text */}
                   {(item.comentario || item.observacion) && (
-                    <p className="text-xs text-slate-300 bg-[#0a0c10] p-2.5 rounded-lg border border-[#2d3748]/60 font-mono leading-relaxed">
+                    <p className="text-xs text-foreground bg-surface-subtle p-2.5 rounded-lg border border-border/60 font-mono leading-relaxed">
                       {(item.estado_nuevo_id === 2 || item.estado_nuevo_codigo === "HOLD" || String(item.estado_nuevo_nombre || "").toUpperCase().includes("HOLD")) ? (
                         <span>
-                          <strong className="text-amber-400 font-bold">Motivo: </strong>
+                          <strong className="text-amber-600 dark:text-amber-400 font-bold">Motivo: </strong>
                           {item.comentario || item.observacion}
                         </span>
                       ) : (
@@ -186,10 +186,10 @@ export default function WorkOrderHistoryView({ history = [] }) {
                   )}
 
                   {/* Responsible User */}
-                  <div className="flex items-center gap-1.5 text-[11px] text-slate-400 pt-0.5 font-mono">
-                    <User className="w-3 h-3 text-slate-500" />
+                  <div className="flex items-center gap-1.5 text-[11px] text-foreground-muted pt-0.5 font-mono">
+                    <User className="w-3 h-3 text-foreground-muted" />
                     <span>
-                      Responsable: <strong className="text-slate-200">{item.usuario_nombre || "Sistema / Administrador"}</strong>
+                      Responsable: <strong className="text-foreground">{item.usuario_nombre || "Sistema / Administrador"}</strong>
                     </span>
                   </div>
                 </div>
