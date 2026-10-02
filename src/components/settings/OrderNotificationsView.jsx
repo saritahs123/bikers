@@ -14,7 +14,6 @@ import {
   Radio,
   Search,
   FilterX,
-  Eye,
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
@@ -58,7 +57,7 @@ function DeliveryStatusBadge({ status }) {
     !normStatus
   ) {
     return (
-      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold tracking-wider uppercase bg-slate-800/80 text-slate-300 border border-slate-700/80 shadow-sm">
+      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10.5px] font-mono font-bold tracking-wider uppercase bg-surface-subtle text-foreground-muted border border-border shadow-sm">
         SIN CONFIRMAR
       </span>
     );
@@ -67,32 +66,32 @@ function DeliveryStatusBadge({ status }) {
   switch (normStatus) {
     case "ENTREGADO":
       return (
-        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold tracking-wider uppercase bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-sm">
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10.5px] font-mono font-bold tracking-wider uppercase bg-success/15 text-success border border-success/30 shadow-sm">
           ENTREGADO
         </span>
       );
     case "ENVIADO":
       return (
-        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold tracking-wider uppercase bg-blue-500/15 text-blue-400 border border-blue-500/30 shadow-sm">
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10.5px] font-mono font-bold tracking-wider uppercase bg-info/15 text-info border border-info/30 shadow-sm">
           ENVIADO
         </span>
       );
     case "PENDIENTE":
       return (
-        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold tracking-wider uppercase bg-amber-500/15 text-amber-400 border border-amber-500/30 shadow-sm">
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10.5px] font-mono font-bold tracking-wider uppercase bg-warning/15 text-warning border border-warning/30 shadow-sm">
           PENDIENTE
         </span>
       );
     case "ERROR":
     case "FAILED":
       return (
-        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold tracking-wider uppercase bg-rose-500/15 text-rose-400 border border-rose-500/30 shadow-sm">
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10.5px] font-mono font-bold tracking-wider uppercase bg-error/15 text-error border border-error/30 shadow-sm">
           ERROR
         </span>
       );
     default:
       return (
-        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold tracking-wider uppercase bg-surface-subtle text-foreground-muted border border-border">
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10.5px] font-mono font-bold tracking-wider uppercase bg-surface-subtle text-foreground-muted border border-border">
           {normStatus || "DESCONOCIDO"}
         </span>
       );
@@ -107,7 +106,7 @@ function NotificationTypeBadge({ type }) {
   else if (norm === "CIERRE") label = "Cierre";
 
   return (
-    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-surface-subtle border border-border text-foreground-secondary">
+    <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-[11px] font-medium bg-surface-subtle border border-border text-foreground-secondary">
       {label}
     </span>
   );
@@ -118,12 +117,12 @@ function ProviderStatusLabel({ providerStatus }) {
   const p = (providerStatus || "").toLowerCase();
   if (!p) return <span className="text-foreground-disabled text-xs">-</span>;
 
-  let colorClass = "text-slate-400";
-  if (p === "delivered") colorClass = "text-emerald-400 font-semibold";
-  else if (p === "sent") colorClass = "text-blue-400 font-semibold";
-  else if (p === "dispatched" || p === "pending") colorClass = "text-amber-400";
-  else if (p === "failed" || p === "error") colorClass = "text-rose-400 font-semibold";
-  else if (p === "unknown") colorClass = "text-slate-400 italic";
+  let colorClass = "text-foreground-muted";
+  if (p === "delivered") colorClass = "text-success font-semibold";
+  else if (p === "sent") colorClass = "text-info font-semibold";
+  else if (p === "dispatched" || p === "pending") colorClass = "text-warning";
+  else if (p === "failed" || p === "error") colorClass = "text-error font-semibold";
+  else if (p === "unknown") colorClass = "text-foreground-disabled italic";
 
   return (
     <span className={`text-xs font-mono ${colorClass}`}>
@@ -201,13 +200,25 @@ export default function OrderNotificationsView() {
 
         const json = await res.json();
         if (!ignore && json.success) {
-          setData(json.data || []);
+          const list = json.data || [];
+          setData(list);
           if (json.pagination) {
             setTotalRecords(json.pagination.totalRecords || 0);
             setTotalPages(json.pagination.totalPages || 1);
           }
           if (json.summary) {
             setSummary(json.summary);
+          }
+          if (list.length > 0) {
+            setSelectedItem((prev) => {
+              if (!prev) return list[0];
+              const exists = list.find(
+                (d) => d.notificacion_orden_trabajo_id === prev.notificacion_orden_trabajo_id
+              );
+              return exists || list[0];
+            });
+          } else {
+            setSelectedItem(null);
           }
         }
       } catch (err) {
@@ -300,7 +311,9 @@ export default function OrderNotificationsView() {
 
     const headers = [
       "ID",
-      "Fecha y Hora",
+      "Fecha Registro",
+      "Fecha Envio",
+      "Fecha Actualizacion",
       "Orden",
       "Cliente",
       "Telefono",
@@ -310,13 +323,14 @@ export default function OrderNotificationsView() {
       "Codigo HTTP",
       "Batch ID",
       "Mensaje",
-      "Fecha Envio",
       "Usuario Registro"
     ];
 
     const rows = data.map((item) => [
       item.notificacion_orden_trabajo_id,
       formatFullDate(item.fecha_registro),
+      formatFullDate(item.fecha_envio),
+      formatFullDate(item.fecha_actualizacion),
       `"${item.codigo_orden || ""}"`,
       `"${(item.nombre_cliente || "").replace(/"/g, '""')}"`,
       `"${item.telefono_destino || ""}"`,
@@ -326,7 +340,6 @@ export default function OrderNotificationsView() {
       item.codigo_http || "",
       `"${item.textbee_batch_id || ""}"`,
       `"${(item.mensaje || "").replace(/"/g, '""')}"`,
-      formatFullDate(item.fecha_envio),
       `"${item.usuario_nombre || ""}"`
     ]);
 
@@ -348,19 +361,19 @@ export default function OrderNotificationsView() {
     return (
       <th
         onClick={() => handleSort(columnKey)}
-        className={`px-3 py-2 text-left text-[10px] font-mono font-bold tracking-wider text-slate-300 uppercase cursor-pointer select-none transition-colors hover:text-white hover:bg-slate-800/40 ${extraClass}`}
+        className={`px-2.5 py-2 text-left text-[11px] font-mono font-bold tracking-wider uppercase cursor-pointer select-none transition-colors hover:text-foreground text-foreground-secondary ${extraClass}`}
       >
-        <div className="flex items-center gap-1">
-          <span className="truncate">{label}</span>
-          <span className="text-slate-500 shrink-0">
+        <div className="flex items-center gap-1.5">
+          <span className="whitespace-nowrap">{label}</span>
+          <span className="shrink-0">
             {isSorted ? (
               sortOrder === "asc" ? (
-                <ArrowUp size={12} className="text-primary" />
+                <ArrowUp size={11} className="text-primary" />
               ) : (
-                <ArrowDown size={12} className="text-primary" />
+                <ArrowDown size={11} className="text-primary" />
               )
             ) : (
-              <ArrowUpDown size={11} className="opacity-40" />
+              <ArrowUpDown size={10} className="text-foreground-disabled opacity-50" />
             )}
           </span>
         </div>
@@ -386,11 +399,11 @@ export default function OrderNotificationsView() {
       {/* 2. Page Header */}
       <div className="flex flex-wrap items-center justify-between gap-2 shrink-0">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-surface-subtle border border-primary/30 flex items-center justify-center text-primary shadow-sm shadow-primary/10 shrink-0">
+          <div className="w-8 h-8 rounded-lg bg-surface-subtle border border-border flex items-center justify-center text-primary shadow-sm shrink-0">
             <Mail size={16} className="text-primary" />
           </div>
           <div>
-            <h1 className="text-lg md:text-xl font-bold tracking-tight text-white leading-tight">
+            <h1 className="text-lg md:text-xl font-bold tracking-tight text-foreground leading-tight">
               Notificaciones de Órdenes
             </h1>
             <p className="text-[11px] text-foreground-muted leading-tight mt-0.5">
@@ -408,7 +421,7 @@ export default function OrderNotificationsView() {
               setRefreshTrigger((c) => c + 1);
             }}
             disabled={loading || refreshing}
-            className="h-7.5 flex items-center gap-1.5 px-3 bg-surface-subtle hover:bg-hover border border-border rounded-lg text-xs font-mono font-medium text-foreground transition-all shadow-sm cursor-pointer disabled:opacity-50"
+            className="h-8 flex items-center gap-1.5 px-3 bg-surface-subtle hover:bg-hover border border-border rounded-lg text-xs font-mono font-medium text-foreground transition-all shadow-sm cursor-pointer disabled:opacity-50"
             title="Refrescar lista"
           >
             <RefreshCw size={12} className={refreshing ? "animate-spin text-primary" : "text-foreground-muted"} />
@@ -419,35 +432,35 @@ export default function OrderNotificationsView() {
             type="button"
             onClick={handleExportCsv}
             disabled={loading || data.length === 0}
-            className="h-7.5 flex items-center gap-1.5 px-3.5 bg-primary/10 hover:bg-primary/20 border border-primary/40 text-primary rounded-lg text-xs font-mono font-bold transition-all shadow-sm cursor-pointer disabled:opacity-50"
+            className="h-8 flex items-center gap-1.5 px-3.5 bg-surface-subtle hover:bg-hover border border-border text-foreground rounded-lg text-xs font-mono font-bold transition-all shadow-sm cursor-pointer disabled:opacity-50"
             title="Exportar a CSV"
           >
-            <Download size={12} />
+            <Download size={12} className="text-primary" />
             <span>Exportar</span>
           </button>
         </div>
       </div>
 
-      {/* 3. Summary Cards Bar (6 compact cards matching visual mockup, 74px height) */}
+      {/* 3. Summary Cards Bar (6 compact cards matching Ride Lab branding) */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 shrink-0">
         {/* Total */}
         <div
           onClick={() => handleMetricCardClick("TOTAL")}
           className={`h-[74px] p-2.5 rounded-xl border transition-all cursor-pointer shadow-sm flex flex-col justify-between ${
             estadoFilter === "TODOS"
-              ? "bg-slate-900/90 border-slate-700 ring-1 ring-primary/40"
-              : "bg-[#0e131f]/90 border-slate-800/80 hover:border-slate-700"
+              ? "bg-primary/10 border-primary ring-1 ring-primary/40"
+              : "bg-card border-border hover:border-primary/40"
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className="w-5 h-5 rounded-md bg-slate-800/80 border border-slate-700 flex items-center justify-center text-slate-300">
+            <span className="w-5 h-5 rounded-md bg-surface-subtle border border-border flex items-center justify-center text-primary">
               <MessageSquare size={11} />
             </span>
           </div>
-          <div className="text-xl font-bold font-mono text-white tracking-tight leading-none">
+          <div className="text-xl font-bold font-mono text-foreground tracking-tight leading-none">
             {summary.total}
           </div>
-          <div className="text-[10px] font-mono text-slate-400 leading-none">
+          <div className="text-[10px] font-mono text-foreground-muted uppercase font-bold leading-none">
             Total
           </div>
         </div>
@@ -457,19 +470,19 @@ export default function OrderNotificationsView() {
           onClick={() => handleMetricCardClick("PENDIENTE")}
           className={`h-[74px] p-2.5 rounded-xl border transition-all cursor-pointer shadow-sm flex flex-col justify-between ${
             estadoFilter === "PENDIENTE"
-              ? "bg-amber-950/40 border-amber-500 ring-1 ring-amber-500/50"
-              : "bg-[#18140c]/90 border-amber-900/40 hover:border-amber-700/60"
+              ? "bg-warning/15 border-warning ring-1 ring-warning/50"
+              : "bg-card border-border hover:border-warning/40"
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className="w-5 h-5 rounded-md bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
+            <span className="w-5 h-5 rounded-md bg-warning/15 border border-warning/30 flex items-center justify-center text-warning">
               <Clock size={11} />
             </span>
           </div>
-          <div className="text-xl font-bold font-mono text-amber-400 tracking-tight leading-none">
+          <div className="text-xl font-bold font-mono text-warning tracking-tight leading-none">
             {summary.pendientes}
           </div>
-          <div className="text-[10px] font-mono text-amber-400/80 leading-none">
+          <div className="text-[10px] font-mono text-warning/80 uppercase font-bold leading-none">
             Pendientes
           </div>
         </div>
@@ -479,19 +492,19 @@ export default function OrderNotificationsView() {
           onClick={() => handleMetricCardClick("ENVIADO")}
           className={`h-[74px] p-2.5 rounded-xl border transition-all cursor-pointer shadow-sm flex flex-col justify-between ${
             estadoFilter === "ENVIADO"
-              ? "bg-blue-950/40 border-blue-500 ring-1 ring-blue-500/50"
-              : "bg-[#0b1526]/90 border-blue-900/40 hover:border-blue-700/60"
+              ? "bg-info/15 border-info ring-1 ring-info/50"
+              : "bg-card border-border hover:border-info/40"
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className="w-5 h-5 rounded-md bg-blue-500/15 border border-blue-500/30 flex items-center justify-center text-blue-400">
+            <span className="w-5 h-5 rounded-md bg-info/15 border border-info/30 flex items-center justify-center text-info">
               <Send size={11} />
             </span>
           </div>
-          <div className="text-xl font-bold font-mono text-blue-400 tracking-tight leading-none">
+          <div className="text-xl font-bold font-mono text-info tracking-tight leading-none">
             {summary.enviadas}
           </div>
-          <div className="text-[10px] font-mono text-blue-400/80 leading-none">
+          <div className="text-[10px] font-mono text-info/80 uppercase font-bold leading-none">
             Enviadas
           </div>
         </div>
@@ -501,19 +514,19 @@ export default function OrderNotificationsView() {
           onClick={() => handleMetricCardClick("ENTREGADO")}
           className={`h-[74px] p-2.5 rounded-xl border transition-all cursor-pointer shadow-sm flex flex-col justify-between ${
             estadoFilter === "ENTREGADO"
-              ? "bg-emerald-950/40 border-emerald-500 ring-1 ring-emerald-500/50"
-              : "bg-[#0d1c16]/90 border-emerald-900/40 hover:border-emerald-700/60"
+              ? "bg-success/15 border-success ring-1 ring-success/50"
+              : "bg-card border-border hover:border-success/40"
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className="w-5 h-5 rounded-md bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+            <span className="w-5 h-5 rounded-md bg-success/15 border border-success/30 flex items-center justify-center text-success">
               <CheckCircle2 size={11} />
             </span>
           </div>
-          <div className="text-xl font-bold font-mono text-emerald-400 tracking-tight leading-none">
+          <div className="text-xl font-bold font-mono text-success tracking-tight leading-none">
             {summary.entregadas}
           </div>
-          <div className="text-[10px] font-mono text-emerald-400/80 leading-none">
+          <div className="text-[10px] font-mono text-success/80 uppercase font-bold leading-none">
             Entregadas
           </div>
         </div>
@@ -523,19 +536,19 @@ export default function OrderNotificationsView() {
           onClick={() => handleMetricCardClick("ERROR")}
           className={`h-[74px] p-2.5 rounded-xl border transition-all cursor-pointer shadow-sm flex flex-col justify-between ${
             estadoFilter === "ERROR"
-              ? "bg-rose-950/40 border-rose-500 ring-1 ring-rose-500/50"
-              : "bg-[#201015]/90 border-rose-900/40 hover:border-rose-700/60"
+              ? "bg-error/15 border-error ring-1 ring-error/50"
+              : "bg-card border-border hover:border-error/40"
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className="w-5 h-5 rounded-md bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400">
+            <span className="w-5 h-5 rounded-md bg-error/15 border border-error/30 flex items-center justify-center text-error">
               <AlertTriangle size={11} />
             </span>
           </div>
-          <div className="text-xl font-bold font-mono text-rose-400 tracking-tight leading-none">
+          <div className="text-xl font-bold font-mono text-error tracking-tight leading-none">
             {summary.errores}
           </div>
-          <div className="text-[10px] font-mono text-rose-400/80 leading-none">
+          <div className="text-[10px] font-mono text-error/80 uppercase font-bold leading-none">
             Errores
           </div>
         </div>
@@ -545,30 +558,30 @@ export default function OrderNotificationsView() {
           onClick={() => handleMetricCardClick("SIN_CONFIRMAR")}
           className={`h-[74px] p-2.5 rounded-xl border transition-all cursor-pointer shadow-sm flex flex-col justify-between ${
             estadoFilter === "SIN_CONFIRMAR"
-              ? "bg-slate-800/50 border-cyan-500 ring-1 ring-cyan-500/50"
-              : "bg-[#0e171f]/90 border-slate-800/80 hover:border-cyan-800/60"
+              ? "bg-surface-elevated border-border-strong ring-1 ring-primary/30"
+              : "bg-card border-border hover:border-border-strong"
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className="w-5 h-5 rounded-md bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+            <span className="w-5 h-5 rounded-md bg-surface-subtle border border-border flex items-center justify-center text-foreground-muted">
               <Radio size={11} />
             </span>
           </div>
-          <div className="text-xl font-bold font-mono text-cyan-400 tracking-tight leading-none">
+          <div className="text-xl font-bold font-mono text-foreground-secondary tracking-tight leading-none">
             {summary.sin_confirmar}
           </div>
-          <div className="text-[10px] font-mono text-cyan-400/80 leading-none">
+          <div className="text-[10px] font-mono text-foreground-muted uppercase font-bold leading-none">
             Sin confirmar
           </div>
         </div>
       </div>
 
-      {/* 4. Filter Panel (Card with 2 rows matching visual mockup) */}
+      {/* 4. Filter Panel (Ride Lab Card) */}
       <form
         onSubmit={handleSearchSubmit}
-        className="bg-[#0e131f]/90 border border-slate-800/90 rounded-xl p-2.5 shadow-sm space-y-2 shrink-0"
+        className="bg-card border border-border rounded-xl p-2.5 shadow-sm space-y-2 shrink-0"
       >
-        <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400">
+        <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-foreground-muted">
           Filtros de búsqueda
         </div>
 
@@ -576,32 +589,32 @@ export default function OrderNotificationsView() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
           {/* Search Input */}
           <div className="space-y-0.5">
-            <label className="text-[10px] font-mono text-slate-400 block leading-tight">Buscar</label>
+            <label className="text-[10px] font-mono text-foreground-muted block leading-tight">Buscar</label>
             <div className="relative">
               <Search
                 size={13}
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none"
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-foreground-disabled pointer-events-none"
               />
               <input
                 type="text"
                 placeholder="Código OT, cliente, teléfono..."
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                className="w-full bg-[#141b2b] border border-slate-700/80 rounded-lg pl-8 pr-2.5 h-8 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-primary transition-colors"
+                className="w-full bg-input border border-border rounded-lg pl-8 pr-2.5 h-8 text-xs text-foreground placeholder:text-foreground-disabled focus:outline-none focus:border-primary transition-colors"
               />
             </div>
           </div>
 
           {/* Tipo de Notificación */}
           <div className="space-y-0.5">
-            <label className="text-[10px] font-mono text-slate-400 block leading-tight">Tipo de notificación</label>
+            <label className="text-[10px] font-mono text-foreground-muted block leading-tight">Tipo de notificación</label>
             <select
               value={tipoFilter}
               onChange={(e) => {
                 setTipoFilter(e.target.value);
                 setPage(1);
               }}
-              className="w-full bg-[#141b2b] border border-slate-700/80 rounded-lg px-2.5 h-8 text-xs text-white font-mono focus:outline-none focus:border-primary transition-colors cursor-pointer"
+              className="w-full bg-input border border-border rounded-lg px-2.5 h-8 text-xs text-foreground font-mono focus:outline-none focus:border-primary transition-colors cursor-pointer"
             >
               <option value="TODOS">Todos</option>
               <option value="BIENVENIDA">Bienvenida</option>
@@ -612,14 +625,14 @@ export default function OrderNotificationsView() {
 
           {/* Estado de Envío */}
           <div className="space-y-0.5">
-            <label className="text-[10px] font-mono text-slate-400 block leading-tight">Estado</label>
+            <label className="text-[10px] font-mono text-foreground-muted block leading-tight">Estado</label>
             <select
               value={estadoFilter}
               onChange={(e) => {
                 setEstadoFilter(e.target.value);
                 setPage(1);
               }}
-              className="w-full bg-[#141b2b] border border-slate-700/80 rounded-lg px-2.5 h-8 text-xs text-white font-mono focus:outline-none focus:border-primary transition-colors cursor-pointer"
+              className="w-full bg-input border border-border rounded-lg px-2.5 h-8 text-xs text-foreground font-mono focus:outline-none focus:border-primary transition-colors cursor-pointer"
             >
               <option value="TODOS">Todos</option>
               <option value="PENDIENTE">Pendiente</option>
@@ -632,14 +645,14 @@ export default function OrderNotificationsView() {
 
           {/* Estado Proveedor */}
           <div className="space-y-0.5">
-            <label className="text-[10px] font-mono text-slate-400 block leading-tight">Estado proveedor</label>
+            <label className="text-[10px] font-mono text-foreground-muted block leading-tight">Estado proveedor</label>
             <select
               value={estadoProveedorFilter}
               onChange={(e) => {
                 setEstadoProveedorFilter(e.target.value);
                 setPage(1);
               }}
-              className="w-full bg-[#141b2b] border border-slate-700/80 rounded-lg px-2.5 h-8 text-xs text-white font-mono focus:outline-none focus:border-primary transition-colors cursor-pointer"
+              className="w-full bg-input border border-border rounded-lg px-2.5 h-8 text-xs text-foreground font-mono focus:outline-none focus:border-primary transition-colors cursor-pointer"
             >
               <option value="todos">Todos</option>
               <option value="pending">pending</option>
@@ -657,7 +670,7 @@ export default function OrderNotificationsView() {
           <div className="flex flex-wrap items-center gap-2">
             {/* Fecha Desde */}
             <div className="space-y-0.5">
-              <label className="text-[10px] font-mono text-slate-400 block leading-tight">Fecha desde</label>
+              <label className="text-[10px] font-mono text-foreground-muted block leading-tight">Fecha desde</label>
               <input
                 type="date"
                 value={fechaDesde}
@@ -665,13 +678,13 @@ export default function OrderNotificationsView() {
                   setFechaDesde(e.target.value);
                   setPage(1);
                 }}
-                className="bg-[#141b2b] border border-slate-700/80 rounded-lg px-2.5 h-8 text-xs text-white font-mono focus:outline-none focus:border-primary transition-colors"
+                className="bg-input border border-border rounded-lg px-2.5 h-8 text-xs text-foreground font-mono focus:outline-none focus:border-primary transition-colors"
               />
             </div>
 
             {/* Fecha Hasta */}
             <div className="space-y-0.5">
-              <label className="text-[10px] font-mono text-slate-400 block leading-tight">Fecha hasta</label>
+              <label className="text-[10px] font-mono text-foreground-muted block leading-tight">Fecha hasta</label>
               <input
                 type="date"
                 value={fechaHasta}
@@ -679,7 +692,7 @@ export default function OrderNotificationsView() {
                   setFechaHasta(e.target.value);
                   setPage(1);
                 }}
-                className="bg-[#141b2b] border border-slate-700/80 rounded-lg px-2.5 h-8 text-xs text-white font-mono focus:outline-none focus:border-primary transition-colors"
+                className="bg-input border border-border rounded-lg px-2.5 h-8 text-xs text-foreground font-mono focus:outline-none focus:border-primary transition-colors"
               />
             </div>
           </div>
@@ -689,7 +702,7 @@ export default function OrderNotificationsView() {
             <button
               type="button"
               onClick={handleResetFilters}
-              className="flex items-center gap-1 px-3 h-8 bg-surface-subtle hover:bg-hover border border-slate-700/80 rounded-lg text-xs font-mono text-slate-300 transition-colors cursor-pointer"
+              className="flex items-center gap-1 px-3 h-8 bg-surface-subtle hover:bg-hover border border-border rounded-lg text-xs font-mono text-foreground-secondary transition-colors cursor-pointer"
             >
               <FilterX size={13} />
               <span>Limpiar filtros</span>
@@ -697,7 +710,7 @@ export default function OrderNotificationsView() {
 
             <button
               type="submit"
-              className="flex items-center gap-1.5 px-4 h-8 bg-[#95c11f] hover:bg-[#86ae1a] text-black font-mono text-xs font-bold rounded-lg transition-all shadow-md cursor-pointer"
+              className="flex items-center gap-1.5 px-4 h-8 bg-primary-button-bg hover:brightness-110 text-primary-foreground font-mono text-xs font-bold rounded-lg transition-all shadow-md cursor-pointer"
             >
               <Search size={13} />
               <span>Buscar</span>
@@ -708,12 +721,12 @@ export default function OrderNotificationsView() {
 
       {/* 5. Table Header Count and Pagination Controls */}
       <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono shrink-0 py-0.5">
-        <div className="text-slate-400">
-          <span className="font-bold text-white">{totalRecords}</span> registros encontrados
+        <div className="text-foreground-muted">
+          <span className="font-bold text-foreground">{totalRecords}</span> registros encontrados
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 text-slate-400">
+          <div className="flex items-center gap-1.5 text-foreground-muted">
             <span>Filas por página</span>
             <select
               value={pageSize}
@@ -721,7 +734,7 @@ export default function OrderNotificationsView() {
                 setPageSize(Number(e.target.value));
                 setPage(1);
               }}
-              className="bg-[#141b2b] border border-slate-700/80 rounded-md px-2 py-0.5 text-xs text-white focus:outline-none focus:border-primary cursor-pointer"
+              className="bg-input border border-border rounded-md px-2 py-0.5 text-xs text-foreground focus:outline-none focus:border-primary cursor-pointer"
             >
               <option value={25}>25</option>
               <option value={50}>50</option>
@@ -735,7 +748,7 @@ export default function OrderNotificationsView() {
               type="button"
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page <= 1}
-              className="w-6 h-6 flex items-center justify-center rounded-md border border-slate-700/80 bg-[#141b2b] text-slate-300 hover:text-white hover:border-slate-600 disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
+              className="w-6 h-6 flex items-center justify-center rounded-md border border-border bg-surface-subtle text-foreground-secondary hover:text-foreground hover:bg-hover disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
             >
               <ChevronLeft size={13} />
             </button>
@@ -755,8 +768,8 @@ export default function OrderNotificationsView() {
                   onClick={() => setPage(pageNum)}
                   className={`w-6 h-6 flex items-center justify-center rounded-md text-[11px] font-mono font-bold transition-all cursor-pointer ${
                     isCurrent
-                      ? "bg-[#95c11f] text-black shadow-sm"
-                      : "border border-slate-700/80 bg-[#141b2b] text-slate-300 hover:border-slate-600 hover:text-white"
+                      ? "bg-primary-button-bg text-primary-foreground shadow-sm"
+                      : "border border-border bg-surface-subtle text-foreground-secondary hover:border-primary/40 hover:text-foreground hover:bg-hover"
                   }`}
                 >
                   {pageNum}
@@ -768,7 +781,7 @@ export default function OrderNotificationsView() {
               type="button"
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page >= totalPages}
-              className="w-6 h-6 flex items-center justify-center rounded-md border border-slate-700/80 bg-[#141b2b] text-slate-300 hover:text-white hover:border-slate-600 disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
+              className="w-6 h-6 flex items-center justify-center rounded-md border border-border bg-surface-subtle text-foreground-secondary hover:text-foreground hover:bg-hover disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
             >
               <ChevronRight size={13} />
             </button>
@@ -778,49 +791,48 @@ export default function OrderNotificationsView() {
 
       {/* 6. Main Data Table with Dynamic Viewport Height */}
       <div
-        className={`bg-[#0e131f]/90 border border-slate-800 rounded-xl overflow-hidden shadow-md flex flex-col min-h-0 transition-all duration-200 ${
+        className={`bg-card border border-border rounded-xl overflow-hidden shadow-sm flex flex-col min-h-0 transition-all duration-200 ${
           selectedItem ? "flex-[6] min-h-[160px]" : "flex-1 min-h-[220px]"
         }`}
       >
         <div className="flex-1 min-h-0 overflow-auto custom-scrollbar relative">
           <table className="w-full text-left border-collapse text-xs">
-            <thead className="sticky top-0 z-20 bg-[#141b2b] shadow-sm">
-              <tr className="border-b border-slate-800 whitespace-nowrap">
-                {renderSortableHeader("Fecha y hora", "fecha_registro")}
-                {renderSortableHeader("Orden", "codigo_orden")}
-                {renderSortableHeader("Cliente", "nombre_cliente")}
-                <th className="px-3 py-2 text-left text-[10px] font-mono font-bold tracking-wider text-slate-300 uppercase">
+            <thead className="sticky top-0 z-20 bg-surface-subtle shadow-sm">
+              <tr className="border-b border-border whitespace-nowrap">
+                {renderSortableHeader("Fecha registro", "fecha_registro", "w-px whitespace-nowrap")}
+                {renderSortableHeader("Fecha envío", "fecha_envio", "w-px whitespace-nowrap")}
+                {renderSortableHeader("Fecha actualización", "fecha_actualizacion", "w-px whitespace-nowrap")}
+                {renderSortableHeader("Orden", "codigo_orden", "w-px whitespace-nowrap")}
+                {renderSortableHeader("Cliente", "nombre_cliente", "w-px whitespace-nowrap")}
+                <th className="w-px whitespace-nowrap px-2.5 py-2 text-left text-[11px] font-mono font-bold tracking-wider text-foreground-secondary uppercase">
                   Teléfono
                 </th>
-                {renderSortableHeader("Tipo", "tipo_notificacion")}
-                {renderSortableHeader("Estado envío", "estado_envio")}
-                {renderSortableHeader("Estado proveedor", "estado_proveedor")}
-                <th className="px-3 py-2 text-left text-[10px] font-mono font-bold tracking-wider text-slate-300 uppercase">
+                {renderSortableHeader("Tipo", "tipo_notificacion", "w-px whitespace-nowrap")}
+                {renderSortableHeader("Estado envío", "estado_envio", "w-px whitespace-nowrap")}
+                {renderSortableHeader("Estado proveedor", "estado_proveedor", "w-px whitespace-nowrap")}
+                <th className="px-2.5 py-2 text-left text-[11px] font-mono font-bold tracking-wider text-foreground-secondary uppercase w-full">
                   Mensaje
-                </th>
-                <th className="px-2 py-2 text-center text-[10px] font-mono font-bold tracking-wider text-slate-300 uppercase sticky right-0 bg-[#141b2b] shadow-[-6px_0_10px_rgba(0,0,0,0.3)] z-10 w-[55px]">
-                  Acciones
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/80">
+            <tbody className="divide-y divide-border">
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="py-10 text-center text-slate-400 font-mono">
+                  <td colSpan={10} className="py-10 text-center text-foreground-muted font-mono text-xs">
                     <RefreshCw className="animate-spin text-primary mx-auto mb-1.5" size={20} />
                     Cargando notificaciones de órdenes...
                   </td>
                 </tr>
               ) : error ? (
                 <tr>
-                  <td colSpan={9} className="py-8 text-center text-rose-400 font-mono">
-                    <AlertTriangle size={20} className="mx-auto mb-1.5 text-rose-500" />
+                  <td colSpan={10} className="py-8 text-center text-error font-mono text-xs">
+                    <AlertTriangle size={20} className="mx-auto mb-1.5 text-error" />
                     {error}
                   </td>
                 </tr>
               ) : data.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-10 text-center text-slate-400 font-mono italic">
+                  <td colSpan={10} className="py-10 text-center text-foreground-muted font-mono italic text-xs">
                     No se encontraron notificaciones que coincidan con los filtros aplicados.
                   </td>
                 </tr>
@@ -835,78 +847,75 @@ export default function OrderNotificationsView() {
                       onClick={() => setSelectedItem(item)}
                       className={`h-10 transition-colors cursor-pointer ${
                         isSelected
-                          ? "bg-slate-800/50 border-l-2 border-l-primary"
-                          : "hover:bg-slate-800/30"
+                          ? "bg-primary/10 border-l-2 border-l-primary"
+                          : "hover:bg-hover"
                       }`}
                     >
-                      {/* Fecha y Hora */}
-                      <td className="px-3 py-1.5 font-mono text-slate-300 whitespace-nowrap text-[11px]">
+                      {/* Fecha Registro */}
+                      <td className="w-px px-2.5 py-1.5 font-mono text-foreground-secondary whitespace-nowrap text-xs">
                         {formatFullDate(item.fecha_registro)}
                       </td>
 
+                      {/* Fecha Envío */}
+                      <td className="w-px px-2.5 py-1.5 font-mono text-foreground-secondary whitespace-nowrap text-xs">
+                        {formatFullDate(item.fecha_envio)}
+                      </td>
+
+                      {/* Fecha Actualización */}
+                      <td className="w-px px-2.5 py-1.5 font-mono text-foreground-secondary whitespace-nowrap text-xs">
+                        {formatFullDate(item.fecha_actualizacion)}
+                      </td>
+
                       {/* Código de Orden */}
-                      <td className="px-3 py-1.5 whitespace-nowrap text-[11px]">
+                      <td className="w-px px-2.5 py-1.5 whitespace-nowrap text-xs">
                         {item.orden_trabajo_id ? (
                           <Link
                             href={`/workshop?view=work_orders&order_id=${item.orden_trabajo_id}`}
                             onClick={(e) => e.stopPropagation()}
-                            className="font-mono font-bold text-[#95c11f] hover:underline flex items-center gap-1"
+                            className="font-mono font-bold text-primary hover:underline flex items-center gap-1"
                           >
                             <span>{item.codigo_orden || `OT-${item.orden_trabajo_id}`}</span>
                           </Link>
                         ) : (
-                          <span className="font-mono text-slate-400">
+                          <span className="font-mono text-foreground-muted">
                             {item.codigo_orden || "-"}
                           </span>
                         )}
                       </td>
 
                       {/* Cliente */}
-                      <td className="px-3 py-1.5 text-white font-medium whitespace-nowrap text-[11px]">
+                      <td className="w-px px-2.5 py-1.5 text-foreground font-medium whitespace-nowrap text-xs max-w-[150px] truncate" title={item.nombre_cliente || "Cliente no especificado"}>
                         {item.nombre_cliente || "Cliente no especificado"}
                       </td>
 
                       {/* Teléfono */}
-                      <td className="px-3 py-1.5 font-mono text-slate-300 whitespace-nowrap text-[11px]">
+                      <td className="w-px px-2.5 py-1.5 font-mono text-foreground-secondary whitespace-nowrap text-xs">
                         {item.telefono_destino || "-"}
                       </td>
 
                       {/* Tipo */}
-                      <td className="px-3 py-1.5 whitespace-nowrap">
+                      <td className="w-px px-2.5 py-1.5 whitespace-nowrap">
                         <NotificationTypeBadge type={item.tipo_notificacion} />
                       </td>
 
                       {/* Estado Envío */}
-                      <td className="px-3 py-1.5 whitespace-nowrap">
+                      <td className="w-px px-2.5 py-1.5 whitespace-nowrap">
                         <DeliveryStatusBadge status={item.estado_envio} />
                       </td>
 
                       {/* Proveedor / Estado proveedor */}
-                      <td className="px-3 py-1.5 whitespace-nowrap">
+                      <td className="w-px px-2.5 py-1.5 whitespace-nowrap">
                         <div className="flex flex-col leading-tight">
-                          <span className="text-[10px] font-medium text-slate-400">TextBee</span>
+                          <span className="text-[10px] font-medium text-foreground-muted">TextBee</span>
                           <ProviderStatusLabel providerStatus={item.estado_proveedor} />
                         </div>
                       </td>
 
                       {/* Mensaje */}
-                      <td className="px-3 py-1.5 text-slate-300 max-w-[240px] truncate text-[11px]" title={item.mensaje}>
-                        {item.mensaje || "-"}
-                      </td>
-
-                      {/* Acciones */}
-                      <td className="px-2 py-1.5 text-center whitespace-nowrap sticky right-0 bg-[#0e131f] shadow-[-6px_0_10px_rgba(0,0,0,0.3)] z-10">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedItem(item);
-                          }}
-                          className="p-1 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
-                          title="Ver detalle completo"
-                        >
-                          <Eye size={14} />
-                        </button>
+                      <td className="px-2.5 py-1.5 text-foreground-secondary text-xs" title={item.mensaje}>
+                        <div className="line-clamp-2 leading-snug break-words select-text">
+                          {item.mensaje || "-"}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -921,15 +930,15 @@ export default function OrderNotificationsView() {
       {selectedItem && (
         <div
           id="notification-detail-card"
-          className="bg-[#0e131f]/95 border border-slate-800 rounded-xl p-3 shadow-2xl flex flex-col min-h-0 flex-[4] max-h-[38%] overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-150 shrink-0"
+          className="bg-card border border-border rounded-xl p-3 shadow-2xl flex flex-col min-h-0 flex-[4] max-h-[38%] overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-150 shrink-0"
         >
           {/* Panel Header */}
-          <div className="flex items-center justify-between border-b border-slate-800/80 pb-1.5 shrink-0">
+          <div className="flex items-center justify-between border-b border-border pb-1.5 shrink-0">
             <div className="flex items-center gap-2">
               <span className="w-5 h-5 rounded-md bg-primary/10 border border-primary/30 flex items-center justify-center text-primary">
                 <Mail size={12} />
               </span>
-              <h2 className="text-xs font-bold text-white tracking-wide">
+              <h2 className="text-xs font-bold text-foreground tracking-wide">
                 Detalle de notificación #{selectedItem.notificacion_orden_trabajo_id}
               </h2>
             </div>
@@ -937,7 +946,7 @@ export default function OrderNotificationsView() {
             <button
               type="button"
               onClick={() => setSelectedItem(null)}
-              className="p-1 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+              className="p-1 rounded-md text-foreground-muted hover:text-foreground hover:bg-hover transition-colors cursor-pointer"
               title="Cerrar detalle"
             >
               <X size={14} />
@@ -949,49 +958,49 @@ export default function OrderNotificationsView() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-mono">
               {/* Columna 1: Información General */}
               <div className="space-y-1.5">
-                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800/60 pb-0.5">
+                <div className="text-[10px] font-bold text-primary uppercase tracking-wider border-b border-border pb-0.5">
                   Información general
                 </div>
 
-                <div className="flex items-start justify-between py-0.5 border-b border-slate-800/30 text-[11px]">
-                  <span className="text-slate-400">ID:</span>
-                  <span className="text-white font-bold">{selectedItem.notificacion_orden_trabajo_id}</span>
+                <div className="flex items-start justify-between py-0.5 border-b border-border-subtle text-[11px]">
+                  <span className="text-foreground-muted">ID:</span>
+                  <span className="text-foreground font-bold">{selectedItem.notificacion_orden_trabajo_id}</span>
                 </div>
 
-                <div className="flex items-start justify-between py-0.5 border-b border-slate-800/30 text-[11px]">
-                  <span className="text-slate-400">Orden de trabajo:</span>
+                <div className="flex items-start justify-between py-0.5 border-b border-border-subtle text-[11px]">
+                  <span className="text-foreground-muted">Orden de trabajo:</span>
                   {selectedItem.orden_trabajo_id ? (
                     <Link
                       href={`/workshop?view=work_orders&order_id=${selectedItem.orden_trabajo_id}`}
-                      className="font-bold text-[#95c11f] hover:underline flex items-center gap-1"
+                      className="font-bold text-primary hover:underline flex items-center gap-1"
                     >
                       <span>{selectedItem.codigo_orden || `OT-${selectedItem.orden_trabajo_id}`}</span>
                       <ExternalLink size={10} />
                     </Link>
                   ) : (
-                    <span className="text-slate-300">{selectedItem.codigo_orden || "-"}</span>
+                    <span className="text-foreground-secondary">{selectedItem.codigo_orden || "-"}</span>
                   )}
                 </div>
 
-                <div className="flex items-start justify-between py-0.5 border-b border-slate-800/30 text-[11px]">
-                  <span className="text-slate-400">Cliente:</span>
-                  <span className="text-white font-sans font-medium text-right">
+                <div className="flex items-start justify-between py-0.5 border-b border-border-subtle text-[11px]">
+                  <span className="text-foreground-muted">Cliente:</span>
+                  <span className="text-foreground font-sans font-medium text-right">
                     {selectedItem.nombre_cliente || "-"}
                   </span>
                 </div>
 
-                <div className="flex items-start justify-between py-0.5 border-b border-slate-800/30 text-[11px]">
-                  <span className="text-slate-400">Tipo de notificación:</span>
+                <div className="flex items-start justify-between py-0.5 border-b border-border-subtle text-[11px]">
+                  <span className="text-foreground-muted">Tipo de notificación:</span>
                   <NotificationTypeBadge type={selectedItem.tipo_notificacion} />
                 </div>
 
-                <div className="flex items-start justify-between py-0.5 border-b border-slate-800/30 text-[11px]">
-                  <span className="text-slate-400">Teléfono destino:</span>
-                  <span className="text-white">{selectedItem.telefono_destino || "-"}</span>
+                <div className="flex items-start justify-between py-0.5 border-b border-border-subtle text-[11px]">
+                  <span className="text-foreground-muted">Teléfono destino:</span>
+                  <span className="text-foreground">{selectedItem.telefono_destino || "-"}</span>
                 </div>
 
                 <div className="space-y-1 pt-0.5">
-                  <div className="flex items-center justify-between text-slate-400 text-[10px]">
+                  <div className="flex items-center justify-between text-foreground-muted text-[10px]">
                     <span>Mensaje:</span>
                     <button
                       type="button"
@@ -1002,7 +1011,7 @@ export default function OrderNotificationsView() {
                       <span>{copiedField === "msg" ? "Copiado" : "Copiar"}</span>
                     </button>
                   </div>
-                  <div className="bg-[#141b2b] border border-slate-800 rounded-lg p-2 text-[11px] font-sans text-slate-200 whitespace-pre-wrap leading-relaxed max-h-16 overflow-y-auto custom-scrollbar">
+                  <div className="bg-surface-subtle border border-border rounded-lg p-2 text-[11px] font-sans text-foreground whitespace-pre-wrap leading-relaxed max-h-16 overflow-y-auto custom-scrollbar">
                     {selectedItem.mensaje}
                   </div>
                 </div>
@@ -1010,49 +1019,49 @@ export default function OrderNotificationsView() {
 
               {/* Columna 2: Estado y Respuesta */}
               <div className="space-y-1.5">
-                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800/60 pb-0.5">
+                <div className="text-[10px] font-bold text-primary uppercase tracking-wider border-b border-border pb-0.5">
                   Estado y respuesta
                 </div>
 
-                <div className="flex items-center justify-between py-0.5 border-b border-slate-800/30 text-[11px]">
-                  <span className="text-slate-400">Estado envío:</span>
+                <div className="flex items-center justify-between py-0.5 border-b border-border-subtle text-[11px]">
+                  <span className="text-foreground-muted">Estado envío:</span>
                   <DeliveryStatusBadge status={selectedItem.estado_envio} />
                 </div>
 
-                <div className="flex items-center justify-between py-0.5 border-b border-slate-800/30 text-[11px]">
-                  <span className="text-slate-400">Estado proveedor:</span>
+                <div className="flex items-center justify-between py-0.5 border-b border-border-subtle text-[11px]">
+                  <span className="text-foreground-muted">Estado proveedor:</span>
                   <ProviderStatusLabel providerStatus={selectedItem.estado_proveedor} />
                 </div>
 
-                <div className="flex items-center justify-between py-0.5 border-b border-slate-800/30 text-[11px]">
-                  <span className="text-slate-400">Código HTTP:</span>
-                  <span className="text-white font-bold">{selectedItem.codigo_http || "-"}</span>
+                <div className="flex items-center justify-between py-0.5 border-b border-border-subtle text-[11px]">
+                  <span className="text-foreground-muted">Código HTTP:</span>
+                  <span className="text-foreground font-bold">{selectedItem.codigo_http || "-"}</span>
                 </div>
 
-                <div className="flex items-start justify-between py-0.5 border-b border-slate-800/30 gap-2 text-[11px]">
-                  <span className="text-slate-400 shrink-0">Batch ID:</span>
+                <div className="flex items-start justify-between py-0.5 border-b border-border-subtle gap-2 text-[11px]">
+                  <span className="text-foreground-muted shrink-0">Batch ID:</span>
                   {selectedItem.textbee_batch_id ? (
                     <div className="flex items-center gap-1 text-right overflow-hidden">
-                      <span className="text-slate-300 truncate max-w-[140px]" title={selectedItem.textbee_batch_id}>
+                      <span className="text-foreground-secondary truncate max-w-[140px]" title={selectedItem.textbee_batch_id}>
                         {selectedItem.textbee_batch_id}
                       </span>
                       <button
                         type="button"
                         onClick={() => handleCopy(selectedItem.textbee_batch_id, "batch")}
-                        className="text-slate-400 hover:text-white cursor-pointer"
+                        className="text-foreground-muted hover:text-foreground cursor-pointer"
                         title="Copiar Batch ID"
                       >
                         {copiedField === "batch" ? <Check size={11} className="text-primary" /> : <Copy size={11} />}
                       </button>
                     </div>
                   ) : (
-                    <span className="text-slate-500">-</span>
+                    <span className="text-foreground-disabled">-</span>
                   )}
                 </div>
 
-                <div className="flex items-start justify-between py-0.5 border-b border-slate-800/30 gap-2 text-[11px]">
-                  <span className="text-slate-400 shrink-0">Error mensaje:</span>
-                  <span className="text-rose-400 text-right truncate max-w-[180px]" title={selectedItem.error_mensaje || "-"}>
+                <div className="flex items-start justify-between py-0.5 border-b border-border-subtle gap-2 text-[11px]">
+                  <span className="text-foreground-muted shrink-0">Error mensaje:</span>
+                  <span className="text-error text-right truncate max-w-[180px]" title={selectedItem.error_mensaje || "-"}>
                     {selectedItem.error_mensaje || "-"}
                   </span>
                 </div>
@@ -1070,11 +1079,11 @@ export default function OrderNotificationsView() {
                     </button>
 
                     {showJsonDetails && (
-                      <div className="mt-1 bg-[#090d16] border border-slate-800 rounded-lg p-2 text-[10px] text-slate-300 max-h-24 overflow-auto relative">
+                      <div className="mt-1 bg-input border border-border rounded-lg p-2 text-[10px] text-foreground-secondary max-h-24 overflow-auto relative">
                         <button
                           type="button"
                           onClick={() => handleCopy(JSON.stringify(selectedItem.respuesta_proveedor, null, 2), "json")}
-                          className="absolute top-1.5 right-1.5 p-1 bg-slate-800 rounded text-slate-400 hover:text-white"
+                          className="absolute top-1.5 right-1.5 p-1 bg-surface-subtle hover:bg-hover border border-border rounded text-foreground-muted hover:text-foreground"
                           title="Copiar JSON"
                         >
                           {copiedField === "json" ? <Check size={11} className="text-primary" /> : <Copy size={11} />}
@@ -1090,33 +1099,33 @@ export default function OrderNotificationsView() {
 
               {/* Columna 3: Fechas y Usuario */}
               <div className="space-y-1.5">
-                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800/60 pb-0.5">
+                <div className="text-[10px] font-bold text-primary uppercase tracking-wider border-b border-border pb-0.5">
                   Fechas y usuario
                 </div>
 
-                <div className="flex items-start justify-between py-0.5 border-b border-slate-800/30 text-[11px]">
-                  <span className="text-slate-400">Fecha registro:</span>
-                  <span className="text-white text-right">{formatFullDate(selectedItem.fecha_registro)}</span>
+                <div className="flex items-start justify-between py-0.5 border-b border-border-subtle text-[11px]">
+                  <span className="text-foreground-muted">Fecha registro:</span>
+                  <span className="text-foreground text-right">{formatFullDate(selectedItem.fecha_registro)}</span>
                 </div>
 
-                <div className="flex items-start justify-between py-0.5 border-b border-slate-800/30 text-[11px]">
-                  <span className="text-slate-400">Fecha envío:</span>
-                  <span className="text-white text-right">{formatFullDate(selectedItem.fecha_envio)}</span>
+                <div className="flex items-start justify-between py-0.5 border-b border-border-subtle text-[11px]">
+                  <span className="text-foreground-muted">Fecha envío:</span>
+                  <span className="text-foreground text-right">{formatFullDate(selectedItem.fecha_envio)}</span>
                 </div>
 
-                <div className="flex items-start justify-between py-0.5 border-b border-slate-800/30 text-[11px]">
-                  <span className="text-slate-400">Fecha actualización:</span>
-                  <span className="text-white text-right">{formatFullDate(selectedItem.fecha_actualizacion)}</span>
+                <div className="flex items-start justify-between py-0.5 border-b border-border-subtle text-[11px]">
+                  <span className="text-foreground-muted">Fecha actualización:</span>
+                  <span className="text-foreground text-right">{formatFullDate(selectedItem.fecha_actualizacion)}</span>
                 </div>
 
-                <div className="flex items-start justify-between py-0.5 border-b border-slate-800/30 text-[11px]">
-                  <span className="text-slate-400">Usuario registro:</span>
-                  <span className="text-white text-right">{selectedItem.usuario_nombre || "Sistema"}</span>
+                <div className="flex items-start justify-between py-0.5 border-b border-border-subtle text-[11px]">
+                  <span className="text-foreground-muted">Usuario registro:</span>
+                  <span className="text-foreground text-right">{selectedItem.usuario_nombre || "Sistema"}</span>
                 </div>
 
-                <div className="flex items-start justify-between py-0.5 border-b border-slate-800/30 text-[11px]">
-                  <span className="text-slate-400">Empresa:</span>
-                  <span className="text-white text-right">{selectedItem.nombre_empresa || "Ride Lab"}</span>
+                <div className="flex items-start justify-between py-0.5 border-b border-border-subtle text-[11px]">
+                  <span className="text-foreground-muted">Empresa:</span>
+                  <span className="text-foreground text-right">{selectedItem.nombre_empresa || "Ride Lab"}</span>
                 </div>
               </div>
             </div>

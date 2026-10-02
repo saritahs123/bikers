@@ -38,6 +38,8 @@ interface NotificationRow {
 const SORT_WHITELIST: Record<string, string> = {
   fecha_registro: "n.fecha_registro",
   fecha: "n.fecha_registro",
+  fecha_envio: "n.fecha_envio",
+  fecha_actualizacion: "n.fecha_actualizacion",
   codigo_orden: "ot.codigo_orden",
   orden: "ot.codigo_orden",
   nombre_cliente: "nombre_cliente",
