@@ -207,13 +207,13 @@ function SidebarContent({
             className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl border transition-all duration-200 w-full cursor-pointer group text-xs ${
               isGroupActive
                 ? "bg-surface-subtle border-primary/40 text-primary font-bold shadow-[inset_4px_0_0_var(--color-primary)]"
-                : "bg-surface-subtle/50 border-border text-foreground-secondary hover:bg-surface-subtle hover:border-primary/40 hover:text-foreground"
+                : "bg-surface-subtle border-border text-foreground-secondary hover:bg-surface-subtle hover:border-primary/40 hover:text-foreground"
             }`}
           >
             {typeof item.icon === "string" ? (
               <span
                 className={`material-symbols-outlined text-[20px] transition-colors ${
-                  isGroupActive ? "text-primary" : "text-foreground-muted group-hover:text-primary"
+                  isGroupActive ? "text-primary" : "text-foreground-secondary group-hover:text-primary"
                 }`}
               >
                 {item.icon}
@@ -221,7 +221,7 @@ function SidebarContent({
             ) : (
               <span
                 className={`w-5 h-5 flex items-center justify-center transition-colors ${
-                  isGroupActive ? "text-primary" : "text-foreground-muted group-hover:text-primary"
+                  isGroupActive ? "text-primary" : "text-foreground-secondary group-hover:text-primary"
                 }`}
               >
                 {item.icon}
@@ -236,7 +236,7 @@ function SidebarContent({
             </span>
             <span
               className={`material-symbols-outlined text-sm transition-transform duration-200 ${
-                isExpanded ? "rotate-180 text-primary" : "text-foreground-muted group-hover:text-foreground"
+                isExpanded ? "rotate-180 text-primary" : "text-foreground-secondary group-hover:text-foreground"
               }`}
             >
               expand_more
@@ -244,7 +244,7 @@ function SidebarContent({
           </button>
 
           {isExpanded && (
-            <div className="flex flex-col mt-1.5 ml-2 space-y-1 py-1 font-mono text-xs animate-in fade-in duration-200">
+            <div className="flex flex-col mt-1.5 ml-3 pl-2.5 border-l-2 border-border/80 space-y-1 py-1 font-mono text-xs animate-in fade-in duration-200">
               {item.submenu.map((sub, idx) => {
                 if (sub.isHeader) {
                   return (
@@ -269,12 +269,12 @@ function SidebarContent({
                     }}
                     className={`text-xs py-1.5 px-2.5 rounded-lg border transition-all duration-200 flex items-center gap-2 uppercase ${
                       isSubActive
-                        ? "bg-primary/10 border-primary/40 text-primary font-bold"
-                        : "border-transparent text-foreground-muted hover:text-foreground hover:bg-hover hover:border-border"
+                        ? "bg-primary/15 border-primary/50 text-primary font-bold shadow-sm"
+                        : "border-transparent text-foreground-secondary hover:text-foreground hover:bg-surface-subtle hover:border-border"
                     }`}
                   >
                     {sub.icon && typeof sub.icon === "string" ? (
-                      <span className="material-symbols-outlined text-[16px] shrink-0">{sub.icon}</span>
+                      <span className="material-symbols-outlined text-[16px] shrink-0 text-foreground-secondary group-hover:text-primary">{sub.icon}</span>
                     ) : sub.icon ? (
                       <span className="shrink-0">{sub.icon}</span>
                     ) : null}
@@ -299,13 +299,13 @@ function SidebarContent({
         className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl border transition-all duration-200 cursor-pointer group font-mono text-xs mb-2 ${
           isActive
             ? "bg-surface-subtle border-primary/40 text-primary font-bold shadow-[inset_4px_0_0_var(--color-primary)]"
-            : "bg-surface-subtle/50 border-border text-foreground-secondary hover:bg-surface-subtle hover:border-primary/40 hover:text-foreground"
+            : "bg-surface-subtle border-border text-foreground-secondary hover:bg-surface-subtle hover:border-primary/40 hover:text-foreground"
         }`}
       >
         {typeof item.icon === "string" ? (
           <span
             className={`material-symbols-outlined text-[20px] transition-colors ${
-              isActive ? "text-primary" : "text-foreground-muted group-hover:text-primary"
+              isActive ? "text-primary" : "text-foreground-secondary group-hover:text-primary"
             }`}
           >
             {item.icon}
@@ -313,7 +313,7 @@ function SidebarContent({
         ) : (
           <span
             className={`w-5 h-5 flex items-center justify-center transition-colors ${
-              isActive ? "text-primary" : "text-foreground-muted group-hover:text-primary"
+              isActive ? "text-primary" : "text-foreground-secondary group-hover:text-primary"
             }`}
           >
             {item.icon}
@@ -356,14 +356,16 @@ function SidebarContent({
             className="flex items-center justify-center transition-transform hover:scale-[1.03] focus:outline-none"
             title="Ride Lab"
           >
-            <Image
-              src="/ridelab-logo.png"
-              alt="Ride Lab Logo"
-              width={180}
-              height={72}
-              className="h-12 max-h-14 w-auto object-contain"
-              priority
-            />
+            <div className="p-1 rounded-xl bg-[#0f0f0f] border border-border/40 shadow-sm flex items-center justify-center">
+              <Image
+                src="/ridelab-logo.png"
+                alt="Ride Lab Logo"
+                width={180}
+                height={72}
+                className="h-11 max-h-12 w-auto object-contain rounded-lg"
+                priority
+              />
+            </div>
           </Link>
           <button
             type="button"
