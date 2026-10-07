@@ -82,7 +82,7 @@ export function DashboardShell({
           onMenuToggle={() => setIsSidebarOpen((prev) => !prev)}
         />
         <main
-          className={`mt-16 p-4 md:p-8 h-[calc(100vh-4rem)] overflow-y-auto custom-scrollbar w-full transition-all duration-300 ease-in-out ${
+          className={`mt-16 p-4 md:p-8 h-[calc(100vh-4rem)] overflow-y-auto custom-scrollbar w-full transition-all duration-300 ease-in-out bg-background text-foreground ${
             isSidebarOpen ? "md:ml-64 md:w-[calc(100%-16rem)]" : "ml-0 w-full"
           }`}
         >
