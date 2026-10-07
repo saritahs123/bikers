@@ -356,16 +356,14 @@ function SidebarContent({
             className="flex items-center justify-center transition-transform hover:scale-[1.03] focus:outline-none"
             title="Ride Lab"
           >
-            <div className="p-1 rounded-xl bg-[#0f0f0f] border border-border/40 shadow-sm flex items-center justify-center">
-              <Image
-                src="/ridelab-logo.png"
-                alt="Ride Lab Logo"
-                width={180}
-                height={72}
-                className="h-11 max-h-12 w-auto object-contain rounded-lg"
-                priority
-              />
-            </div>
+            <Image
+              src="/ridelab-logo.png"
+              alt="Ride Lab Logo"
+              width={180}
+              height={72}
+              className="h-12 max-h-14 w-auto object-contain"
+              priority
+            />
           </Link>
           <button
             type="button"

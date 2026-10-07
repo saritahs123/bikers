@@ -32,7 +32,7 @@ export function TopBar({
   onMenuToggle?: () => void;
 }) {
   const router = useRouter();
-  const { theme, setTheme, isDark, isLight } = useTheme();
+  const { setTheme, isDark, isLight } = useTheme();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -87,16 +87,14 @@ export function TopBar({
               className="flex items-center transition-transform hover:scale-[1.02] focus:outline-none shrink-0"
               title="Ride Lab"
             >
-              <div className="p-1 rounded-xl bg-[#0f0f0f] border border-border/40 shadow-sm flex items-center justify-center">
-                <Image
-                  src="/ridelab-logo.png"
-                  alt="Ride Lab Logo"
-                  width={160}
-                  height={64}
-                  className="h-8 sm:h-9 md:h-10 w-auto object-contain shrink-0 rounded-lg"
-                  priority
-                />
-              </div>
+              <Image
+                src="/ridelab-logo.png"
+                alt="Ride Lab Logo"
+                width={160}
+                height={64}
+                className="h-8 sm:h-9 md:h-10 w-auto object-contain shrink-0"
+                priority
+              />
             </Link>
           </>
         )}
