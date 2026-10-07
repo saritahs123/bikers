@@ -345,8 +345,8 @@ export default function PublicTrackingView({
           {/* CARD PRINCIPAL */}
           <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_2px_8px_rgba(0,0,0,0.03)] p-3.5 min-[360px]:p-4 sm:p-5 space-y-3.5">
             {/* Top Section: CLIENTE and ORDEN DE TRABAJO */}
-            <div className="flex flex-col min-[380px]:flex-row justify-between items-start gap-1.5 min-[380px]:gap-3 sm:gap-4">
-              <div className="min-w-0 flex-1 w-full min-[380px]:w-auto">
+            <div className="flex justify-between items-start gap-2.5 sm:gap-4">
+              <div className="min-w-0 flex-1">
                 <span className="font-mono text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
                   CLIENTE
                 </span>
@@ -358,20 +358,20 @@ export default function PublicTrackingView({
                 </div>
               </div>
 
-              <div className="min-[380px]:text-right shrink-0 w-full min-[380px]:w-auto pt-1 min-[380px]:pt-0 border-t border-slate-100/60 min-[380px]:border-none">
+              <div className="text-right shrink-0">
                 <span className="font-mono text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
                   ORDEN DE TRABAJO
                 </span>
-                <div className="font-mono text-xs sm:text-[13px] font-bold text-[#0F0F0F] mt-0.5">
+                <div className="font-mono text-xs sm:text-[13px] font-bold text-[#0F0F0F] mt-0.5 whitespace-nowrap">
                   {order.codigoOrden}
                 </div>
               </div>
             </div>
 
             {/* Bottom Section: BICICLETA and FECHA DE INGRESO */}
-            <div className="border-t border-slate-100/90 pt-3.5 flex flex-col min-[410px]:flex-row justify-between gap-3 sm:gap-4 items-start">
+            <div className="border-t border-slate-100/90 pt-3.5 flex justify-between items-start gap-2.5 sm:gap-4">
               {/* LADO IZQUIERDO: BICICLETA */}
-              <div className="flex items-start gap-2.5 sm:gap-3 min-w-0 flex-1 w-full min-[410px]:w-auto">
+              <div className="flex items-start gap-2.5 sm:gap-3 min-w-0 flex-1">
                 {fotoPrincipal && (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
@@ -402,7 +402,7 @@ export default function PublicTrackingView({
               </div>
 
               {/* LADO DERECHO: FECHA DE INGRESO */}
-              <div className="min-[410px]:text-right shrink-0 w-full min-[410px]:w-auto pt-1 min-[410px]:pt-0 border-t border-dashed border-slate-100 min-[410px]:border-none">
+              <div className="text-right shrink-0">
                 <span className="font-mono text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
                   FECHA DE INGRESO
                 </span>
