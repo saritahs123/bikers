@@ -32,7 +32,7 @@ export function TopBar({
   onMenuToggle?: () => void;
 }) {
   const router = useRouter();
-  const { theme, setTheme, isDark, isLight } = useTheme();
+  const { setTheme, isDark, isLight } = useTheme();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -127,7 +127,7 @@ export function TopBar({
               <p className="text-[13px] font-bold text-foreground leading-tight">
                 {user.nombre_completo}
               </p>
-              <p className="text-[11px] text-foreground-muted leading-tight font-mono mt-0.5">
+              <p className="text-[11px] text-foreground-secondary leading-tight font-mono mt-0.5">
                 {user.cargo_nombre || user.rol_nombre}
               </p>
             </div>
@@ -143,7 +143,7 @@ export function TopBar({
 
           {/* Profile Dropdown Menu */}
           {dropdownOpen && user && (
-            <div className="absolute right-0 mt-3 w-80 bg-surface-elevated border border-border rounded-2xl shadow-2xl z-50 overflow-hidden font-sans animate-in fade-in duration-150 text-foreground">
+            <div className="absolute right-0 mt-3 w-80 bg-surface border border-border rounded-2xl shadow-2xl z-50 overflow-hidden font-sans animate-in fade-in duration-150 text-foreground">
               {/* User Header */}
               <div className="p-4 bg-surface-subtle border-b border-border flex items-center gap-3">
                 <div className="w-11 h-11 rounded-full border border-primary/40 bg-primary/15 text-primary flex items-center justify-center font-mono font-bold text-sm overflow-hidden shrink-0">
@@ -155,7 +155,7 @@ export function TopBar({
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-bold text-foreground truncate">{user.nombre_completo}</p>
-                  <p className="text-xs text-foreground-muted font-mono truncate" title={`Identificador de acceso: ${accessLabel}`}>
+                  <p className="text-xs text-foreground-secondary font-mono truncate" title={`Identificador de acceso: ${accessLabel}`}>
                     Acceso: {accessLabel}
                   </p>
                   <span className="inline-block mt-1 px-2 py-0.5 bg-primary/15 text-primary border border-primary/30 rounded text-[10px] font-mono font-bold">
@@ -166,7 +166,7 @@ export function TopBar({
 
               <div className="p-2 space-y-1.5">
                 {/* Role / Position Details */}
-                <div className="px-3 py-2 text-xs font-mono text-foreground-muted border-b border-border mb-1 space-y-1">
+                <div className="px-3 py-2 text-xs font-mono text-foreground-secondary border-b border-border mb-1 space-y-1">
                   <div className="flex justify-between items-center">
                     <span>Rol:</span>
                     <span className="text-foreground font-bold">{user.rol_nombre}</span>
@@ -179,7 +179,7 @@ export function TopBar({
 
                 {/* Appearance Switcher Section */}
                 <div className="px-3 py-2 border-b border-border">
-                  <span className="text-[10px] font-mono font-bold text-foreground-muted uppercase tracking-wider block mb-2">
+                  <span className="text-[10px] font-mono font-bold text-foreground-secondary uppercase tracking-wider block mb-2">
                     Apariencia
                   </span>
                   <div className="grid grid-cols-2 gap-1.5">
@@ -189,7 +189,7 @@ export function TopBar({
                       className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-mono transition-all cursor-pointer border ${
                         isDark
                           ? "bg-primary/15 border-primary/40 text-primary font-bold shadow-sm"
-                          : "bg-surface-subtle border-border/60 text-foreground-muted hover:text-foreground hover:bg-hover"
+                          : "bg-surface-subtle border-border text-foreground-secondary hover:text-foreground hover:bg-hover"
                       }`}
                     >
                       <div className="flex items-center gap-2">
@@ -205,7 +205,7 @@ export function TopBar({
                       className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-mono transition-all cursor-pointer border ${
                         isLight
                           ? "bg-primary/15 border-primary/40 text-primary font-bold shadow-sm"
-                          : "bg-surface-subtle border-border/60 text-foreground-muted hover:text-foreground hover:bg-hover"
+                          : "bg-surface-subtle border-border text-foreground-secondary hover:text-foreground hover:bg-hover"
                       }`}
                     >
                       <div className="flex items-center gap-2">
@@ -221,7 +221,7 @@ export function TopBar({
                 <Link
                   href="/security/my-profile"
                   onClick={() => setDropdownOpen(false)}
-                  className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-mono text-foreground-secondary hover:bg-hover hover:text-primary transition-all text-left cursor-pointer"
+                  className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-mono text-foreground-secondary hover:bg-surface-subtle hover:text-primary transition-all text-left cursor-pointer"
                 >
                   <span className="material-symbols-outlined text-base">manage_accounts</span>
                   <span>Mi Perfil</span>
