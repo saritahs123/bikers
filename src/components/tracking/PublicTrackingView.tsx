@@ -495,7 +495,7 @@ export default function PublicTrackingView({
                   return (
                     <div
                       key={idx}
-                      className="p-3 sm:p-3.5 rounded-xl bg-slate-50/80 border border-slate-100/90 flex flex-col min-[390px]:flex-row min-[390px]:items-center justify-between gap-2 min-[390px]:gap-3 transition-colors hover:bg-slate-50"
+                      className="p-3 sm:p-3.5 rounded-xl bg-slate-50/80 border border-slate-100/90 flex items-start justify-between gap-2.5 sm:gap-3 transition-colors hover:bg-slate-50"
                     >
                       <div className="min-w-0 flex-1">
                         <div className="text-xs sm:text-sm font-bold text-[#0F0F0F] break-words">
@@ -509,19 +509,19 @@ export default function PublicTrackingView({
                       </div>
 
                       {isDone ? (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full text-[11px] sm:text-xs font-semibold bg-[#84924A]/15 text-[#5e6931] border border-[#84924A]/30 shrink-0 self-start min-[390px]:self-center">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full text-[11px] sm:text-xs font-semibold bg-[#84924A]/15 text-[#5e6931] border border-[#84924A]/30 shrink-0 whitespace-nowrap">
                           <span className="w-4 h-4 rounded-full bg-[#84924A] flex items-center justify-center text-white shrink-0">
                             <Check className="w-2.5 h-2.5 stroke-[3]" />
                           </span>
                           <span>{srv.estadoLabel || "Completado"}</span>
                         </span>
                       ) : isEnCola ? (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200 shrink-0 self-start min-[390px]:self-center">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200 shrink-0 whitespace-nowrap">
                           <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
                           <span>{srv.estadoLabel || "En Cola"}</span>
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full text-[11px] sm:text-xs font-semibold bg-[#84924A]/15 text-[#5e6931] border border-[#84924A]/30 shrink-0 self-start min-[390px]:self-center">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full text-[11px] sm:text-xs font-semibold bg-[#84924A]/15 text-[#5e6931] border border-[#84924A]/30 shrink-0 whitespace-nowrap">
                           <span className="w-4 h-4 rounded-full bg-[#84924A] flex items-center justify-center text-white shrink-0">
                             <Check className="w-2.5 h-2.5 stroke-[3]" />
                           </span>
