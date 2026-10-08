@@ -93,8 +93,12 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
 
-    // Auto-sincronizar lotes recientes no confirmados para asegurar datos en tiempo real
-    await syncRecentPendingTextBeeNotifications(15).catch(() => {});
+    // Sincronizar lotes de TextBee únicamente cuando se solicite explícitamente (?sync=true)
+    // para evitar bloquear y degradar la velocidad de los filtros y la paginación.
+    const shouldSync = searchParams.get("sync") === "true";
+    if (shouldSync) {
+      await syncRecentPendingTextBeeNotifications(10).catch(() => {});
+    }
 
     // 4. Parse Pagination Parameters
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10) || 1);
@@ -116,30 +120,7 @@ export async function GET(req: NextRequest) {
     const sortColumnSql = SORT_WHITELIST[sortByParam] || "n.fecha_registro";
     const sortDirection = sortOrderParam === "asc" ? "ASC" : "DESC";
 
-    // 7. Calculate Global Summary for Company
-    const summaryRows = await query<SummaryResult>(
-      `SELECT 
-         COUNT(*)::int AS total,
-         COUNT(CASE WHEN estado_envio = 'PENDIENTE' THEN 1 END)::int AS pendientes,
-         COUNT(CASE WHEN estado_envio = 'ENVIADO' THEN 1 END)::int AS enviadas,
-         COUNT(CASE WHEN estado_envio = 'ENTREGADO' THEN 1 END)::int AS entregadas,
-         COUNT(CASE WHEN estado_envio = 'ERROR' THEN 1 END)::int AS errores,
-         COUNT(CASE WHEN estado_envio = 'SIN CONFIRMAR' OR estado_envio = 'UNKNOWN' OR estado_envio IS NULL OR estado_envio NOT IN ('PENDIENTE', 'ENVIADO', 'ENTREGADO', 'ERROR') THEN 1 END)::int AS sin_confirmar
-       FROM admin.notificacion_orden_trabajo
-       WHERE empresa_id = $1`,
-      [empresaId]
-    );
-
-    const summary = summaryRows[0] || {
-      total: 0,
-      pendientes: 0,
-      enviadas: 0,
-      entregadas: 0,
-      errores: 0,
-      sin_confirmar: 0,
-    };
-
-    // 8. Build Filtered Query with Safe Parameterized Conditions
+    // 7. Build Filtered Query with Safe Parameterized Conditions
     const whereClauses: string[] = ["n.empresa_id = $1"];
     const queryParams: (string | number)[] = [empresaId];
 
@@ -188,7 +169,19 @@ export async function GET(req: NextRequest) {
 
     const whereSql = whereClauses.join(" AND ");
 
-    // 9. Count Filtered Records
+    // 8. SQL Queries: Summary, Count, and Paginated Data
+    const summarySql = `
+      SELECT 
+         COUNT(*)::int AS total,
+         COUNT(CASE WHEN estado_envio = 'PENDIENTE' THEN 1 END)::int AS pendientes,
+         COUNT(CASE WHEN estado_envio = 'ENVIADO' THEN 1 END)::int AS enviadas,
+         COUNT(CASE WHEN estado_envio = 'ENTREGADO' THEN 1 END)::int AS entregadas,
+         COUNT(CASE WHEN estado_envio = 'ERROR' THEN 1 END)::int AS errores,
+         COUNT(CASE WHEN estado_envio = 'SIN CONFIRMAR' OR estado_envio = 'UNKNOWN' OR estado_envio IS NULL OR estado_envio NOT IN ('PENDIENTE', 'ENVIADO', 'ENTREGADO', 'ERROR') THEN 1 END)::int AS sin_confirmar
+       FROM admin.notificacion_orden_trabajo
+       WHERE empresa_id = $1
+    `;
+
     const countSql = `
       SELECT COUNT(*)::int AS total
       FROM admin.notificacion_orden_trabajo n
@@ -196,11 +189,7 @@ export async function GET(req: NextRequest) {
       LEFT JOIN admin.clientes c ON c.cliente_id = ot.cliente_id
       WHERE ${whereSql}
     `;
-    const countRows = await query<{ total: number }>(countSql, queryParams);
-    const totalRecords = countRows[0]?.total || 0;
-    const totalPages = Math.ceil(totalRecords / pageSize) || 1;
 
-    // 10. Fetch Paginated Rows
     const dataSql = `
       SELECT 
         n.notificacion_orden_trabajo_id,
@@ -235,7 +224,25 @@ export async function GET(req: NextRequest) {
     `;
 
     const paginationParams = [...queryParams, pageSize, offset];
-    const rows = await query<NotificationRow>(dataSql, paginationParams);
+
+    // 9. Execute Summary, Count, and Paginated Data queries in parallel for high speed
+    const [summaryRows, countRows, rows] = await Promise.all([
+      query<SummaryResult>(summarySql, [empresaId]),
+      query<{ total: number }>(countSql, queryParams),
+      query<NotificationRow>(dataSql, paginationParams),
+    ]);
+
+    const summary = summaryRows[0] || {
+      total: 0,
+      pendientes: 0,
+      enviadas: 0,
+      entregadas: 0,
+      errores: 0,
+      sin_confirmar: 0,
+    };
+
+    const totalRecords = countRows[0]?.total || 0;
+    const totalPages = Math.ceil(totalRecords / pageSize) || 1;
 
     return NextResponse.json({
       success: true,
