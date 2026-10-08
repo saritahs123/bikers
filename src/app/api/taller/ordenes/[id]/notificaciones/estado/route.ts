@@ -52,10 +52,12 @@ export async function POST(
     }
 
     // 4-12. Invocar servicio centralizado de notificación
+    const origin = req.nextUrl?.origin || req.headers.get("origin") || undefined;
     const result = await sendStatusNotification({
       ordenTrabajoId: ordenId,
       usuarioId: session.usuario_id,
       empresaId,
+      baseUrl: origin,
     });
 
     if (result.success) {

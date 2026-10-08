@@ -35,6 +35,7 @@ export async function GET() {
         e.whatsapp,
         e.email,
         e.descripcion,
+        e.public_portal_url,
         e.fecha_registro,
         e.fecha_actualizacion
       FROM admin.empresa e
@@ -74,6 +75,7 @@ export async function GET() {
       whatsapp: r.whatsapp || '',
       email: r.email || '',
       descripcion: r.descripcion || '',
+      public_portal_url: r.public_portal_url || '',
       fecha_registro: r.fecha_registro ? String(r.fecha_registro).substring(0, 10) : null,
       fecha_actualizacion: r.fecha_actualizacion ? String(r.fecha_actualizacion).substring(0, 10) : null
     }));
@@ -112,6 +114,7 @@ export async function POST(req: Request) {
     const whatsappRaw = (body.whatsapp || '').trim();
     const emailRaw = (body.email || '').trim();
     const descripcion = (body.descripcion || '').trim();
+    const public_portal_url = (body.public_portal_url || '').trim();
 
     // 1. RNC Validation
     const rncVal = validateRNC(rncRaw, true);
@@ -197,14 +200,15 @@ export async function POST(req: Request) {
       const sql1 = `
         INSERT INTO admin.empresa (
           rnc, codigo, nombre_comercial, alias, tipo_empresa_id, empresa_padre_id,
-          logotipo_url, estado, color_identificador, direccion, telefono, whatsapp, email, descripcion, fecha_registro
+          logotipo_url, estado, color_identificador, direccion, telefono, whatsapp, email, descripcion, public_portal_url, fecha_registro
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW())
         RETURNING *
       `;
       const res1 = await query(sql1, [
         rnc, codigo || null, nombre_comercial, alias || null, tipo_empresa_id, empresa_padre_id || null,
-        logotipo_url || null, estado, color_identificador, direccion || null, telefono || null, whatsapp || null, email || null, descripcion || null
+        logotipo_url || null, estado, color_identificador, direccion || null, telefono || null, whatsapp || null, email || null, descripcion || null,
+        public_portal_url || null
       ]);
       return NextResponse.json({ success: true, item: res1[0] || {} });
     } catch (err1: any) {
@@ -215,17 +219,18 @@ export async function POST(req: Request) {
         const sql2 = `
           INSERT INTO admin.empresa (
             empresa_id, rnc, codigo, nombre_comercial, alias, tipo_empresa_id, empresa_padre_id,
-            logotipo_url, estado, color_identificador, direccion, telefono, whatsapp, email, descripcion, fecha_registro
+            logotipo_url, estado, color_identificador, direccion, telefono, whatsapp, email, descripcion, public_portal_url, fecha_registro
           )
           VALUES (
             (SELECT COALESCE(MAX(empresa_id), 0) + 1 FROM admin.empresa),
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW()
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW()
           )
           RETURNING *
         `;
         const res2 = await query(sql2, [
           rnc, codigo || null, nombre_comercial, alias || null, tipo_empresa_id, empresa_padre_id || null,
-          logotipo_url || null, estado, color_identificador, direccion || null, telefono || null, whatsapp || null, email || null, descripcion || null
+          logotipo_url || null, estado, color_identificador, direccion || null, telefono || null, whatsapp || null, email || null, descripcion || null,
+          public_portal_url || null
         ]);
         return NextResponse.json({ success: true, item: res2[0] || {} });
       } catch (err2: any) {

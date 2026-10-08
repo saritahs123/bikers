@@ -918,10 +918,12 @@ export async function executeReceptionWithWorkOrder(
 
     if (resultData.orden_trabajo_id) {
       try {
+        const origin = req ? (req.nextUrl?.origin || (typeof req.headers?.get === "function" ? req.headers.get("origin") : undefined) || undefined) : undefined;
         await sendWelcomeNotification({
           ordenTrabajoId: resultData.orden_trabajo_id,
           usuarioId: session.usuario_id,
-          empresaId: session.empresa_id
+          empresaId: session.empresa_id,
+          baseUrl: origin,
         });
       } catch (err) {
         console.error("[receptionOrderService] Error al enviar notificación de bienvenida SMS:", err);

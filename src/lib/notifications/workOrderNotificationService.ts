@@ -10,7 +10,9 @@ import {
   getTextBeeBatchStatus,
   TextBeeSendSmsResult,
 } from "./textBeeSmsService";
-import { ensureWorkOrderTracking } from "@/lib/tracking/workOrderTrackingService";
+import {
+  ensureWorkOrderTracking,
+} from "@/lib/tracking/workOrderTrackingService";
 
 export type NotificationType = "BIENVENIDA" | "ESTADO" | "CIERRE";
 export type DeliveryStatus = "PENDIENTE" | "ENVIADO" | "ENTREGADO" | "ERROR" | "NO_ENVIADO";
@@ -19,6 +21,7 @@ export interface SendNotificationParams {
   ordenTrabajoId: number;
   usuarioId?: number | null;
   empresaId?: number | null;
+  baseUrl?: string | null;
 }
 
 export interface SendNotificationResult {
@@ -34,7 +37,6 @@ export interface SendNotificationResult {
   statusCode?: number | null;
 }
 
-const PUBLIC_PORTAL_BASE = "https://web.bikerrd.com";
 const MAX_SMS_LENGTH = 128;
 
 /**
@@ -285,6 +287,7 @@ export async function sendWorkOrderSmsNotification(
       empresa_id: number;
       telefono_principal: string | null;
       telefono_secundario: string | null;
+      public_portal_url: string | null;
     }>(
       `SELECT
          ot.orden_trabajo_id,
@@ -292,9 +295,11 @@ export async function sendWorkOrderSmsNotification(
          ot.cliente_id,
          COALESCE(c.empresa_id, 1) AS empresa_id,
          c.telefono_principal,
-         c.telefono_secundario
+         c.telefono_secundario,
+         e.public_portal_url
        FROM admin.ordenes_trabajo ot
        JOIN admin.clientes c ON ot.cliente_id = c.cliente_id
+       LEFT JOIN admin.empresa e ON e.empresa_id = COALESCE(c.empresa_id, 1)
        WHERE ot.orden_trabajo_id = $1
        LIMIT 1`,
       [ordenTrabajoId]
@@ -368,7 +373,8 @@ export async function sendWorkOrderSmsNotification(
       };
     }
 
-    const shortUrl = `${PUBLIC_PORTAL_BASE}/${shortCode}`;
+    const publicPortalBase = (order.public_portal_url || "").trim().replace(/\/+$/, "");
+    const shortUrl = `${publicPortalBase}/${shortCode}`;
 
     // 4. Construct message and validate length <= 128 characters
     const message = buildNotificationMessage(tipo, order.codigo_orden, shortUrl);
@@ -801,13 +807,21 @@ export async function syncRecentPendingTextBeeNotifications(
   const results: SyncNotificationResult[] = [];
   let updatedCount = 0;
 
-  for (const row of pendingRows) {
-    try {
-      const res = await syncPendingTextBeeNotification(row);
-      results.push(res);
-      if (res.updated) updatedCount++;
-    } catch (rowErr) {
-      console.warn(`Error al sincronizar batch reciente ${row.textbee_batch_id}:`, rowErr);
+  const settled = await Promise.allSettled(
+    pendingRows.map(async (row) => {
+      try {
+        return await syncPendingTextBeeNotification(row);
+      } catch (rowErr) {
+        console.warn(`Error al sincronizar batch reciente ${row.textbee_batch_id}:`, rowErr);
+        return null;
+      }
+    })
+  );
+
+  for (const outcome of settled) {
+    if (outcome.status === "fulfilled" && outcome.value) {
+      results.push(outcome.value);
+      if (outcome.value.updated) updatedCount++;
     }
   }
 
