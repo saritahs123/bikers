@@ -555,10 +555,12 @@ export async function POST(req: NextRequest) {
 
       // Notificación de bienvenida SMS (Fuera de transacción BD)
       try {
+        const origin = req.nextUrl?.origin || req.headers.get("origin") || undefined;
         await sendWelcomeNotification({
           ordenTrabajoId,
           usuarioId: session.usuario_id,
-          empresaId: session.empresa_id
+          empresaId: session.empresa_id,
+          baseUrl: origin,
         });
       } catch (err) {
         console.error("[taller/ordenes] Error al enviar notificación de bienvenida SMS:", err);

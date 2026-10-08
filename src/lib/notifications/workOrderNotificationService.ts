@@ -10,7 +10,9 @@ import {
   getTextBeeBatchStatus,
   TextBeeSendSmsResult,
 } from "./textBeeSmsService";
-import { ensureWorkOrderTracking } from "@/lib/tracking/workOrderTrackingService";
+import {
+  ensureWorkOrderTracking,
+} from "@/lib/tracking/workOrderTrackingService";
 
 export type NotificationType = "BIENVENIDA" | "ESTADO" | "CIERRE";
 export type DeliveryStatus = "PENDIENTE" | "ENVIADO" | "ENTREGADO" | "ERROR" | "NO_ENVIADO";
@@ -19,6 +21,7 @@ export interface SendNotificationParams {
   ordenTrabajoId: number;
   usuarioId?: number | null;
   empresaId?: number | null;
+  baseUrl?: string | null;
 }
 
 export interface SendNotificationResult {
@@ -370,7 +373,8 @@ export async function sendWorkOrderSmsNotification(
       };
     }
 
-    const shortUrl = `${order.public_portal_url}/${shortCode}`;
+    const publicPortalBase = (order.public_portal_url || "").trim().replace(/\/+$/, "");
+    const shortUrl = `${publicPortalBase}/${shortCode}`;
 
     // 4. Construct message and validate length <= 128 characters
     const message = buildNotificationMessage(tipo, order.codigo_orden, shortUrl);
@@ -803,13 +807,21 @@ export async function syncRecentPendingTextBeeNotifications(
   const results: SyncNotificationResult[] = [];
   let updatedCount = 0;
 
-  for (const row of pendingRows) {
-    try {
-      const res = await syncPendingTextBeeNotification(row);
-      results.push(res);
-      if (res.updated) updatedCount++;
-    } catch (rowErr) {
-      console.warn(`Error al sincronizar batch reciente ${row.textbee_batch_id}:`, rowErr);
+  const settled = await Promise.allSettled(
+    pendingRows.map(async (row) => {
+      try {
+        return await syncPendingTextBeeNotification(row);
+      } catch (rowErr) {
+        console.warn(`Error al sincronizar batch reciente ${row.textbee_batch_id}:`, rowErr);
+        return null;
+      }
+    })
+  );
+
+  for (const outcome of settled) {
+    if (outcome.status === "fulfilled" && outcome.value) {
+      results.push(outcome.value);
+      if (outcome.value.updated) updatedCount++;
     }
   }
 

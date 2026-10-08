@@ -78,6 +78,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const whatsapp = (body.whatsapp || '').trim();
     const email = (body.email || '').trim();
     const descripcion = (body.descripcion || '').trim();
+    const public_portal_url = (body.public_portal_url || '').trim();
 
     // Validations
     if (!rnc) {
@@ -163,11 +164,13 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
              whatsapp = $12,
              email = $13,
              descripcion = $14,
+             public_portal_url = $15,
              fecha_actualizacion = NOW()
-         WHERE empresa_id = $15`,
+         WHERE empresa_id = $16`,
         [
           rnc, codigo || null, nombre_comercial, alias || null, tipo_empresa_id, empresa_padre_id || null,
-          logotipo_url || null, estado, color_identificador, direccion || null, telefonoFormatted, whatsappFormatted, email || null, descripcion || null, empresaId
+          logotipo_url || null, estado, color_identificador, direccion || null, telefonoFormatted, whatsappFormatted, email || null, descripcion || null,
+          public_portal_url || null, empresaId
         ]
       );
       return NextResponse.json({ success: true, message: "Empresa actualizada correctamente." });
@@ -191,11 +194,13 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
                telefono = $11,
                whatsapp = $12,
                email = $13,
-               descripcion = $14
-           WHERE empresa_id = $15`,
+               descripcion = $14,
+               public_portal_url = $15
+           WHERE empresa_id = $16`,
           [
             rnc, codigo || null, nombre_comercial, alias || null, tipo_empresa_id, empresa_padre_id || null,
-            logotipo_url || null, estado, color_identificador, direccion || null, telefonoFormatted, whatsappFormatted, email || null, descripcion || null, empresaId
+            logotipo_url || null, estado, color_identificador, direccion || null, telefonoFormatted, whatsappFormatted, email || null, descripcion || null,
+            public_portal_url || null, empresaId
           ]
         );
         return NextResponse.json({ success: true, message: "Empresa actualizada correctamente." });

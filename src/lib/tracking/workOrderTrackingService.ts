@@ -158,15 +158,31 @@ export function hashTrackingToken(token: string): string {
  * Resolves the public base URL for tracking links dynamically without hardcoded domains.
  */
 export function getPublicTrackingBaseUrl(requestOrigin?: string | null): string {
-  if (requestOrigin && !requestOrigin.includes("undefined")) {
-    return requestOrigin.replace(/\/$/, "");
+  if (
+    requestOrigin &&
+    typeof requestOrigin === "string" &&
+    !requestOrigin.includes("undefined") &&
+    requestOrigin.trim().length > 0
+  ) {
+    return requestOrigin.trim().replace(/\/$/, "");
   }
   const envUrl =
     process.env.APP_PUBLIC_URL ||
     process.env.NEXT_PUBLIC_APP_URL ||
     process.env.APP_URL;
-  if (envUrl) {
-    return envUrl.replace(/\/$/, "");
+  if (envUrl && typeof envUrl === "string" && envUrl.trim().length > 0) {
+    return envUrl.trim().replace(/\/$/, "");
+  }
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    const vUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL.replace(/\/$/, "");
+    return vUrl.startsWith("http") ? vUrl : `https://${vUrl}`;
+  }
+  if (process.env.VERCEL_URL) {
+    const vUrl = process.env.VERCEL_URL.replace(/\/$/, "");
+    return vUrl.startsWith("http") ? vUrl : `https://${vUrl}`;
+  }
+  if (process.env.NODE_ENV === "production") {
+    return "https://web.bikerrd.com";
   }
   return "http://localhost:3000";
 }

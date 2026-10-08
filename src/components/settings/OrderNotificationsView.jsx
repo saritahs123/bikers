@@ -171,6 +171,7 @@ export default function OrderNotificationsView() {
 
   // Refresh trigger state
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [shouldSyncProvider, setShouldSyncProvider] = useState(false);
 
   // Fetch data inside useEffect
   useEffect(() => {
@@ -190,6 +191,7 @@ export default function OrderNotificationsView() {
       if (fechaHasta) params.set("fechaHasta", fechaHasta);
       if (sortBy) params.set("sortBy", sortBy);
       if (sortOrder) params.set("sortOrder", sortOrder);
+      if (shouldSyncProvider) params.set("sync", "true");
 
       try {
         const res = await fetch(`/api/configuracion/notificaciones-ordenes?${params.toString()}`);
@@ -230,6 +232,7 @@ export default function OrderNotificationsView() {
         if (!ignore) {
           setLoading(false);
           setRefreshing(false);
+          setShouldSyncProvider(false);
         }
       }
     }
@@ -418,11 +421,12 @@ export default function OrderNotificationsView() {
             type="button"
             onClick={() => {
               setRefreshing(true);
+              setShouldSyncProvider(true);
               setRefreshTrigger((c) => c + 1);
             }}
             disabled={loading || refreshing}
             className="h-8 flex items-center gap-1.5 px-3 bg-surface-subtle hover:bg-hover border border-border rounded-lg text-xs font-mono font-medium text-foreground transition-all shadow-sm cursor-pointer disabled:opacity-50"
-            title="Refrescar lista"
+            title="Refrescar lista y sincronizar estado con TextBee"
           >
             <RefreshCw size={12} className={refreshing ? "animate-spin text-primary" : "text-foreground-muted"} />
             <span>Actualizar</span>

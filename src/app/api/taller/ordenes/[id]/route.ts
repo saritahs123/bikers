@@ -1861,10 +1861,12 @@ export async function PUT(
     // CIERRE Automático cuando la OT pasa a estado COMPLETADA (LISTA_ENTREGA) - Fuera de transacción BD
     if (targetStateId === estadoListaEntregaId && currentStateId !== estadoListaEntregaId) {
       try {
+        const origin = req.nextUrl?.origin || req.headers.get("origin") || undefined;
         await sendCompletionNotification({
           ordenTrabajoId: ordenId,
           usuarioId: session.usuario_id,
           empresaId: session.empresa_id,
+          baseUrl: origin,
         });
       } catch (err) {
         console.error("[taller/ordenes/[id]] Error al enviar notificación de cierre SMS:", err);

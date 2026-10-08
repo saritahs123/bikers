@@ -26,7 +26,8 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
-  AlertCircle
+  AlertCircle,
+  Globe
 } from "lucide-react";
 import { 
   validateRNC, 
@@ -67,7 +68,8 @@ export default function CompaniesSecurityView() {
     telefono: "",
     whatsapp: "",
     email: "",
-    descripcion: ""
+    descripcion: "",
+    public_portal_url: ""
   });
 
   const [formErrors, setFormErrors] = useState({
@@ -201,7 +203,8 @@ export default function CompaniesSecurityView() {
       telefono: "",
       whatsapp: "",
       email: "",
-      descripcion: ""
+      descripcion: "",
+      public_portal_url: ""
     });
     setFormErrors({
       rnc: "",
@@ -231,7 +234,8 @@ export default function CompaniesSecurityView() {
       telefono: item.telefono ? (formatPhoneDR(item.telefono).formatted || item.telefono) : "",
       whatsapp: item.whatsapp ? (formatPhoneDR(item.whatsapp).formatted || item.whatsapp) : "",
       email: item.email || "",
-      descripcion: item.descripcion || ""
+      descripcion: item.descripcion || "",
+      public_portal_url: item.public_portal_url || ""
     };
     setFormData(initial);
     validateCurrentForm(initial);
@@ -327,7 +331,7 @@ export default function CompaniesSecurityView() {
   const exportToExcel = () => {
     const headers = [
       "ID", "Código", "RNC", "Nombre Comercial", "Alias", 
-      "Tipo Empresa", "Empresa Padre", "Teléfono", "WhatsApp", "Email", "Estado", "Fecha Registro"
+      "Tipo Empresa", "Empresa Padre", "Teléfono", "WhatsApp", "Email", "Url portal publico", "Estado", "Fecha Registro"
     ];
     const rows = sortedData.map(i => [
       i.id,
@@ -340,6 +344,7 @@ export default function CompaniesSecurityView() {
       `"${i.telefono ? (formatPhoneDR(i.telefono).formatted || i.telefono) : ''}"`,
       `"${i.whatsapp ? (formatPhoneDR(i.whatsapp).formatted || i.whatsapp) : ''}"`,
       `"${i.email || ''}"`,
+      `"${i.public_portal_url || ''}"`,
       i.estado,
       i.fecha_registro || ''
     ]);
@@ -370,6 +375,7 @@ export default function CompaniesSecurityView() {
       item.telefono,
       item.whatsapp,
       item.email,
+      item.public_portal_url,
       item.direccion,
       item.descripcion
     ].some(val => val !== null && val !== undefined && String(val).toLowerCase().includes(s));
@@ -593,6 +599,7 @@ export default function CompaniesSecurityView() {
                 {renderSortableHeader("Teléfono", "telefono")}
                 {renderSortableHeader("WhatsApp", "whatsapp")}
                 {renderSortableHeader("Email", "email")}
+                {renderSortableHeader("Url portal publico", "public_portal_url")}
                 {renderSortableHeader("Estado", "estado", "text-center")}
                 {renderSortableHeader("Registro", "fecha_registro")}
                 <th className="px-1.5 xl:px-2 py-2 text-right sticky right-0 bg-surface-subtle shadow-[-6px_0_10px_rgba(0,0,0,0.05)] z-20">Acciones</th>
@@ -601,14 +608,14 @@ export default function CompaniesSecurityView() {
             <tbody className="divide-y divide-border">
               {loading ? (
                 <tr>
-                  <td colSpan={13} className="py-12 text-center text-foreground-muted font-mono">
+                  <td colSpan={14} className="py-12 text-center text-foreground-muted font-mono">
                     <RefreshCw className="animate-spin text-primary mx-auto mb-2" size={24} />
                     Cargando catálogo de empresas...
                   </td>
                 </tr>
               ) : paginatedData.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="py-12 text-center text-foreground-muted font-mono italic">
+                  <td colSpan={14} className="py-12 text-center text-foreground-muted font-mono italic">
                     No se encontraron registros de empresas.
                   </td>
                 </tr>
@@ -669,6 +676,22 @@ export default function CompaniesSecurityView() {
                       <span className="truncate block max-w-[100px] xl:max-w-[140px]" title={item.email}>
                         {item.email || "-"}
                       </span>
+                    </td>
+                    <td className="px-1.5 xl:px-2 py-1.5 font-mono text-foreground-secondary text-[10.5px]">
+                      {item.public_portal_url ? (
+                        <a 
+                          href={item.public_portal_url} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          className="text-primary hover:underline inline-flex items-center gap-1 max-w-[130px] xl:max-w-[170px] truncate"
+                          title={item.public_portal_url}
+                        >
+                          <Globe size={11} className="shrink-0 text-primary" />
+                          <span className="truncate">{item.public_portal_url}</span>
+                        </a>
+                      ) : (
+                        <span className="text-foreground-disabled">-</span>
+                      )}
                     </td>
                     <td className="px-1.5 xl:px-2 py-1.5 text-center">
                       <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-mono font-bold tracking-wider uppercase border ${
@@ -984,7 +1007,7 @@ export default function CompaniesSecurityView() {
                   </div>
 
                   {/* EMAIL */}
-                  <div className="col-span-2 space-y-1">
+                  <div className="space-y-1">
                     <label className="font-mono text-[11px] text-foreground-secondary font-bold tracking-wider uppercase block flex items-center gap-1">
                       <Mail size={11} className="text-foreground-muted" />
                       <span>Email</span>
@@ -1004,6 +1027,21 @@ export default function CompaniesSecurityView() {
                         <span>{formErrors.email}</span>
                       </div>
                     )}
+                  </div>
+
+                  {/* URL PORTAL PÚBLICO */}
+                  <div className="space-y-1">
+                    <label className="font-mono text-[11px] text-foreground-secondary font-bold tracking-wider uppercase block flex items-center gap-1">
+                      <Globe size={11} className="text-foreground-muted" />
+                      <span>Url portal publico</span>
+                    </label>
+                    <input 
+                      type="text"
+                      value={formData.public_portal_url}
+                      onChange={(e) => updateField("public_portal_url", e.target.value)}
+                      placeholder="Ej. https://web.ridelabrd.com"
+                      className="w-full bg-input border border-border rounded-xl px-3 py-2 text-xs text-foreground placeholder:text-foreground-disabled focus:outline-none focus:border-primary font-mono"
+                    />
                   </div>
 
                   {/* DIRECCIÓN */}
