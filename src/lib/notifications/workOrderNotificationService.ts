@@ -34,7 +34,6 @@ export interface SendNotificationResult {
   statusCode?: number | null;
 }
 
-const PUBLIC_PORTAL_BASE = "https://web.bikerrd.com";
 const MAX_SMS_LENGTH = 128;
 
 /**
@@ -285,6 +284,7 @@ export async function sendWorkOrderSmsNotification(
       empresa_id: number;
       telefono_principal: string | null;
       telefono_secundario: string | null;
+      public_portal_url: string | null;
     }>(
       `SELECT
          ot.orden_trabajo_id,
@@ -292,9 +292,11 @@ export async function sendWorkOrderSmsNotification(
          ot.cliente_id,
          COALESCE(c.empresa_id, 1) AS empresa_id,
          c.telefono_principal,
-         c.telefono_secundario
+         c.telefono_secundario,
+         e.public_portal_url
        FROM admin.ordenes_trabajo ot
        JOIN admin.clientes c ON ot.cliente_id = c.cliente_id
+       LEFT JOIN admin.empresa e ON e.empresa_id = COALESCE(c.empresa_id, 1)
        WHERE ot.orden_trabajo_id = $1
        LIMIT 1`,
       [ordenTrabajoId]
@@ -368,7 +370,7 @@ export async function sendWorkOrderSmsNotification(
       };
     }
 
-    const shortUrl = `${PUBLIC_PORTAL_BASE}/${shortCode}`;
+    const shortUrl = `${order.public_portal_url}/${shortCode}`;
 
     // 4. Construct message and validate length <= 128 characters
     const message = buildNotificationMessage(tipo, order.codigo_orden, shortUrl);
