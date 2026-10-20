@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
+import { AppLogo } from "@/components/ui/AppLogo";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useState, useEffect, Suspense } from "react";
 import { Home, PanelLeftClose } from "lucide-react";
@@ -356,11 +356,9 @@ function SidebarContent({
             className="flex items-center justify-center transition-transform hover:scale-[1.03] focus:outline-none"
             title="Ride Lab"
           >
-            <Image
-              src="/ridelab-logo.png"
-              alt="Ride Lab Logo"
+            <AppLogo
               width={180}
-              height={72}
+              height={63}
               className="h-12 max-h-14 w-auto object-contain"
               priority
             />

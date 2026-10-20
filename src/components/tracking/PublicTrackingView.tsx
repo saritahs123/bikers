@@ -195,7 +195,7 @@ export default function PublicTrackingView({
         </div>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="/ridelab-logo.png"
+          src="/ridelab-logo-light.png"
           alt="Ride Lab"
           className="h-8 sm:h-9 w-auto object-contain mb-2"
         />
@@ -329,7 +329,7 @@ export default function PublicTrackingView({
         <div className="portal-header-box w-full py-2 sm:py-2.5 px-4 flex items-center justify-center">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/ridelab-logo.png"
+            src="/ridelab-logo-dark.png"
             alt="Ride Lab"
             className="portal-logo-img w-auto h-7 min-[360px]:h-7.5 sm:h-8 md:h-9 max-w-[170px] min-[360px]:max-w-[190px] sm:max-w-[210px] object-contain block"
           />

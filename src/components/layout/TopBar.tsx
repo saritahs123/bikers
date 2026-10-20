@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
+import { AppLogo } from "@/components/ui/AppLogo";
 import { Moon, Sun, Check, PanelLeftOpen } from "lucide-react";
 import { useTheme } from "@/context/ThemeContext";
 
@@ -87,11 +87,9 @@ export function TopBar({
               className="flex items-center transition-transform hover:scale-[1.02] focus:outline-none shrink-0"
               title="Ride Lab"
             >
-              <Image
-                src="/ridelab-logo.png"
-                alt="Ride Lab Logo"
+              <AppLogo
                 width={160}
-                height={64}
+                height={56}
                 className="h-8 sm:h-9 md:h-10 w-auto object-contain shrink-0"
                 priority
               />

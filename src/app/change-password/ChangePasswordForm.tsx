@@ -29,9 +29,14 @@ export default function ChangePasswordForm({ userEmail, userName }: ChangePasswo
         <div className="flex flex-col items-center text-center mb-6">
           <div className="h-16 sm:h-20 w-auto mb-4 flex items-center justify-center">
             <img
-              src="/ridelab-logo.png"
+              src="/ridelab-logo-dark.png"
               alt="Ride Lab Logo"
-              className="h-full w-auto object-contain"
+              className="app-logo-dark h-full w-auto object-contain"
+            />
+            <img
+              src="/ridelab-logo-light.png"
+              alt="Ride Lab Logo"
+              className="app-logo-light h-full w-auto object-contain"
             />
           </div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-semibold mb-2">

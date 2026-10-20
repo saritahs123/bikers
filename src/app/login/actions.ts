@@ -58,9 +58,11 @@ export async function loginAction(
   try {
     const rawIdentifier = formData.get("identifier");
     const rawPassword = formData.get("password");
+    const rawRememberMe = formData.get("rememberMe");
 
     const identifier = String(rawIdentifier || "").trim();
     const password = String(rawPassword || "");
+    const rememberMe = rawRememberMe === "true" || rawRememberMe === "on" || rawRememberMe === "1";
 
     // 1. Completely empty form check (NO DB query executed)
     if (!identifier && !password) {
@@ -234,20 +236,28 @@ export async function loginAction(
 
       const cookieStore = await cookies();
       const maxAgeSeconds = sessionDurationMinutes * 60;
+
+      // Configuración de cookie de sesión según preferencia «Recordarme»:
+      // - Si rememberMe está marcado: cookie persistente (maxAge y expires vigentes)
+      // - Si rememberMe está desmarcado: cookie de sesión del navegador (Session cookie, sin maxAge/expires)
       const baseCookieOptions: {
         httpOnly: boolean;
         secure: boolean;
         sameSite: "lax" | "strict" | "none";
         path: string;
-        maxAge: number;
-        expires: Date;
+        maxAge?: number;
+        expires?: Date;
       } = {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
         path: "/",
-        maxAge: maxAgeSeconds,
-        expires: new Date(Date.now() + maxAgeSeconds * 1000)
+        ...(rememberMe
+          ? {
+              maxAge: maxAgeSeconds,
+              expires: new Date(Date.now() + maxAgeSeconds * 1000)
+            }
+          : {})
       };
 
       cookieStore.set("session_user_id", targetUser.usuario_id.toString(), baseCookieOptions);

@@ -79,6 +79,7 @@ export default function NewInvoiceView() {
 
   // Condición de Venta y Pago Automático (FIX-FAC-NEW-2)
   const [condicionVenta, setCondicionVenta] = useState("CONTADO"); // CONTADO | CREDITO
+  const [fechaVencimiento, setFechaVencimiento] = useState(""); // YYYY-MM-DD opcional
   const [tipoPagoId, setTipoPagoId] = useState("");
   const [montoRecibido, setMontoRecibido] = useState("");
   const [pagoReferencia, setPagoReferencia] = useState("");
@@ -655,6 +656,20 @@ export default function NewInvoiceView() {
       }
     }
 
+    if (fechaVencimiento) {
+      const fv = new Date(fechaVencimiento);
+      const today = new Date();
+      const fvDateOnly = new Date(fv.getFullYear(), fv.getMonth(), fv.getDate());
+      const todayDateOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      if (fvDateOnly < todayDateOnly) {
+        setFeedback({
+          type: "error",
+          message: "La fecha de vencimiento no puede ser anterior a la fecha de emisión de la factura.",
+        });
+        return;
+      }
+    }
+
     setSubmitting(true);
     setFeedback(null);
 
@@ -665,6 +680,7 @@ export default function NewInvoiceView() {
         orden_trabajo_id: ordenTrabajo ? ordenTrabajo.orden_trabajo_id : null,
         observacion: observacion.trim() || null,
         condicion_venta: condicionVenta,
+        fecha_vencimiento: fechaVencimiento ? new Date(fechaVencimiento).toISOString() : null,
         pago:
           condicionVenta === "CONTADO"
             ? {
@@ -730,6 +746,7 @@ export default function NewInvoiceView() {
       setMontoRecibido("");
       setPagoReferencia("");
       setCondicionVenta("CONTADO");
+      setFechaVencimiento("");
       await loadCatalogos();
     } catch (err) {
       console.error(err);
@@ -1537,18 +1554,48 @@ export default function NewInvoiceView() {
               </div>
             ) : (
               /* Si es CRÉDITO */
-              <div className="p-3.5 rounded-lg bg-surface border border-border/80 text-xs space-y-2">
-                <div className="flex items-center gap-2 text-foreground font-semibold">
-                  <Receipt className="w-4 h-4 text-primary" />
-                  <span>Venta a Crédito</span>
+              <div className="space-y-3 pt-2">
+                <div className="p-3.5 rounded-lg bg-surface border border-border/80 text-xs space-y-2">
+                  <div className="flex items-center gap-2 text-foreground font-semibold">
+                    <Receipt className="w-4 h-4 text-primary" />
+                    <span>Venta a Crédito</span>
+                  </div>
+                  <p className="text-[11px] text-foreground-muted leading-relaxed">
+                    La factura se generará en estado <strong className="text-amber-400">PENDIENTE</strong> con balance total de{" "}
+                    <strong className="text-foreground font-mono">RD$ {totalFactura.toFixed(2)}</strong>. No se registrará pago inicial.
+                  </p>
+                  <p className="text-[10px] text-foreground-muted border-t border-border/50 pt-1.5">
+                    Los pagos posteriores se registrarán desde Facturas → Registrar Pago (FAC-4).
+                  </p>
                 </div>
-                <p className="text-[11px] text-foreground-muted leading-relaxed">
-                  La factura se generará en estado <strong className="text-amber-400">PENDIENTE</strong> con balance total de{" "}
-                  <strong className="text-foreground font-mono">RD$ {totalFactura.toFixed(2)}</strong>. No se registrará pago inicial.
-                </p>
-                <p className="text-[10px] text-foreground-muted border-t border-border/50 pt-1.5">
-                  Los pagos posteriores se registrarán desde Facturas → Registrar Pago (FAC-4).
-                </p>
+
+                {/* Fecha de Vencimiento Opcional */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] font-medium text-foreground-secondary">
+                      Fecha de Vencimiento <span className="text-foreground-muted text-[10px] font-normal">(Opcional)</span>
+                    </label>
+                    {fechaVencimiento && (
+                      <button
+                        type="button"
+                        onClick={() => setFechaVencimiento("")}
+                        className="text-[10px] font-mono text-error hover:underline cursor-pointer"
+                      >
+                        Quitar fecha
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    type="date"
+                    min={new Date().toISOString().split("T")[0]}
+                    value={fechaVencimiento}
+                    onChange={(e) => setFechaVencimiento(e.target.value)}
+                    className="w-full px-2.5 py-1.5 text-xs bg-input border border-border rounded-lg text-foreground font-mono focus:outline-none focus:border-primary"
+                  />
+                  <p className="text-[10px] text-foreground-muted mt-1">
+                    Fecha límite acordada para el cobro. Si no se especifica, quedará sin fecha de vencimiento.
+                  </p>
+                </div>
               </div>
             )}
           </div>

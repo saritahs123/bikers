@@ -26,6 +26,8 @@ export interface BillingInvoicePrintData {
     monto_pagado: number;
     balance_pendiente: number;
     estado: string;
+    condicion_venta?: "CONTADO" | "CREDITO" | string;
+    fecha_vencimiento?: string | null;
     observacion?: string | null;
     fecha_creacion: string;
     usuario_creacion_nombre?: string;
@@ -240,10 +242,14 @@ export function generateInvoiceModel1Pdf(data: BillingInvoicePrintData): jsPDF {
   const tipoFacturaStr = getInvoiceTypeName(data.factura);
   const printDateTime = formatPrintDateTime(new Date());
   const fechaFacturaStr = formatDateOnly(data.factura.fecha_factura);
+  const condicionVentaStr = String(data.factura.condicion_venta || "CONTADO").toUpperCase() === "CREDITO" ? "A CRÉDITO" : "AL CONTADO";
+  const fechaVencimientoStr = data.factura.fecha_vencimiento ? formatDateOnly(data.factura.fecha_vencimiento) : null;
 
   const rightMeta = [
     { label: "Factura:", val: data.factura.codigo_factura || data.factura.numero_factura || "—" },
     { label: "Tipo de Factura:", val: tipoFacturaStr },
+    { label: "Condición de Pago:", val: condicionVentaStr },
+    ...(fechaVencimientoStr ? [{ label: "Vencimiento:", val: fechaVencimientoStr }] : []),
     ...(data.factura.orden_trabajo_id && data.orden_trabajo?.codigo_orden
       ? [{ label: "Orden de Trabajo:", val: data.orden_trabajo.codigo_orden }]
       : []),
@@ -863,10 +869,14 @@ function renderTicketContent(doc: jsPDF, data: BillingInvoicePrintData): number 
   const estadoFactura = (data.factura.estado || "").toUpperCase();
   const clienteNombre = data.cliente?.nombre_completo || "Cliente General";
   const clienteTel = data.cliente?.telefono_principal || "—";
+  const condicionVentaTicket = String(data.factura.condicion_venta || "CONTADO").toUpperCase() === "CREDITO" ? "CRÉDITO" : "CONTADO";
+  const fechaVencimientoTicket = data.factura.fecha_vencimiento ? formatDateOnly(data.factura.fecha_vencimiento) : null;
 
-  // Columna Izquierda: FACTURA, TIPO FACTURA, FECHA FACTURA, CLIENTE
+  // Columna Izquierda: FACTURA, CONDICIÓN, VENCE (si aplica), TIPO FACTURA, FECHA FACTURA, CLIENTE
   const leftFields: Array<{ label: string; val: string }> = [
     { label: "FACTURA:", val: facNumero },
+    { label: "CONDICIÓN:", val: condicionVentaTicket },
+    ...(fechaVencimientoTicket ? [{ label: "VENCE:", val: fechaVencimientoTicket }] : []),
     { label: "TIPO FACTURA:", val: tipoFacturaTicket },
     { label: "FECHA FACTURA:", val: fechaFactura },
     { label: "CLIENTE:", val: clienteNombre }

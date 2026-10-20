@@ -54,6 +54,7 @@ import { getPool } from "@/lib/db";
 import {
   CODIGO_SISTEMA_FACTURA,
   CrearFacturaInput,
+  ActualizarTerminosFacturaInput,
   PagoInicialInput,
   RegistrarPagoInput,
   AnularFacturaInput,
@@ -494,6 +495,22 @@ export async function crearFactura(
     const balancePendiente = Math.max(0, parseFloat((totalFactura - montoPagadoInicial).toFixed(2)));
     const estadoInicial: EstadoFactura = condicionVenta === "CONTADO" ? "PAGADA" : "PENDIENTE";
 
+    // 5.1. Validación de fecha_vencimiento (opcional, NULL permitido)
+    let fechaVencimientoObj: Date | null = null;
+    if (input.fecha_vencimiento) {
+      const fv = new Date(input.fecha_vencimiento);
+      if (isNaN(fv.getTime())) {
+        throw new Error("La fecha de vencimiento proporcionada no es válida.");
+      }
+      const ff = input.fecha_factura ? new Date(input.fecha_factura) : new Date();
+      const fvDateOnly = new Date(fv.getFullYear(), fv.getMonth(), fv.getDate());
+      const ffDateOnly = new Date(ff.getFullYear(), ff.getMonth(), ff.getDate());
+      if (fvDateOnly < ffDateOnly) {
+        throw new Error("La fecha de vencimiento no puede ser anterior a la fecha de emisión de la factura.");
+      }
+      fechaVencimientoObj = fv;
+    }
+
     // 6. Generar Código Correlativo Canónico de Factura
     const codigoFactura = await generarCodigoFactura(client, input.empresa_id);
 
@@ -517,6 +534,7 @@ export async function crearFactura(
       cliente_id: input.cliente_id || null,
       orden_trabajo_id: input.orden_trabajo_id || null,
       fecha_factura: input.fecha_factura || new Date(),
+      fecha_vencimiento: fechaVencimientoObj,
       subtotal: subtotalGeneral,
       descuento: descuentoGeneral,
       descuento_total: descuentoGeneral,
@@ -550,6 +568,7 @@ export async function crearFactura(
     }
     facturaRow.factura_id = facturaId;
     facturaRow.condicion_venta = condicionVenta;
+    facturaRow.fecha_vencimiento = fechaVencimientoObj;
 
     // 7.1. Salida física de Inventario para líneas PRODUCTO (FAC-2, FAC-3, Secciones 9, 10, 11)
     // - Las líneas REPUESTO de una OT NO generan SAL_VENTA porque ya salieron vía SAL_ORDEN.
@@ -1495,6 +1514,103 @@ export async function obtenerFacturaPorId(
     };
   } finally {
     if (!externalClient) {
+      client.release();
+    }
+  }
+}
+
+/**
+ * Actualiza la condición de venta ('CONTADO' | 'CREDITO') y la fecha de vencimiento
+ * de una factura existente de forma segura y auditada.
+ */
+export async function actualizarTerminosFactura(
+  input: ActualizarTerminosFacturaInput,
+  externalClient?: PoolClient
+): Promise<FacturaRow> {
+  const pool = getPool();
+  const client = externalClient || (await pool.connect());
+  const isInternalTransaction = !externalClient;
+
+  try {
+    if (isInternalTransaction) {
+      await client.query("BEGIN");
+    }
+
+    // 1. Validaciones básicas
+    if (!input.factura_id || input.factura_id <= 0) {
+      throw new Error("El ID de la factura es obligatorio.");
+    }
+    if (!input.empresa_id || input.empresa_id <= 0) {
+      throw new Error("El ID de la empresa es obligatorio.");
+    }
+    if (!input.usuario_id || input.usuario_id <= 0) {
+      throw new Error("El usuario que realiza la modificación es obligatorio.");
+    }
+
+    const condicion: CondicionVenta = input.condicion_venta === "CREDITO" ? "CREDITO" : "CONTADO";
+
+    // 2. Lock de la factura FOR UPDATE
+    const facRes = await client.query(
+      `SELECT * FROM admin.facturas WHERE factura_id = $1 AND empresa_id = $2 FOR UPDATE`,
+      [input.factura_id, input.empresa_id]
+    );
+
+    if (!facRes.rows || facRes.rows.length === 0) {
+      throw new Error(`La factura #${input.factura_id} no existe o no pertenece a la empresa.`);
+    }
+
+    const factura = facRes.rows[0];
+    if (factura.estado === "ANULADA") {
+      throw new Error(`No es posible modificar los términos de una factura anulada (${factura.codigo_factura || factura.numero_factura}).`);
+    }
+
+    // 3. Validación de fecha_vencimiento
+    let fechaVencimientoObj: Date | null = null;
+    if (input.fecha_vencimiento) {
+      const fv = new Date(input.fecha_vencimiento);
+      if (isNaN(fv.getTime())) {
+        throw new Error("La fecha de vencimiento proporcionada no es válida.");
+      }
+      const ff = factura.fecha_factura ? new Date(factura.fecha_factura) : new Date();
+      const fvDateOnly = new Date(fv.getFullYear(), fv.getMonth(), fv.getDate());
+      const ffDateOnly = new Date(ff.getFullYear(), ff.getMonth(), ff.getDate());
+      if (fvDateOnly < ffDateOnly) {
+        throw new Error("La fecha de vencimiento no puede ser anterior a la fecha de emisión de la factura.");
+      }
+      fechaVencimientoObj = fv;
+    }
+
+    // 4. Actualización en admin.facturas
+    const updateRes = await client.query(
+      `UPDATE admin.facturas
+       SET
+         condicion_venta = $1,
+         fecha_vencimiento = $2,
+         usuario_modificacion_id = $3,
+         fecha_modificacion = NOW()
+       WHERE factura_id = $4 AND empresa_id = $5
+       RETURNING *`,
+      [condicion, fechaVencimientoObj, input.usuario_id, input.factura_id, input.empresa_id]
+    );
+
+    if (isInternalTransaction) {
+      await client.query("COMMIT");
+    }
+
+    const row = updateRes.rows[0];
+    return {
+      ...row,
+      condicion_venta: condicion,
+      fecha_vencimiento: fechaVencimientoObj
+    };
+  } catch (err) {
+    if (isInternalTransaction) {
+      await client.query("ROLLBACK");
+    }
+    console.error("Error en actualizarTerminosFactura:", err);
+    throw err;
+  } finally {
+    if (isInternalTransaction) {
       client.release();
     }
   }

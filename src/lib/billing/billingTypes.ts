@@ -48,6 +48,7 @@ export interface CrearFacturaInput {
   empresa_id: number;
   tipo_factura_id: number;
   condicion_venta?: CondicionVenta;
+  fecha_vencimiento?: string | Date | null;
   cliente_id?: number | null;
   orden_trabajo_id?: number | null;
   fecha_factura?: string | Date;
@@ -55,6 +56,14 @@ export interface CrearFacturaInput {
   usuario_id: number;
   lineas: LineaFacturaInput[];
   pagos_iniciales?: PagoInicialInput[];
+}
+
+export interface ActualizarTerminosFacturaInput {
+  empresa_id: number;
+  factura_id: number;
+  usuario_id: number;
+  condicion_venta: CondicionVenta;
+  fecha_vencimiento?: string | Date | null;
 }
 
 export interface RegistrarPagoInput {
@@ -102,6 +111,7 @@ export interface FacturaRow {
   orden_trabajo_id: number | null;
   codigo_orden?: string;
   fecha_factura: Date | string;
+  fecha_vencimiento?: Date | string | null;
   subtotal: number;
   descuento: number;
   descuento_total?: number;

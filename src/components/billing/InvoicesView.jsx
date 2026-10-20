@@ -19,7 +19,8 @@ import {
   AlertTriangle,
   ArrowUpDown,
   ExternalLink,
-  Loader2
+  Loader2,
+  X
 } from "lucide-react";
 import InvoiceDetailModal from "./InvoiceDetailModal";
 import InvoicePrintSelectorModal from "./InvoicePrintSelectorModal";
@@ -47,6 +48,7 @@ export default function InvoicesView() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [estadoFilter, setEstadoFilter] = useState("TODOS");
+  const [condicionFilter, setCondicionFilter] = useState("TODOS");
   const [tipoFilter, setTipoFilter] = useState("TODOS");
   const [fechaDesde, setFechaDesde] = useState("");
   const [fechaHasta, setFechaHasta] = useState("");
@@ -95,6 +97,7 @@ export default function InvoicesView() {
       const params = new URLSearchParams();
       if (debouncedSearch) params.set("search", debouncedSearch);
       if (estadoFilter && estadoFilter !== "TODOS") params.set("estado", estadoFilter);
+      if (condicionFilter && condicionFilter !== "TODOS") params.set("condicion", condicionFilter);
       if (tipoFilter && tipoFilter !== "TODOS") params.set("tipo_factura", tipoFilter);
       if (fechaDesde) params.set("fecha_desde", fechaDesde);
       if (fechaHasta) params.set("fecha_hasta", fechaHasta);
@@ -132,7 +135,7 @@ export default function InvoicesView() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, estadoFilter, tipoFilter, fechaDesde, fechaHasta, page, limit, sortBy, sortOrder]);
+  }, [debouncedSearch, estadoFilter, condicionFilter, tipoFilter, fechaDesde, fechaHasta, page, limit, sortBy, sortOrder]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -145,6 +148,7 @@ export default function InvoicesView() {
     setSearch("");
     setDebouncedSearch("");
     setEstadoFilter("TODOS");
+    setCondicionFilter("TODOS");
     setTipoFilter("TODOS");
     setFechaDesde("");
     setFechaHasta("");
@@ -275,6 +279,7 @@ export default function InvoicesView() {
   const hasActiveFilters =
     search.trim() !== "" ||
     estadoFilter !== "TODOS" ||
+    condicionFilter !== "TODOS" ||
     tipoFilter !== "TODOS" ||
     fechaDesde !== "" ||
     fechaHasta !== "";
@@ -401,28 +406,38 @@ export default function InvoicesView() {
       </div>
 
       {/* 3. Barra de Filtros (Sección 5) */}
-      <div className="bg-card border border-border rounded-2xl p-4 shadow-sm space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="bg-card border border-border rounded-xl px-3 py-2 shadow-sm">
+        <div className="flex items-end gap-2 overflow-x-auto min-w-0">
           {/* Búsqueda */}
-          <div className="lg:col-span-2">
-            <label className="block text-[11px] font-mono font-bold uppercase tracking-wider text-foreground-secondary mb-1">
+          <div className="flex-1 min-w-[160px]">
+            <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-foreground-secondary mb-1">
               Buscar
             </label>
             <div className="relative">
-              <Search className="w-4 h-4 text-foreground-muted absolute left-3 top-1/2 -translate-y-1/2" />
+              <Search className="w-3.5 h-3.5 text-foreground-muted absolute left-2.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Factura, cliente, RNC, OT..."
-                className="w-full pl-9 pr-3 py-2 rounded-xl border border-border bg-input text-foreground text-xs font-sans placeholder:text-foreground-muted focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                className="w-full h-9 pl-8 pr-7 rounded-lg border border-border bg-input text-foreground text-xs font-sans placeholder:text-foreground-muted focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary"
               />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-foreground-muted hover:text-foreground p-0.5"
+                  title="Limpiar búsqueda"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           </div>
 
           {/* Estado */}
-          <div>
-            <label className="block text-[11px] font-mono font-bold uppercase tracking-wider text-foreground-secondary mb-1">
+          <div className="w-[145px] shrink-0">
+            <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-foreground-secondary mb-1">
               Estado
             </label>
             <select
@@ -431,7 +446,7 @@ export default function InvoicesView() {
                 setEstadoFilter(e.target.value);
                 setPage(1);
               }}
-              className="w-full px-3 py-2 rounded-xl border border-border bg-input text-foreground text-xs font-sans focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary cursor-pointer"
+              className="w-full h-9 px-2.5 rounded-lg border border-border bg-input text-foreground text-xs font-sans focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary cursor-pointer"
             >
               <option value="TODOS">Todos los estados</option>
               <option value="PENDIENTE">PENDIENTE</option>
@@ -442,9 +457,28 @@ export default function InvoicesView() {
             </select>
           </div>
 
+          {/* Condición de Pago */}
+          <div className="w-[160px] shrink-0">
+            <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-foreground-secondary mb-1">
+              Condición
+            </label>
+            <select
+              value={condicionFilter}
+              onChange={(e) => {
+                setCondicionFilter(e.target.value);
+                setPage(1);
+              }}
+              className="w-full h-9 px-2.5 rounded-lg border border-border bg-input text-foreground text-xs font-sans focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary cursor-pointer"
+            >
+              <option value="TODOS">Todas las condiciones</option>
+              <option value="CONTADO">CONTADO</option>
+              <option value="CREDITO">CRÉDITO</option>
+            </select>
+          </div>
+
           {/* Tipo / Origen */}
-          <div>
-            <label className="block text-[11px] font-mono font-bold uppercase tracking-wider text-foreground-secondary mb-1">
+          <div className="w-[145px] shrink-0">
+            <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-foreground-secondary mb-1">
               Origen
             </label>
             <select
@@ -453,7 +487,7 @@ export default function InvoicesView() {
                 setTipoFilter(e.target.value);
                 setPage(1);
               }}
-              className="w-full px-3 py-2 rounded-xl border border-border bg-input text-foreground text-xs font-sans focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary cursor-pointer"
+              className="w-full h-9 px-2.5 rounded-lg border border-border bg-input text-foreground text-xs font-sans focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary cursor-pointer"
             >
               <option value="TODOS">Todos los orígenes</option>
               <option value="VENTA_DIRECTA">Venta Directa</option>
@@ -462,8 +496,8 @@ export default function InvoicesView() {
           </div>
 
           {/* Fecha Desde */}
-          <div>
-            <label className="block text-[11px] font-mono font-bold uppercase tracking-wider text-foreground-secondary mb-1">
+          <div className="w-[125px] shrink-0">
+            <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-foreground-secondary mb-1">
               Desde
             </label>
             <input
@@ -473,13 +507,13 @@ export default function InvoicesView() {
                 setFechaDesde(e.target.value);
                 setPage(1);
               }}
-              className="w-full px-3 py-2 rounded-xl border border-border bg-input text-foreground text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              className="w-full h-9 px-2 rounded-lg border border-border bg-input text-foreground text-xs font-mono focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary"
             />
           </div>
 
           {/* Fecha Hasta */}
-          <div>
-            <label className="block text-[11px] font-mono font-bold uppercase tracking-wider text-foreground-secondary mb-1">
+          <div className="w-[125px] shrink-0">
+            <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-foreground-secondary mb-1">
               Hasta
             </label>
             <input
@@ -489,24 +523,25 @@ export default function InvoicesView() {
                 setFechaHasta(e.target.value);
                 setPage(1);
               }}
-              className="w-full px-3 py-2 rounded-xl border border-border bg-input text-foreground text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              className="w-full h-9 px-2 rounded-lg border border-border bg-input text-foreground text-xs font-mono focus:outline-none focus:ring-1 focus:ring-primary/30 focus:border-primary"
             />
           </div>
-        </div>
 
-        {/* Botón Limpiar filtros si hay activos */}
-        {hasActiveFilters && (
-          <div className="flex justify-end pt-1 border-t border-border">
-            <button
-              type="button"
-              onClick={handleClearFilters}
-              className="flex items-center gap-1.5 text-xs font-mono font-bold text-foreground-muted hover:text-primary transition-colors cursor-pointer py-1 px-2 rounded-lg hover:bg-hover"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Limpiar filtros</span>
-            </button>
-          </div>
-        )}
+          {/* Botón Limpiar filtros si hay activos */}
+          {hasActiveFilters && (
+            <div className="shrink-0">
+              <button
+                type="button"
+                onClick={handleClearFilters}
+                className="h-9 px-2.5 rounded-lg border border-border hover:bg-hover text-foreground-muted hover:text-primary text-[11px] font-mono font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="Limpiar filtros"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span className="hidden xl:inline">Limpiar</span>
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* 4. Tabla de Facturas (Sección 3) */}
@@ -539,6 +574,15 @@ export default function InvoicesView() {
                 >
                   <div className="flex items-center gap-1">
                     <span>Cliente</span>
+                    <ArrowUpDown className="w-3 h-3 opacity-60" />
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort("condicion_venta")}
+                  className="py-3 px-3 cursor-pointer hover:text-foreground whitespace-nowrap"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Condición</span>
                     <ArrowUpDown className="w-3 h-3 opacity-60" />
                   </div>
                 </th>
@@ -578,7 +622,7 @@ export default function InvoicesView() {
             <tbody className="divide-y divide-border font-sans">
               {loading ? (
                 <tr>
-                  <td colSpan={10} className="py-14 text-center">
+                  <td colSpan={11} className="py-14 text-center">
                     <div className="flex flex-col items-center justify-center gap-2 text-foreground-muted">
                       <Loader2 className="w-6 h-6 animate-spin text-primary" />
                       <span className="text-xs font-mono">Cargando facturas...</span>
@@ -587,7 +631,7 @@ export default function InvoicesView() {
                 </tr>
               ) : invoices.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-16 text-center text-foreground-muted">
+                  <td colSpan={11} className="py-16 text-center text-foreground-muted">
                     <div className="max-w-xs mx-auto space-y-2">
                       <FileText className="w-8 h-8 text-foreground-muted mx-auto opacity-40" />
                       <p className="text-sm font-semibold text-foreground">No se encontraron facturas</p>
@@ -640,6 +684,24 @@ export default function InvoicesView() {
                               {inv.cliente_identificacion}
                             </span>
                           )}
+                        </div>
+                      </td>
+
+                      {/* CONDICIÓN & VENCIMIENTO */}
+                      <td className="py-3 px-3 whitespace-nowrap">
+                        <div className="flex flex-col gap-0.5">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase inline-block w-fit ${
+                              String(inv.condicion_venta).toUpperCase() === "CREDITO"
+                                ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
+                                : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                            }`}
+                          >
+                            {String(inv.condicion_venta).toUpperCase() === "CREDITO" ? "CRÉDITO" : "CONTADO"}
+                          </span>
+                          <span className="text-[10px] font-mono text-foreground-muted">
+                            {inv.fecha_vencimiento ? formatDate(inv.fecha_vencimiento) : "Sin vencimiento"}
+                          </span>
                         </div>
                       </td>
 

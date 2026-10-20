@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { actualizarTerminosFactura } from "@/lib/billing/billingService";
 
 export const dynamic = "force-dynamic";
 
@@ -95,6 +96,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
         f.cliente_id,
         f.orden_trabajo_id,
         f.fecha_factura,
+        f.fecha_vencimiento,
         f.subtotal,
         ${colDescuento} AS descuento,
         ${colDescuento} AS descuento_total,
@@ -570,6 +572,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
           cliente_id: factura.cliente_id ? Number(factura.cliente_id) : null,
           orden_trabajo_id: factura.orden_trabajo_id ? Number(factura.orden_trabajo_id) : null,
           fecha_factura: factura.fecha_factura,
+          fecha_vencimiento: factura.fecha_vencimiento ? new Date(factura.fecha_vencimiento as string).toISOString() : null,
           subtotal: parseFloat(Number(factura.subtotal || 0).toFixed(2)),
           descuento: parseFloat(Number(factura.descuento || factura.descuento_total || 0).toFixed(2)),
           impuesto: parseFloat(Number(factura.impuesto || factura.impuesto_total || 0).toFixed(2)),
@@ -603,6 +606,60 @@ export async function GET(request: NextRequest, context: RouteContext) {
         details: errorMsg
       },
       { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(request: NextRequest, context: RouteContext) {
+  try {
+    const session = await getWorkshopSession();
+    if (!session || !session.empresa_id) {
+      return NextResponse.json(
+        { error: "UNAUTHORIZED", message: "Sesión no válida o expirada." },
+        { status: 401 }
+      );
+    }
+
+    const perms = await getModulePermissions("FACTURACION", session.usuario_id);
+    if (!perms.puede_editar && !perms.puede_crear) {
+      return NextResponse.json(
+        { error: "FORBIDDEN", message: "No tienes permisos para modificar facturas." },
+        { status: 403 }
+      );
+    }
+
+    const { id } = await context.params;
+    const facturaId = parseInt(id, 10);
+    if (isNaN(facturaId) || facturaId <= 0) {
+      return NextResponse.json(
+        { error: "INVALID_ID", message: "Identificador de factura no válido." },
+        { status: 400 }
+      );
+    }
+
+    const body = await request.json();
+    const condicionVenta = body.condicion_venta === "CREDITO" ? "CREDITO" : "CONTADO";
+    const fechaVencimiento = body.fecha_vencimiento !== undefined ? body.fecha_vencimiento : null;
+
+    const result = await actualizarTerminosFactura({
+      empresa_id: session.empresa_id,
+      factura_id: facturaId,
+      usuario_id: session.usuario_id,
+      condicion_venta: condicionVenta,
+      fecha_vencimiento: fechaVencimiento
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: "Términos de la factura actualizados exitosamente.",
+      factura: result
+    });
+  } catch (err: unknown) {
+    console.error("Error en PATCH /api/facturacion/facturas/[id]:", err);
+    const errorMessage = err instanceof Error ? err.message : "Error al actualizar términos de la factura.";
+    return NextResponse.json(
+      { error: "ERROR_ACTUALIZAR_FACTURA", message: errorMessage },
+      { status: 400 }
     );
   }
 }

@@ -68,6 +68,7 @@ export async function GET(request: NextRequest) {
 
     const search = (searchParams.get("search") || "").trim();
     const estado = (searchParams.get("estado") || "").trim().toUpperCase();
+    const condicion = (searchParams.get("condicion") || "").trim().toUpperCase();
     const tipoFactura = (searchParams.get("tipo_factura") || "").trim();
     const fechaDesde = (searchParams.get("fecha_desde") || "").trim();
     const fechaHasta = (searchParams.get("fecha_hasta") || "").trim();
@@ -132,6 +133,8 @@ export async function GET(request: NextRequest) {
       codigo_factura: colCodigo,
       numero_factura: colNumero,
       fecha_factura: "f.fecha_factura",
+      fecha_vencimiento: "f.fecha_vencimiento",
+      condicion_venta: colCondicion,
       fecha_creacion: colFechaCreacion,
       total: colTotal,
       monto_pagado: colMontoPagado,
@@ -156,6 +159,12 @@ export async function GET(request: NextRequest) {
     if (estado && estado !== "TODOS") {
       conditions.push(`f.estado = $${paramIndex}`);
       params.push(estado);
+      paramIndex++;
+    }
+
+    if (condicion && condicion !== "TODOS") {
+      conditions.push(`${colCondicion} = $${paramIndex}`);
+      params.push(condicion);
       paramIndex++;
     }
 
@@ -231,6 +240,7 @@ export async function GET(request: NextRequest) {
         f.orden_trabajo_id,
         ot.codigo_orden,
         f.fecha_factura,
+        f.fecha_vencimiento,
         f.subtotal,
         ${colDescuento} AS descuento,
         ${colDescuento} AS descuento_total,
@@ -253,7 +263,7 @@ export async function GET(request: NextRequest) {
       LIMIT $${limitIndex} OFFSET $${offsetIndex};
     `;
 
-    const rawRows = await query<FacturaListRow & { condicion_venta?: string }>(listSql, listParams);
+    const rawRows = await query<FacturaListRow & { condicion_venta?: string; fecha_vencimiento?: string | Date | null }>(listSql, listParams);
 
     const data = (rawRows || []).map((row) => ({
       factura_id: Number(row.factura_id),
@@ -264,6 +274,7 @@ export async function GET(request: NextRequest) {
       tipo_factura_codigo: row.tipo_factura_codigo || "VENTA_DIRECTA",
       tipo_factura_nombre: row.tipo_factura_nombre || "Venta Directa",
       condicion_venta: (row.condicion_venta as "CONTADO" | "CREDITO") || "CONTADO",
+      fecha_vencimiento: row.fecha_vencimiento ? new Date(row.fecha_vencimiento).toISOString() : null,
       cliente_id: row.cliente_id ? Number(row.cliente_id) : null,
       cliente_nombre: row.cliente_nombre || "Cliente General",
       cliente_identificacion: row.cliente_identificacion || "",
@@ -423,10 +434,32 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    let fechaVencimiento: string | Date | null = null;
+    if (body.fecha_vencimiento) {
+      const fv = new Date(body.fecha_vencimiento);
+      if (isNaN(fv.getTime())) {
+        return NextResponse.json(
+          { error: "VALIDATION_ERROR", message: "La fecha de vencimiento proporcionada no es válida." },
+          { status: 400 }
+        );
+      }
+      const ff = body.fecha_factura ? new Date(body.fecha_factura) : new Date();
+      const fvDateOnly = new Date(fv.getFullYear(), fv.getMonth(), fv.getDate());
+      const ffDateOnly = new Date(ff.getFullYear(), ff.getMonth(), ff.getDate());
+      if (fvDateOnly < ffDateOnly) {
+        return NextResponse.json(
+          { error: "VALIDATION_ERROR", message: "La fecha de vencimiento no puede ser anterior a la fecha de emisión de la factura." },
+          { status: 400 }
+        );
+      }
+      fechaVencimiento = fv;
+    }
+
     const input: CrearFacturaInput = {
       empresa_id: session.empresa_id,
       tipo_factura_id: Number(body.tipo_factura_id),
       condicion_venta: condicionVenta,
+      fecha_vencimiento: fechaVencimiento,
       cliente_id: body.cliente_id ? Number(body.cliente_id) : null,
       orden_trabajo_id: body.orden_trabajo_id ? Number(body.orden_trabajo_id) : null,
       fecha_factura: body.fecha_factura || new Date(),
