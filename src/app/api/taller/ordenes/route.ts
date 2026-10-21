@@ -34,8 +34,8 @@ export async function GET(req: NextRequest) {
     const from = searchParams.get("from") || "";
     const to = searchParams.get("to") || "";
     const sortBy = (searchParams.get("sort_by") || searchParams.get("sortBy") || "").trim().toLowerCase();
-    const sortOrderRaw = (searchParams.get("sort_order") || searchParams.get("sortOrder") || "ASC").trim().toUpperCase();
-    const sortDirection = sortOrderRaw === "DESC" ? "DESC" : "ASC";
+    const sortOrderRaw = (searchParams.get("sort_order") || searchParams.get("sortOrder") || "DESC").trim().toUpperCase();
+    const sortDirection = sortOrderRaw === "ASC" ? "ASC" : "DESC";
     const page = parseInt(searchParams.get("page") || "1", 10);
     const limit = parseInt(searchParams.get("limit") || "20", 10);
     const offset = (page - 1) * limit;
@@ -143,11 +143,10 @@ export async function GET(req: NextRequest) {
     const countRes = await query(countSql, queryParams);
     const total = parseInt(countRes[0]?.total || "0", 10);
 
-    // Whitelist Order By construction
+    // Whitelist Order By construction: default descending by creation date (most recent first)
     let orderBySql = `
-      DATE_TRUNC('day', ot.fecha_registro AT TIME ZONE 'America/Santo_Domingo') ASC,
-      ot.prioridad_orden_id DESC,
-      ot.orden_trabajo_id ASC
+      ot.fecha_registro DESC,
+      ot.orden_trabajo_id DESC
     `;
 
     if (sortBy === "codigo") {

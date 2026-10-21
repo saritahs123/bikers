@@ -3,25 +3,19 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import {
   Search,
-  Filter,
   Plus,
-  Kanban,
   RotateCcw,
-  Eye,
   Wrench,
   User,
-  Bike,
   Calendar,
   AlertCircle,
   Loader2,
   Clock,
   CheckCircle2,
-  AlertTriangle,
   Inbox,
   ClipboardList,
   ChevronLeft,
   ChevronRight,
-  MoreVertical,
   X,
   Tag,
   ArrowUpDown,
@@ -106,8 +100,8 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
   const urlEstado = getNormalizedStatus(searchParams.get("estado") || searchParams.get("estado_id") || "");
   const urlPrioridad = searchParams.get("prioridad_id") || "";
   const urlMecanico = searchParams.get("mecanico_id") || "";
-  const urlSortBy = searchParams.get("sort_by") || "";
-  const urlSortOrder = searchParams.get("sort_order") || "asc";
+  const urlSortBy = searchParams.get("sort_by") || "fecha";
+  const urlSortOrder = searchParams.get("sort_order") || "desc";
   const urlPage = parseInt(searchParams.get("page") || "1", 10);
 
   const [orders, setOrders] = useState([]);
@@ -200,7 +194,7 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
       }
       if (activeSortBy) {
         queryParams.set("sort_by", activeSortBy);
-        queryParams.set("sort_order", activeSortOrder || "asc");
+        queryParams.set("sort_order", activeSortOrder || "desc");
       }
       queryParams.set("page", String(page));
       queryParams.set("limit", "25");
@@ -293,8 +287,8 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
     setDateFrom(defaultFrom);
     setDateTo(defaultTo);
     setPage(1);
-    setSortBy("");
-    setSortOrder("asc");
+    setSortBy("fecha");
+    setSortOrder("desc");
 
     const currentParams = new URLSearchParams(searchParams.toString());
     const viewParam = currentParams.get("view");
@@ -327,7 +321,7 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
   };
 
   const handleSort = (columnKey) => {
-    let nextOrder = "asc";
+    let nextOrder = columnKey === "fecha" ? "desc" : "asc";
     if (sortBy === columnKey) {
       nextOrder = sortOrder === "asc" ? "desc" : "asc";
     }
