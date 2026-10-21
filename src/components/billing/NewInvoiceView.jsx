@@ -16,7 +16,8 @@ import {
   X,
   Lock,
   Bike,
-  Printer
+  Printer,
+  Award
 } from "lucide-react";
 import CustomerFormDrawer from "@/components/crm/CustomerFormDrawer";
 import ProductCreateModal from "@/components/products/ProductCreateModal";
@@ -245,11 +246,12 @@ export default function NewInvoiceView() {
   const handleCustomerCreated = useCallback(async (newClient) => {
     setIsCreateCustomerModalOpen(false);
 
+    let clientList = [];
     try {
       const res = await fetch("/api/crm/clientes");
       if (res.ok) {
         const data = await res.json();
-        const clientList = Array.isArray(data) ? data : (data?.data || []);
+        clientList = Array.isArray(data) ? data : (data?.data || []);
         setClientes(clientList);
       }
     } catch (err) {
@@ -258,6 +260,7 @@ export default function NewInvoiceView() {
 
     if (newClient) {
       const cid = newClient.cliente_id || newClient.id;
+      const foundInList = clientList.find((c) => String(c.cliente_id) === String(cid));
       const formattedClient = {
         cliente_id: cid,
         id: cid,
@@ -268,6 +271,12 @@ export default function NewInvoiceView() {
         identificacion: newClient.identificacion || "",
         telefono_principal: newClient.telefono_principal || "",
         correo: newClient.correo || "",
+        nivel_cliente_id: foundInList?.nivel_cliente_id ?? newClient.nivel_cliente_id ?? null,
+        nivel_cliente_nombre: foundInList?.nivel_cliente_nombre ?? newClient.nivel_cliente_nombre ?? null,
+        porciento_descuento: foundInList
+          ? (foundInList.nivel_cliente_activo ? Number(foundInList.porciento_descuento || 0) : 0)
+          : Number(newClient.porciento_descuento || 0),
+        nivel_cliente_activo: foundInList?.nivel_cliente_activo ?? true,
       };
 
       setClientes((prev) => {
@@ -513,15 +522,44 @@ export default function NewInvoiceView() {
     );
   }, [lineas]);
 
-  const descuentoGeneral = useMemo(() => {
+  // Descuentos manuales de línea
+  const descuentoManualGeneral = useMemo(() => {
     return parseFloat(lineas.reduce((acc, l) => acc + (l.descuento || 0), 0).toFixed(2));
   }, [lineas]);
+
+  // Base elegible para descuento de nivel = Subtotal Bruto - Descuentos Manuales
+  const baseElegibleNivel = useMemo(() => {
+    return Math.max(0, parseFloat((subtotalGeneral - descuentoManualGeneral).toFixed(2)));
+  }, [subtotalGeneral, descuentoManualGeneral]);
+
+  // Porcentaje del nivel del cliente seleccionado
+  const porcientoDescuentoNivel = useMemo(() => {
+    if (!selectedClient) return 0;
+    if (selectedClient.nivel_cliente_activo === false) return 0;
+    const pct = Number(selectedClient.porciento_descuento);
+    return isNaN(pct) || pct < 0 ? 0 : Math.min(100, pct);
+  }, [selectedClient]);
+
+  // Descuento de nivel aplicado sobre la base elegible
+  const descuentoNivelGeneral = useMemo(() => {
+    if (porcientoDescuentoNivel <= 0 || baseElegibleNivel <= 0) return 0;
+    return parseFloat(((baseElegibleNivel * (porcientoDescuentoNivel / 100))).toFixed(2));
+  }, [baseElegibleNivel, porcientoDescuentoNivel]);
+
+  // Descuento total (manual + nivel)
+  const descuentoGeneral = useMemo(() => {
+    return parseFloat((descuentoManualGeneral + descuentoNivelGeneral).toFixed(2));
+  }, [descuentoManualGeneral, descuentoNivelGeneral]);
+
+  const subtotalNetoGeneral = useMemo(() => {
+    return Math.max(0, parseFloat((subtotalGeneral - descuentoGeneral).toFixed(2)));
+  }, [subtotalGeneral, descuentoGeneral]);
 
   const impuestoGeneral = 0.00; // En FAC-2: impuesto = 0
 
   const totalFactura = useMemo(() => {
-    return Math.max(0, parseFloat((subtotalGeneral - descuentoGeneral + impuestoGeneral).toFixed(2)));
-  }, [subtotalGeneral, descuentoGeneral, impuestoGeneral]);
+    return Math.max(0, parseFloat((subtotalNetoGeneral + impuestoGeneral).toFixed(2)));
+  }, [subtotalNetoGeneral, impuestoGeneral]);
 
   // Cálculo de devuelta para EFECTIVO (Sección 6 y 7)
   const isEfectivo = useMemo(() => {
@@ -548,6 +586,10 @@ export default function NewInvoiceView() {
         identificacion: ot.cliente.identificacion,
         telefono_principal: ot.cliente.telefono_principal,
         correo: ot.cliente.correo,
+        nivel_cliente_id: ot.cliente.nivel_cliente_id || null,
+        nivel_cliente_nombre: ot.cliente.nivel_cliente_nombre || null,
+        porciento_descuento: ot.cliente.nivel_cliente_activo !== false ? Number(ot.cliente.porciento_descuento || 0) : 0,
+        nivel_cliente_activo: ot.cliente.nivel_cliente_activo ?? true,
       });
       setClientSearch("");
       setClientDropdownOpen(false);
@@ -966,6 +1008,16 @@ export default function NewInvoiceView() {
                     <span className="text-xs font-bold text-foreground">
                       {selectedClient.nombre_completo}
                     </span>
+                    {selectedClient.nivel_cliente_nombre ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                        <Award className="w-3 h-3" />
+                        Nivel {selectedClient.nivel_cliente_nombre} ({Number(selectedClient.porciento_descuento || 0)}% Desc.)
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-surface-subtle text-foreground-muted border border-border">
+                        Sin Nivel (0%)
+                      </span>
+                    )}
                     {selectedClient.identificacion && (
                       <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-surface-subtle text-foreground-muted border border-border">
                         {selectedClient.identificacion}
@@ -1035,8 +1087,14 @@ export default function NewInvoiceView() {
                               className="px-3.5 py-2 hover:bg-hover cursor-pointer border-b border-border/40 last:border-0 flex items-center justify-between"
                             >
                               <div>
-                                <div className="font-semibold text-foreground font-sans">
-                                  {c.nombre_completo}
+                                <div className="font-semibold text-foreground font-sans flex items-center gap-2">
+                                  <span>{c.nombre_completo}</span>
+                                  {c.nivel_cliente_nombre && (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">
+                                      <Award className="w-2.5 h-2.5" />
+                                      {c.nivel_cliente_nombre} ({Number(c.porciento_descuento || 0)}%)
+                                    </span>
+                                  )}
                                 </div>
                                 <div className="text-[10px] text-foreground-muted">
                                   {c.identificacion || "Sin RNC/Cédula"} • Tel: {c.telefono_principal || "N/A"}
@@ -1403,10 +1461,35 @@ export default function NewInvoiceView() {
                 <span>Subtotal Bruto:</span>
                 <span>RD$ {subtotalGeneral.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between text-foreground-secondary">
-                <span>Descuento Total:</span>
-                <span className="text-amber-400">- RD$ {descuentoGeneral.toFixed(2)}</span>
-              </div>
+              {descuentoManualGeneral > 0 && (
+                <div className="flex justify-between text-foreground-secondary">
+                  <span>Descuento Manual:</span>
+                  <span className="text-amber-400">- RD$ {descuentoManualGeneral.toFixed(2)}</span>
+                </div>
+              )}
+              {selectedClient?.nivel_cliente_nombre && (
+                <div className="flex justify-between items-center text-foreground-secondary">
+                  <span className="flex items-center gap-1">
+                    <Award className="w-3 h-3 text-emerald-400" />
+                    <span>Descuento ({porcientoDescuentoNivel}%):</span>
+                  </span>
+                  <span className={descuentoNivelGeneral > 0 ? "text-emerald-400 font-medium" : "text-foreground-muted"}>
+                    {descuentoNivelGeneral > 0 ? `- RD$ ${descuentoNivelGeneral.toFixed(2)}` : "RD$ 0.00"}
+                  </span>
+                </div>
+              )}
+              {descuentoGeneral > 0 && (descuentoManualGeneral > 0 && descuentoNivelGeneral > 0) && (
+                <div className="flex justify-between text-foreground-secondary font-medium pt-1 border-t border-border/40">
+                  <span>Descuento Total:</span>
+                  <span className="text-amber-400">- RD$ {descuentoGeneral.toFixed(2)}</span>
+                </div>
+              )}
+              {!selectedClient?.nivel_cliente_nombre && descuentoManualGeneral === 0 && (
+                <div className="flex justify-between text-foreground-secondary">
+                  <span>Descuento:</span>
+                  <span className="text-foreground-muted">RD$ 0.00</span>
+                </div>
+              )}
               <div className="flex justify-between text-foreground-secondary">
                 <span>Impuestos:</span>
                 <span>RD$ 0.00</span>

@@ -36,6 +36,10 @@ interface FacturaListRow {
   observacion: string | null;
   fecha_creacion: string | Date;
   total_lineas: number;
+  nivel_cliente_id?: number | null;
+  porciento_descuento_nivel?: number | string | null;
+  descuento_nivel?: number | string | null;
+  nivel_cliente_nombre?: string | null;
 }
 
 interface MetricasRow {
@@ -137,6 +141,7 @@ export async function GET(request: NextRequest) {
       condicion_venta: colCondicion,
       fecha_creacion: colFechaCreacion,
       total: colTotal,
+      descuento: colDescuento,
       monto_pagado: colMontoPagado,
       balance_pendiente: colBalancePendiente,
       estado: "f.estado",
@@ -253,10 +258,15 @@ export async function GET(request: NextRequest) {
         f.estado,
         ${colObservacion} AS observacion,
         ${colFechaCreacion} AS fecha_creacion,
+        ${facCols.has("nivel_cliente_id") ? "f.nivel_cliente_id" : "NULL::int AS nivel_cliente_id"},
+        ${facCols.has("porciento_descuento_nivel") ? "COALESCE(f.porciento_descuento_nivel, 0)::numeric AS porciento_descuento_nivel" : "0.00::numeric AS porciento_descuento_nivel"},
+        ${facCols.has("descuento_nivel") ? "COALESCE(f.descuento_nivel, 0)::numeric AS descuento_nivel" : "0.00::numeric AS descuento_nivel"},
+        nc.nombre AS nivel_cliente_nombre,
         (SELECT COUNT(*)::int FROM admin.detalle_factura df WHERE df.factura_id = f.factura_id) AS total_lineas
       FROM admin.facturas f
       LEFT JOIN admin.tipo_factura tf ON f.tipo_factura_id = tf.tipo_factura_id
       LEFT JOIN admin.clientes c ON f.cliente_id = c.cliente_id
+      LEFT JOIN admin.nivel_cliente nc ON f.nivel_cliente_id = nc.nivel_cliente_id
       LEFT JOIN admin.ordenes_trabajo ot ON f.orden_trabajo_id = ot.orden_trabajo_id
       WHERE ${whereClause}
       ORDER BY ${sortColumn} ${sortOrderParam}, f.factura_id DESC
@@ -280,6 +290,10 @@ export async function GET(request: NextRequest) {
       cliente_identificacion: row.cliente_identificacion || "",
       cliente_telefono: row.cliente_telefono || "",
       cliente_correo: row.cliente_correo || "",
+      nivel_cliente_id: row.nivel_cliente_id ? Number(row.nivel_cliente_id) : null,
+      porciento_descuento_nivel: parseFloat(Number(row.porciento_descuento_nivel || 0).toFixed(2)),
+      descuento_nivel: parseFloat(Number(row.descuento_nivel || 0).toFixed(2)),
+      nivel_cliente_nombre: row.nivel_cliente_nombre || null,
       orden_trabajo_id: row.orden_trabajo_id ? Number(row.orden_trabajo_id) : null,
       codigo_orden: row.codigo_orden || null,
       fecha_factura: row.fecha_factura,
@@ -465,6 +479,8 @@ export async function POST(request: NextRequest) {
       fecha_factura: body.fecha_factura || new Date(),
       observacion: body.observacion ? String(body.observacion).trim() : null,
       usuario_id: session.usuario_id,
+      porciento_impuesto: body.porciento_impuesto != null ? Number(body.porciento_impuesto) : undefined,
+      impuesto: body.impuesto != null ? Number(body.impuesto) : undefined,
       lineas: (body.lineas as RawLineaInput[]).map((l: RawLineaInput) => ({
         tipo_linea: (l.tipo_linea as TipoLineaFactura) || "PRODUCTO",
         almacen_id: l.almacen_id ? Number(l.almacen_id) : null,

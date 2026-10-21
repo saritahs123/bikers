@@ -589,6 +589,15 @@ export default function InvoicesView() {
                 <th className="py-3 px-3">Origen</th>
                 <th className="py-3 px-3">Orden Trabajo</th>
                 <th
+                  onClick={() => handleSort("descuento")}
+                  className="py-3 px-3 text-right cursor-pointer hover:text-foreground whitespace-nowrap"
+                >
+                  <div className="flex items-center justify-end gap-1">
+                    <span>Descuento</span>
+                    <ArrowUpDown className="w-3 h-3 opacity-60" />
+                  </div>
+                </th>
+                <th
                   onClick={() => handleSort("total")}
                   className="py-3 px-3 text-right cursor-pointer hover:text-foreground"
                 >
@@ -622,7 +631,7 @@ export default function InvoicesView() {
             <tbody className="divide-y divide-border font-sans">
               {loading ? (
                 <tr>
-                  <td colSpan={11} className="py-14 text-center">
+                  <td colSpan={12} className="py-14 text-center">
                     <div className="flex flex-col items-center justify-center gap-2 text-foreground-muted">
                       <Loader2 className="w-6 h-6 animate-spin text-primary" />
                       <span className="text-xs font-mono">Cargando facturas...</span>
@@ -631,7 +640,7 @@ export default function InvoicesView() {
                 </tr>
               ) : invoices.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="py-16 text-center text-foreground-muted">
+                  <td colSpan={12} className="py-16 text-center text-foreground-muted">
                     <div className="max-w-xs mx-auto space-y-2">
                       <FileText className="w-8 h-8 text-foreground-muted mx-auto opacity-40" />
                       <p className="text-sm font-semibold text-foreground">No se encontraron facturas</p>
@@ -731,6 +740,27 @@ export default function InvoicesView() {
                           </Link>
                         ) : (
                           <span className="font-mono text-foreground-muted text-center block w-6">—</span>
+                        )}
+                      </td>
+
+                      {/* DESCUENTO */}
+                      <td className="py-3 px-3 text-right font-mono whitespace-nowrap">
+                        {Number(inv.descuento || 0) > 0 ? (
+                          <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                            {formatMoney(inv.descuento)}{" "}
+                            <span className="text-[10px] text-foreground-muted font-normal">
+                              ({Number(inv.porciento_descuento_nivel || 0)}%)
+                            </span>
+                          </span>
+                        ) : Number(inv.porciento_descuento_nivel || 0) > 0 ? (
+                          <span className="text-foreground-muted font-normal">
+                            RD$ 0.00{" "}
+                            <span className="text-[10px]">
+                              ({Number(inv.porciento_descuento_nivel)}%)
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="text-foreground-muted font-normal">—</span>
                         )}
                       </td>
 

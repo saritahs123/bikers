@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import {
   Search,
@@ -38,6 +38,26 @@ const STATUS_FILTERS = {
   ENTREGADAS: "ENTREGADA"
 };
 
+const getTodaySantoDomingo = () => {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Santo_Domingo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(new Date());
+};
+
+const getDaysAgoSantoDomingo = (days) => {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Santo_Domingo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(d);
+};
+
 const formatCreationDate = (dateValue) => {
   if (!dateValue) return { datePart: "—", timePart: "" };
   const d = new Date(dateValue);
@@ -72,9 +92,16 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
     return str;
   };
 
+  const defaultFrom = useMemo(() => getDaysAgoSantoDomingo(6), []);
+  const defaultTo = useMemo(() => getTodaySantoDomingo(), []);
+
   // Primary URL source of truth
-  const urlFrom = searchParams.get("from") || "";
-  const urlTo = searchParams.get("to") || "";
+  const rawFrom = searchParams.get("from");
+  const rawTo = searchParams.get("to");
+  const isExplicitAllDates = rawFrom === "all" || rawTo === "all";
+
+  const urlFrom = isExplicitAllDates ? "" : (rawFrom === null ? defaultFrom : rawFrom);
+  const urlTo = isExplicitAllDates ? "" : (rawTo === null ? defaultTo : rawTo);
   const urlSearch = searchParams.get("search") || "";
   const urlEstado = getNormalizedStatus(searchParams.get("estado") || searchParams.get("estado_id") || "");
   const urlPrioridad = searchParams.get("prioridad_id") || "";
@@ -104,6 +131,16 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
 
   const fetchSequenceRef = useRef(0);
   const abortControllerRef = useRef(null);
+
+  // If first visit without date params in URL, initialize the URL params to last 7 days
+  useEffect(() => {
+    if (searchParams.get("from") === null && searchParams.get("to") === null) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("from", defaultFrom);
+      params.set("to", defaultTo);
+      router.replace(`${pathname}?${params.toString()}`);
+    }
+  }, [searchParams, defaultFrom, defaultTo, pathname, router]);
 
   // Sync state with URL search params on mount & when URL params change
   useEffect(() => {
@@ -140,8 +177,8 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
     setIsFetching(true);
     setError(null);
     try {
-      const activeFrom = dateFrom !== undefined ? dateFrom : urlFrom;
-      const activeTo = dateTo !== undefined ? dateTo : urlTo;
+      const activeFrom = rawFrom === "all" ? "" : (rawFrom !== null ? rawFrom : (dateFrom !== undefined ? dateFrom : defaultFrom));
+      const activeTo = rawTo === "all" ? "" : (rawTo !== null ? rawTo : (dateTo !== undefined ? dateTo : defaultTo));
       const activeSearch = search !== undefined ? search : urlSearch;
       const activeEstado = selectedEstado !== undefined ? selectedEstado : urlEstado;
       const activePrioridad = selectedPrioridad !== undefined ? selectedPrioridad : urlPrioridad;
@@ -154,8 +191,13 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
       if (activeEstado) queryParams.set("estado", activeEstado);
       if (activePrioridad) queryParams.set("prioridad_id", activePrioridad);
       if (activeMecanico) queryParams.set("mecanico_id", activeMecanico);
-      if (activeFrom) queryParams.set("from", activeFrom);
-      if (activeTo) queryParams.set("to", activeTo);
+      if (rawFrom === "all" || rawTo === "all") {
+        queryParams.set("from", "all");
+        queryParams.set("to", "all");
+      } else {
+        if (activeFrom) queryParams.set("from", activeFrom);
+        if (activeTo) queryParams.set("to", activeTo);
+      }
       if (activeSortBy) {
         queryParams.set("sort_by", activeSortBy);
         queryParams.set("sort_order", activeSortOrder || "asc");
@@ -212,7 +254,7 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
         setIsFetching(false);
       }
     }
-  }, [dateFrom, dateTo, search, selectedEstado, selectedPrioridad, selectedMecanico, sortBy, sortOrder, page, urlFrom, urlTo, urlSearch, urlEstado, urlPrioridad, urlMecanico, urlSortBy, urlSortOrder]);
+  }, [dateFrom, dateTo, search, selectedEstado, selectedPrioridad, selectedMecanico, sortBy, sortOrder, page, urlFrom, urlTo, urlSearch, urlEstado, urlPrioridad, urlMecanico, urlSortBy, urlSortOrder, rawFrom, rawTo, defaultFrom, defaultTo]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -248,8 +290,8 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
     setSelectedEstado(STATUS_FILTERS.TOTAL);
     setSelectedPrioridad("");
     setSelectedMecanico("");
-    setDateFrom("");
-    setDateTo("");
+    setDateFrom(defaultFrom);
+    setDateTo(defaultTo);
     setPage(1);
     setSortBy("");
     setSortOrder("asc");
@@ -260,10 +302,28 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
     if (viewParam) {
       newParams.set("view", viewParam);
     }
+    newParams.set("from", defaultFrom);
+    newParams.set("to", defaultTo);
 
     const newQuery = newParams.toString();
     const targetUrl = newQuery ? `${pathname}?${newQuery}` : pathname;
     router.push(targetUrl);
+  };
+
+  const handleSetPreset = (preset) => {
+    if (preset === "7d") {
+      setDateFrom(defaultFrom);
+      setDateTo(defaultTo);
+      updateUrlParams({ from: defaultFrom, to: defaultTo });
+    } else if (preset === "hoy") {
+      setDateFrom(defaultTo);
+      setDateTo(defaultTo);
+      updateUrlParams({ from: defaultTo, to: defaultTo });
+    } else if (preset === "all") {
+      setDateFrom("");
+      setDateTo("");
+      updateUrlParams({ from: "all", to: "all" });
+    }
   };
 
   const handleSort = (columnKey) => {
@@ -296,7 +356,7 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
     if (filterKey === "date") {
       setDateFrom("");
       setDateTo("");
-      updateUrlParams({ from: null, to: null });
+      updateUrlParams({ from: "all", to: "all" });
     } else if (filterKey === "search") {
       setSearch("");
       updateUrlParams({ search: null });
@@ -310,7 +370,7 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
   };
 
   const selectedMecanicoObj = catalogs.mecanicos?.find(m => String(m.usuario_id) === String(selectedMecanico));
-  const hasActiveFilters = Boolean(search || selectedEstado || selectedMecanico || dateFrom || dateTo);
+  const hasActiveFilters = Boolean(search || (selectedEstado && selectedEstado !== STATUS_FILTERS.TOTAL) || selectedMecanico || dateFrom || dateTo);
 
   const stRecibida = catalogs.estados?.find(e => e.codigo === "RECIBIDA" || e.estado_orden_id === 1);
   const stReparacion = catalogs.estados?.find(e => e.codigo === "REPARACION" || e.estado_orden_id === 5);
@@ -520,9 +580,9 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
 
       {/* Filters & Search Bar */}
       <div className="space-y-3">
-        <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-card border border-border p-3.5 rounded-xl shadow-sm">
+        <div className="flex flex-col xl:flex-row gap-2.5 items-stretch xl:items-center justify-between bg-card border border-border p-3 rounded-xl shadow-sm">
           {/* Search Bar */}
-          <div className="relative w-full sm:flex-1">
+          <div className="relative flex-1 min-w-[200px]">
             <Search className="w-4 h-4 text-foreground-muted absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
@@ -532,19 +592,110 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
                 updateUrlParams({ search: e.target.value || null });
               }}
               placeholder="Buscar código, cliente, bicicleta, serie..."
-              className="w-full bg-input border border-border rounded-xl py-2.5 pl-10 pr-4 text-xs text-foreground placeholder:text-foreground-muted focus:border-primary outline-none font-sans transition-all"
+              className="w-full bg-input border border-border rounded-xl py-2 pl-10 pr-4 text-xs text-foreground placeholder:text-foreground-muted focus:border-primary outline-none font-sans transition-all"
             />
           </div>
 
-          {/* Mechanic Filter & Reset */}
-          <div className="flex items-center gap-2.5 w-full sm:w-auto">
+          {/* Date & Mechanic Filters */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Quick Presets */}
+            <div className="flex items-center bg-input border border-border rounded-xl p-0.5">
+              <button
+                type="button"
+                onClick={() => handleSetPreset("7d")}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-semibold transition-colors cursor-pointer ${
+                  dateFrom === defaultFrom && dateTo === defaultTo
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-foreground-muted hover:text-foreground"
+                }`}
+                title="Últimos 7 días"
+              >
+                7 Días
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSetPreset("hoy")}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-semibold transition-colors cursor-pointer ${
+                  dateFrom === defaultTo && dateTo === defaultTo
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-foreground-muted hover:text-foreground"
+                }`}
+                title="Órdenes de hoy"
+              >
+                Hoy
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSetPreset("all")}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-semibold transition-colors cursor-pointer ${
+                  !dateFrom && !dateTo
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-foreground-muted hover:text-foreground"
+                }`}
+                title="Todo el histórico"
+              >
+                Todos
+              </button>
+            </div>
+
+            {/* Fecha Desde */}
+            <div className="flex items-center gap-1.5 bg-input border border-border rounded-xl px-2.5 py-1.5 text-xs focus-within:border-primary transition-all">
+              <Calendar className="w-3.5 h-3.5 text-foreground-muted shrink-0 pointer-events-none" />
+              <span className="text-[10px] font-semibold text-foreground-muted uppercase tracking-wider shrink-0">
+                Desde:
+              </span>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setDateFrom(val);
+                  updateUrlParams({ from: val || "all" });
+                }}
+                style={{ colorScheme: "dark" }}
+                className="bg-transparent text-foreground text-xs focus:outline-none cursor-pointer"
+              />
+            </div>
+
+            {/* Fecha Hasta */}
+            <div className="flex items-center gap-1.5 bg-input border border-border rounded-xl px-2.5 py-1.5 text-xs focus-within:border-primary transition-all">
+              <Calendar className="w-3.5 h-3.5 text-foreground-muted shrink-0 pointer-events-none" />
+              <span className="text-[10px] font-semibold text-foreground-muted uppercase tracking-wider shrink-0">
+                Hasta:
+              </span>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setDateTo(val);
+                  updateUrlParams({ to: val || "all" });
+                }}
+                style={{ colorScheme: "dark" }}
+                className="bg-transparent text-foreground text-xs focus:outline-none cursor-pointer"
+              />
+            </div>
+
+            {/* Limpiar Fechas */}
+            {(dateFrom || dateTo) && (
+              <button
+                type="button"
+                onClick={() => removeFilter("date")}
+                className="p-1.5 text-foreground-muted hover:text-foreground hover:bg-hover border border-border rounded-xl transition-colors cursor-pointer shrink-0"
+                title="Ver todo el histórico"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+
+            {/* Mechanic Filter */}
             <select
               value={selectedMecanico}
               onChange={(e) => {
                 setSelectedMecanico(e.target.value);
                 updateUrlParams({ mecanico_id: e.target.value || null });
               }}
-              className="w-full sm:w-auto bg-input border border-border rounded-xl py-2.5 px-3.5 text-xs text-foreground focus:border-primary outline-none font-sans transition-all cursor-pointer"
+              className="bg-input border border-border rounded-xl py-2 px-3 text-xs text-foreground focus:border-primary outline-none font-sans transition-all cursor-pointer"
             >
               <option value="">Todos los Mecánicos</option>
               {catalogs.mecanicos?.map((m) => (
@@ -554,9 +705,10 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
               ))}
             </select>
 
+            {/* Refresh */}
             <button
               onClick={() => fetchOrders()}
-              className="p-2.5 bg-surface-subtle border border-border text-foreground-muted hover:text-foreground rounded-xl hover:bg-hover transition-colors cursor-pointer shrink-0"
+              className="p-2 bg-surface-subtle border border-border text-foreground-muted hover:text-foreground rounded-xl hover:bg-hover transition-colors cursor-pointer shrink-0"
               title="Refrescar órdenes"
             >
               <RotateCcw className={`w-4 h-4 ${isFetching ? "animate-spin text-primary" : ""}`} />
@@ -575,8 +727,13 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
             {(dateFrom || dateTo) && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/15 border border-primary/30 text-primary font-bold">
                 <Calendar size={12} />
-                Fecha: {dateFrom === dateTo ? dateFrom : `${dateFrom} a ${dateTo}`}
-                <button onClick={() => removeFilter("date")} className="hover:text-foreground ml-0.5 cursor-pointer">
+                Fecha: {dateFrom === dateTo ? dateFrom : `${dateFrom} a ${dateTo}`} {dateFrom === defaultFrom && dateTo === defaultTo ? "(Últimos 7 días)" : ""}
+                <button
+                  type="button"
+                  onClick={() => removeFilter("date")}
+                  className="hover:text-foreground ml-0.5 cursor-pointer"
+                  title="Ver todo el histórico"
+                >
                   <X size={12} />
                 </button>
               </span>

@@ -113,11 +113,16 @@ export async function GET(request: NextRequest, context: RouteContext) {
         ${colMotivoAnulacion},
         ${colFechaAnulacion},
         ${colUsuarioAnulacion},
+        ${facCols.has("nivel_cliente_id") ? "f.nivel_cliente_id" : "NULL::int AS nivel_cliente_id"},
+        ${facCols.has("porciento_descuento_nivel") ? "COALESCE(f.porciento_descuento_nivel, 0)::numeric AS porciento_descuento_nivel" : "0.00::numeric AS porciento_descuento_nivel"},
+        ${facCols.has("descuento_nivel") ? "COALESCE(f.descuento_nivel, 0)::numeric AS descuento_nivel" : "0.00::numeric AS descuento_nivel"},
+        nc.nombre AS nivel_cliente_nombre,
         COALESCE(NULLIF(TRIM(CONCAT_WS(' ', ui_anul.nombre, ui_anul.apellido)), ''), ui_anul.correo_electronico, ('Usuario #' || u_anul.usuario_id::text), NULL) AS usuario_anulacion_nombre,
         COALESCE(NULLIF(TRIM(CONCAT_WS(' ', ui.nombre, ui.apellido)), ''), ui.correo_electronico, ('Usuario #' || u.usuario_id::text), 'Sistema') AS usuario_creacion_nombre
       FROM admin.facturas f
       LEFT JOIN admin.tipo_factura tf ON f.tipo_factura_id = tf.tipo_factura_id
       LEFT JOIN admin.clientes c ON f.cliente_id = c.cliente_id
+      LEFT JOIN admin.nivel_cliente nc ON f.nivel_cliente_id = nc.nivel_cliente_id
       LEFT JOIN admin.usuario u ON ${colUsuarioCreacion} = u.usuario_id
       LEFT JOIN admin.usuario_identidad ui ON u.usuario_id = ui.usuario_id
       LEFT JOIN admin.usuario u_anul ON ${facCols.has("usuario_anulacion_id") ? "f.usuario_anulacion_id" : "NULL::int"} = u_anul.usuario_id
@@ -575,6 +580,11 @@ export async function GET(request: NextRequest, context: RouteContext) {
           fecha_vencimiento: factura.fecha_vencimiento ? new Date(factura.fecha_vencimiento as string).toISOString() : null,
           subtotal: parseFloat(Number(factura.subtotal || 0).toFixed(2)),
           descuento: parseFloat(Number(factura.descuento || factura.descuento_total || 0).toFixed(2)),
+          descuento_total: parseFloat(Number(factura.descuento || factura.descuento_total || 0).toFixed(2)),
+          nivel_cliente_id: factura.nivel_cliente_id ? Number(factura.nivel_cliente_id) : null,
+          porciento_descuento_nivel: parseFloat(Number(factura.porciento_descuento_nivel || 0).toFixed(2)),
+          descuento_nivel: parseFloat(Number(factura.descuento_nivel || 0).toFixed(2)),
+          nivel_cliente_nombre: (factura.nivel_cliente_nombre as string) || null,
           impuesto: parseFloat(Number(factura.impuesto || factura.impuesto_total || 0).toFixed(2)),
           total: parseFloat(Number(factura.total || factura.total_factura || 0).toFixed(2)),
           monto_pagado: parseFloat(Number(factura.monto_pagado || 0).toFixed(2)),

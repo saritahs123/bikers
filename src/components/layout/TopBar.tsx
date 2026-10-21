@@ -20,6 +20,7 @@ export interface AuthenticatedUser {
   empresa_nombre: string;
   iniciales: string;
   foto_url: string | null;
+  can_view_reports?: boolean;
 }
 
 export function TopBar({

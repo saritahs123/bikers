@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import {
   Users,
@@ -9,11 +9,7 @@ import {
   X,
   Save,
   RefreshCw,
-  Phone,
-  Mail,
-  MapPin,
-  CheckCircle2,
-  AlertTriangle
+  Award
 } from "lucide-react";
 import {
   formatCedula,
@@ -46,6 +42,8 @@ export default function CustomerFormDrawer({
   const [mounted, setMounted] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [errors, setErrors] = useState({});
+  const [niveles, setNiveles] = useState([]);
+  const [loadingNiveles, setLoadingNiveles] = useState(false);
 
   const [formData, setFormData] = useState({
     nombre: "",
@@ -63,17 +61,49 @@ export default function CustomerFormDrawer({
     genero: "",
     contacto_whatsapp: true,
     contacto_email: true,
-    notas: ""
+    notas: "",
+    nivel_cliente_id: ""
   });
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
   }, []);
 
   useEffect(() => {
     if (isOpen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setErrors({});
       setIsSaving(false);
+      setLoadingNiveles(true);
+
+      // Cargar catálogo de niveles activos
+      fetch("/api/crm/niveles-cliente?activos=true")
+        .then((res) => (res.ok ? res.json() : { data: [] }))
+        .then((json) => {
+          let list = Array.isArray(json) ? json : (json?.data || []);
+          if (editingItem?.nivel_cliente_id) {
+            const exists = list.some((n) => String(n.nivel_cliente_id) === String(editingItem.nivel_cliente_id));
+            if (!exists && editingItem.nivel_cliente_nombre) {
+              list = [
+                ...list,
+                {
+                  nivel_cliente_id: editingItem.nivel_cliente_id,
+                  nombre: editingItem.nivel_cliente_nombre,
+                  porciento_descuento: editingItem.porciento_descuento || 0,
+                  activo: false
+                }
+              ];
+            }
+          }
+          setNiveles(list);
+        })
+        .catch((err) => {
+          console.error("Error al cargar niveles de cliente:", err);
+          setNiveles([]);
+        })
+        .finally(() => setLoadingNiveles(false));
+
       if (editingItem) {
         const isEmpresa = (editingItem.tipo_cliente || "").toUpperCase() === "EMPRESA";
         const formattedIdent = isEmpresa
@@ -97,7 +127,8 @@ export default function CustomerFormDrawer({
           genero: editingItem.genero || "",
           contacto_whatsapp: editingItem.contacto_whatsapp !== false,
           contacto_email: editingItem.contacto_email !== false,
-          notas: editingItem.notas || ""
+          notas: editingItem.notas || "",
+          nivel_cliente_id: editingItem.nivel_cliente_id ? String(editingItem.nivel_cliente_id) : ""
         });
       } else {
         setFormData({
@@ -116,11 +147,17 @@ export default function CustomerFormDrawer({
           genero: "",
           contacto_whatsapp: true,
           contacto_email: true,
-          notas: ""
+          notas: "",
+          nivel_cliente_id: ""
         });
       }
     }
   }, [isOpen, editingItem]);
+
+  const selectedNivel = useMemo(() => {
+    if (!formData.nivel_cliente_id) return null;
+    return niveles.find((n) => String(n.nivel_cliente_id) === String(formData.nivel_cliente_id)) || null;
+  }, [formData.nivel_cliente_id, niveles]);
 
   if (!isOpen || !mounted || typeof document === "undefined") {
     return null;
@@ -177,7 +214,8 @@ export default function CustomerFormDrawer({
         ciudad: (formData.ciudad || "").trim(),
         provincia: (formData.provincia || "").trim(),
         pais: (formData.pais || "República Dominicana").trim(),
-        notas: (formData.notas || "").trim()
+        notas: (formData.notas || "").trim(),
+        nivel_cliente_id: formData.nivel_cliente_id ? parseInt(formData.nivel_cliente_id, 10) : null
       };
 
       const res = await fetch(url, {
@@ -337,6 +375,38 @@ export default function CustomerFormDrawer({
                     }`}
                   />
                   {errors.identificacion && <p className="text-error text-[10px] mt-1">{errors.identificacion}</p>}
+                </div>
+
+                {/* Nivel de Cliente */}
+                <div className="sm:col-span-2 bg-surface-subtle border border-border rounded-xl p-3.5 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-foreground-secondary font-semibold flex items-center gap-1.5">
+                      <Award size={14} className="text-primary" />
+                      <span>Nivel de Cliente</span>
+                    </label>
+                    {selectedNivel ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-primary/10 text-primary border border-primary/20 font-mono">
+                        <Award size={11} />
+                        {selectedNivel.nombre} ({Number(selectedNivel.porciento_descuento)}%)
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-foreground-muted font-mono">Sin nivel asignado</span>
+                    )}
+                  </div>
+
+                  <select
+                    value={formData.nivel_cliente_id || ""}
+                    onChange={(e) => setFormData({ ...formData, nivel_cliente_id: e.target.value })}
+                    className="w-full bg-surface border border-border rounded-xl px-3.5 py-2.5 text-foreground focus:outline-none focus:border-primary font-sans text-xs cursor-pointer font-medium"
+                    disabled={loadingNiveles}
+                  >
+                    <option value="">Sin nivel asignado</option>
+                    {niveles.map((n) => (
+                      <option key={n.nivel_cliente_id} value={n.nivel_cliente_id}>
+                        {n.nombre} ({Number(n.porciento_descuento)}%)
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
             </div>

@@ -5,6 +5,7 @@ import { AppLogo } from "@/components/ui/AppLogo";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useState, useEffect, Suspense } from "react";
 import { Home, PanelLeftClose } from "lucide-react";
+import { AuthenticatedUser } from "./TopBar";
 
 interface SubMenuItem {
   href?: string;
@@ -25,10 +26,12 @@ function SidebarContent({
   isOpen = false,
   onClose = () => {},
   onNavigate = () => {},
+  user,
 }: {
   isOpen?: boolean;
   onClose?: () => void;
   onNavigate?: () => void;
+  user?: AuthenticatedUser;
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -47,6 +50,8 @@ function SidebarContent({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose]);
+
+  const canViewReports = Boolean(user?.can_view_reports);
 
   const navItems: NavItem[] = [
     {
@@ -82,7 +87,8 @@ function SidebarContent({
       label: "CRM",
       submenu: [
         { href: "/crm/customers", label: "CLIENTES" },
-        { href: "/crm/bicycles", label: "BICICLETAS" }
+        { href: "/crm/bicycles", label: "BICICLETAS" },
+        { href: "/crm/client-levels", label: "NIVELES DE CLIENTES" }
       ]
     },
     {
@@ -98,6 +104,19 @@ function SidebarContent({
         { href: "/inventory/transfers", label: "TRANSFERENCIAS" }
       ]
     },
+    ...(canViewReports ? [{
+      id: "reportes",
+      icon: "bar_chart",
+      label: "REPORTES",
+      submenu: [
+        { href: "/reports/invoices-daily", label: "FACTURAS POR DÍA" },
+        { href: "/reports/work-orders-daily", label: "ÓRDENES POR DÍA" },
+        { href: "/reports/receivables", label: "CUENTAS POR COBRAR" },
+        { href: "/reports/customer-activity", label: "ACTIVIDAD DE CLIENTES" },
+        { href: "/reports/inventory-supplier", label: "INVENTARIO POR SUPLIDOR" },
+        { href: "/reports/daily-cash", label: "CUADRE DE CAJA" }
+      ]
+    }] : []),
     {
       id: "configuracion",
       icon: "settings",
@@ -112,6 +131,7 @@ function SidebarContent({
         { href: "/inventory/measurement-units", label: "UNIDADES DE MEDIDA" },
         { href: "/inventory/suppliers", label: "PROVEEDORES" },
         { href: "/inventory/initial", label: "INVENTARIO INICIAL" },
+        { href: "/crm/client-levels", label: "NIVELES DE CLIENTES" },
         { href: "/crm/component-categories", label: "CATEGORÍAS COMPONENTES" },
         { href: "/crm/component-states", label: "ESTADOS COMPONENTES" },
         { href: "/settings/order-notifications", label: "NOTIFICACIONES DE ÓRDENES" }
@@ -168,6 +188,9 @@ function SidebarContent({
     }
     if (subHref === "/inventory/movements" || subHref === "/inventory?view=movements") {
       return pathname === "/inventory/movements" || (pathname === "/inventory" && (currentView === "movements" || currentView === "movimientos"));
+    }
+    if (subHref.startsWith("/reports/")) {
+      return pathname.startsWith(subHref);
     }
     if (subHref.includes("?")) {
       return currentFullUrl === subHref;
@@ -388,10 +411,12 @@ export function Sidebar({
   isOpen = false,
   onClose = () => {},
   onNavigate = () => {},
+  user,
 }: {
   isOpen?: boolean;
   onClose?: () => void;
   onNavigate?: () => void;
+  user?: AuthenticatedUser;
 }) {
   return (
     <Suspense
@@ -399,7 +424,7 @@ export function Sidebar({
         <aside className="fixed left-0 top-0 h-full w-64 bg-surface border-r border-border flex-col p-4 z-45 font-mono animate-pulse -translate-x-full pointer-events-none" />
       }
     >
-      <SidebarContent isOpen={isOpen} onClose={onClose} onNavigate={onNavigate} />
+      <SidebarContent isOpen={isOpen} onClose={onClose} onNavigate={onNavigate} user={user} />
     </Suspense>
   );
 }

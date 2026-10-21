@@ -20,7 +20,8 @@ import {
   PackageCheck,
   HelpCircle,
   Info,
-  Calendar
+  Calendar,
+  Award
 } from "lucide-react";
 import {
   generateInvoiceModel1Pdf,
@@ -789,6 +790,23 @@ export default function InvoiceDetailModal({
                           </span>
                         </div>
                       )}
+                      {factura?.nivel_cliente_nombre ? (
+                        <div className="col-span-2 pt-1 border-t border-border/40 flex items-center gap-2">
+                          <span className="text-foreground-muted text-[11px]">Nivel Cliente (Facturado):</span>
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            <Award className="w-3 h-3" />
+                            {factura.nivel_cliente_nombre} ({Number(factura.porciento_descuento_nivel || 0)}% Desc.)
+                          </span>
+                        </div>
+                      ) : cliente?.nivel_cliente_nombre ? (
+                        <div className="col-span-2 pt-1 border-t border-border/40 flex items-center gap-2">
+                          <span className="text-foreground-muted text-[11px]">Nivel Cliente:</span>
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-surface text-foreground-secondary border border-border">
+                            <Award className="w-3 h-3 text-primary" />
+                            {cliente.nivel_cliente_nombre} ({Number(cliente.porciento_descuento || 0)}%)
+                          </span>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
 
@@ -1021,12 +1039,40 @@ export default function InvoiceDetailModal({
                         <span>Subtotal:</span>
                         <span className="font-mono font-medium">{formatMoney(factura.subtotal)}</span>
                       </div>
-                      <div className="flex items-center justify-between text-foreground-secondary">
-                        <span>Descuento:</span>
-                        <span className="font-mono font-medium text-foreground-muted">
-                          {Number(factura.descuento) > 0 ? `-${formatMoney(factura.descuento)}` : "RD$ 0.00"}
-                        </span>
-                      </div>
+                      {Number(factura.descuento_nivel) > 0 ? (
+                        <>
+                          {Number(factura.descuento) - Number(factura.descuento_nivel) > 0 && (
+                            <div className="flex items-center justify-between text-foreground-secondary">
+                              <span>Descuento Manual:</span>
+                              <span className="font-mono font-medium text-foreground-muted">
+                                -{formatMoney(Number(factura.descuento) - Number(factura.descuento_nivel))}
+                              </span>
+                            </div>
+                          )}
+                          <div className="flex items-center justify-between text-foreground-secondary">
+                            <span className="flex items-center gap-1">
+                              <Award className="w-3.5 h-3.5 text-emerald-500" />
+                              <span>Descuento ({Number(factura.porciento_descuento_nivel || 0)}%):</span>
+                            </span>
+                            <span className="font-mono font-medium text-emerald-600 dark:text-emerald-400">
+                              -{formatMoney(factura.descuento_nivel)}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between text-foreground-secondary font-medium pt-0.5 border-t border-border/40">
+                            <span>Descuento Total:</span>
+                            <span className="font-mono font-medium text-amber-500 dark:text-amber-400">
+                              -{formatMoney(factura.descuento)}
+                            </span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex items-center justify-between text-foreground-secondary">
+                          <span>Descuento:</span>
+                          <span className="font-mono font-medium text-foreground-muted">
+                            {Number(factura.descuento) > 0 ? `-${formatMoney(factura.descuento)}` : "RD$ 0.00"}
+                          </span>
+                        </div>
+                      )}
                       {Number(factura.impuesto) > 0 && (
                         <div className="flex items-center justify-between text-foreground-secondary">
                           <span>Impuesto (ITBIS):</span>

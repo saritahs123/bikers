@@ -5,6 +5,7 @@ import { query } from "@/lib/db";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { AuthenticatedUser } from "@/components/layout/TopBar";
 import { validateAndTouchSession } from "@/lib/sessionLifecycle";
+import { getModulePermissions } from "@/lib/workshop-session";
 
 interface UserRecord {
   usuario_id: number;
@@ -100,6 +101,14 @@ async function getAuthenticatedUser() {
   const cargoNombre = row.cargo_nombre || rolNombre;
   const empresaNombre = row.empresa_nombre || "Biker's Fort";
 
+  let canViewReports = false;
+  try {
+    const reportesPerms = await getModulePermissions("REPORTES", row.usuario_id);
+    canViewReports = Boolean(reportesPerms?.puede_ver);
+  } catch (permErr) {
+    console.warn("Error getting REPORTES permissions for user:", permErr);
+  }
+
   return {
     user: {
       usuario_id: row.usuario_id,
@@ -116,7 +125,8 @@ async function getAuthenticatedUser() {
       empresa_nombre: empresaNombre,
       iniciales,
       foto_url: null,
-      session_expires_at: validation.session.fecha_expiracion || null
+      session_expires_at: validation.session.fecha_expiracion || null,
+      can_view_reports: canViewReports
     },
     reason: null
   };

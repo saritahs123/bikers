@@ -241,8 +241,22 @@ export async function GET() {
       existencias: existenciasPorProducto[p.producto_id] || [],
     }));
 
-    // 6. Clientes activos (CRM) - Filtro real por fecha_eliminacion IS NULL (sin columna activo)
-    const clientesRows = await query(
+    interface ClienteCatalogRow {
+      cliente_id: number;
+      nombre: string;
+      apellido: string;
+      nombre_completo: string;
+      identificacion: string | null;
+      telefono_principal: string | null;
+      correo: string | null;
+      nivel_cliente_id: number | null;
+      nivel_cliente_nombre: string | null;
+      porciento_descuento: number | string | null;
+      nivel_cliente_activo: boolean | null;
+    }
+
+    // 6. Clientes activos (CRM) con su Nivel de Cliente y porcentaje de descuento asociado
+    const clientesRows = await query<ClienteCatalogRow>(
       `SELECT
          c.cliente_id,
          c.nombre,
@@ -250,13 +264,25 @@ export async function GET() {
          COALESCE(c.nombre_completo, TRIM(CONCAT(c.nombre, ' ', c.apellido))) AS nombre_completo,
          c.identificacion,
          c.telefono_principal,
-         c.correo
+         c.correo,
+         c.nivel_cliente_id,
+         nc.nombre AS nivel_cliente_nombre,
+         COALESCE(nc.porciento_descuento, 0)::numeric AS porciento_descuento,
+         nc.activo AS nivel_cliente_activo
        FROM admin.clientes c
+       LEFT JOIN admin.nivel_cliente nc ON c.nivel_cliente_id = nc.nivel_cliente_id
        WHERE (c.empresa_id = $1 OR c.empresa_id IS NULL)
          AND c.fecha_eliminacion IS NULL
        ORDER BY c.nombre_completo ASC NULLS LAST, c.cliente_id DESC
        LIMIT 500`,
       [empresaId]
+    );
+
+    // 7. Catálogo de Niveles de Cliente
+    const nivelesRows = await query(
+      `SELECT nivel_cliente_id, nombre, porciento_descuento, descripcion, activo
+       FROM admin.nivel_cliente
+       ORDER BY porciento_descuento DESC, nombre ASC`
     );
 
     return NextResponse.json({
@@ -265,7 +291,15 @@ export async function GET() {
       tipos_pago: finalTiposPago,
       almacenes: almacenesRows || [],
       productos: productosConStock,
-      clientes: clientesRows || [],
+      clientes: (clientesRows || []).map((c: ClienteCatalogRow) => ({
+        ...c,
+        nivel_cliente_id: c.nivel_cliente_id ? Number(c.nivel_cliente_id) : null,
+        nivel_cliente_nombre: c.nivel_cliente_nombre || null,
+        // Solo otorgar descuento si el nivel está activo
+        porciento_descuento: c.nivel_cliente_activo ? Number(c.porciento_descuento || 0) : 0,
+        nivel_cliente_activo: c.nivel_cliente_activo !== undefined && c.nivel_cliente_activo !== null ? Boolean(c.nivel_cliente_activo) : null
+      })),
+      niveles_cliente: nivelesRows || [],
       permisos: perms
     });
 

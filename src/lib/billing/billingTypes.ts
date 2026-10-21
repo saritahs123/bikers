@@ -54,6 +54,8 @@ export interface CrearFacturaInput {
   fecha_factura?: string | Date;
   observacion?: string | null;
   usuario_id: number;
+  porciento_impuesto?: number;
+  impuesto?: number;
   lineas: LineaFacturaInput[];
   pagos_iniciales?: PagoInicialInput[];
 }
@@ -108,6 +110,10 @@ export interface FacturaRow {
   tipo_factura_nombre?: string;
   cliente_id: number | null;
   cliente_nombre?: string;
+  nivel_cliente_id?: number | null;
+  nivel_cliente_nombre?: string | null;
+  porciento_descuento_nivel?: number;
+  descuento_nivel?: number;
   orden_trabajo_id: number | null;
   codigo_orden?: string;
   fecha_factura: Date | string;
