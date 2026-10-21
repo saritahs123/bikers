@@ -26,9 +26,15 @@ export interface BillingInvoicePrintData {
     monto_pagado: number;
     balance_pendiente: number;
     estado: string;
+    condicion_venta?: "CONTADO" | "CREDITO" | string;
+    fecha_vencimiento?: string | null;
     observacion?: string | null;
     fecha_creacion: string;
     usuario_creacion_nombre?: string;
+    nivel_cliente_id?: number | null;
+    porciento_descuento_nivel?: number | null;
+    descuento_nivel?: number | null;
+    nivel_cliente_nombre?: string | null;
   };
   cliente?: {
     cliente_id?: number;
@@ -240,10 +246,14 @@ export function generateInvoiceModel1Pdf(data: BillingInvoicePrintData): jsPDF {
   const tipoFacturaStr = getInvoiceTypeName(data.factura);
   const printDateTime = formatPrintDateTime(new Date());
   const fechaFacturaStr = formatDateOnly(data.factura.fecha_factura);
+  const condicionVentaStr = String(data.factura.condicion_venta || "CONTADO").toUpperCase() === "CREDITO" ? "A CRÉDITO" : "AL CONTADO";
+  const fechaVencimientoStr = data.factura.fecha_vencimiento ? formatDateOnly(data.factura.fecha_vencimiento) : null;
 
   const rightMeta = [
     { label: "Factura:", val: data.factura.codigo_factura || data.factura.numero_factura || "—" },
     { label: "Tipo de Factura:", val: tipoFacturaStr },
+    { label: "Condición de Pago:", val: condicionVentaStr },
+    ...(fechaVencimientoStr ? [{ label: "Vencimiento:", val: fechaVencimientoStr }] : []),
     ...(data.factura.orden_trabajo_id && data.orden_trabajo?.codigo_orden
       ? [{ label: "Orden de Trabajo:", val: data.orden_trabajo.codigo_orden }]
       : []),
@@ -520,7 +530,7 @@ export function generateInvoiceModel1Pdf(data: BillingInvoicePrintData): jsPDF {
   // 4. TOTALES Y PAGOS SECTION
   const colWidth = (contentWidth - 6) / 2;
   const rightX = marginX + colWidth + 6;
-  const summaryBoxHeight = 52;
+  const summaryBoxHeight = Number(data.factura.descuento_nivel || 0) > 0 ? 58 : 52;
 
   // Tarjeta Izquierda: HISTORIAL DE PAGOS / OBSERVACIONES
   drawCardBox(marginX, currentY, colWidth, summaryBoxHeight, "PAGOS & OBSERVACIONES");
@@ -577,13 +587,46 @@ export function generateInvoiceModel1Pdf(data: BillingInvoicePrintData): jsPDF {
   drawCardBox(rightX, currentY, colWidth, summaryBoxHeight, "RESUMEN FINANCIERO");
   let finY = currentY + 12;
 
-  const finLines = [
-    { label: "Subtotal", val: formatMoney(data.factura.subtotal) },
-    {
-      label: "Descuento",
-      val: data.factura.descuento > 0 ? `-${formatMoney(data.factura.descuento)}` : "RD$ 0.00"
-    }
+  const finLines: { label: string; val: string }[] = [
+    { label: "Subtotal", val: formatMoney(data.factura.subtotal) }
   ];
+
+  const descNivel = Number(data.factura.descuento_nivel || 0);
+  const descTotal = Number(data.factura.descuento || 0);
+  const descManual = Math.max(0, parseFloat((descTotal - descNivel).toFixed(2)));
+
+  if (descNivel > 0) {
+    if (descManual > 0) {
+      finLines.push({
+        label: "Descuento Manual",
+        val: `-${formatMoney(descManual)}`
+      });
+    }
+    const pctDesc = Number(data.factura.porciento_descuento_nivel || 0);
+    const nivelLabel = `Descuento (${pctDesc}%):`;
+    finLines.push({
+      label: nivelLabel,
+      val: `-${formatMoney(descNivel)}`
+    });
+    if (descManual > 0) {
+      finLines.push({
+        label: "Descuento Total",
+        val: `-${formatMoney(descTotal)}`
+      });
+    }
+  } else if (descTotal > 0) {
+    const pctDesc = Number(data.factura.porciento_descuento_nivel || 0);
+    const label = pctDesc > 0 ? `Descuento (${pctDesc}%):` : "Descuento:";
+    finLines.push({
+      label,
+      val: `-${formatMoney(descTotal)}`
+    });
+  } else {
+    finLines.push({
+      label: "Descuento",
+      val: "RD$ 0.00"
+    });
+  }
 
   if (data.factura.impuesto > 0) {
     finLines.push({ label: "Impuesto (ITBIS)", val: formatMoney(data.factura.impuesto) });
@@ -863,10 +906,14 @@ function renderTicketContent(doc: jsPDF, data: BillingInvoicePrintData): number 
   const estadoFactura = (data.factura.estado || "").toUpperCase();
   const clienteNombre = data.cliente?.nombre_completo || "Cliente General";
   const clienteTel = data.cliente?.telefono_principal || "—";
+  const condicionVentaTicket = String(data.factura.condicion_venta || "CONTADO").toUpperCase() === "CREDITO" ? "CRÉDITO" : "CONTADO";
+  const fechaVencimientoTicket = data.factura.fecha_vencimiento ? formatDateOnly(data.factura.fecha_vencimiento) : null;
 
-  // Columna Izquierda: FACTURA, TIPO FACTURA, FECHA FACTURA, CLIENTE
+  // Columna Izquierda: FACTURA, CONDICIÓN, VENCE (si aplica), TIPO FACTURA, FECHA FACTURA, CLIENTE
   const leftFields: Array<{ label: string; val: string }> = [
     { label: "FACTURA:", val: facNumero },
+    { label: "CONDICIÓN:", val: condicionVentaTicket },
+    ...(fechaVencimientoTicket ? [{ label: "VENCE:", val: fechaVencimientoTicket }] : []),
     { label: "TIPO FACTURA:", val: tipoFacturaTicket },
     { label: "FECHA FACTURA:", val: fechaFactura },
     { label: "CLIENTE:", val: clienteNombre }
@@ -995,9 +1042,26 @@ function renderTicketContent(doc: jsPDF, data: BillingInvoicePrintData): number 
   };
 
   drawRow("Subtotal:", formatMoney(data.factura.subtotal));
-  if (data.factura.descuento > 0) {
-    drawRow("Descuento:", `-${formatMoney(data.factura.descuento)}`);
+
+  const ticketDescNivel = Number(data.factura.descuento_nivel || 0);
+  const ticketDescTotal = Number(data.factura.descuento || 0);
+  const ticketDescManual = Math.max(0, parseFloat((ticketDescTotal - ticketDescNivel).toFixed(2)));
+
+  if (ticketDescNivel > 0) {
+    if (ticketDescManual > 0) {
+      drawRow("Desc. Manual:", `-${formatMoney(ticketDescManual)}`);
+    }
+    const pctDesc = Number(data.factura.porciento_descuento_nivel || 0);
+    drawRow(`Descuento (${pctDesc}%):`, `-${formatMoney(ticketDescNivel)}`);
+    if (ticketDescManual > 0) {
+      drawRow("Descuento Total:", `-${formatMoney(ticketDescTotal)}`);
+    }
+  } else if (ticketDescTotal > 0) {
+    const pctDesc = Number(data.factura.porciento_descuento_nivel || 0);
+    const label = pctDesc > 0 ? `Descuento (${pctDesc}%):` : "Descuento:";
+    drawRow(label, `-${formatMoney(ticketDescTotal)}`);
   }
+
   if (data.factura.impuesto > 0) {
     drawRow("ITBIS (Impuesto):", formatMoney(data.factura.impuesto));
   }

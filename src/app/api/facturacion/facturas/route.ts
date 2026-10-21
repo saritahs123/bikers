@@ -36,6 +36,10 @@ interface FacturaListRow {
   observacion: string | null;
   fecha_creacion: string | Date;
   total_lineas: number;
+  nivel_cliente_id?: number | null;
+  porciento_descuento_nivel?: number | string | null;
+  descuento_nivel?: number | string | null;
+  nivel_cliente_nombre?: string | null;
 }
 
 interface MetricasRow {
@@ -68,6 +72,7 @@ export async function GET(request: NextRequest) {
 
     const search = (searchParams.get("search") || "").trim();
     const estado = (searchParams.get("estado") || "").trim().toUpperCase();
+    const condicion = (searchParams.get("condicion") || "").trim().toUpperCase();
     const tipoFactura = (searchParams.get("tipo_factura") || "").trim();
     const fechaDesde = (searchParams.get("fecha_desde") || "").trim();
     const fechaHasta = (searchParams.get("fecha_hasta") || "").trim();
@@ -132,8 +137,11 @@ export async function GET(request: NextRequest) {
       codigo_factura: colCodigo,
       numero_factura: colNumero,
       fecha_factura: "f.fecha_factura",
+      fecha_vencimiento: "f.fecha_vencimiento",
+      condicion_venta: colCondicion,
       fecha_creacion: colFechaCreacion,
       total: colTotal,
+      descuento: colDescuento,
       monto_pagado: colMontoPagado,
       balance_pendiente: colBalancePendiente,
       estado: "f.estado",
@@ -156,6 +164,12 @@ export async function GET(request: NextRequest) {
     if (estado && estado !== "TODOS") {
       conditions.push(`f.estado = $${paramIndex}`);
       params.push(estado);
+      paramIndex++;
+    }
+
+    if (condicion && condicion !== "TODOS") {
+      conditions.push(`${colCondicion} = $${paramIndex}`);
+      params.push(condicion);
       paramIndex++;
     }
 
@@ -231,6 +245,7 @@ export async function GET(request: NextRequest) {
         f.orden_trabajo_id,
         ot.codigo_orden,
         f.fecha_factura,
+        f.fecha_vencimiento,
         f.subtotal,
         ${colDescuento} AS descuento,
         ${colDescuento} AS descuento_total,
@@ -243,17 +258,22 @@ export async function GET(request: NextRequest) {
         f.estado,
         ${colObservacion} AS observacion,
         ${colFechaCreacion} AS fecha_creacion,
+        ${facCols.has("nivel_cliente_id") ? "f.nivel_cliente_id" : "NULL::int AS nivel_cliente_id"},
+        ${facCols.has("porciento_descuento_nivel") ? "COALESCE(f.porciento_descuento_nivel, 0)::numeric AS porciento_descuento_nivel" : "0.00::numeric AS porciento_descuento_nivel"},
+        ${facCols.has("descuento_nivel") ? "COALESCE(f.descuento_nivel, 0)::numeric AS descuento_nivel" : "0.00::numeric AS descuento_nivel"},
+        nc.nombre AS nivel_cliente_nombre,
         (SELECT COUNT(*)::int FROM admin.detalle_factura df WHERE df.factura_id = f.factura_id) AS total_lineas
       FROM admin.facturas f
       LEFT JOIN admin.tipo_factura tf ON f.tipo_factura_id = tf.tipo_factura_id
       LEFT JOIN admin.clientes c ON f.cliente_id = c.cliente_id
+      LEFT JOIN admin.nivel_cliente nc ON f.nivel_cliente_id = nc.nivel_cliente_id
       LEFT JOIN admin.ordenes_trabajo ot ON f.orden_trabajo_id = ot.orden_trabajo_id
       WHERE ${whereClause}
       ORDER BY ${sortColumn} ${sortOrderParam}, f.factura_id DESC
       LIMIT $${limitIndex} OFFSET $${offsetIndex};
     `;
 
-    const rawRows = await query<FacturaListRow & { condicion_venta?: string }>(listSql, listParams);
+    const rawRows = await query<FacturaListRow & { condicion_venta?: string; fecha_vencimiento?: string | Date | null }>(listSql, listParams);
 
     const data = (rawRows || []).map((row) => ({
       factura_id: Number(row.factura_id),
@@ -264,11 +284,16 @@ export async function GET(request: NextRequest) {
       tipo_factura_codigo: row.tipo_factura_codigo || "VENTA_DIRECTA",
       tipo_factura_nombre: row.tipo_factura_nombre || "Venta Directa",
       condicion_venta: (row.condicion_venta as "CONTADO" | "CREDITO") || "CONTADO",
+      fecha_vencimiento: row.fecha_vencimiento ? new Date(row.fecha_vencimiento).toISOString() : null,
       cliente_id: row.cliente_id ? Number(row.cliente_id) : null,
       cliente_nombre: row.cliente_nombre || "Cliente General",
       cliente_identificacion: row.cliente_identificacion || "",
       cliente_telefono: row.cliente_telefono || "",
       cliente_correo: row.cliente_correo || "",
+      nivel_cliente_id: row.nivel_cliente_id ? Number(row.nivel_cliente_id) : null,
+      porciento_descuento_nivel: parseFloat(Number(row.porciento_descuento_nivel || 0).toFixed(2)),
+      descuento_nivel: parseFloat(Number(row.descuento_nivel || 0).toFixed(2)),
+      nivel_cliente_nombre: row.nivel_cliente_nombre || null,
       orden_trabajo_id: row.orden_trabajo_id ? Number(row.orden_trabajo_id) : null,
       codigo_orden: row.codigo_orden || null,
       fecha_factura: row.fecha_factura,
@@ -423,15 +448,39 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    let fechaVencimiento: string | Date | null = null;
+    if (body.fecha_vencimiento) {
+      const fv = new Date(body.fecha_vencimiento);
+      if (isNaN(fv.getTime())) {
+        return NextResponse.json(
+          { error: "VALIDATION_ERROR", message: "La fecha de vencimiento proporcionada no es válida." },
+          { status: 400 }
+        );
+      }
+      const ff = body.fecha_factura ? new Date(body.fecha_factura) : new Date();
+      const fvDateOnly = new Date(fv.getFullYear(), fv.getMonth(), fv.getDate());
+      const ffDateOnly = new Date(ff.getFullYear(), ff.getMonth(), ff.getDate());
+      if (fvDateOnly < ffDateOnly) {
+        return NextResponse.json(
+          { error: "VALIDATION_ERROR", message: "La fecha de vencimiento no puede ser anterior a la fecha de emisión de la factura." },
+          { status: 400 }
+        );
+      }
+      fechaVencimiento = fv;
+    }
+
     const input: CrearFacturaInput = {
       empresa_id: session.empresa_id,
       tipo_factura_id: Number(body.tipo_factura_id),
       condicion_venta: condicionVenta,
+      fecha_vencimiento: fechaVencimiento,
       cliente_id: body.cliente_id ? Number(body.cliente_id) : null,
       orden_trabajo_id: body.orden_trabajo_id ? Number(body.orden_trabajo_id) : null,
       fecha_factura: body.fecha_factura || new Date(),
       observacion: body.observacion ? String(body.observacion).trim() : null,
       usuario_id: session.usuario_id,
+      porciento_impuesto: body.porciento_impuesto != null ? Number(body.porciento_impuesto) : undefined,
+      impuesto: body.impuesto != null ? Number(body.impuesto) : undefined,
       lineas: (body.lineas as RawLineaInput[]).map((l: RawLineaInput) => ({
         tipo_linea: (l.tipo_linea as TipoLineaFactura) || "PRODUCTO",
         almacen_id: l.almacen_id ? Number(l.almacen_id) : null,

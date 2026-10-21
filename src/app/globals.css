@@ -291,3 +291,26 @@ body {
   letter-spacing: 0.05em;
   color: var(--text-foreground-secondary);
 }
+
+/* --------------------------------------------------------------------------
+   THEME-AWARE APP LOGO (Dark / Light Mode)
+   -------------------------------------------------------------------------- */
+.app-logo-dark {
+  display: inline-block;
+}
+
+.app-logo-light {
+  display: none !important;
+}
+
+html.light .app-logo-dark,
+[data-theme="light"] .app-logo-dark,
+.light .app-logo-dark {
+  display: none !important;
+}
+
+html.light .app-logo-light,
+[data-theme="light"] .app-logo-light,
+.light .app-logo-light {
+  display: inline-block !important;
+}

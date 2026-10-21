@@ -1015,11 +1015,20 @@ export default function NewWorkOrderModal({ isOpen, onClose, onSuccess }) {
                           {getInitials(selectedClient.nombre_completo)}
                         </div>
                         <div>
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="font-bold text-foreground text-xs">{selectedClient.nombre_completo}</span>
                             <span className="text-[9px] uppercase font-bold text-primary bg-primary-muted px-1.5 py-0.2 rounded">
                               {selectedClient.tipo_cliente || "Persona"}
                             </span>
+                            {selectedClient.nivel_cliente_nombre ? (
+                              <span className="text-[9px] font-mono font-bold text-primary bg-primary/10 border border-primary/20 px-1.5 py-0.2 rounded">
+                                {selectedClient.nivel_cliente_nombre} ({Number(selectedClient.porciento_descuento || 0)}%)
+                              </span>
+                            ) : (
+                              <span className="text-[9px] font-mono text-foreground-muted bg-surface border border-border px-1.5 py-0.2 rounded">
+                                Sin nivel asignado
+                              </span>
+                            )}
                           </div>
                           <p className="text-[10px] text-foreground-muted font-mono">
                             Doc: {selectedClient.identificacion || "—"} | Tel: {selectedClient.telefono_principal || "—"}

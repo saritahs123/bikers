@@ -54,6 +54,7 @@ import { getPool } from "@/lib/db";
 import {
   CODIGO_SISTEMA_FACTURA,
   CrearFacturaInput,
+  ActualizarTerminosFacturaInput,
   PagoInicialInput,
   RegistrarPagoInput,
   AnularFacturaInput,
@@ -391,9 +392,44 @@ export async function crearFactura(
       ];
     }
 
-    // 4. Calcular Totales de Líneas con validación rigurosa
+    // 3.2. Consultar Nivel de Cliente y Porcentaje de Descuento (Zero-Trust Backend)
+    let nivelClienteId: number | null = null;
+    let porcientoDescuentoNivel = 0.00;
+    let nivelClienteNombre: string | null = null;
+
+    if (input.cliente_id) {
+      const cliRes = await client.query<{
+        cliente_id: number;
+        nivel_cliente_id: number | null;
+        nivel_nombre: string | null;
+        porciento_descuento: number | string | null;
+        nivel_activo: boolean | null;
+      }>(
+        `SELECT c.cliente_id, c.nivel_cliente_id, nc.nombre AS nivel_nombre, nc.porciento_descuento, nc.activo AS nivel_activo
+         FROM admin.clientes c
+         LEFT JOIN admin.nivel_cliente nc ON c.nivel_cliente_id = nc.nivel_cliente_id
+         WHERE c.cliente_id = $1 AND c.empresa_id = $2 AND c.fecha_eliminacion IS NULL`,
+        [input.cliente_id, input.empresa_id]
+      );
+
+      if (cliRes.rows && cliRes.rows.length > 0) {
+        const cRow = cliRes.rows[0];
+        if (cRow.nivel_cliente_id) {
+          nivelClienteId = Number(cRow.nivel_cliente_id);
+          nivelClienteNombre = cRow.nivel_nombre || null;
+          // Validar que el nivel esté activo para otorgar el descuento
+          if (cRow.nivel_activo) {
+            porcientoDescuentoNivel = Math.min(100, Math.max(0, Number(cRow.porciento_descuento || 0)));
+          } else {
+            porcientoDescuentoNivel = 0.00;
+          }
+        }
+      }
+    }
+
+    // 4. Calcular Totales de Líneas con validación rigurosa y descuento de nivel
     let subtotalGeneral = 0;
-    let descuentoGeneral = 0;
+    let descuentoManualTotal = 0;
 
     for (let i = 0; i < input.lineas.length; i++) {
       const linea = input.lineas[i];
@@ -420,13 +456,30 @@ export async function crearFactura(
       }
 
       subtotalGeneral += parseFloat((cant * prec).toFixed(2));
-      descuentoGeneral += desc;
+      descuentoManualTotal += desc;
     }
 
     subtotalGeneral = parseFloat(subtotalGeneral.toFixed(2));
-    descuentoGeneral = parseFloat(descuentoGeneral.toFixed(2));
-    const subtotalNeto = Math.max(0, parseFloat((subtotalGeneral - descuentoGeneral).toFixed(2)));
-    const impuestoGeneral = 0.00;
+    descuentoManualTotal = parseFloat(descuentoManualTotal.toFixed(2));
+    const baseElegible = Math.max(0, parseFloat((subtotalGeneral - descuentoManualTotal).toFixed(2)));
+
+    // Descuento de Nivel de Cliente sobre la base elegible (sin duplicarlo)
+    const descuentoNivelTotal = porcientoDescuentoNivel > 0
+      ? Math.min(baseElegible, parseFloat((baseElegible * (porcientoDescuentoNivel / 100)).toFixed(2)))
+      : 0.00;
+
+    const descuentoGeneral = parseFloat((descuentoManualTotal + descuentoNivelTotal).toFixed(2));
+    const subtotalNeto = Math.max(0, parseFloat((baseElegible - descuentoNivelTotal).toFixed(2)));
+
+    // Cálculo de Impuesto
+    let impuestoGeneral = 0.00;
+    if (input.porciento_impuesto !== undefined && input.porciento_impuesto !== null && Number(input.porciento_impuesto) > 0) {
+      const pctImp = Math.max(0, Number(input.porciento_impuesto));
+      impuestoGeneral = parseFloat((subtotalNeto * (pctImp / 100)).toFixed(2));
+    } else if (input.impuesto !== undefined && input.impuesto !== null && Number(input.impuesto) > 0) {
+      impuestoGeneral = parseFloat(Number(input.impuesto).toFixed(2));
+    }
+
     const totalFactura = parseFloat((subtotalNeto + impuestoGeneral).toFixed(2));
 
     if (totalFactura <= 0) {
@@ -494,6 +547,22 @@ export async function crearFactura(
     const balancePendiente = Math.max(0, parseFloat((totalFactura - montoPagadoInicial).toFixed(2)));
     const estadoInicial: EstadoFactura = condicionVenta === "CONTADO" ? "PAGADA" : "PENDIENTE";
 
+    // 5.1. Validación de fecha_vencimiento (opcional, NULL permitido)
+    let fechaVencimientoObj: Date | null = null;
+    if (input.fecha_vencimiento) {
+      const fv = new Date(input.fecha_vencimiento);
+      if (isNaN(fv.getTime())) {
+        throw new Error("La fecha de vencimiento proporcionada no es válida.");
+      }
+      const ff = input.fecha_factura ? new Date(input.fecha_factura) : new Date();
+      const fvDateOnly = new Date(fv.getFullYear(), fv.getMonth(), fv.getDate());
+      const ffDateOnly = new Date(ff.getFullYear(), ff.getMonth(), ff.getDate());
+      if (fvDateOnly < ffDateOnly) {
+        throw new Error("La fecha de vencimiento no puede ser anterior a la fecha de emisión de la factura.");
+      }
+      fechaVencimientoObj = fv;
+    }
+
     // 6. Generar Código Correlativo Canónico de Factura
     const codigoFactura = await generarCodigoFactura(client, input.empresa_id);
 
@@ -517,9 +586,13 @@ export async function crearFactura(
       cliente_id: input.cliente_id || null,
       orden_trabajo_id: input.orden_trabajo_id || null,
       fecha_factura: input.fecha_factura || new Date(),
+      fecha_vencimiento: fechaVencimientoObj,
       subtotal: subtotalGeneral,
       descuento: descuentoGeneral,
       descuento_total: descuentoGeneral,
+      nivel_cliente_id: nivelClienteId,
+      porciento_descuento_nivel: porcientoDescuentoNivel,
+      descuento_nivel: descuentoNivelTotal,
       impuesto: impuestoGeneral,
       impuesto_total: impuestoGeneral,
       total: totalFactura,
@@ -550,6 +623,11 @@ export async function crearFactura(
     }
     facturaRow.factura_id = facturaId;
     facturaRow.condicion_venta = condicionVenta;
+    facturaRow.fecha_vencimiento = fechaVencimientoObj;
+    facturaRow.nivel_cliente_id = nivelClienteId;
+    facturaRow.porciento_descuento_nivel = porcientoDescuentoNivel;
+    facturaRow.descuento_nivel = descuentoNivelTotal;
+    facturaRow.nivel_cliente_nombre = nivelClienteNombre;
 
     // 7.1. Salida física de Inventario para líneas PRODUCTO (FAC-2, FAC-3, Secciones 9, 10, 11)
     // - Las líneas REPUESTO de una OT NO generan SAL_VENTA porque ya salieron vía SAL_ORDEN.
@@ -657,12 +735,34 @@ export async function crearFactura(
     );
     let nextDetalleId = Number(maxDetRes.rows[0]?.max_id) || 0;
 
-    for (const linea of input.lineas) {
+    let acumuladoDescNivel = 0;
+    const numLineas = input.lineas.length;
+
+    for (let idx = 0; idx < numLineas; idx++) {
+      const linea = input.lineas[idx];
       nextDetalleId += 1;
       const cant = Number(linea.cantidad);
       const prec = Number(linea.precio_unitario);
-      const desc = Number(linea.descuento || 0);
-      const sub = parseFloat(((cant * prec) - desc).toFixed(2));
+      const descManual = Number(linea.descuento || 0);
+      const lineaBruto = parseFloat((cant * prec).toFixed(2));
+      const lineaBase = Math.max(0, parseFloat((lineaBruto - descManual).toFixed(2)));
+
+      let descNivelLinea = 0;
+      if (descuentoNivelTotal > 0 && baseElegible > 0 && lineaBase > 0) {
+        if (idx === numLineas - 1) {
+          // Última línea absorbe el diferencial por redondeo para cuadre exacto al centavo
+          descNivelLinea = parseFloat((descuentoNivelTotal - acumuladoDescNivel).toFixed(2));
+        } else {
+          descNivelLinea = parseFloat((lineaBase * (porcientoDescuentoNivel / 100)).toFixed(2));
+          if (acumuladoDescNivel + descNivelLinea > descuentoNivelTotal) {
+            descNivelLinea = parseFloat((descuentoNivelTotal - acumuladoDescNivel).toFixed(2));
+          }
+          acumuladoDescNivel = parseFloat((acumuladoDescNivel + descNivelLinea).toFixed(2));
+        }
+      }
+
+      const descTotalLinea = parseFloat((descManual + descNivelLinea).toFixed(2));
+      const sub = Math.max(0, parseFloat((lineaBruto - descTotalLinea).toFixed(2)));
 
       const detData: Record<string, unknown> = {
         detalle_factura_id: nextDetalleId,
@@ -680,7 +780,7 @@ export async function crearFactura(
         descripcion: linea.descripcion.trim(),
         cantidad: cant,
         precio_unitario: prec,
-        descuento: desc,
+        descuento: descTotalLinea,
         subtotal: sub,
         costo_unitario: linea.costo_unitario != null ? Number(linea.costo_unitario) : null,
         usuario_creacion_id: input.usuario_id,
@@ -1443,10 +1543,12 @@ export async function obtenerFacturaPorId(
         tf.codigo AS tipo_factura_codigo,
         tf.nombre AS tipo_factura_nombre,
         c.nombre_completo AS cliente_nombre,
-        ot.codigo_orden AS codigo_orden
+        ot.codigo_orden AS codigo_orden,
+        nc.nombre AS nivel_cliente_nombre
       FROM admin.facturas f
       JOIN admin.tipo_factura tf ON f.tipo_factura_id = tf.tipo_factura_id
       LEFT JOIN admin.clientes c ON f.cliente_id = c.cliente_id
+      LEFT JOIN admin.nivel_cliente nc ON f.nivel_cliente_id = nc.nivel_cliente_id
       LEFT JOIN admin.ordenes_trabajo ot ON f.orden_trabajo_id = ot.orden_trabajo_id
       WHERE f.factura_id = $1 AND f.empresa_id = $2
     `, [facturaId, empresaId]);
@@ -1465,7 +1567,11 @@ export async function obtenerFacturaPorId(
     const factura: FacturaRow = {
       ...rawFactura,
       total: safeTotal,
-      total_factura: safeTotal
+      total_factura: safeTotal,
+      nivel_cliente_id: rawFactura.nivel_cliente_id ? Number(rawFactura.nivel_cliente_id) : null,
+      porciento_descuento_nivel: Number(rawFactura.porciento_descuento_nivel || 0),
+      descuento_nivel: Number(rawFactura.descuento_nivel || 0),
+      nivel_cliente_nombre: rawFactura.nivel_cliente_nombre || null
     };
 
     const detRes = await client.query(`
@@ -1495,6 +1601,103 @@ export async function obtenerFacturaPorId(
     };
   } finally {
     if (!externalClient) {
+      client.release();
+    }
+  }
+}
+
+/**
+ * Actualiza la condición de venta ('CONTADO' | 'CREDITO') y la fecha de vencimiento
+ * de una factura existente de forma segura y auditada.
+ */
+export async function actualizarTerminosFactura(
+  input: ActualizarTerminosFacturaInput,
+  externalClient?: PoolClient
+): Promise<FacturaRow> {
+  const pool = getPool();
+  const client = externalClient || (await pool.connect());
+  const isInternalTransaction = !externalClient;
+
+  try {
+    if (isInternalTransaction) {
+      await client.query("BEGIN");
+    }
+
+    // 1. Validaciones básicas
+    if (!input.factura_id || input.factura_id <= 0) {
+      throw new Error("El ID de la factura es obligatorio.");
+    }
+    if (!input.empresa_id || input.empresa_id <= 0) {
+      throw new Error("El ID de la empresa es obligatorio.");
+    }
+    if (!input.usuario_id || input.usuario_id <= 0) {
+      throw new Error("El usuario que realiza la modificación es obligatorio.");
+    }
+
+    const condicion: CondicionVenta = input.condicion_venta === "CREDITO" ? "CREDITO" : "CONTADO";
+
+    // 2. Lock de la factura FOR UPDATE
+    const facRes = await client.query(
+      `SELECT * FROM admin.facturas WHERE factura_id = $1 AND empresa_id = $2 FOR UPDATE`,
+      [input.factura_id, input.empresa_id]
+    );
+
+    if (!facRes.rows || facRes.rows.length === 0) {
+      throw new Error(`La factura #${input.factura_id} no existe o no pertenece a la empresa.`);
+    }
+
+    const factura = facRes.rows[0];
+    if (factura.estado === "ANULADA") {
+      throw new Error(`No es posible modificar los términos de una factura anulada (${factura.codigo_factura || factura.numero_factura}).`);
+    }
+
+    // 3. Validación de fecha_vencimiento
+    let fechaVencimientoObj: Date | null = null;
+    if (input.fecha_vencimiento) {
+      const fv = new Date(input.fecha_vencimiento);
+      if (isNaN(fv.getTime())) {
+        throw new Error("La fecha de vencimiento proporcionada no es válida.");
+      }
+      const ff = factura.fecha_factura ? new Date(factura.fecha_factura) : new Date();
+      const fvDateOnly = new Date(fv.getFullYear(), fv.getMonth(), fv.getDate());
+      const ffDateOnly = new Date(ff.getFullYear(), ff.getMonth(), ff.getDate());
+      if (fvDateOnly < ffDateOnly) {
+        throw new Error("La fecha de vencimiento no puede ser anterior a la fecha de emisión de la factura.");
+      }
+      fechaVencimientoObj = fv;
+    }
+
+    // 4. Actualización en admin.facturas
+    const updateRes = await client.query(
+      `UPDATE admin.facturas
+       SET
+         condicion_venta = $1,
+         fecha_vencimiento = $2,
+         usuario_modificacion_id = $3,
+         fecha_modificacion = NOW()
+       WHERE factura_id = $4 AND empresa_id = $5
+       RETURNING *`,
+      [condicion, fechaVencimientoObj, input.usuario_id, input.factura_id, input.empresa_id]
+    );
+
+    if (isInternalTransaction) {
+      await client.query("COMMIT");
+    }
+
+    const row = updateRes.rows[0];
+    return {
+      ...row,
+      condicion_venta: condicion,
+      fecha_vencimiento: fechaVencimientoObj
+    };
+  } catch (err) {
+    if (isInternalTransaction) {
+      await client.query("ROLLBACK");
+    }
+    console.error("Error en actualizarTerminosFactura:", err);
+    throw err;
+  } finally {
+    if (isInternalTransaction) {
       client.release();
     }
   }

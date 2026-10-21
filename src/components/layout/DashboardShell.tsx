@@ -74,6 +74,7 @@ export function DashboardShell({
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
         onNavigate={handleNavigate}
+        user={user}
       />
       <div className="flex-1 flex flex-col relative w-full min-w-0">
         <TopBar

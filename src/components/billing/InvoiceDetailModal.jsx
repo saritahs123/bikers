@@ -19,7 +19,9 @@ import {
   Ban,
   PackageCheck,
   HelpCircle,
-  Info
+  Info,
+  Calendar,
+  Award
 } from "lucide-react";
 import {
   generateInvoiceModel1Pdf,
@@ -42,6 +44,13 @@ export default function InvoiceDetailModal({
   // Estados de impresión directa
   const [isPrintingA4, setIsPrintingA4] = useState(false);
   const [isPrintingTicket, setIsPrintingTicket] = useState(false);
+
+  // Edición de Términos (Condición de Venta y Fecha de Vencimiento)
+  const [isEditingTerms, setIsEditingTerms] = useState(false);
+  const [editCondicion, setEditCondicion] = useState("CONTADO");
+  const [editFechaVencimiento, setEditFechaVencimiento] = useState("");
+  const [savingTerms, setSavingTerms] = useState(false);
+  const [termsError, setTermsError] = useState(null);
 
   // Modales secundarios
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -355,6 +364,76 @@ export default function InvoiceDetailModal({
     factura.estado !== "ANULADA" &&
     (!effectivePerms || effectivePerms.puede_eliminar || effectivePerms.puede_inactivar || effectivePerms.puede_editar);
 
+  const puedeEditarTerminos =
+    factura &&
+    factura.estado !== "ANULADA" &&
+    (!effectivePerms || effectivePerms.puede_editar || effectivePerms.puede_crear);
+
+  const handleOpenEditTerms = () => {
+    setEditCondicion(factura?.condicion_venta || "CONTADO");
+    setEditFechaVencimiento(
+      factura?.fecha_vencimiento
+        ? new Date(factura.fecha_vencimiento).toISOString().split("T")[0]
+        : ""
+    );
+    setTermsError(null);
+    setIsEditingTerms(true);
+  };
+
+  const handleSaveTerms = async (e) => {
+    e.preventDefault();
+    try {
+      setSavingTerms(true);
+      setTermsError(null);
+
+      if (editFechaVencimiento) {
+        const fv = new Date(editFechaVencimiento);
+        const ff = factura?.fecha_factura ? new Date(factura.fecha_factura) : new Date();
+        const fvDateOnly = new Date(fv.getFullYear(), fv.getMonth(), fv.getDate());
+        const ffDateOnly = new Date(ff.getFullYear(), ff.getMonth(), ff.getDate());
+        if (fvDateOnly < ffDateOnly) {
+          setTermsError("La fecha de vencimiento no puede ser anterior a la fecha de emisión.");
+          return;
+        }
+      }
+
+      const res = await fetch(`/api/facturacion/facturas/${facturaId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          condicion_venta: editCondicion,
+          fecha_vencimiento: editFechaVencimiento ? new Date(editFechaVencimiento).toISOString() : null
+        })
+      });
+
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json.message || "Error al actualizar términos de la factura.");
+      }
+
+      setData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          factura: {
+            ...prev.factura,
+            condicion_venta: editCondicion,
+            fecha_vencimiento: editFechaVencimiento ? new Date(editFechaVencimiento).toISOString() : null
+          }
+        };
+      });
+
+      setIsEditingTerms(false);
+      if (onInvoiceUpdated) {
+        onInvoiceUpdated();
+      }
+    } catch (err) {
+      setTermsError(err.message || "Error desconocido");
+    } finally {
+      setSavingTerms(false);
+    }
+  };
+
   const handlePaymentSuccess = (result) => {
     if (result && result.factura) {
       // Actualizamos estado local
@@ -441,13 +520,28 @@ export default function InvoiceDetailModal({
                   </h2>
                   {factura && getStatusBadge(factura.estado)}
                   {factura && (
+                    <span
+                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase border ${
+                        String(factura.condicion_venta).toUpperCase() === "CREDITO"
+                          ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
+                          : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                      }`}
+                    >
+                      {String(factura.condicion_venta).toUpperCase() === "CREDITO" ? "A CRÉDITO" : "AL CONTADO"}
+                    </span>
+                  )}
+                  {factura && (
                     <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-surface border border-border text-foreground-secondary uppercase">
                       {factura.tipo_factura_nombre || (factura.orden_trabajo_id ? "ORDEN DE TRABAJO" : "VENTA DIRECTA")}
                     </span>
                   )}
                 </div>
                 <p className="text-xs text-foreground-muted font-mono mt-0.5">
-                  Fecha de emisión: {factura ? formatDate(factura.fecha_factura) : "—"} • Registrado por: {factura?.usuario_creacion_nombre || "Sistema"}
+                  Fecha: {factura ? formatDate(factura.fecha_factura) : "—"} • Vencimiento:{" "}
+                  <span className={factura?.fecha_vencimiento ? "text-foreground font-semibold" : ""}>
+                    {factura?.fecha_vencimiento ? formatDate(factura.fecha_vencimiento) : "Sin fecha de vencimiento"}
+                  </span>
+                  {" • "}Registrado por: {factura?.usuario_creacion_nombre || "Sistema"}
                 </p>
               </div>
             </div>
@@ -485,6 +579,18 @@ export default function InvoiceDetailModal({
                     )}
                     <span>Descargar Ticket</span>
                   </button>
+
+                  {puedeEditarTerminos && (
+                    <button
+                      type="button"
+                      onClick={handleOpenEditTerms}
+                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-mono font-bold uppercase tracking-wider text-foreground hover:text-primary bg-surface hover:bg-hover border border-border rounded-xl transition-all cursor-pointer shadow-sm"
+                      title="Editar Términos (Condición de Pago y Fecha de Vencimiento)"
+                    >
+                      <Calendar className="w-4 h-4 text-primary" />
+                      <span>Términos</span>
+                    </button>
+                  )}
                 </>
               )}
 
@@ -684,6 +790,23 @@ export default function InvoiceDetailModal({
                           </span>
                         </div>
                       )}
+                      {factura?.nivel_cliente_nombre ? (
+                        <div className="col-span-2 pt-1 border-t border-border/40 flex items-center gap-2">
+                          <span className="text-foreground-muted text-[11px]">Nivel Cliente (Facturado):</span>
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            <Award className="w-3 h-3" />
+                            {factura.nivel_cliente_nombre} ({Number(factura.porciento_descuento_nivel || 0)}% Desc.)
+                          </span>
+                        </div>
+                      ) : cliente?.nivel_cliente_nombre ? (
+                        <div className="col-span-2 pt-1 border-t border-border/40 flex items-center gap-2">
+                          <span className="text-foreground-muted text-[11px]">Nivel Cliente:</span>
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-surface text-foreground-secondary border border-border">
+                            <Award className="w-3 h-3 text-primary" />
+                            {cliente.nivel_cliente_nombre} ({Number(cliente.porciento_descuento || 0)}%)
+                          </span>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
 
@@ -916,12 +1039,40 @@ export default function InvoiceDetailModal({
                         <span>Subtotal:</span>
                         <span className="font-mono font-medium">{formatMoney(factura.subtotal)}</span>
                       </div>
-                      <div className="flex items-center justify-between text-foreground-secondary">
-                        <span>Descuento:</span>
-                        <span className="font-mono font-medium text-foreground-muted">
-                          {Number(factura.descuento) > 0 ? `-${formatMoney(factura.descuento)}` : "RD$ 0.00"}
-                        </span>
-                      </div>
+                      {Number(factura.descuento_nivel) > 0 ? (
+                        <>
+                          {Number(factura.descuento) - Number(factura.descuento_nivel) > 0 && (
+                            <div className="flex items-center justify-between text-foreground-secondary">
+                              <span>Descuento Manual:</span>
+                              <span className="font-mono font-medium text-foreground-muted">
+                                -{formatMoney(Number(factura.descuento) - Number(factura.descuento_nivel))}
+                              </span>
+                            </div>
+                          )}
+                          <div className="flex items-center justify-between text-foreground-secondary">
+                            <span className="flex items-center gap-1">
+                              <Award className="w-3.5 h-3.5 text-emerald-500" />
+                              <span>Descuento ({Number(factura.porciento_descuento_nivel || 0)}%):</span>
+                            </span>
+                            <span className="font-mono font-medium text-emerald-600 dark:text-emerald-400">
+                              -{formatMoney(factura.descuento_nivel)}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between text-foreground-secondary font-medium pt-0.5 border-t border-border/40">
+                            <span>Descuento Total:</span>
+                            <span className="font-mono font-medium text-amber-500 dark:text-amber-400">
+                              -{formatMoney(factura.descuento)}
+                            </span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex items-center justify-between text-foreground-secondary">
+                          <span>Descuento:</span>
+                          <span className="font-mono font-medium text-foreground-muted">
+                            {Number(factura.descuento) > 0 ? `-${formatMoney(factura.descuento)}` : "RD$ 0.00"}
+                          </span>
+                        </div>
+                      )}
                       {Number(factura.impuesto) > 0 && (
                         <div className="flex items-center justify-between text-foreground-secondary">
                           <span>Impuesto (ITBIS):</span>
@@ -955,6 +1106,42 @@ export default function InvoiceDetailModal({
                           {formatMoney(factura.balance_pendiente)}
                         </span>
                       </div>
+
+                      <div className="border-t border-border pt-2.5 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-foreground-secondary font-medium">Condición de Pago:</span>
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
+                              String(factura.condicion_venta).toUpperCase() === "CREDITO"
+                                ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
+                                : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                            }`}
+                          >
+                            {String(factura.condicion_venta).toUpperCase() === "CREDITO" ? "CRÉDITO" : "CONTADO"}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <span className="text-foreground-secondary font-medium">Fecha de Vencimiento:</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono text-xs text-foreground">
+                              {factura.fecha_vencimiento
+                                ? formatDate(factura.fecha_vencimiento)
+                                : "Sin fecha de vencimiento"}
+                            </span>
+                            {puedeEditarTerminos && (
+                              <button
+                                type="button"
+                                onClick={handleOpenEditTerms}
+                                className="text-[10px] font-mono font-semibold text-primary hover:underline cursor-pointer ml-1"
+                                title="Editar condición y vencimiento"
+                              >
+                                Editar
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -986,6 +1173,119 @@ export default function InvoiceDetailModal({
           factura={factura}
           onPaymentSuccess={handlePaymentSuccess}
         />
+      )}
+
+      {/* Modal Editar Términos (Condición de Pago y Vencimiento) */}
+      {isEditingTerms && factura && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-card border border-border rounded-2xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col transition-colors">
+            <div className="flex items-center justify-between p-4 border-b border-border bg-surface/50">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-primary/10 border border-primary/30 rounded-xl text-primary shrink-0">
+                  <Calendar className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-foreground font-mono">Editar Términos de Pago</h3>
+                  <p className="text-[11px] text-foreground-muted font-mono">{factura.codigo_factura}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditingTerms(false)}
+                disabled={savingTerms}
+                className="p-1.5 rounded-lg text-foreground-muted hover:text-foreground hover:bg-hover transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveTerms} className="p-5 space-y-4">
+              {termsError && (
+                <div className="p-3 bg-error-muted border border-error/30 rounded-xl text-error text-xs flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{termsError}</span>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-foreground mb-1.5">
+                  Condición de Pago:
+                </label>
+                <div className="grid grid-cols-2 gap-2 p-1 bg-surface border border-border rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setEditCondicion("CONTADO")}
+                    className={`py-2 px-3 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      editCondicion === "CONTADO"
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-foreground-secondary hover:text-foreground hover:bg-hover"
+                    }`}
+                  >
+                    CONTADO
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditCondicion("CREDITO")}
+                    className={`py-2 px-3 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      editCondicion === "CREDITO"
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-foreground-secondary hover:text-foreground hover:bg-hover"
+                    }`}
+                  >
+                    CRÉDITO
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-semibold text-foreground">
+                    Fecha de Vencimiento:
+                  </label>
+                  {editFechaVencimiento && (
+                    <button
+                      type="button"
+                      onClick={() => setEditFechaVencimiento("")}
+                      className="text-[10px] font-mono text-error hover:underline cursor-pointer"
+                    >
+                      Quitar vencimiento
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="date"
+                  value={editFechaVencimiento}
+                  onChange={(e) => setEditFechaVencimiento(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-input border border-border rounded-xl text-foreground font-mono focus:outline-none focus:border-primary"
+                />
+                <p className="text-[10px] text-foreground-muted mt-1 leading-snug">
+                  {editFechaVencimiento
+                    ? "Fecha límite pactada para cobro."
+                    : "Sin fecha asignada (se guardará como «Sin fecha de vencimiento»)."}
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => setIsEditingTerms(false)}
+                  disabled={savingTerms}
+                  className="px-3.5 py-2 text-xs font-mono font-bold uppercase rounded-xl border border-border text-foreground hover:bg-hover transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingTerms}
+                  className="flex items-center gap-1.5 px-4 py-2 text-xs font-mono font-bold uppercase tracking-wider text-primary-foreground bg-primary hover:bg-primary/90 rounded-xl transition-all shadow-md shadow-primary/20 cursor-pointer disabled:opacity-50"
+                >
+                  {savingTerms && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>{savingTerms ? "Guardando..." : "Guardar Cambios"}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* Modal de Confirmación de Anulación (FAC-6.1) */}
