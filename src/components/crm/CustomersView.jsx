@@ -89,11 +89,11 @@ export default function CustomersView() {
 
   // RBAC permissions state
   const [permissions, setPermissions] = useState({
-    puede_ver: true,
-    puede_crear: true,
-    puede_editar: true,
-    puede_eliminar: true,
-    puede_exportar: true
+    puede_ver: false,
+    puede_crear: false,
+    puede_editar: false,
+    puede_eliminar: false,
+    puede_exportar: false
   });
 
   // Detail 360 View State
@@ -1304,7 +1304,7 @@ export default function CustomersView() {
                                     <span>Ver Factura</span>
                                   </button>
 
-                                  {saldoNum > 0.009 && est !== "ANULADA" && estadoCuenta?.permisos?.puede_registrar_pago !== false && (
+                                  {saldoNum > 0.009 && est !== "ANULADA" && estadoCuenta?.permisos?.puede_registrar_pago === true && (
                                     <button
                                       type="button"
                                       onClick={() => handleOpenRegisterPayment(f)}

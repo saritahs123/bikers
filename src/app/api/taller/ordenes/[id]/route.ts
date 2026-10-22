@@ -6,7 +6,7 @@ import { recalculateWorkOrderTotals } from "@/lib/workshop/recalculateWorkOrderT
 import { syncProductsForWorkOrderUpdate } from "@/lib/workshop/workshopInventoryReservationService";
 import { syncWorkOrderInvoice } from "@/lib/workshop/syncWorkOrderInvoice";
 import { getCronometroStatus } from "@/lib/workshop/getCronometroStatus";
-import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { getWorkshopSession, getScreenPermissions } from "@/lib/workshop-session";
 import { queryIncompleteServicesAndTimers } from "@/lib/workshop/validateOrderState";
 import { recordUserActivity, recordUserAudit, computeDiff } from "@/lib/auditLogger";
 import { deleteWorkOrderWithSnapshot } from "@/lib/workshop/workOrderDeletionService";
@@ -58,7 +58,7 @@ export async function GET(
       );
     }
 
-    const perms = await getModulePermissions("TALLER", session.usuario_id);
+    const perms = await getScreenPermissions("TALLER_ORDENES", session.usuario_id);
     if (!perms.puede_ver) {
       return NextResponse.json(
         { error: "FORBIDDEN", message: "No tienes permiso para consultar esta orden." },
@@ -572,6 +572,10 @@ export async function GET(
     resPayload.headers.set("x-perm-editar", perms.puede_editar ? "true" : "false");
     resPayload.headers.set("x-perm-eliminar", perms.puede_eliminar ? "true" : "false");
     resPayload.headers.set("x-perm-exportar", perms.puede_exportar ? "true" : "false");
+    resPayload.headers.set("x-perm-asignar", perms.puede_asignar ? "true" : "false");
+    resPayload.headers.set("x-perm-cerrar", perms.puede_cerrar ? "true" : "false");
+    resPayload.headers.set("x-perm-reabrir", perms.puede_reabrir ? "true" : "false");
+    resPayload.headers.set("x-perm-mover", perms.puede_mover ? "true" : "false");
     return resPayload;
   } catch (error: any) {
     console.error("GET /api/taller/ordenes/[id] exception:", error);
@@ -787,7 +791,7 @@ export async function PUT(
     );
   }
 
-  const perms = await getModulePermissions("TALLER", session.usuario_id);
+  const perms = await getScreenPermissions("TALLER_ORDENES", session.usuario_id);
 
   const pool = getPool();
   const client = await pool.connect();
@@ -912,13 +916,53 @@ export async function PUT(
     const isStateChangeRequested = requestedStateId !== undefined && requestedStateId !== currentStateId;
 
     if (!isStateChangeRequested) {
-      if (!perms.puede_editar) {
+      const isAssigningMechanic = body.mecanico_id !== undefined && (
+        currentOrder.mecanico_id === null
+          ? (body.mecanico_id !== null && body.mecanico_id !== "" && body.mecanico_id !== 0)
+          : String(body.mecanico_id) !== String(currentOrder.mecanico_id)
+      );
+
+      const isEditingOtherFields = (
+        body.prioridad_id !== undefined ||
+        body.diagnostico_inicial !== undefined ||
+        body.descripcion_cliente !== undefined ||
+        body.fecha_estimada_entrega !== undefined ||
+        body.kilometraje !== undefined ||
+        body.observaciones !== undefined ||
+        body.notas !== undefined
+      );
+
+      if (isEditingOtherFields && !perms.puede_editar) {
         await client.query("ROLLBACK");
         return NextResponse.json(
           {
             error: "FORBIDDEN",
             title: "No tienes permiso para editar esta orden",
-            message: "No tienes permiso para cambiar la configuración de esta orden."
+            message: "No tienes permiso para cambiar la configuración de esta orden. Se requiere el privilegio EDITAR."
+          },
+          { status: 403 }
+        );
+      }
+
+      if (isAssigningMechanic && !perms.puede_asignar) {
+        await client.query("ROLLBACK");
+        return NextResponse.json(
+          {
+            error: "FORBIDDEN",
+            title: "Sin permiso de asignación",
+            message: "No tienes permiso para asignar o cambiar el mecánico de esta orden. Se requiere el privilegio ASIGNAR."
+          },
+          { status: 403 }
+        );
+      }
+
+      if (!isAssigningMechanic && !isEditingOtherFields && !perms.puede_editar && !perms.puede_asignar) {
+        await client.query("ROLLBACK");
+        return NextResponse.json(
+          {
+            error: "FORBIDDEN",
+            title: "No tienes permiso para modificar esta orden",
+            message: "No tienes permiso para modificar esta orden de trabajo."
           },
           { status: 403 }
         );
@@ -1319,6 +1363,57 @@ export async function PUT(
       }
     }
 
+    // Permission Checks (RBAC precedes state machine validation)
+    if (targetStateId === estadoReparacionId) {
+      const isReopening = (
+        accion === "REABRIR_REPARACION" ||
+        (currentStateId === estadoListaEntregaId && targetStateId === estadoReparacionId) ||
+        (currentStateId === estadoEntregadaId)
+      );
+
+      if (isReopening) {
+        if (!perms.puede_reabrir) {
+          await client.query("ROLLBACK");
+          return NextResponse.json(
+            { error: "FORBIDDEN", message: "No tienes permiso para reabrir la reparación de esta orden. Se requiere el privilegio REABRIR." },
+            { status: 403 }
+          );
+        }
+      } else {
+        if (!perms.puede_mover) {
+          await client.query("ROLLBACK");
+          return NextResponse.json(
+            { error: "FORBIDDEN", message: "No tienes permiso para mover esta orden a reparación. Se requiere el privilegio MOVER." },
+            { status: 403 }
+          );
+        }
+      }
+    } else if (targetStateId === estadoListaEntregaId) {
+      if (!perms.puede_mover) {
+        await client.query("ROLLBACK");
+        return NextResponse.json(
+          { error: "FORBIDDEN", message: "No tienes permiso para mover esta orden a lista para entrega. Se requiere el privilegio MOVER." },
+          { status: 403 }
+        );
+      }
+    } else if (targetStateId === estadoEntregadaId) {
+      if (!perms.puede_cerrar) {
+        await client.query("ROLLBACK");
+        return NextResponse.json(
+          { error: "FORBIDDEN", message: "No tienes permiso para cerrar o entregar esta orden de trabajo. Se requiere el privilegio CERRAR." },
+          { status: 403 }
+        );
+      }
+    } else {
+      if (!perms.puede_mover) {
+        await client.query("ROLLBACK");
+        return NextResponse.json(
+          { error: "FORBIDDEN", message: "No tienes permiso para cambiar el estado de esta orden. Se requiere el privilegio MOVER." },
+          { status: 403 }
+        );
+      }
+    }
+
     if (!ALLOWED_TRANSITIONS[currentStateId]?.includes(targetStateId)) {
       await client.query("ROLLBACK");
       await recordUserActivity({
@@ -1339,24 +1434,7 @@ export async function PUT(
       );
     }
 
-    // Permission Checks
-    if (targetStateId === estadoReparacionId) {
-      if (!perms.puede_mover && !perms.puede_editar && !perms.puede_crear && !perms.puede_reabrir) {
-        await client.query("ROLLBACK");
-        return NextResponse.json(
-          { error: "FORBIDDEN", message: "No tienes permiso para reanudar o reabrir la reparación de esta orden." },
-          { status: 403 }
-        );
-      }
-    } else if (targetStateId === estadoListaEntregaId) {
-      if (!perms.puede_mover && !perms.puede_editar) {
-        await client.query("ROLLBACK");
-        return NextResponse.json(
-          { error: "FORBIDDEN", message: "No tienes permiso para cambiar el estado de esta orden." },
-          { status: 403 }
-        );
-      }
-
+    if (targetStateId === estadoListaEntregaId) {
       // Check if order has at least one active item (services or products)
       const itemsCountRes = await client.query(`
         SELECT 
@@ -1409,14 +1487,6 @@ export async function PUT(
             message: msg
           },
           { status: 409 }
-        );
-      }
-    } else {
-      if (!perms.puede_mover && !perms.puede_editar) {
-        await client.query("ROLLBACK");
-        return NextResponse.json(
-          { error: "FORBIDDEN", message: "No tienes permiso para cambiar el estado de esta orden." },
-          { status: 403 }
         );
       }
     }
@@ -1501,7 +1571,7 @@ export async function PUT(
           empresa_id: session.empresa_id || Number(currentOrder.empresa_id || 1),
           usuario_id: session.usuario_id,
           observacion: typeof obs === "string" && obs.trim() ? obs.trim() : undefined
-        });
+        }, client);
       } catch (invErr: any) {
         await client.query("ROLLBACK");
         console.error("Error al obtener/crear factura en entrega de orden:", invErr);
@@ -2008,8 +2078,8 @@ export async function DELETE(
       );
     }
 
-    const perms = await getModulePermissions("TALLER", session.usuario_id);
-    if (!perms.puede_eliminar) {
+    const perms = await getScreenPermissions("TALLER_ORDENES", session.usuario_id);
+    if (!perms.puede_eliminar && !perms.puede_inactivar) {
       return NextResponse.json(
         { error: "FORBIDDEN", message: "No tienes permiso para eliminar órdenes de trabajo." },
         { status: 403 }

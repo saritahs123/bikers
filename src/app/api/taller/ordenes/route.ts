@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPool, query } from "@/lib/db";
-import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { getWorkshopSession, getScreenPermissions } from "@/lib/workshop-session";
 import { recordUserActivity, recordUserAudit } from "@/lib/auditLogger";
 import { ensureWorkOrderTracking } from "@/lib/tracking/workOrderTrackingService";
 import { sendWelcomeNotification } from "@/lib/notifications/workOrderNotificationService";
@@ -18,8 +18,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "FORBIDDEN_COMPANY", message: "No se pudo determinar la empresa del usuario." }, { status: 403 });
     }
 
-    // Check IAM permission for Módulo TALLER
-    const perms = await getModulePermissions("TALLER", session.usuario_id);
+    // Check IAM permission for Módulo TALLER / Pantalla TALLER_ORDENES
+    const perms = await getScreenPermissions("TALLER_ORDENES", session.usuario_id);
     if (!perms.puede_ver) {
       return NextResponse.json({ error: "FORBIDDEN", message: "No posee permiso de lectura para acceder a las órdenes de trabajo." }, { status: 403 });
     }
@@ -371,7 +371,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión inválida o expirada." }, { status: 401 });
     }
 
-    const perms = await getModulePermissions("TALLER", session.usuario_id);
+    const perms = await getScreenPermissions("TALLER_ORDENES", session.usuario_id);
     if (!perms.puede_crear) {
       return NextResponse.json({ error: "FORBIDDEN", message: "No posee permiso de creación para Órdenes de Trabajo." }, { status: 403 });
     }

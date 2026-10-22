@@ -1,6 +1,7 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
-import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { getWorkshopSession, getScreenPermissions } from "@/lib/workshop-session";
 import { recalculateWorkOrderTotals } from "@/lib/workshop/recalculateWorkOrderTotals";
 import { validateOrderInRepair } from "@/lib/workshop/validateOrderState";
 import { recordUserActivity, recordUserAudit } from "@/lib/auditLogger";
@@ -36,7 +37,7 @@ export async function POST(
       return NextResponse.json({ error: "NO_SESSION", message: "No hay sesión activa." }, { status: 401 });
     }
 
-    const perms = await getModulePermissions("TALLER", session.usuario_id);
+    const perms = await getScreenPermissions("TALLER_ORDENES", session.usuario_id);
     if (!perms.puede_crear && !perms.puede_editar) {
       return NextResponse.json({ error: "FORBIDDEN", message: "No posee permisos para agregar servicios a la orden." }, { status: 403 });
     }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { getWorkshopSession, getScreenPermissions } from "@/lib/workshop-session";
 
 export const dynamic = "force-dynamic";
 
@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const perms = await getModulePermissions("FACTURACION", session.usuario_id);
+    const perms = await getScreenPermissions("FACTURACION_PAGOS", session.usuario_id);
     if (!perms.puede_ver) {
       return NextResponse.json(
         { error: "FORBIDDEN", message: "No tienes permisos para consultar pagos de facturación." },

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { query } from "@/lib/db";
-import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { getWorkshopSession, getScreenPermissions } from "@/lib/workshop-session";
 import { CustomerActivityReportView } from "@/components/reports/CustomerActivityReportView";
 import { ReportAccessDenied } from "@/components/reports/ReportAccessDenied";
 
@@ -15,7 +15,7 @@ export default async function CustomerActivityReportPage() {
     redirect("/login");
   }
 
-  const perms = await getModulePermissions("REPORTES", session.usuario_id);
+  const perms = await getScreenPermissions("/reports/customer-activity", session.usuario_id);
   if (!perms.puede_ver) {
     return <ReportAccessDenied />;
   }
@@ -26,5 +26,5 @@ export default async function CustomerActivityReportPage() {
   );
   const companyName = empRows[0]?.nombre_comercial || "Ride Lab";
 
-  return <CustomerActivityReportView initialCompany={companyName} />;
+  return <CustomerActivityReportView initialCompany={companyName} canExport={perms.puede_exportar} />;
 }

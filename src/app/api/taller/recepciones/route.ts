@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { getWorkshopSession, getScreenPermissions } from "@/lib/workshop-session";
 import { recordUserActivity, recordUserAudit } from "@/lib/auditLogger";
 import { CURRENT_RECEPTION_TERMS_VERSION, isValidReceptionTermsVersion } from "@/lib/workshop/receptionTerms";
 
@@ -22,7 +22,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "NO_SESSION", message: "No hay sesión activa." }, { status: 401 });
     }
 
-    const perms = await getModulePermissions("TALLER", session.usuario_id);
+    const perms = await getScreenPermissions("TALLER_RECEPCIONES", session.usuario_id);
     if (!perms.puede_ver) {
       return NextResponse.json({ error: "FORBIDDEN", message: "No posee permiso de lectura para el Módulo de Recepción." }, { status: 403 });
     }
@@ -208,7 +208,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const perms = await getModulePermissions("TALLER", session.usuario_id);
+    const perms = await getScreenPermissions("TALLER_RECEPCIONES", session.usuario_id);
     if (!perms.puede_crear) {
       return NextResponse.json(
         { error: "FORBIDDEN", message: "No tienes permiso para registrar recepciones en TALLER." },

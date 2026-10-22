@@ -42,10 +42,10 @@ export default function SuppliersView() {
   const [mounted, setMounted] = useState(false);
 
   const [permissions, setPermissions] = useState({
-    puede_ver: true,
-    puede_crear: true,
-    puede_editar: true,
-    puede_eliminar: true,
+    puede_ver: false,
+    puede_crear: false,
+    puede_editar: false,
+    puede_eliminar: false,
   });
 
   // Drawer / Modal states

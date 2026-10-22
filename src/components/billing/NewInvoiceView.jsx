@@ -712,6 +712,14 @@ export default function NewInvoiceView() {
       }
     }
 
+    if (permisos && !permisos.puede_crear) {
+      setFeedback({
+        type: "error",
+        message: "Tu rol de usuario no cuenta con privilegios para crear facturas.",
+      });
+      return;
+    }
+
     setSubmitting(true);
     setFeedback(null);
 
@@ -1689,12 +1697,14 @@ export default function NewInvoiceView() {
             onClick={handleSubmitFactura}
             disabled={
               submitting ||
+              (permisos && !permisos.puede_crear) ||
               lineas.length === 0 ||
               totalFactura <= 0 ||
               (condicionVenta === "CONTADO" && isEfectivo && montoRecibidoNum < totalFactura)
             }
             className={`w-full py-3.5 px-4 rounded-xl text-sm font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-lg ${
               submitting ||
+              (permisos && !permisos.puede_crear) ||
               lineas.length === 0 ||
               totalFactura <= 0 ||
               (condicionVenta === "CONTADO" && isEfectivo && montoRecibidoNum < totalFactura)

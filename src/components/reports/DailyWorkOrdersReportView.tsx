@@ -31,6 +31,7 @@ import { COMPANY_LOGO_BASE64 } from "@/lib/assets/logoBase64";
 
 interface DailyWorkOrdersReportViewProps {
   initialCompany?: string;
+  canExport?: boolean;
 }
 
 export interface WorkOrderDailyDetailRow {
@@ -67,7 +68,7 @@ export interface WorkOrderDailyGroupSummary {
   ordenes?: WorkOrderDailyDetailRow[];
 }
 
-export function DailyWorkOrdersReportView({ initialCompany = "Ride Lab" }: DailyWorkOrdersReportViewProps) {
+export function DailyWorkOrdersReportView({ initialCompany = "Ride Lab", canExport }: DailyWorkOrdersReportViewProps) {
   const defaultFrom = useMemo(() => getDaysAgoSantoDomingo(6), []);
   const defaultTo = useMemo(() => getTodaySantoDomingo(), []);
 
@@ -804,6 +805,7 @@ export function DailyWorkOrdersReportView({ initialCompany = "Ride Lab" }: Daily
         title="REPORTE DE ÓRDENES DE TRABAJO POR DÍA"
         subtitle="Consolidado diario de órdenes de taller, servicios contratados, avance técnico y facturación estimada."
         totalRecords={meta.totalRecords}
+        canExport={canExport}
         isLoading={loading}
         onRefresh={fetchData}
         onExportExcel={handleExportExcel}

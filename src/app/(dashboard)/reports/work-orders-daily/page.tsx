@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { query } from "@/lib/db";
-import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { getWorkshopSession, getScreenPermissions } from "@/lib/workshop-session";
 import { DailyWorkOrdersReportView } from "@/components/reports/DailyWorkOrdersReportView";
 import { ReportAccessDenied } from "@/components/reports/ReportAccessDenied";
 
@@ -15,7 +15,7 @@ export default async function DailyWorkOrdersReportPage() {
     redirect("/login");
   }
 
-  const perms = await getModulePermissions("REPORTES", session.usuario_id);
+  const perms = await getScreenPermissions("/reports/work-orders-daily", session.usuario_id);
   if (!perms.puede_ver) {
     return <ReportAccessDenied />;
   }
@@ -26,5 +26,5 @@ export default async function DailyWorkOrdersReportPage() {
   );
   const companyName = empRows[0]?.nombre_comercial || "Ride Lab";
 
-  return <DailyWorkOrdersReportView initialCompany={companyName} />;
+  return <DailyWorkOrdersReportView initialCompany={companyName} canExport={perms.puede_exportar} />;
 }

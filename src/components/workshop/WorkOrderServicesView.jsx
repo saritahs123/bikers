@@ -137,13 +137,13 @@ export default function WorkOrderServicesView({
     ? Boolean(permissions.puede_editar)
     : order?.permisos
     ? Boolean(order.permisos.puede_editar)
-    : true;
+    : false;
 
   const canDelete = permissions
     ? Boolean(permissions.puede_eliminar)
     : order?.permisos
     ? Boolean(order.permisos.puede_eliminar)
-    : true;
+    : false;
 
   const [tiposServicio, setTiposServicio] = useState([]);
   const [productosList, setProductosList] = useState([]);
@@ -1809,36 +1809,40 @@ export default function WorkOrderServicesView({
                             )}
 
                             {/* Botón Editar */}
-                            <button
-                              type="button"
-                              onClick={() => handleOpenEditItem(prod, "PRODUCTO")}
-                              disabled={!isOrderInRepair || isConsumido}
-                              className={`p-1.5 rounded-lg border transition-colors ${
-                                !isOrderInRepair || isConsumido
-                                  ? "opacity-30 cursor-not-allowed bg-surface-subtle border-border text-foreground-muted"
-                                  : "bg-surface-subtle text-foreground-secondary border-border hover:bg-hover hover:text-foreground cursor-pointer"
-                              }`}
-                              title={isConsumido ? "Repuesto consumido - No puede ser editado" : !isOrderInRepair ? "La orden debe estar en Reparación" : "Editar repuesto"}
-                              aria-label="Editar repuesto"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
+                            {canEdit && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditItem(prod, "PRODUCTO")}
+                                disabled={!isOrderInRepair || isConsumido}
+                                className={`p-1.5 rounded-lg border transition-colors ${
+                                  !isOrderInRepair || isConsumido
+                                    ? "opacity-30 cursor-not-allowed bg-surface-subtle border-border text-foreground-muted"
+                                    : "bg-surface-subtle text-foreground-secondary border-border hover:bg-hover hover:text-foreground cursor-pointer"
+                                }`}
+                                title={isConsumido ? "Repuesto consumido - No puede ser editado" : !isOrderInRepair ? "La orden debe estar en Reparación" : "Editar repuesto"}
+                                aria-label="Editar repuesto"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                            )}
 
                             {/* Botón Eliminar */}
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteProduct(prod)}
-                              disabled={!isOrderInRepair || isConsumido}
-                              className={`p-1.5 rounded-lg border transition-colors ${
-                                !isOrderInRepair || isConsumido
-                                  ? "opacity-30 cursor-not-allowed bg-surface-subtle border-border text-foreground-muted"
-                                  : "bg-rose-500/10 border-rose-500/30 text-rose-500 dark:text-rose-400 hover:bg-rose-500/20 cursor-pointer"
-                              }`}
-                              title={isConsumido ? "Repuesto consumido - No puede ser eliminado" : !isOrderInRepair ? "La orden debe estar en Reparación" : "Eliminar repuesto"}
-                              aria-label="Eliminar repuesto"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            {canDelete && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteProduct(prod)}
+                                disabled={!isOrderInRepair || isConsumido}
+                                className={`p-1.5 rounded-lg border transition-colors ${
+                                  !isOrderInRepair || isConsumido
+                                    ? "opacity-30 cursor-not-allowed bg-surface-subtle border-border text-foreground-muted"
+                                    : "bg-rose-500/10 border-rose-500/30 text-rose-500 dark:text-rose-400 hover:bg-rose-500/20 cursor-pointer"
+                                }`}
+                                title={isConsumido ? "Repuesto consumido - No puede ser eliminado" : !isOrderInRepair ? "La orden debe estar en Reparación" : "Eliminar repuesto"}
+                                aria-label="Eliminar repuesto"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
-import { getWorkshopSession } from "@/lib/workshop-session";
+import { getWorkshopSession, getScreenPermissions } from "@/lib/workshop-session";
 import { recalculateWorkOrderTotals } from "@/lib/workshop/recalculateWorkOrderTotals";
 import { validateOrderInRepair } from "@/lib/workshop/validateOrderState";
 import { recordUserActivity, recordUserAudit } from "@/lib/auditLogger";
@@ -17,6 +17,14 @@ export async function POST(
       return NextResponse.json(
         { success: false, error: "UNAUTHORIZED", message: "Sesión no válida o expirada." },
         { status: 401 }
+      );
+    }
+
+    const perms = await getScreenPermissions("TALLER_ORDENES", session.usuario_id);
+    if (!perms.puede_crear && !perms.puede_editar) {
+      return NextResponse.json(
+        { success: false, error: "FORBIDDEN", message: "No tienes permiso para agregar repuestos a la orden de trabajo." },
+        { status: 403 }
       );
     }
 

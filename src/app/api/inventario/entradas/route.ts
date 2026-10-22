@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { getWorkshopSession, getScreenPermissions } from "@/lib/workshop-session";
 import { executeWithIdempotency } from "@/lib/inventory/idempotencyService";
 import {
   registrarMovimientoInventario,
@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const perms = await getModulePermissions("INVENTARIO", session.usuario_id);
+    const perms = await getScreenPermissions("INVENTARIO_ENTRADAS", session.usuario_id);
     if (!perms.puede_ver) {
       return NextResponse.json(
         { error: "FORBIDDEN", message: "No tienes permisos para ver entradas." },
@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const perms = await getModulePermissions("INVENTARIO", session.usuario_id);
+    const perms = await getScreenPermissions("INVENTARIO_ENTRADAS", session.usuario_id);
     if (!perms.puede_crear) {
       return NextResponse.json(
         { error: "FORBIDDEN", message: "No tienes permisos para registrar entradas de inventario." },

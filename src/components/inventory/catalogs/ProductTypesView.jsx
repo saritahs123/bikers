@@ -34,10 +34,10 @@ export default function ProductTypesView() {
   const [mounted, setMounted] = useState(false);
 
   const [permissions, setPermissions] = useState({
-    puede_ver: true,
-    puede_crear: true,
-    puede_editar: true,
-    puede_eliminar: true,
+    puede_ver: false,
+    puede_crear: false,
+    puede_editar: false,
+    puede_eliminar: false,
   });
 
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);

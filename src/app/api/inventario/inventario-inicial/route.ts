@@ -1,17 +1,15 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
-import { query } from "@/lib/db";
-import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { getWorkshopSession, getScreenPermissions } from "@/lib/workshop-session";
 import { executeWithIdempotency } from "@/lib/inventory/idempotencyService";
 import {
   registrarMovimientoInventario,
   InventoryError,
-  ValidacionInventarioError,
 } from "@/lib/inventory/inventoryMovementService";
 import {
   INVENTORY_SYSTEM_CODES,
   generarCodigoMovimiento,
 } from "@/lib/inventory/inventoryConstants";
-import crypto from "crypto";
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,10 +21,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const perms = await getModulePermissions("INVENTARIO", session.usuario_id);
-    if (!perms.puede_crear) {
+    const perms = await getScreenPermissions("/inventory/initial", session.usuario_id);
+    if (!perms.puede_importar) {
       return NextResponse.json(
-        { error: "FORBIDDEN", message: "No tienes permisos para registrar inventario inicial." },
+        { error: "FORBIDDEN", message: "No tienes permisos para importar inventario inicial. Se requiere el privilegio IMPORTAR." },
         { status: 403 }
       );
     }

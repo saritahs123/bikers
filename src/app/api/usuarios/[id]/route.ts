@@ -133,6 +133,42 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       scopeEntityIds = (scopeDetailRes || []).map((r: { referencia_id?: number | string }) => Number(r.referencia_id));
     }
 
+    // Cargar permisos personalizados del usuario desde admin.usuario_permiso_personalizado
+    const userOverridesRes = await query<{
+      modulo_sistema_id: number | null;
+      pantalla_id: number | null;
+      puede_ver: boolean | null;
+      puede_crear: boolean | null;
+      puede_editar: boolean | null;
+      puede_inactivar: boolean | null;
+      puede_exportar: boolean | null;
+      puede_importar: boolean | null;
+      puede_aprobar: boolean | null;
+      puede_asignar: boolean | null;
+      puede_mover: boolean | null;
+      puede_cerrar: boolean | null;
+      puede_reabrir: boolean | null;
+      puede_eliminar: boolean | null;
+    }>(
+      `SELECT modulo_sistema_id, pantalla_id, puede_ver, puede_crear, puede_editar, puede_inactivar, puede_exportar, puede_importar, puede_aprobar, puede_asignar, puede_mover, puede_cerrar, puede_reabrir, puede_eliminar
+       FROM admin.usuario_permiso_personalizado
+       WHERE usuario_id = $1 AND estado = 'ACTIVO'`,
+      [u.id]
+    );
+
+    const overridesMap: Record<string, boolean> = {};
+    (userOverridesRes || []).forEach(row => {
+      const targetId = row.pantalla_id ? `p:${row.pantalla_id}` : (row.modulo_sistema_id ? String(row.modulo_sistema_id) : null);
+      if (!targetId) return;
+      const acts = ['ver', 'crear', 'editar', 'inactivar', 'exportar', 'importar', 'aprobar', 'asignar', 'mover', 'cerrar', 'reabrir', 'eliminar'] as const;
+      acts.forEach(act => {
+        const val = row[`puede_${act}`];
+        if (val !== null && val !== undefined) {
+          overridesMap[`${targetId}:${act}`] = Boolean(val);
+        }
+      });
+    });
+
     const mappedUser = {
       id: u.id,
       full_name: fullNameComputed,
@@ -190,7 +226,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       expiracion_acceso: u.expiracion_acceso ?? null,
       fecha_activacion: u.fecha_activacion ?? null,
       fecha_ultima_invitacion: u.fecha_ultima_invitacion ?? null,
-      permissionsOverride: false,
+      permissionsOverride: Object.keys(overridesMap).length > 0 ? overridesMap : false,
       scope_type: scopeType,
       include_children: includeChildren,
       scope_entity_ids: scopeEntityIds
@@ -664,6 +700,72 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       }
     }
 
+    // 5b. Persistir permisos personalizados del usuario en admin.usuario_permiso_personalizado
+    if (body.permissionsOverride !== undefined) {
+      await query(`DELETE FROM admin.usuario_permiso_personalizado WHERE usuario_id = $1`, [targetUserId]);
+
+      if (body.permissionsOverride && typeof body.permissionsOverride === 'object') {
+        const overrides = body.permissionsOverride as Record<string, boolean>;
+        const moduleMap: Record<number, Record<string, boolean>> = {};
+        const screenMap: Record<number, Record<string, boolean>> = {};
+
+        for (const [key, val] of Object.entries(overrides)) {
+          const parts = key.split(':');
+          if (parts.length === 2) {
+            const target = parts[0];
+            const act = parts[1];
+            if (target.startsWith('p:')) {
+              const scrId = parseInt(target.substring(2), 10);
+              if (!isNaN(scrId)) {
+                if (!screenMap[scrId]) screenMap[scrId] = {};
+                screenMap[scrId][act] = Boolean(val);
+              }
+            } else {
+              const modId = parseInt(target, 10);
+              if (!isNaN(modId)) {
+                if (!moduleMap[modId]) moduleMap[modId] = {};
+                moduleMap[modId][act] = Boolean(val);
+              }
+            }
+          }
+        }
+
+        // Insertar overrides a nivel de módulo
+        for (const modIdStr of Object.keys(moduleMap)) {
+          const modId = parseInt(modIdStr, 10);
+          const acts = moduleMap[modId];
+          await query(
+            `INSERT INTO admin.usuario_permiso_personalizado
+             (usuario_id, modulo_sistema_id, puede_ver, puede_crear, puede_editar, puede_inactivar, puede_exportar, puede_importar, puede_aprobar, puede_asignar, puede_mover, puede_cerrar, puede_reabrir, puede_eliminar)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+            [
+              targetUserId, modId,
+              acts['ver'] ?? null, acts['crear'] ?? null, acts['editar'] ?? null, acts['inactivar'] ?? null,
+              acts['exportar'] ?? null, acts['importar'] ?? null, acts['aprobar'] ?? null, acts['asignar'] ?? null,
+              acts['mover'] ?? null, acts['cerrar'] ?? null, acts['reabrir'] ?? null, acts['eliminar'] ?? null
+            ]
+          );
+        }
+
+        // Insertar overrides a nivel de pantalla
+        for (const scrIdStr of Object.keys(screenMap)) {
+          const scrId = parseInt(scrIdStr, 10);
+          const acts = screenMap[scrId];
+          await query(
+            `INSERT INTO admin.usuario_permiso_personalizado
+             (usuario_id, pantalla_id, puede_ver, puede_crear, puede_editar, puede_inactivar, puede_exportar, puede_importar, puede_aprobar, puede_asignar, puede_mover, puede_cerrar, puede_reabrir, puede_eliminar)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+            [
+              targetUserId, scrId,
+              acts['ver'] ?? null, acts['crear'] ?? null, acts['editar'] ?? null, acts['inactivar'] ?? null,
+              acts['exportar'] ?? null, acts['importar'] ?? null, acts['aprobar'] ?? null, acts['asignar'] ?? null,
+              acts['mover'] ?? null, acts['cerrar'] ?? null, acts['reabrir'] ?? null, acts['eliminar'] ?? null
+            ]
+          );
+        }
+      }
+    }
+
     // Re-query updated real data and construct usuarioActualizado
     const fetchUpdatedSql = `
       SELECT
@@ -788,7 +890,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       canales_permitidos: updatedRow.canales_permitidos ?? null,
       restriccion_ip: updatedRow.restriccion_ip ?? null,
       horario_acceso: updatedRow.horario_acceso ?? null,
-      expiracion_acceso: updatedRow.expiracion_acceso ?? null
+      expiracion_acceso: updatedRow.expiracion_acceso ?? null,
+      permissionsOverride: body.permissionsOverride !== undefined ? body.permissionsOverride : false
     } : null;
 
     // Build field-level diff for forensic audit
@@ -941,12 +1044,12 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
 
     // Verify SEGURIDAD permissions
     const segPerms = await getModulePermissions("SEGURIDAD", authUserId);
-    if (!segPerms.puede_eliminar && !segPerms.puede_editar) {
+    if (!segPerms.puede_eliminar) {
       return NextResponse.json(
         {
           success: false,
           error: "FORBIDDEN",
-          message: "Acceso denegado. No posee permisos para eliminar usuarios en el módulo SEGURIDAD."
+          message: "Acceso denegado. No posee permisos para eliminar usuarios en el módulo SEGURIDAD. Se requiere el privilegio ELIMINAR."
         },
         { status: 403 }
       );

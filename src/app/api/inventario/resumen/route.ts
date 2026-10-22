@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { getWorkshopSession, getScreenPermissions } from "@/lib/workshop-session";
 
 // GET /api/inventario/resumen
 export async function GET() {
@@ -13,7 +13,7 @@ export async function GET() {
       );
     }
 
-    const perms = await getModulePermissions("INVENTARIO", session.usuario_id);
+    const perms = await getScreenPermissions("INVENTARIO_RESUMEN", session.usuario_id);
     if (!perms.puede_ver) {
       return NextResponse.json(
         { error: "FORBIDDEN", message: "No tienes permisos para consultar el resumen de inventario." },

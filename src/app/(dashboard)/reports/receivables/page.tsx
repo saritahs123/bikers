@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { query } from "@/lib/db";
-import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { getWorkshopSession, getScreenPermissions } from "@/lib/workshop-session";
 import { ReceivablesReportView } from "@/components/reports/ReceivablesReportView";
 import { ReportAccessDenied } from "@/components/reports/ReportAccessDenied";
 
@@ -15,7 +15,7 @@ export default async function ReceivablesReportPage() {
     redirect("/login");
   }
 
-  const perms = await getModulePermissions("REPORTES", session.usuario_id);
+  const perms = await getScreenPermissions("/reports/receivables", session.usuario_id);
   if (!perms.puede_ver) {
     return <ReportAccessDenied />;
   }
@@ -27,5 +27,5 @@ export default async function ReceivablesReportPage() {
   );
   const companyName = empRows[0]?.nombre_comercial || "Ride Lab";
 
-  return <ReceivablesReportView initialCompany={companyName} />;
+  return <ReceivablesReportView initialCompany={companyName} canExport={perms.puede_exportar} />;
 }

@@ -1,6 +1,7 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { getWorkshopSession, getScreenPermissions } from "@/lib/workshop-session";
 import { executeWithIdempotency } from "@/lib/inventory/idempotencyService";
 import {
   registrarMovimientoInventario,
@@ -22,10 +23,10 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const perms = await getModulePermissions("INVENTARIO", session.usuario_id);
+    const perms = await getScreenPermissions("/inventory/adjustments", session.usuario_id);
     if (!perms.puede_ver) {
       return NextResponse.json(
-        { error: "FORBIDDEN", message: "No tienes permisos para ver movimientos." },
+        { error: "FORBIDDEN", message: "No tienes permisos para ver movimientos y ajustes de inventario." },
         { status: 403 }
       );
     }
@@ -122,14 +123,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const perms = await getModulePermissions("INVENTARIO", session.usuario_id);
-    if (!perms.puede_crear) {
-      return NextResponse.json(
-        { error: "FORBIDDEN", message: "No tienes permisos para registrar movimientos de inventario." },
-        { status: 403 }
-      );
-    }
-
     const body = await request.json();
     const {
       tipo, // "SALIDA" | "SAL_MANUAL" | "AJU_POS" | "AJU_NEG"
@@ -144,6 +137,26 @@ export async function POST(request: NextRequest) {
       referencia,
     } = body;
 
+    const perms = await getScreenPermissions("/inventory/adjustments", session.usuario_id);
+    const cleanTipo = String(tipo || "").toUpperCase();
+    const isAjuste = cleanTipo === "AJU_POS" || cleanTipo === "AJU_NEG";
+
+    if (isAjuste) {
+      if (!perms.puede_aprobar) {
+        return NextResponse.json(
+          { error: "FORBIDDEN", message: "No tienes permisos para aprobar ajustes de inventario. Se requiere el privilegio APROBAR." },
+          { status: 403 }
+        );
+      }
+    } else {
+      if (!perms.puede_crear) {
+        return NextResponse.json(
+          { error: "FORBIDDEN", message: "No tienes permisos para registrar salidas de inventario. Se requiere el privilegio CREAR." },
+          { status: 403 }
+        );
+      }
+    }
+
     const empresaId = session.empresa_id;
     const usuarioId = session.usuario_id;
     const idempotencyKey = request.headers.get("x-idempotency-key") || body.idempotencyKey;
@@ -156,7 +169,6 @@ export async function POST(request: NextRequest) {
     let tipoOperacionIdem: string;
     let codigoSistemaId: number;
 
-    const cleanTipo = String(tipo || "").toUpperCase();
     if (cleanTipo === "SALIDA" || cleanTipo === "SAL_MANUAL") {
       tipoMovimientoCodigo = "SAL_MANUAL";
       tipoOperacionIdem = "SALIDA_MANUAL_INVENTARIO";

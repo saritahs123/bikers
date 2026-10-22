@@ -1,4 +1,4 @@
-import { getWorkshopSession } from "@/lib/workshop-session";
+import { getWorkshopSession, getScreenPermissions } from "@/lib/workshop-session";
 import { query } from "@/lib/db";
 import DashboardView from "@/components/dashboard/DashboardView";
 
@@ -51,6 +51,26 @@ async function getDashboardMetrics(): Promise<InitialMetrics> {
 }
 
 export default async function DashboardPage() {
+  const session = await getWorkshopSession();
+  if (session?.usuario_id) {
+    const perms = await getScreenPermissions("/", session.usuario_id);
+    if (!perms.puede_ver) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6">
+          <div className="max-w-md p-8 bg-card border border-border rounded-2xl shadow-sm">
+            <h2 className="text-xl font-bold text-foreground mb-2">Acceso No Autorizado</h2>
+            <p className="text-sm text-muted-foreground mb-4">
+              Tu rol o usuario no tiene permisos configurados para visualizar el Dashboard Principal.
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Utiliza el menú lateral para acceder a los módulos autorizados asignados a tu cuenta.
+            </p>
+          </div>
+        </div>
+      );
+    }
+  }
+
   const metrics = await getDashboardMetrics();
   return <DashboardView initialMetrics={metrics} />;
 }

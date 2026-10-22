@@ -1,7 +1,6 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import { query, withTransaction } from "@/lib/db";
-import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { getWorkshopSession, getScreenPermissions } from "@/lib/workshop-session";
 import { recordUserActivity, recordUserAudit, computeDiff, sanitizeAuditPayload } from "@/lib/auditLogger";
 
 // GET /api/crm/clientes/[id]
@@ -12,7 +11,7 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
       return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
     }
 
-    const perms = await getModulePermissions("CRM", session.usuario_id);
+    const perms = await getScreenPermissions("CRM_CLIENTES", session.usuario_id);
     if (!perms.puede_ver) {
       return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para consultar este cliente." }, { status: 403 });
     }
@@ -331,7 +330,7 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
       return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
     }
 
-    const perms = await getModulePermissions("CRM", session.usuario_id);
+    const perms = await getScreenPermissions("CRM_CLIENTES", session.usuario_id);
     if (!perms.puede_editar) {
       return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para modificar este cliente." }, { status: 403 });
     }
@@ -586,7 +585,7 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
       return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
     }
 
-    const perms = await getModulePermissions("CRM", session.usuario_id);
+    const perms = await getScreenPermissions("CRM_CLIENTES", session.usuario_id);
     if (!perms.puede_eliminar) {
       return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para eliminar clientes." }, { status: 403 });
     }

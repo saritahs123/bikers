@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { query } from "@/lib/db";
-import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { getWorkshopSession, getScreenPermissions } from "@/lib/workshop-session";
 import { InventorySupplierReportView } from "@/components/reports/InventorySupplierReportView";
 import { ReportAccessDenied } from "@/components/reports/ReportAccessDenied";
 
@@ -15,7 +15,7 @@ export default async function InventorySupplierReportPage() {
     redirect("/login");
   }
 
-  const perms = await getModulePermissions("REPORTES", session.usuario_id);
+  const perms = await getScreenPermissions("/reports/inventory-supplier", session.usuario_id);
   if (!perms.puede_ver) {
     return <ReportAccessDenied />;
   }
@@ -26,5 +26,5 @@ export default async function InventorySupplierReportPage() {
   );
   const companyName = empRows[0]?.nombre_comercial || "Ride Lab";
 
-  return <InventorySupplierReportView initialCompany={companyName} />;
+  return <InventorySupplierReportView initialCompany={companyName} canExport={perms.puede_exportar} />;
 }

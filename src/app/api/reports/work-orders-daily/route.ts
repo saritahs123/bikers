@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { getWorkshopSession, getScreenPermissions } from "@/lib/workshop-session";
 
 export interface WorkOrderDailyDetailRow {
   orden_trabajo_id: number;
@@ -42,20 +42,24 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
     }
 
-    const perms = await getModulePermissions("REPORTES", session.usuario_id);
+    const perms = await getScreenPermissions("/reports/work-orders-daily", session.usuario_id);
     if (!perms.puede_ver) {
-      return NextResponse.json({ error: "FORBIDDEN", message: "No posee permisos para ver reportes." }, { status: 403 });
+      return NextResponse.json({ error: "FORBIDDEN", message: "No posee permisos para ver este reporte." }, { status: 403 });
     }
 
     const empresaId = session.empresa_id;
     const { searchParams } = new URL(req.url);
+
+    const isExport = searchParams.get("export") === "true";
+    if (isExport && !perms.puede_exportar) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No cuenta con privilegios para exportar este reporte." }, { status: 403 });
+    }
 
     const fechaDesde = searchParams.get("fechaDesde") || "";
     const fechaHasta = searchParams.get("fechaHasta") || "";
     const estadoId = (searchParams.get("estado_id") || searchParams.get("estado") || "TODOS").trim();
     const tipoServicioId = (searchParams.get("tipo_servicio_id") || "TODOS").trim();
     const search = (searchParams.get("search") || "").trim();
-    const isExport = searchParams.get("export") === "true";
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
     const limit = isExport ? 5000 : Math.max(1, parseInt(searchParams.get("limit") || "10", 10));
     const offset = (page - 1) * limit;

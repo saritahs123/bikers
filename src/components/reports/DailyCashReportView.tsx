@@ -32,6 +32,7 @@ import {
 
 interface DailyCashReportViewProps {
   initialCompany?: string;
+  canExport?: boolean;
 }
 
 export interface DailyCashRow {
@@ -54,7 +55,7 @@ export interface DailyCashMethodSummary {
   [key: string]: unknown;
 }
 
-export function DailyCashReportView({ initialCompany }: DailyCashReportViewProps) {
+export function DailyCashReportView({ initialCompany, canExport }: DailyCashReportViewProps) {
   const todayStr = getTodaySantoDomingo();
 
   // Data state
@@ -355,6 +356,7 @@ export function DailyCashReportView({ initialCompany }: DailyCashReportViewProps
       <ReportHeader
         title="Cuadre de Caja Diario"
         subtitle="Conciliación y arqueo de cobros registrados durante la jornada operativa"
+        canExport={canExport}
         onRefresh={fetchData}
         onExportExcel={handleExportExcel}
         onExportPdf={handleExportPdf}
