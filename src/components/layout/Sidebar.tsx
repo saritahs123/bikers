@@ -1,10 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
+import { AppLogo } from "@/components/ui/AppLogo";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useMemo, Suspense } from "react";
 import { Home, PanelLeftClose } from "lucide-react";
+import { AuthenticatedUser } from "./TopBar";
+
+import { CANONICAL_NAVIGATION, normalizeCode } from "@/config/navigationConfig";
 
 interface SubMenuItem {
   href?: string;
@@ -25,10 +28,12 @@ function SidebarContent({
   isOpen = false,
   onClose = () => {},
   onNavigate = () => {},
+  user,
 }: {
   isOpen?: boolean;
   onClose?: () => void;
   onNavigate?: () => void;
+  user?: AuthenticatedUser;
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -48,88 +53,67 @@ function SidebarContent({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose]);
 
-  const navItems: NavItem[] = [
-    {
-      id: "home",
-      href: "/",
-      icon: <Home className="w-5 h-5" />,
-      label: "HOME"
-    },
-    {
-      id: "taller",
-      icon: "build",
-      label: "TALLER",
-      submenu: [
-        { href: "/workshop?view=list", label: "RECEPCIONES" },
-        { href: "/workshop?view=work_orders", label: "ÓRDENES DE TRABAJO" },
-        { href: "/workshop?view=kanban", label: "VISTA KANBAN" }
-      ]
-    },
-    {
-      id: "facturacion",
-      icon: "receipt_long",
-      label: "FACTURACIÓN",
-      submenu: [
-        { href: "/billing/new", label: "NUEVA FACTURA" },
-        { href: "/billing/invoices", label: "FACTURAS" },
-        { href: "/billing/payments", label: "PAGOS" },
-        { href: "/workshop?view=billing", label: "DESPACHO DE ÓRDENES" }
-      ]
-    },
-    {
-      id: "crm",
-      icon: "group",
-      label: "CRM",
-      submenu: [
-        { href: "/crm/customers", label: "CLIENTES" },
-        { href: "/crm/bicycles", label: "BICICLETAS" }
-      ]
-    },
-    {
-      id: "inventario",
-      icon: "inventory_2",
-      label: "INVENTARIO",
-      submenu: [
-        { href: "/inventory/summary", label: "RESUMEN" },
-        { href: "/inventory/stock", label: "EXISTENCIAS" },
-        { href: "/inventory/movements", label: "MOVIMIENTOS" },
-        { href: "/inventory/entries", label: "ENTRADAS" },
-        { href: "/inventory/adjustments", label: "SALIDAS Y AJUSTES" },
-        { href: "/inventory/transfers", label: "TRANSFERENCIAS" }
-      ]
-    },
-    {
-      id: "configuracion",
-      icon: "settings",
-      label: "CONFIGURACIÓN",
-      submenu: [
-        { href: "/workshop/service-types", label: "SERVICIOS" },
-        { href: "/workshop/order-statuses", label: "ESTADOS DE ORDEN DE TRABAJO" },
-        { href: "/workshop/products", label: "PRODUCTOS" },
-        { href: "/inventory/product-types", label: "TIPOS DE PRODUCTO" },
-        { href: "/inventory/product-categories", label: "CATEGORÍAS DE PRODUCTO" },
-        { href: "/inventory/product-brands", label: "MARCAS DE PRODUCTO" },
-        { href: "/inventory/measurement-units", label: "UNIDADES DE MEDIDA" },
-        { href: "/inventory/suppliers", label: "PROVEEDORES" },
-        { href: "/inventory/initial", label: "INVENTARIO INICIAL" },
-        { href: "/crm/component-categories", label: "CATEGORÍAS COMPONENTES" },
-        { href: "/crm/component-states", label: "ESTADOS COMPONENTES" },
-        { href: "/settings/order-notifications", label: "NOTIFICACIONES DE ÓRDENES" }
-      ]
-    },
-    {
-      id: "seguridad",
-      icon: "verified_user",
-      label: "SEGURIDAD",
-      submenu: [
-        { href: "/settings/security/users", label: "ADMINISTRAR USUARIOS" },
-        { href: "/settings/security/roles", label: "MATRIZ DE ROLES" },
-        { href: "/settings/security/company-types", label: "TIPOS DE EMPRESA" },
-        { href: "/settings/security/companies", label: "EMPRESAS" },
-        { href: "/settings/security/user-types", label: "TIPOS DE USUARIO" }
-      ]
-    }
-  ];
+  const navItems: NavItem[] = useMemo(() => {
+    const navPerms = user?.navigationPermissions;
+    const isSuper = Boolean(navPerms?.isSuperAdmin);
+
+    return CANONICAL_NAVIGATION.map(menu => {
+      const menuKey = normalizeCode(menu.codigo);
+      // Check menu level permission
+      const hasMenuPerm = !navPerms || isSuper || Boolean(navPerms.modules[menuKey]);
+
+      // Filter child screens
+      const visibleScreens = menu.screens.filter(screen => {
+        if (!navPerms || isSuper) return true;
+        // Check screen override first
+        const screenKey = screen.codigo;
+        const screenRoute = screen.ruta;
+        if (navPerms.screens[screenKey] !== undefined) {
+          return Boolean(navPerms.screens[screenKey]);
+        }
+        if (navPerms.screens[screenRoute] !== undefined) {
+          return Boolean(navPerms.screens[screenRoute]);
+        }
+        // Fallback to menu permission
+        return hasMenuPerm;
+      });
+
+      // Special handling for backward compatibility with can_view_reports
+      if (menu.id === "reportes" && user?.can_view_reports !== undefined && !isSuper) {
+        if (!user.can_view_reports) return null;
+      }
+
+      // If menu has screens but none is visible, hide whole menu
+      if (menu.screens.length > 0 && visibleScreens.length === 0) {
+        return null;
+      }
+
+      // If standalone menu without submenus and not permitted, hide it
+      if (menu.screens.length === 0 && !hasMenuPerm) {
+        return null;
+      }
+
+      // For HOME / single link menu
+      if (menu.id === "home") {
+        return {
+          id: "home",
+          href: "/",
+          icon: <Home className="w-5 h-5" />,
+          label: "HOME"
+        };
+      }
+
+      return {
+        id: menu.id,
+        icon: menu.icono,
+        label: menu.nombre,
+        submenu: visibleScreens.map(s => ({
+          href: s.ruta,
+          label: s.nombre.toUpperCase()
+        }))
+      };
+    }).filter(Boolean) as NavItem[];
+  }, [user]);
 
   const isSubmenuActive = (subHref?: string) => {
     if (!subHref) return false;
@@ -168,6 +152,9 @@ function SidebarContent({
     }
     if (subHref === "/inventory/movements" || subHref === "/inventory?view=movements") {
       return pathname === "/inventory/movements" || (pathname === "/inventory" && (currentView === "movements" || currentView === "movimientos"));
+    }
+    if (subHref.startsWith("/reports/")) {
+      return pathname.startsWith(subHref);
     }
     if (subHref.includes("?")) {
       return currentFullUrl === subHref;
@@ -356,11 +343,9 @@ function SidebarContent({
             className="flex items-center justify-center transition-transform hover:scale-[1.03] focus:outline-none"
             title="Ride Lab"
           >
-            <Image
-              src="/ridelab-logo.png"
-              alt="Ride Lab Logo"
+            <AppLogo
               width={180}
-              height={72}
+              height={63}
               className="h-12 max-h-14 w-auto object-contain"
               priority
             />
@@ -390,10 +375,12 @@ export function Sidebar({
   isOpen = false,
   onClose = () => {},
   onNavigate = () => {},
+  user,
 }: {
   isOpen?: boolean;
   onClose?: () => void;
   onNavigate?: () => void;
+  user?: AuthenticatedUser;
 }) {
   return (
     <Suspense
@@ -401,7 +388,7 @@ export function Sidebar({
         <aside className="fixed left-0 top-0 h-full w-64 bg-surface border-r border-border flex-col p-4 z-45 font-mono animate-pulse -translate-x-full pointer-events-none" />
       }
     >
-      <SidebarContent isOpen={isOpen} onClose={onClose} onNavigate={onNavigate} />
+      <SidebarContent isOpen={isOpen} onClose={onClose} onNavigate={onNavigate} user={user} />
     </Suspense>
   );
 }

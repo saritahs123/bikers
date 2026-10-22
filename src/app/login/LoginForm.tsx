@@ -8,6 +8,7 @@ export default function LoginForm({ isSessionExpired = false }: { isSessionExpir
   const [identifierVal, setIdentifierVal] = useState("");
   const [passwordVal, setPasswordVal] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
 
   const identifierRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
@@ -60,7 +61,7 @@ export default function LoginForm({ isSessionExpired = false }: { isSessionExpir
             {/* Logo Header */}
             <div className="mb-6 sm:mb-8 w-full flex justify-center relative h-24 sm:h-28 md:h-32">
               <img
-                src="/ridelab-logo.png"
+                src="/ridelab-logo-dark.png"
                 alt="Ride Lab Logo"
                 className="h-full w-auto object-contain"
               />
@@ -68,7 +69,6 @@ export default function LoginForm({ isSessionExpired = false }: { isSessionExpir
             
             <div className="w-full text-center mb-6 sm:mb-8">
               <h1 className="text-xl sm:text-2xl md:text-[24px] font-bold text-[#e4e3d9] tracking-tight whitespace-normal">CONTROL DE ACCESO</h1>
-              <p className="text-[11px] sm:text-[12px] text-[#c7c8b7] mt-1.5 sm:mt-2 uppercase tracking-[0.1em] font-mono">Workshop Management v4.2</p>
             </div>
 
             {/* Error Banner */}
@@ -141,6 +141,8 @@ export default function LoginForm({ isSessionExpired = false }: { isSessionExpir
                     id="rememberMe"
                     name="rememberMe"
                     type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
                     value="true"
                     className="w-5 h-5 border-[#46483b] bg-[#0e0f0a] text-[#bfce7f] focus:ring-[#bfce7f] focus:ring-offset-[#1f201a] rounded-none cursor-pointer"
                   />

@@ -1,6 +1,7 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { getWorkshopSession, getScreenPermissions } from "@/lib/workshop-session";
 import { recordUserActivity, recordUserAudit, computeDiff, sanitizeAuditPayload } from "@/lib/auditLogger";
 import { upsertProductoProveedor } from "@/lib/inventory/productSupplierService";
 
@@ -12,7 +13,7 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
       return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
     }
 
-    const perms = await getModulePermissions("TALLER", session.usuario_id);
+    const perms = await getScreenPermissions("/workshop/products", session.usuario_id);
     if (!perms.puede_ver) {
       return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para consultar productos." }, { status: 403 });
     }
@@ -204,7 +205,7 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
       return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
     }
 
-    const perms = await getModulePermissions("TALLER", session.usuario_id);
+    const perms = await getScreenPermissions("/workshop/products", session.usuario_id);
     if (!perms.puede_editar) {
       return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para modificar productos." }, { status: 403 });
     }
@@ -467,8 +468,8 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
       return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
     }
 
-    const perms = await getModulePermissions("TALLER", session.usuario_id);
-    if (!perms.puede_eliminar) {
+    const perms = await getScreenPermissions("/workshop/products", session.usuario_id);
+    if (!perms.puede_eliminar && !perms.puede_inactivar) {
       return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para eliminar productos." }, { status: 403 });
     }
 

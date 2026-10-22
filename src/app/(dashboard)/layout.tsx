@@ -5,6 +5,7 @@ import { query } from "@/lib/db";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { AuthenticatedUser } from "@/components/layout/TopBar";
 import { validateAndTouchSession } from "@/lib/sessionLifecycle";
+import { getModulePermissions, getUserNavigationPermissions } from "@/lib/workshop-session";
 
 interface UserRecord {
   usuario_id: number;
@@ -42,7 +43,7 @@ async function getAuthenticatedUser() {
   }
 
   const userRows = await query<UserRecord>(
-    `SELECT 
+    `SELECT
        u.usuario_id,
        u.estado AS usuario_estado,
        ui.nombre,
@@ -100,6 +101,25 @@ async function getAuthenticatedUser() {
   const cargoNombre = row.cargo_nombre || rolNombre;
   const empresaNombre = row.empresa_nombre || "Biker's Fort";
 
+  let canViewReports = false;
+  let navPerms: { isSuperAdmin: boolean; modules: Record<string, boolean>; screens: Record<string, boolean> } = {
+    isSuperAdmin: false,
+    modules: {},
+    screens: {}
+  };
+  try {
+    navPerms = await getUserNavigationPermissions(row.usuario_id);
+    canViewReports = navPerms.isSuperAdmin || Boolean(navPerms.modules["REPORTES"]);
+  } catch (permErr) {
+    console.warn("Error getting navigation permissions for user:", permErr);
+    try {
+      const reportesPerms = await getModulePermissions("REPORTES", row.usuario_id);
+      canViewReports = Boolean(reportesPerms?.puede_ver);
+    } catch {
+      // fallback
+    }
+  }
+
   return {
     user: {
       usuario_id: row.usuario_id,
@@ -116,7 +136,9 @@ async function getAuthenticatedUser() {
       empresa_nombre: empresaNombre,
       iniciales,
       foto_url: null,
-      session_expires_at: validation.session.fecha_expiracion || null
+      session_expires_at: validation.session.fecha_expiracion || null,
+      can_view_reports: canViewReports,
+      navigationPermissions: navPerms
     },
     reason: null
   };

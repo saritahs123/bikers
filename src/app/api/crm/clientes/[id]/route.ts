@@ -1,7 +1,6 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import { query, withTransaction } from "@/lib/db";
-import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { getWorkshopSession, getScreenPermissions } from "@/lib/workshop-session";
 import { recordUserActivity, recordUserAudit, computeDiff, sanitizeAuditPayload } from "@/lib/auditLogger";
 
 // GET /api/crm/clientes/[id]
@@ -12,7 +11,7 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
       return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
     }
 
-    const perms = await getModulePermissions("CRM", session.usuario_id);
+    const perms = await getScreenPermissions("CRM_CLIENTES", session.usuario_id);
     if (!perms.puede_ver) {
       return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para consultar este cliente." }, { status: 403 });
     }
@@ -25,8 +24,14 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
     }
 
     const clienteRows = await query(`
-      SELECT * FROM admin.clientes
-      WHERE cliente_id = $1 AND empresa_id = $2 AND fecha_eliminacion IS NULL
+      SELECT
+        c.*,
+        nc.nombre AS nivel_cliente_nombre,
+        COALESCE(nc.porciento_descuento, 0)::numeric AS porciento_descuento,
+        nc.activo AS nivel_cliente_activo
+      FROM admin.clientes c
+      LEFT JOIN admin.nivel_cliente nc ON c.nivel_cliente_id = nc.nivel_cliente_id
+      WHERE c.cliente_id = $1 AND c.empresa_id = $2 AND c.fecha_eliminacion IS NULL
     `, [clienteId, session.empresa_id]);
 
     if (!clienteRows || clienteRows.length === 0) {
@@ -325,7 +330,7 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
       return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
     }
 
-    const perms = await getModulePermissions("CRM", session.usuario_id);
+    const perms = await getScreenPermissions("CRM_CLIENTES", session.usuario_id);
     if (!perms.puede_editar) {
       return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para modificar este cliente." }, { status: 403 });
     }
@@ -412,6 +417,42 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
 
     const nombre_completo = `${nombre} ${apellido}`.trim();
 
+    // Validar nivel_cliente_id si se especificó
+    let nivel_cliente_id: number | null = beforeClient.nivel_cliente_id ? Number(beforeClient.nivel_cliente_id) : null;
+    let nivelInfo: any = null;
+    if (body.nivel_cliente_id !== undefined) {
+      if (body.nivel_cliente_id === null || body.nivel_cliente_id === "" || body.nivel_cliente_id === 0) {
+        nivel_cliente_id = null;
+      } else {
+        const parsedNivel = parseInt(body.nivel_cliente_id, 10);
+        if (isNaN(parsedNivel) || parsedNivel <= 0) {
+          return NextResponse.json({ success: false, message: "ID de nivel de cliente no válido.", field: "nivel_cliente_id" }, { status: 400 });
+        }
+        const nivelRows = await query(`
+          SELECT nivel_cliente_id, nombre, porciento_descuento, activo
+          FROM admin.nivel_cliente
+          WHERE nivel_cliente_id = $1
+        `, [parsedNivel]);
+        if (!nivelRows || nivelRows.length === 0) {
+          return NextResponse.json({ success: false, message: "El nivel de cliente seleccionado no existe.", field: "nivel_cliente_id" }, { status: 400 });
+        }
+        if (!nivelRows[0].activo) {
+          return NextResponse.json({ success: false, message: "El nivel de cliente seleccionado se encuentra inactivo.", field: "nivel_cliente_id" }, { status: 400 });
+        }
+        nivel_cliente_id = parsedNivel;
+        nivelInfo = nivelRows[0];
+      }
+    } else if (nivel_cliente_id) {
+      const existingNivel = await query(`
+        SELECT nivel_cliente_id, nombre, porciento_descuento, activo
+        FROM admin.nivel_cliente
+        WHERE nivel_cliente_id = $1
+      `, [nivel_cliente_id]);
+      if (existingNivel && existingNivel.length > 0) {
+        nivelInfo = existingNivel[0];
+      }
+    }
+
     const sql = `
       UPDATE admin.clientes SET
         nombre = $1,
@@ -432,9 +473,10 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
         contacto_email = $16::boolean,
         notas = $17,
         activo = $18::boolean,
+        nivel_cliente_id = $19,
         fecha_modificacion = NOW(),
-        usuario_modificacion = $19
-      WHERE cliente_id = $20::integer AND empresa_id = $21::integer AND fecha_eliminacion IS NULL
+        usuario_modificacion = $20
+      WHERE cliente_id = $21::integer AND empresa_id = $22::integer AND fecha_eliminacion IS NULL
       RETURNING *
     `;
 
@@ -457,6 +499,7 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
       contacto_email,
       notas || null,
       activo,
+      nivel_cliente_id,
       session.usuario_id,
       clienteId,
       session.empresa_id
@@ -467,7 +510,13 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
       return NextResponse.json({ success: false, message: "Cliente no encontrado o no pertenece a su empresa." }, { status: 404 });
     }
 
-    const updatedClient = result[0];
+    const updatedClient: any = {
+      ...result[0],
+      nivel_cliente_id: result[0].nivel_cliente_id ? Number(result[0].nivel_cliente_id) : null,
+      nivel_cliente_nombre: nivelInfo ? nivelInfo.nombre : null,
+      porciento_descuento: nivelInfo ? Number(nivelInfo.porciento_descuento) : 0,
+      nivel_cliente_activo: nivelInfo ? Boolean(nivelInfo.activo) : null
+    };
 
     // Compute diff and determine semantic event
     const diff = computeDiff(beforeClient, updatedClient);
@@ -536,7 +585,7 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
       return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
     }
 
-    const perms = await getModulePermissions("CRM", session.usuario_id);
+    const perms = await getScreenPermissions("CRM_CLIENTES", session.usuario_id);
     if (!perms.puede_eliminar) {
       return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para eliminar clientes." }, { status: 403 });
     }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { getWorkshopSession, getScreenPermissions } from "@/lib/workshop-session";
 import { executeWithIdempotency } from "@/lib/inventory/idempotencyService";
 import {
   transferirInventario,
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const perms = await getModulePermissions("INVENTARIO", session.usuario_id);
+    const perms = await getScreenPermissions("/inventory/transfers", session.usuario_id);
     if (!perms.puede_ver) {
       return NextResponse.json(
         { error: "FORBIDDEN", message: "No tienes permisos para consultar transferencias." },
@@ -72,6 +72,7 @@ export async function GET(request: NextRequest) {
     );
 
     return NextResponse.json({
+      permisos: perms,
       transferencias: (rows || []).map((r: Record<string, unknown>) => ({
         id: (r.id || r.movimiento_inventario_id) as number,
         uuid: r.transferencia_uuid as string,
@@ -108,10 +109,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const perms = await getModulePermissions("INVENTARIO", session.usuario_id);
-    if (!perms.puede_crear) {
+    const perms = await getScreenPermissions("/inventory/transfers", session.usuario_id);
+    if (!perms.puede_mover) {
       return NextResponse.json(
-        { error: "FORBIDDEN", message: "No tienes permisos para transferir inventario." },
+        { error: "FORBIDDEN", message: "No tienes permisos para transferir o mover inventario. Se requiere el privilegio MOVER." },
         { status: 403 }
       );
     }

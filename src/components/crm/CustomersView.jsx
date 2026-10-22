@@ -36,7 +36,8 @@ import {
   Wallet,
   FileText,
   DollarSign,
-  Loader2
+  Loader2,
+  Award
 } from "lucide-react";
 import CustomerFormDrawer from "./CustomerFormDrawer";
 import RegisterPaymentModal from "@/components/billing/RegisterPaymentModal";
@@ -88,11 +89,11 @@ export default function CustomersView() {
 
   // RBAC permissions state
   const [permissions, setPermissions] = useState({
-    puede_ver: true,
-    puede_crear: true,
-    puede_editar: true,
-    puede_eliminar: true,
-    puede_exportar: true
+    puede_ver: false,
+    puede_crear: false,
+    puede_editar: false,
+    puede_eliminar: false,
+    puede_exportar: false
   });
 
   // Detail 360 View State
@@ -609,7 +610,8 @@ export default function CustomersView() {
         (item.correo || "").toLowerCase().includes(query) ||
         (item.telefono_principal || "").toLowerCase().includes(query) ||
         (item.identificacion || "").toLowerCase().includes(query) ||
-        (item.ciudad || "").toLowerCase().includes(query);
+        (item.ciudad || "").toLowerCase().includes(query) ||
+        (item.nivel_cliente_nombre || "").toLowerCase().includes(query);
 
       const matchesTipo =
         tipoFilter === "Todos" ||
@@ -672,6 +674,8 @@ export default function CustomersView() {
     const headers = [
       "ID",
       "Nombre Completo",
+      "Nivel de Cliente",
+      "Descuento Nivel (%)",
       "Tipo Cliente",
       "Identificación",
       "Teléfono",
@@ -685,6 +689,8 @@ export default function CustomersView() {
     const rows = sortedData.map((c) => [
       c.id || c.cliente_id,
       `"${(c.nombre_completo || "").replace(/"/g, '""')}"`,
+      `"${c.nivel_cliente_nombre || "Sin nivel asignado"}"`,
+      c.nivel_cliente_nombre ? Number(c.porciento_descuento || 0) : "",
       getTipoClienteLabel(c.tipo_cliente),
       `"${c.identificacion || ""}"`,
       `"${c.telefono_principal || ""}"`,
@@ -817,9 +823,21 @@ export default function CustomersView() {
 
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h1 className="text-2xl md:text-3xl font-extrabold text-foreground tracking-tight truncate">
-                      {detailUser.nombre_completo}
-                    </h1>
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      <h1 className="text-2xl md:text-3xl font-extrabold text-foreground tracking-tight truncate">
+                        {detailUser.nombre_completo}
+                      </h1>
+                      {detailUser.nivel_cliente_nombre ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-primary/10 text-primary border border-primary/30 font-mono">
+                          <Award size={13} />
+                          {detailUser.nivel_cliente_nombre} ({Number(detailUser.porciento_descuento)}% Desc.)
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-surface text-foreground-muted border border-border font-mono">
+                          Sin nivel asignado
+                        </span>
+                      )}
+                    </div>
                     <div>{getTipoBadge(detailUser.tipo_cliente)}</div>
                   </div>
 
@@ -1286,7 +1304,7 @@ export default function CustomersView() {
                                     <span>Ver Factura</span>
                                   </button>
 
-                                  {saldoNum > 0.009 && est !== "ANULADA" && estadoCuenta?.permisos?.puede_registrar_pago !== false && (
+                                  {saldoNum > 0.009 && est !== "ANULADA" && estadoCuenta?.permisos?.puede_registrar_pago === true && (
                                     <button
                                       type="button"
                                       onClick={() => handleOpenRegisterPayment(f)}
@@ -1628,6 +1646,7 @@ export default function CustomersView() {
                 <thead>
                   <tr className="bg-surface border-b border-border select-none">
                     {renderSortableHeader("CLIENTE", "nombre_completo", "py-3.5 px-5")}
+                    {renderSortableHeader("NIVEL DESCUENTO", "nivel_cliente_nombre", "py-3.5 px-4")}
                     {renderSortableHeader("TIPO", "tipo_cliente", "py-3.5 px-4 text-center")}
                     {renderSortableHeader("IDENTIFICACIÓN", "identificacion", "py-3.5 px-4")}
                     {renderSortableHeader("CIUDAD", "ciudad", "py-3.5 px-4")}
@@ -1643,14 +1662,14 @@ export default function CustomersView() {
                 <tbody className="divide-y divide-border-subtle">
                   {loading ? (
                     <tr>
-                      <td colSpan={7} className="py-12 text-center text-foreground-muted font-mono">
+                      <td colSpan={8} className="py-12 text-center text-foreground-muted font-mono">
                         <RefreshCw className="animate-spin inline-block mr-2 text-primary" size={18} />
                         Cargando directorio de clientes...
                       </td>
                     </tr>
                   ) : paginatedData.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-12 text-center text-foreground-muted font-mono">
+                      <td colSpan={8} className="py-12 text-center text-foreground-muted font-mono">
                         {data.length === 0 ? (
                           <div className="space-y-3">
                             <Users size={32} className="mx-auto text-foreground-disabled opacity-60" />
@@ -1687,11 +1706,26 @@ export default function CustomersView() {
                               <span className="font-bold text-foreground group-hover:text-primary transition-colors truncate">
                                 {item.nombre_completo}
                               </span>
-                              <span className="text-[11px] text-foreground-muted truncate">
+                              <span className="text-[11px] text-foreground-muted truncate mt-0.5">
                                 {item.correo || "Sin correo"}
                               </span>
                             </div>
                           </div>
+                        </td>
+
+                        {/* Nivel de Cliente */}
+                        <td className="py-3.5 px-4">
+                          {item.nivel_cliente_nombre ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-primary/10 text-primary border border-primary/20 font-mono">
+                              <Award size={12} className="shrink-0" />
+                              <span>{item.nivel_cliente_nombre}</span>
+                              <span className="text-[11px] opacity-80">({Number(item.porciento_descuento || 0)}%)</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono text-foreground-muted bg-surface-subtle border border-border">
+                              Sin nivel asignado
+                            </span>
+                          )}
                         </td>
 
                         {/* Tipo Cliente */}
@@ -1795,7 +1829,19 @@ export default function CustomersView() {
                         </div>
                         <div>
                           <h3 className="font-bold text-sm text-foreground">{item.nombre_completo}</h3>
-                          <p className="text-[11px] text-foreground-muted font-mono">{item.correo || "Sin correo"}</p>
+                          <div className="flex items-center gap-2 mt-1 flex-wrap">
+                            <span className="text-[11px] text-foreground-muted font-mono">{item.correo || "Sin correo"}</span>
+                            {item.nivel_cliente_nombre ? (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-primary/10 text-primary border border-primary/20 font-mono">
+                                <Award size={10} className="shrink-0" />
+                                <span>{item.nivel_cliente_nombre} ({Number(item.porciento_descuento || 0)}%)</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono text-foreground-muted bg-surface border border-border">
+                                Sin nivel asignado
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                       <div>{getTipoBadge(item.tipo_cliente)}</div>

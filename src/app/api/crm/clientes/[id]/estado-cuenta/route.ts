@@ -13,6 +13,7 @@ interface FacturaEstadoCuentaRow {
   empresa_id: number | string;
   codigo_factura: string;
   fecha_factura: Date | string;
+  fecha_vencimiento?: Date | string | null;
   condicion_venta: string;
   total: number | string;
   balance_pendiente_bd: number | string;
@@ -95,6 +96,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
         f.empresa_id,
         COALESCE(f.codigo_factura, f.numero_factura, 'FAC-' || f.factura_id::text) AS codigo_factura,
         f.fecha_factura,
+        f.fecha_vencimiento,
         ${colCondicion} AS condicion_venta,
         COALESCE(f.total, f.total_factura, 0)::numeric AS total,
         COALESCE(f.balance_pendiente, 0)::numeric AS balance_pendiente_bd,
@@ -112,7 +114,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       LEFT JOIN admin.pagos p ON f.factura_id = p.factura_id AND (p.estado = 'APLICADO' OR p.estado IS NULL)
       LEFT JOIN admin.ordenes_trabajo ot ON f.orden_trabajo_id = ot.orden_trabajo_id
       WHERE f.cliente_id = $1 AND (f.empresa_id = $2 OR f.empresa_id IS NULL)
-      GROUP BY f.factura_id, ot.codigo_orden
+      GROUP BY f.factura_id, ot.codigo_orden, f.fecha_vencimiento
       ORDER BY f.fecha_factura DESC, f.factura_id DESC
     `, [clienteId, session.empresa_id]);
 
@@ -162,6 +164,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
         factura_id: facturaId,
         codigo_factura: row.codigo_factura,
         fecha_factura: row.fecha_factura,
+        fecha_vencimiento: row.fecha_vencimiento ? new Date(row.fecha_vencimiento).toISOString() : null,
         condicion_venta: String(row.condicion_venta || "CONTADO").toUpperCase(),
         total,
         monto_pagado: isAnulada ? 0 : pagado,

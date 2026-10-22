@@ -63,6 +63,7 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
   const [selectedEstadoId, setSelectedEstadoId] = useState("");
   const [selectedPrioridadId, setSelectedPrioridadId] = useState("2");
   const [selectedMecanicoId, setSelectedMecanicoId] = useState("");
+  const [puedeAsignar, setPuedeAsignar] = useState(false);
   const [diagnostico, setDiagnostico] = useState("");
 
   // Autocomplete Service State
@@ -132,6 +133,11 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
           ? String(orderData.mecanico_id || orderData.mecanico_usuario_id)
           : ""
       );
+      const headerPerm = resOrder.headers.get("x-perm-asignar");
+      const permAsignar = headerPerm !== null
+        ? headerPerm === "true"
+        : Boolean(orderData.permisos?.puede_asignar);
+      setPuedeAsignar(permAsignar === true);
       setDiagnostico(orderData.diagnostico_inicial || orderData.descripcion_cliente || "");
 
       // Setup Catalogs
@@ -992,7 +998,9 @@ export default function EditWorkOrderModal({ isOpen, ordenId, onClose, onSuccess
                   <select
                     value={selectedMecanicoId}
                     onChange={(e) => setSelectedMecanicoId(e.target.value)}
-                    className="w-full p-2.5 bg-input border border-border focus:border-primary rounded-xl text-foreground text-xs focus:outline-none cursor-pointer"
+                    disabled={!puedeAsignar}
+                    className="w-full p-2.5 bg-input border border-border focus:border-primary rounded-xl text-foreground text-xs focus:outline-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={!puedeAsignar ? "No tienes permisos para asignar o cambiar mecánicos (Se requiere ASIGNAR)" : "Seleccionar mecánico"}
                   >
                     <option value="">Por asignar</option>
                     {catalogs.mecanicos?.map((m) => (

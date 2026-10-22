@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPool, query } from "@/lib/db";
-import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { getWorkshopSession, getScreenPermissions } from "@/lib/workshop-session";
 import { recordUserActivity, recordUserAudit } from "@/lib/auditLogger";
 import { ensureWorkOrderTracking } from "@/lib/tracking/workOrderTrackingService";
 import { sendWelcomeNotification } from "@/lib/notifications/workOrderNotificationService";
@@ -18,8 +18,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "FORBIDDEN_COMPANY", message: "No se pudo determinar la empresa del usuario." }, { status: 403 });
     }
 
-    // Check IAM permission for Módulo TALLER
-    const perms = await getModulePermissions("TALLER", session.usuario_id);
+    // Check IAM permission for Módulo TALLER / Pantalla TALLER_ORDENES
+    const perms = await getScreenPermissions("TALLER_ORDENES", session.usuario_id);
     if (!perms.puede_ver) {
       return NextResponse.json({ error: "FORBIDDEN", message: "No posee permiso de lectura para acceder a las órdenes de trabajo." }, { status: 403 });
     }
@@ -34,8 +34,8 @@ export async function GET(req: NextRequest) {
     const from = searchParams.get("from") || "";
     const to = searchParams.get("to") || "";
     const sortBy = (searchParams.get("sort_by") || searchParams.get("sortBy") || "").trim().toLowerCase();
-    const sortOrderRaw = (searchParams.get("sort_order") || searchParams.get("sortOrder") || "ASC").trim().toUpperCase();
-    const sortDirection = sortOrderRaw === "DESC" ? "DESC" : "ASC";
+    const sortOrderRaw = (searchParams.get("sort_order") || searchParams.get("sortOrder") || "DESC").trim().toUpperCase();
+    const sortDirection = sortOrderRaw === "ASC" ? "ASC" : "DESC";
     const page = parseInt(searchParams.get("page") || "1", 10);
     const limit = parseInt(searchParams.get("limit") || "20", 10);
     const offset = (page - 1) * limit;
@@ -43,16 +43,16 @@ export async function GET(req: NextRequest) {
     const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
 
     // Canonical client company isolation condition mandatory
-    const queryParams: (string | number)[] = [empresaId];
-    const whereConditions: string[] = [
+    const metricsParams: (string | number)[] = [empresaId];
+    const metricsConditions: string[] = [
       `c.empresa_id = $1`,
       `ot.activo = true`
     ];
 
     if (search) {
-      queryParams.push(`%${search}%`);
-      const idx = queryParams.length;
-      whereConditions.push(`(
+      metricsParams.push(`%${search}%`);
+      const idx = metricsParams.length;
+      metricsConditions.push(`(
         ot.codigo_orden ILIKE $${idx} OR
         ot.orden_trabajo_id::text ILIKE $${idx} OR
         r.codigo_recepcion ILIKE $${idx} OR
@@ -69,6 +69,52 @@ export async function GET(req: NextRequest) {
       )`);
     }
 
+    if (prioridadId) {
+      metricsParams.push(parseInt(prioridadId, 10));
+      metricsConditions.push(`ot.prioridad_orden_id = $${metricsParams.length}`);
+    }
+
+    if (mecanicoId) {
+      metricsParams.push(parseInt(mecanicoId, 10));
+      metricsConditions.push(`(
+        ot.mecanico_id = $${metricsParams.length} OR
+        EXISTS (
+          SELECT 1 FROM admin.orden_servicios os_mec
+          WHERE os_mec.orden_trabajo_id = ot.orden_trabajo_id
+            AND os_mec.usuario_id = $${metricsParams.length}
+            AND (os_mec.activo IS DISTINCT FROM false)
+        )
+      )`);
+    }
+
+    const isExplicitAll = period === "all" || from === "all" || to === "all" || searchParams.get("all") === "true";
+
+    if (isExplicitAll) {
+      // Explicitly requested all time - do not apply date range filter
+    } else if (period === "hoy" || period === "today") {
+      metricsConditions.push(`(ot.fecha_registro AT TIME ZONE 'America/Santo_Domingo')::date = (NOW() AT TIME ZONE 'America/Santo_Domingo')::date`);
+    } else if (period === "7d" || period === "7_dias" || period === "7dias") {
+      metricsConditions.push(`(ot.fecha_registro AT TIME ZONE 'America/Santo_Domingo')::date >= ((NOW() AT TIME ZONE 'America/Santo_Domingo')::date - INTERVAL '6 days')::date AND (ot.fecha_registro AT TIME ZONE 'America/Santo_Domingo')::date <= (NOW() AT TIME ZONE 'America/Santo_Domingo')::date`);
+    } else if (period === "30d" || period === "30_dias" || period === "30dias") {
+      metricsConditions.push(`(ot.fecha_registro AT TIME ZONE 'America/Santo_Domingo')::date >= ((NOW() AT TIME ZONE 'America/Santo_Domingo')::date - INTERVAL '29 days')::date AND (ot.fecha_registro AT TIME ZONE 'America/Santo_Domingo')::date <= (NOW() AT TIME ZONE 'America/Santo_Domingo')::date`);
+    } else if (from || to) {
+      if (from && dateRegex.test(from)) {
+        metricsParams.push(from);
+        metricsConditions.push(`(ot.fecha_registro AT TIME ZONE 'America/Santo_Domingo')::date >= $${metricsParams.length}::date`);
+      }
+      if (to && dateRegex.test(to)) {
+        metricsParams.push(to);
+        metricsConditions.push(`(ot.fecha_registro AT TIME ZONE 'America/Santo_Domingo')::date <= $${metricsParams.length}::date`);
+      }
+    } else {
+      // Default: Last 7 days in Santo Domingo timezone
+      metricsConditions.push(`(ot.fecha_registro AT TIME ZONE 'America/Santo_Domingo')::date >= ((NOW() AT TIME ZONE 'America/Santo_Domingo')::date - INTERVAL '6 days')::date AND (ot.fecha_registro AT TIME ZONE 'America/Santo_Domingo')::date <= (NOW() AT TIME ZONE 'America/Santo_Domingo')::date`);
+    }
+
+    // Table conditions inherit all filters and additionally apply the selected status filter
+    const whereConditions: string[] = [...metricsConditions];
+    const queryParams: (string | number)[] = [...metricsParams];
+
     if (estado) {
       queryParams.push(estado.trim().toUpperCase());
       whereConditions.push(`eot.codigo = $${queryParams.length}`);
@@ -79,41 +125,6 @@ export async function GET(req: NextRequest) {
       } else {
         queryParams.push(parseInt(estadoId, 10));
         whereConditions.push(`ot.estado_orden_id = $${queryParams.length}`);
-      }
-    }
-
-    if (prioridadId) {
-      queryParams.push(parseInt(prioridadId, 10));
-      whereConditions.push(`ot.prioridad_orden_id = $${queryParams.length}`);
-    }
-
-    if (mecanicoId) {
-      queryParams.push(parseInt(mecanicoId, 10));
-      whereConditions.push(`(
-        ot.mecanico_id = $${queryParams.length} OR
-        EXISTS (
-          SELECT 1 FROM admin.orden_servicios os_mec
-          WHERE os_mec.orden_trabajo_id = ot.orden_trabajo_id
-            AND os_mec.usuario_id = $${queryParams.length}
-            AND (os_mec.activo IS DISTINCT FROM false)
-        )
-      )`);
-    }
-
-    if (period === "hoy" || period === "today") {
-      whereConditions.push(`(ot.fecha_registro AT TIME ZONE 'America/Santo_Domingo')::date = (NOW() AT TIME ZONE 'America/Santo_Domingo')::date`);
-    } else if (period === "7d" || period === "7_dias" || period === "7dias") {
-      whereConditions.push(`(ot.fecha_registro AT TIME ZONE 'America/Santo_Domingo')::date >= ((NOW() AT TIME ZONE 'America/Santo_Domingo')::date - INTERVAL '6 days')::date AND (ot.fecha_registro AT TIME ZONE 'America/Santo_Domingo')::date <= (NOW() AT TIME ZONE 'America/Santo_Domingo')::date`);
-    } else if (period === "30d" || period === "30_dias" || period === "30dias") {
-      whereConditions.push(`(ot.fecha_registro AT TIME ZONE 'America/Santo_Domingo')::date >= ((NOW() AT TIME ZONE 'America/Santo_Domingo')::date - INTERVAL '29 days')::date AND (ot.fecha_registro AT TIME ZONE 'America/Santo_Domingo')::date <= (NOW() AT TIME ZONE 'America/Santo_Domingo')::date`);
-    } else {
-      if (from && dateRegex.test(from)) {
-        queryParams.push(from);
-        whereConditions.push(`(ot.fecha_registro AT TIME ZONE 'America/Santo_Domingo')::date >= $${queryParams.length}::date`);
-      }
-      if (to && dateRegex.test(to)) {
-        queryParams.push(to);
-        whereConditions.push(`(ot.fecha_registro AT TIME ZONE 'America/Santo_Domingo')::date <= $${queryParams.length}::date`);
       }
     }
 
@@ -132,11 +143,10 @@ export async function GET(req: NextRequest) {
     const countRes = await query(countSql, queryParams);
     const total = parseInt(countRes[0]?.total || "0", 10);
 
-    // Whitelist Order By construction
+    // Whitelist Order By construction: default descending by creation date (most recent first)
     let orderBySql = `
-      DATE_TRUNC('day', ot.fecha_registro AT TIME ZONE 'America/Santo_Domingo') ASC,
-      ot.prioridad_orden_id DESC,
-      ot.orden_trabajo_id ASC
+      ot.fecha_registro DESC,
+      ot.orden_trabajo_id DESC
     `;
 
     if (sortBy === "codigo") {
@@ -277,16 +287,9 @@ export async function GET(req: NextRequest) {
       ORDER BY u.usuario_id ASC
     `, [empresaId]);
 
-    // Summary Metrics for company isolation
-    const metricsRes = await query<{
-      abiertas: number;
-      recibidas: number;
-      en_proceso: number;
-      en_hold: number;
-      listas_entrega: number;
-      entregadas: number;
-      total: number;
-    }>(`
+    // Summary Metrics applying active filters (date range, mechanic, search)
+    const metricsWhereClause = `WHERE ${metricsConditions.join(" AND ")}`;
+    const metricsSql = `
       SELECT
         COUNT(ot.orden_trabajo_id) FILTER (WHERE (eot.codigo NOT IN ('ENTREGADA', 'CANCELADA') OR eot.codigo IS NULL) AND ot.estado_orden_id NOT IN (8, 9))::int AS abiertas,
         COUNT(ot.orden_trabajo_id) FILTER (WHERE eot.codigo = 'RECIBIDA' OR ot.estado_orden_id = 1)::int AS recibidas,
@@ -296,11 +299,22 @@ export async function GET(req: NextRequest) {
         COUNT(ot.orden_trabajo_id) FILTER (WHERE eot.codigo = 'ENTREGADA' OR ot.estado_orden_id = 8)::int AS entregadas,
         COUNT(ot.orden_trabajo_id)::int AS total
       FROM admin.ordenes_trabajo ot
-      JOIN admin.clientes c ON c.cliente_id = ot.cliente_id
-      LEFT JOIN admin.estado_orden_trabajo eot ON eot.estado_orden_id = ot.estado_orden_id
-      WHERE c.empresa_id = $1
-        AND (ot.activo IS DISTINCT FROM false)
-    `, [empresaId]);
+      JOIN admin.clientes c ON ot.cliente_id = c.cliente_id
+      LEFT JOIN admin.estado_orden_trabajo eot ON ot.estado_orden_id = eot.estado_orden_id
+      LEFT JOIN admin.recepciones r ON ot.recepcion_id = r.recepcion_id
+      LEFT JOIN admin.bicicletas b ON ot.bicicleta_id = b.bicicleta_id
+      ${metricsWhereClause}
+    `;
+
+    const metricsRes = await query<{
+      abiertas: number;
+      recibidas: number;
+      en_proceso: number;
+      en_hold: number;
+      listas_entrega: number;
+      entregadas: number;
+      total: number;
+    }>(metricsSql, metricsParams);
 
     const metricsData = metricsRes[0] || {
       abiertas: 0,
@@ -357,7 +371,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión inválida o expirada." }, { status: 401 });
     }
 
-    const perms = await getModulePermissions("TALLER", session.usuario_id);
+    const perms = await getScreenPermissions("TALLER_ORDENES", session.usuario_id);
     if (!perms.puede_crear) {
       return NextResponse.json({ error: "FORBIDDEN", message: "No posee permiso de creación para Órdenes de Trabajo." }, { status: 403 });
     }

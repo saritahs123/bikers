@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { getWorkshopSession, getScreenPermissions } from "@/lib/workshop-session";
 import { recordUserActivity, recordUserAudit, sanitizeAuditPayload } from "@/lib/auditLogger";
 
 // GET /api/crm/clientes
@@ -11,7 +11,7 @@ export async function GET() {
       return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
     }
 
-    const perms = await getModulePermissions("CRM", session.usuario_id);
+    const perms = await getScreenPermissions("CRM_CLIENTES", session.usuario_id);
     if (!perms.puede_ver) {
       return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para consultar clientes." }, { status: 403 });
     }
@@ -46,22 +46,59 @@ export async function GET() {
         c.fecha_creacion,
         c.usuario_creacion,
         c.fecha_modificacion,
-        c.usuario_modificacion
+        c.usuario_modificacion,
+        c.nivel_cliente_id,
+        nc.nombre AS nivel_cliente_nombre,
+        COALESCE(nc.porciento_descuento, 0)::numeric AS porciento_descuento,
+        nc.activo AS nivel_cliente_activo
       FROM admin.clientes c
+      LEFT JOIN admin.nivel_cliente nc ON c.nivel_cliente_id = nc.nivel_cliente_id
       WHERE c.empresa_id = $1 AND c.fecha_eliminacion IS NULL
       ORDER BY c.cliente_id DESC
     `;
 
-    const rows = await query(sql, [session.empresa_id]);
+    interface RawClienteDbRow {
+      cliente_id: number;
+      empresa_id: number;
+      nombre: string;
+      apellido: string | null;
+      nombre_completo: string;
+      tipo_cliente: string | null;
+      identificacion: string | null;
+      telefono_principal: string | null;
+      telefono_secundario: string | null;
+      correo: string | null;
+      direccion: string | null;
+      ciudad: string | null;
+      provincia: string | null;
+      pais: string | null;
+      fecha_nacimiento: string | Date | null;
+      genero: string | null;
+      contacto_whatsapp: boolean | null;
+      contacto_email: boolean | null;
+      notas: string | null;
+      cantidad_bicicletas: number | string | null;
+      total_gastado_taller: number | string | null;
+      total_gastado_tienda: number | string | null;
+      ultima_visita: string | Date | null;
+      activo: boolean;
+      fecha_creacion: string | Date | null;
+      nivel_cliente_id: number | null;
+      nivel_cliente_nombre: string | null;
+      porciento_descuento: number | string | null;
+      nivel_cliente_activo: boolean | null;
+    }
 
-    const mapped = (rows || []).map((r: any) => ({
+    const rows = await query<RawClienteDbRow>(sql, [session.empresa_id]);
+
+    const mapped = (rows || []).map((r: RawClienteDbRow) => ({
       id: r.cliente_id,
       cliente_id: r.cliente_id,
       empresa_id: r.empresa_id,
       nombre: r.nombre || '',
       apellido: r.apellido || '',
       nombre_completo: r.nombre_completo || `${r.nombre || ''} ${r.apellido || ''}`.trim(),
-      tipo_cliente: (r.tipo_cliente || 'STANDARD').toUpperCase(),
+      tipo_cliente: String(r.tipo_cliente || 'STANDARD').toUpperCase(),
       identificacion: r.identificacion || '',
       telefono_principal: r.telefono_principal || '',
       telefono_secundario: r.telefono_secundario || '',
@@ -80,7 +117,11 @@ export async function GET() {
       total_gastado_tienda: Number(r.total_gastado_tienda || 0),
       ultima_visita: r.ultima_visita ? String(r.ultima_visita).substring(0, 10) : null,
       activo: r.activo !== false,
-      fecha_creacion: r.fecha_creacion ? String(r.fecha_creacion).substring(0, 10) : null
+      fecha_creacion: r.fecha_creacion ? String(r.fecha_creacion).substring(0, 10) : null,
+      nivel_cliente_id: r.nivel_cliente_id ? Number(r.nivel_cliente_id) : null,
+      nivel_cliente_nombre: r.nivel_cliente_nombre || null,
+      porciento_descuento: r.porciento_descuento !== undefined && r.porciento_descuento !== null ? Number(r.porciento_descuento) : 0,
+      nivel_cliente_activo: r.nivel_cliente_activo !== undefined && r.nivel_cliente_activo !== null ? Boolean(r.nivel_cliente_activo) : null
     }));
 
     return NextResponse.json(mapped, {
@@ -92,7 +133,7 @@ export async function GET() {
         "x-perm-exportar": String(perms.puede_exportar)
       }
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error in GET /api/crm/clientes:", error);
     return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al obtener clientes" }, { status: 500 });
   }
@@ -106,7 +147,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
     }
 
-    const perms = await getModulePermissions("CRM", session.usuario_id);
+    const perms = await getScreenPermissions("CRM_CLIENTES", session.usuario_id);
     if (!perms.puede_crear) {
       return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para registrar nuevos clientes." }, { status: 403 });
     }
@@ -177,6 +218,29 @@ export async function POST(req: Request) {
 
     const nombre_completo = `${nombre} ${apellido}`.trim();
 
+    // Validar nivel_cliente_id si se especificó
+    let nivel_cliente_id: number | null = null;
+    let nivelInfo: { nivel_cliente_id: number; nombre: string; porciento_descuento: number; activo: boolean } | null = null;
+    if (body.nivel_cliente_id !== undefined && body.nivel_cliente_id !== null && body.nivel_cliente_id !== "") {
+      const parsedNivel = parseInt(body.nivel_cliente_id, 10);
+      if (isNaN(parsedNivel) || parsedNivel <= 0) {
+        return NextResponse.json({ success: false, message: "ID de nivel de cliente no válido.", field: "nivel_cliente_id" }, { status: 400 });
+      }
+      const nivelRows = await query<{ nivel_cliente_id: number; nombre: string; porciento_descuento: number; activo: boolean }>(`
+        SELECT nivel_cliente_id, nombre, porciento_descuento, activo
+        FROM admin.nivel_cliente
+        WHERE nivel_cliente_id = $1
+      `, [parsedNivel]);
+      if (!nivelRows || nivelRows.length === 0) {
+        return NextResponse.json({ success: false, message: "El nivel de cliente seleccionado no existe.", field: "nivel_cliente_id" }, { status: 400 });
+      }
+      if (!nivelRows[0].activo) {
+        return NextResponse.json({ success: false, message: "El nivel de cliente seleccionado se encuentra inactivo.", field: "nivel_cliente_id" }, { status: 400 });
+      }
+      nivel_cliente_id = parsedNivel;
+      nivelInfo = nivelRows[0];
+    }
+
     const maxIdRes = await query("SELECT COALESCE(MAX(cliente_id), 0) + 1 AS next_id FROM admin.clientes");
     const nextId = Number(maxIdRes[0]?.next_id || 1);
 
@@ -186,13 +250,15 @@ export async function POST(req: Request) {
         telefono_principal, telefono_secundario, correo, direccion, ciudad,
         provincia, pais, fecha_nacimiento, genero, contacto_whatsapp,
         contacto_email, notas, cantidad_bicicletas, total_gastado_taller,
-        total_gastado_tienda, activo, fecha_creacion, usuario_creacion
+        total_gastado_tienda, activo, fecha_creacion, usuario_creacion,
+        nivel_cliente_id
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7,
         $8, $9, $10, $11, $12,
         $13, $14, CASE WHEN $15::text IS NULL OR $15::text = '' THEN NULL ELSE $15::date END, $16, $17::boolean,
         $18::boolean, $19, 0, 0.00,
-        0.00, true, NOW(), $20
+        0.00, true, NOW(), $20,
+        $21
       )
       RETURNING *
     `;
@@ -217,7 +283,8 @@ export async function POST(req: Request) {
       contacto_whatsapp,
       contacto_email,
       notas || null,
-      session.usuario_id
+      session.usuario_id,
+      nivel_cliente_id
     ];
 
     const result = await query(sql, params);
@@ -240,7 +307,11 @@ export async function POST(req: Request) {
       provincia: r.provincia || provincia || "",
       pais: r.pais || pais || "República Dominicana",
       activo: true,
-      fecha_creacion: r.fecha_creacion || new Date().toISOString()
+      fecha_creacion: r.fecha_creacion || new Date().toISOString(),
+      nivel_cliente_id: r.nivel_cliente_id ? Number(r.nivel_cliente_id) : null,
+      nivel_cliente_nombre: nivelInfo ? nivelInfo.nombre : null,
+      porciento_descuento: nivelInfo ? Number(nivelInfo.porciento_descuento) : 0,
+      nivel_cliente_activo: nivelInfo ? Boolean(nivelInfo.activo) : null
     };
 
     // Forensic Activity & Audit Logging
@@ -279,9 +350,9 @@ export async function POST(req: Request) {
       ...clientData
     }, { status: 201 });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error in POST /api/crm/clientes:", error);
-    const msg = error?.message || error?.toString() || "";
+    const msg = error instanceof Error ? error.message : String(error || "");
     if (msg.includes("23505") || msg.includes("uk_clientes_identificacion") || msg.includes("identificacion")) {
       return NextResponse.json({ success: false, message: "Ya existe un cliente registrado con esta Cédula / Pasaporte", field: "identificacion" }, { status: 409 });
     }

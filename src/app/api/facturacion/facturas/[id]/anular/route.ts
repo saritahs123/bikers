@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PoolClient } from "pg";
 import { getPool } from "@/lib/db";
-import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { getWorkshopSession, getScreenPermissions } from "@/lib/workshop-session";
 import { INVENTORY_SYSTEM_CODES, generarCodigoMovimiento, ensureEmpresaCodigoSistemaProvisioned } from "@/lib/inventory/inventoryConstants";
 import { calcularNuevoPMP } from "@/lib/inventory/inventoryMovementService";
 import {
@@ -20,6 +20,7 @@ export interface RouteParams {
 
 export interface AnularFacturaBody {
   motivo_anulacion_factura_id?: number | string;
+  motivo_id?: number | string;
   motivo?: string;
   observacion?: string;
   destino_producto?: "DISPONIBLE" | "DAÑADO" | "DEFECTUOSO" | "CUARENTENA" | string;
@@ -98,6 +99,15 @@ export async function anularFactura(
     );
     const movCols = new Set((movColsRes.rows || []).map(r => String(r.column_name).toLowerCase()));
 
+    // Descubrimiento de factura_anulacion_id default/identity
+    const faColsRes = await client.query<{ column_name: string; column_default: string | null; is_identity: string | null }>(
+      `SELECT column_name, column_default, is_identity FROM information_schema.columns WHERE table_schema = 'admin' AND table_name = 'factura_anulacion'`
+    );
+    const faIdCol = (faColsRes.rows || []).find(r => String(r.column_name).toLowerCase() === "factura_anulacion_id");
+    const faIdHasDefaultOrIdentity = Boolean(
+      faIdCol?.column_default || (faIdCol?.is_identity && String(faIdCol.is_identity).toUpperCase() !== "NO")
+    );
+
 
     // C. Pre-verificación de snapshot existente en admin.factura_anulacion (Obligatoria)
     if (!hasFacturaAnulacionTable) {
@@ -135,8 +145,12 @@ export async function anularFactura(
       requiere_autorizacion: boolean;
     } | null = null;
 
-    const motivoId = body.motivo_anulacion_factura_id
-      ? parseInt(String(body.motivo_anulacion_factura_id), 10)
+    const rawMotivoId = body.motivo_anulacion_factura_id !== undefined
+      ? body.motivo_anulacion_factura_id
+      : body.motivo_id;
+
+    const motivoId = rawMotivoId
+      ? parseInt(String(rawMotivoId), 10)
       : null;
 
     if (hasMotivoAnulacionTable) {
@@ -571,46 +585,74 @@ export async function anularFactura(
       ? lineasFisicas.reduce((sum, l) => sum + Number(l.cantidad), 0)
       : 0;
 
+    let explicitFaId: number | null = null;
+    if (!faIdHasDefaultOrIdentity) {
+      // Intentar obtener el siguiente valor de la secuencia PostgreSQL si ya fue aprovisionada
+      try {
+        const seqRes = await client.query<{ next_id: string }>(
+          `SELECT nextval('admin.factura_anulacion_factura_anulacion_id_seq') AS next_id`
+        );
+        explicitFaId = Number(seqRes.rows[0]?.next_id);
+      } catch {
+        // Fallback bajo transacción serializada por BILLING_ADVISORY_LOCK_ID (7005):
+        // Garantiza atomicidad y unicidad si la migración de secuencia está pendiente
+        const maxRes = await client.query<{ next_id: string }>(
+          `SELECT COALESCE(MAX(factura_anulacion_id), 0) + 1 AS next_id FROM admin.factura_anulacion`
+        );
+        explicitFaId = Number(maxRes.rows[0]?.next_id) || 1;
+      }
+    }
+
+    const faColsList = [
+      ...(explicitFaId !== null ? ["factura_anulacion_id"] : []),
+      "empresa_id",
+      "factura_id",
+      "motivo_anulacion_factura_id",
+      "codigo_motivo",
+      "motivo_anulacion",
+      "descripcion_motivo",
+      "genera_movimiento",
+      "tipo_movimiento_reversion_id",
+      "codigo_movimiento_reversion",
+      "nombre_movimiento_reversion",
+      "destino_producto",
+      "cantidad_revertida",
+      "observacion",
+      "usuario_autorizacion_id",
+      "usuario_anulacion_id",
+      "fecha_anulacion",
+      "fecha_registro"
+    ];
+
+    const faValuesList = [
+      ...(explicitFaId !== null ? [explicitFaId] : []),
+      empresaId,
+      facturaId,
+      motivoRow.motivo_anulacion_factura_id || null,
+      motivoRow.codigo || "OTRO",
+      motivoRow.motivo_anulacion,
+      motivoRow.descripcion || null,
+      debeRevertirInventario,
+      debeRevertirInventario ? snapshotTipoMovId : null,
+      debeRevertirInventario ? snapshotTipoMovCodigo : null,
+      debeRevertirInventario ? snapshotTipoMovNombre : null,
+      debeRevertirInventario ? destinoProducto : null,
+      debeRevertirInventario ? totalRevertido : 0,
+      observacion || null,
+      validatedAutorizacionUsuarioId,
+      usuarioId,
+      new Date()
+    ];
+
+    const faPlaceholders = faValuesList.map((_, i) => `$${i + 1}`).join(", ") + ", clock_timestamp()";
+
     await client.query(
       `INSERT INTO admin.factura_anulacion (
-        empresa_id,
-        factura_id,
-        motivo_anulacion_factura_id,
-        codigo_motivo,
-        motivo_anulacion,
-        descripcion_motivo,
-        genera_movimiento,
-        tipo_movimiento_reversion_id,
-        codigo_movimiento_reversion,
-        nombre_movimiento_reversion,
-        destino_producto,
-        cantidad_revertida,
-        observacion,
-        usuario_autorizacion_id,
-        usuario_anulacion_id,
-        fecha_anulacion,
-        fecha_registro
+        ${faColsList.join(", ")}
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, clock_timestamp()
+        ${faPlaceholders}
       )`,
-      [
-        empresaId,
-        facturaId,
-        motivoRow.motivo_anulacion_factura_id || null,
-        motivoRow.codigo || "OTRO",
-        motivoRow.motivo_anulacion,
-        motivoRow.descripcion || null,
-        debeRevertirInventario,
-        debeRevertirInventario ? snapshotTipoMovId : null,
-        debeRevertirInventario ? snapshotTipoMovCodigo : null,
-        debeRevertirInventario ? snapshotTipoMovNombre : null,
-        debeRevertirInventario ? destinoProducto : null,
-        debeRevertirInventario ? totalRevertido : 0,
-        observacion || null,
-        validatedAutorizacionUsuarioId,
-        usuarioId,
-        new Date()
-      ]
+      faValuesList
     );
 
     // 7. Actualizar admin.facturas como ANULADA
@@ -713,10 +755,10 @@ export async function POST(request: NextRequest, context: RouteParams) {
     );
   }
 
-  const perms = await getModulePermissions("FACTURACION", session.usuario_id);
-  if (!perms.puede_eliminar && !perms.puede_inactivar && !perms.puede_editar) {
+  const perms = await getScreenPermissions("FACTURACION_FACTURAS", session.usuario_id);
+  if (!perms.puede_aprobar) {
     return NextResponse.json(
-      { error: "FORBIDDEN", message: "No tienes permisos para anular facturas en el sistema." },
+      { error: "FORBIDDEN", message: "No tienes permisos para anular facturas en el sistema. Se requiere el privilegio APROBAR." },
       { status: 403 }
     );
   }

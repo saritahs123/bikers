@@ -28,6 +28,7 @@ export default function InventoryTransfersView() {
   const [almacenes, setAlmacenes] = useState([]);
   const [productos, setProductos] = useState([]);
   const [transferencias, setTransferencias] = useState([]);
+  const [permisos, setPermisos] = useState(null);
   const [errorTransferencias, setErrorTransferencias] = useState(null);
   const [, setLoadingCatalogos] = useState(true);
   const [loadingTransferencias, setLoadingTransferencias] = useState(false);
@@ -129,6 +130,7 @@ export default function InventoryTransfersView() {
       if (res.ok) {
         const data = await res.json();
         setTransferencias(data.transferencias || []);
+        if (data.permisos) setPermisos(data.permisos);
         setErrorTransferencias(null);
       } else {
         setTransferencias([]);
@@ -866,8 +868,9 @@ export default function InventoryTransfersView() {
                 <button
                   type="button"
                   onClick={handleSubmitBatch}
-                  disabled={submitting || (lineas.length === 0 && (!selectedProduct || !cantidad))}
+                  disabled={submitting || (permisos && !permisos.puede_mover) || (lineas.length === 0 && (!selectedProduct || !cantidad))}
                   className="flex items-center gap-2 px-5 py-2.5 text-xs font-bold rounded-lg bg-purple-600 hover:bg-purple-700 text-white shadow-sm transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={permisos && !permisos.puede_mover ? "No tienes permisos para transferir o mover inventario (Se requiere MOVER)" : "Registrar Transferencia"}
                 >
                   <ArrowLeftRight className="w-4 h-4" />
                   <span>{submitting ? "Transfiriendo..." : "Registrar Transferencia"}</span>

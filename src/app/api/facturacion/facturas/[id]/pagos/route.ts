@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { getWorkshopSession, getScreenPermissions } from "@/lib/workshop-session";
 import { registrarPago } from "@/lib/billing/billingService";
 
 export const dynamic = "force-dynamic";
@@ -18,10 +18,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
       );
     }
 
-    const perms = await getModulePermissions("FACTURACION", session.usuario_id);
-    if (!perms.puede_crear && !perms.puede_editar) {
+    const perms = await getScreenPermissions("FACTURACION_PAGOS", session.usuario_id);
+    const invoicePerms = await getScreenPermissions("FACTURACION_FACTURAS", session.usuario_id);
+    if (!perms.puede_crear && !invoicePerms.puede_crear) {
       return NextResponse.json(
-        { error: "FORBIDDEN", message: "No tienes permisos para registrar pagos en facturación." },
+        { error: "FORBIDDEN", message: "No tienes permisos para registrar pagos en facturación. Se requiere el privilegio CREAR." },
         { status: 403 }
       );
     }
