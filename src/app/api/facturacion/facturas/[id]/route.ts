@@ -631,9 +631,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     const perms = await getModulePermissions("FACTURACION", session.usuario_id);
-    if (!perms.puede_editar && !perms.puede_crear) {
+    if (!perms.puede_editar) {
       return NextResponse.json(
-        { error: "FORBIDDEN", message: "No tienes permisos para modificar facturas." },
+        { error: "FORBIDDEN", message: "No tienes permisos para modificar los términos de la factura. Se requiere el privilegio EDITAR." },
         { status: 403 }
       );
     }

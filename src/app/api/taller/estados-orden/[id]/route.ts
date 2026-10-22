@@ -1,6 +1,7 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { getWorkshopSession, getScreenPermissions } from "@/lib/workshop-session";
 import { recordUserActivity, recordUserAudit, computeDiff, sanitizeAuditPayload } from "@/lib/auditLogger";
 
 const CANONICAL_STATUS_IDS = [1, 2, 3, 5, 7, 8];
@@ -25,7 +26,7 @@ export async function GET(
       return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
     }
 
-    const perms = await getModulePermissions("TALLER", session.usuario_id);
+    const perms = await getScreenPermissions("/workshop/order-statuses", session.usuario_id);
     if (!perms.puede_ver) {
       return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para consultar este estado de orden." }, { status: 403 });
     }
@@ -120,7 +121,7 @@ export async function PUT(
       return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
     }
 
-    const perms = await getModulePermissions("TALLER", session.usuario_id);
+    const perms = await getScreenPermissions("/workshop/order-statuses", session.usuario_id);
     if (!perms.puede_editar) {
       return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para editar estados de orden de trabajo." }, { status: 403 });
     }
@@ -361,8 +362,8 @@ export async function DELETE(
       return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
     }
 
-    const perms = await getModulePermissions("TALLER", session.usuario_id);
-    if (!perms.puede_eliminar) {
+    const perms = await getScreenPermissions("/workshop/order-statuses", session.usuario_id);
+    if (!perms.puede_eliminar && !perms.puede_inactivar) {
       return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para eliminar estados de orden de trabajo." }, { status: 403 });
     }
 

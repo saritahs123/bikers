@@ -99,11 +99,11 @@ export default function BicyclesView({ initialBikeId = null, initialTab = "gener
 
   // RBAC Effective Permissions
   const [permissions, setPermissions] = useState({
-    puede_ver: true,
-    puede_crear: true,
-    puede_editar: true,
-    puede_eliminar: true,
-    puede_exportar: true
+    puede_ver: false,
+    puede_crear: false,
+    puede_editar: false,
+    puede_eliminar: false,
+    puede_exportar: false
   });
 
   // Detail Modal State (Fullscreen Bike Workspace View)

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { getWorkshopSession, getScreenPermissions } from "@/lib/workshop-session";
 
 export async function GET(req: NextRequest) {
   try {
@@ -12,10 +12,10 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const perms = await getModulePermissions("REPORTES", session.usuario_id);
+    const perms = await getScreenPermissions("/reports/receivables", session.usuario_id);
     if (!perms.puede_ver) {
       return NextResponse.json(
-        { error: "FORBIDDEN", message: "No cuenta con autorización para acceder al módulo de Reportes." },
+        { error: "FORBIDDEN", message: "No cuenta con autorización para acceder a este reporte." },
         { status: 403 }
       );
     }
@@ -33,6 +33,13 @@ export async function GET(req: NextRequest) {
     const saldoMax = searchParams.get("saldo_max") ? parseFloat(searchParams.get("saldo_max")!) : null;
     const estadoVencimiento = (searchParams.get("vencimiento") || "TODOS").toUpperCase();
     const exportAll = searchParams.get("all") === "true";
+
+    if (exportAll && !perms.puede_exportar) {
+      return NextResponse.json(
+        { error: "FORBIDDEN", message: "No cuenta con privilegios para exportar este reporte." },
+        { status: 403 }
+      );
+    }
 
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
     const pageSize = Math.min(200, Math.max(1, parseInt(searchParams.get("page_size") || "25", 10)));

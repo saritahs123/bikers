@@ -46,7 +46,7 @@ export async function PUT(
     });
 
     return NextResponse.json({ success: true, item });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error in PUT /api/inventario/producto-proveedor/[id]:", error);
     if (error instanceof ProductSupplierError) {
       return NextResponse.json({ error: error.code, message: error.message }, { status: error.status });
@@ -68,9 +68,9 @@ export async function DELETE(
 
     const perms = await getModulePermissions("INVENTARIO", session.usuario_id);
     const permsTaller = await getModulePermissions("TALLER", session.usuario_id);
-    const canDelete = perms.puede_eliminar || permsTaller.puede_eliminar || perms.puede_editar;
+    const canDelete = perms.puede_eliminar || perms.puede_inactivar || permsTaller.puede_eliminar || permsTaller.puede_inactivar;
     if (!canDelete) {
-      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para inactivar relaciones comerciales." }, { status: 403 });
+      return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para inactivar relaciones comerciales. Se requiere el privilegio ELIMINAR o INACTIVAR." }, { status: 403 });
     }
 
     const { id } = await context.params;
@@ -82,7 +82,7 @@ export async function DELETE(
     await inactivateProductoProveedor(session.empresa_id, session.usuario_id, relId);
 
     return NextResponse.json({ success: true, message: "Relación producto-proveedor inactivada correctamente." });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error in DELETE /api/inventario/producto-proveedor/[id]:", error);
     if (error instanceof ProductSupplierError) {
       return NextResponse.json({ error: error.code, message: error.message }, { status: error.status });

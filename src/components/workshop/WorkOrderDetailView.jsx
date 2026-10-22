@@ -74,11 +74,15 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
   const [error, setError] = useState(null);
 
   const [permissions, setPermissions] = useState({
-    puede_ver: true,
-    puede_crear: true,
-    puede_editar: true,
-    puede_eliminar: true,
-    puede_exportar: true
+    puede_ver: false,
+    puede_crear: false,
+    puede_editar: false,
+    puede_eliminar: false,
+    puede_exportar: false,
+    puede_asignar: false,
+    puede_cerrar: false,
+    puede_reabrir: false,
+    puede_mover: false
   });
 
   const [baseVivo, setBaseVivo] = useState(0);
@@ -264,17 +268,25 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
       }
 
       const permVer = res.headers.get("x-perm-ver") !== "false";
-      const permCrear = res.headers.get("x-perm-crear") === "true";
-      const permEditar = res.headers.get("x-perm-editar") === "true";
+      const permCrear = res.headers.get("x-perm-crear") === "true" || orderData.permisos?.puede_crear === true;
+      const permEditar = res.headers.get("x-perm-editar") === "true" || orderData.permisos?.puede_editar === true;
       const permEliminar = res.headers.get("x-perm-eliminar") === "true" || orderData.puede_eliminar === true || orderData.permisos?.puede_eliminar === true;
-      const permExportar = res.headers.get("x-perm-exportar") === "true";
+      const permExportar = res.headers.get("x-perm-exportar") === "true" || orderData.permisos?.puede_exportar === true;
+      const permAsignar = res.headers.get("x-perm-asignar") === "true" || orderData.permisos?.puede_asignar === true;
+      const permCerrar = res.headers.get("x-perm-cerrar") === "true" || orderData.permisos?.puede_cerrar === true;
+      const permReabrir = res.headers.get("x-perm-reabrir") === "true" || orderData.permisos?.puede_reabrir === true;
+      const permMover = res.headers.get("x-perm-mover") === "true" || orderData.permisos?.puede_mover === true;
 
       setPermissions({
         puede_ver: permVer,
         puede_crear: permCrear,
         puede_editar: permEditar,
         puede_eliminar: permEliminar,
-        puede_exportar: permExportar
+        puede_exportar: permExportar,
+        puede_asignar: permAsignar,
+        puede_cerrar: permCerrar,
+        puede_reabrir: permReabrir,
+        puede_mover: permMover
       });
 
       setOrder(orderData);
@@ -1319,36 +1331,40 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
           )}
           {Number(order.estado_orden_id) === 7 && (
             <>
-              <button
-                onClick={() => {
-                  setReopenReason("");
-                  setReopenSelectedServiceId("");
-                  setReopenModalError(null);
-                  setReopenModalOpen(true);
-                }}
-                disabled={loadingStateChange}
-                className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-slate-950 hover:bg-amber-600 rounded-xl transition-all font-mono text-xs font-extrabold uppercase tracking-wider shadow-lg shadow-amber-500/20 disabled:opacity-50 cursor-pointer"
-              >
-                <RotateCcw className="w-4 h-4" />
-                REABRIR REPARACIÓN
-              </button>
-              <button
-                onClick={() => handleTransitionState(8)}
-                disabled={loadingStateChange || hasIncompleteServices}
-                className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white hover:bg-emerald-600 rounded-xl transition-all font-mono text-xs font-extrabold uppercase tracking-wider shadow-lg shadow-emerald-500/20 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                title={
-                  hasIncompleteServices
-                    ? `La orden tiene ${incompleteServices.length} servicio(s) pendiente(s). Reabre la reparación y complétalo antes de entregar.`
-                    : "Entregar orden al cliente"
-                }
-              >
-                {loadingStateChange ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <ShieldCheck className="w-4 h-4" />
-                )}
-                ENTREGAR A CLIENTE
-              </button>
+              {permissions.puede_reabrir === true && (
+                <button
+                  onClick={() => {
+                    setReopenReason("");
+                    setReopenSelectedServiceId("");
+                    setReopenModalError(null);
+                    setReopenModalOpen(true);
+                  }}
+                  disabled={loadingStateChange}
+                  className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-slate-950 hover:bg-amber-600 rounded-xl transition-all font-mono text-xs font-extrabold uppercase tracking-wider shadow-lg shadow-amber-500/20 disabled:opacity-50 cursor-pointer"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  REABRIR REPARACIÓN
+                </button>
+              )}
+              {permissions.puede_cerrar === true && (
+                <button
+                  onClick={() => handleTransitionState(8)}
+                  disabled={loadingStateChange || hasIncompleteServices}
+                  className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white hover:bg-emerald-600 rounded-xl transition-all font-mono text-xs font-extrabold uppercase tracking-wider shadow-lg shadow-emerald-500/20 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  title={
+                    hasIncompleteServices
+                      ? `La orden tiene ${incompleteServices.length} servicio(s) pendiente(s). Reabre la reparación y complétalo antes de entregar.`
+                      : "Entregar orden al cliente"
+                  }
+                >
+                  {loadingStateChange ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <ShieldCheck className="w-4 h-4" />
+                  )}
+                  ENTREGAR A CLIENTE
+                </button>
+              )}
               {(Boolean(order.facturado) || Boolean(order.factura_id) || Boolean(order.codigo_factura)) && (
                 <span className="px-3 py-2 bg-purple-500/15 border border-purple-500/30 text-purple-400 font-mono text-xs rounded-xl font-bold uppercase tracking-wider flex items-center gap-1.5">
                   <Receipt className="w-4 h-4" />
@@ -1391,7 +1407,7 @@ export default function WorkOrderDetailView({ ordenId, onBack }) {
           )}
 
 
-          {Number(order.estado_orden_id) !== 7 && Number(order.estado_orden_id) !== 8 && (
+          {Number(order.estado_orden_id) !== 7 && Number(order.estado_orden_id) !== 8 && permissions.puede_editar === true && (
             <button
               onClick={() => setStatusModalOpen(true)}
               className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl hover:bg-primary-hover transition-all font-mono text-xs font-bold uppercase tracking-wider border-t border-primary/30 shadow-lg shadow-primary/20 cursor-pointer"

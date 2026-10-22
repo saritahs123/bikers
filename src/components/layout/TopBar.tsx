@@ -21,6 +21,11 @@ export interface AuthenticatedUser {
   iniciales: string;
   foto_url: string | null;
   can_view_reports?: boolean;
+  navigationPermissions?: {
+    isSuperAdmin: boolean;
+    modules: Record<string, boolean>;
+    screens: Record<string, boolean>;
+  };
 }
 
 export function TopBar({

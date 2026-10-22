@@ -1,9 +1,10 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
 import { NextRequest, NextResponse } from "next/server";
 import { getPool, query } from "@/lib/db";
 import { recalculateWorkOrderTotals } from "@/lib/workshop/recalculateWorkOrderTotals";
 import { syncWorkOrderInvoice } from "@/lib/workshop/syncWorkOrderInvoice";
 import { getCronometroStatus } from "@/lib/workshop/getCronometroStatus";
-import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { getWorkshopSession, getScreenPermissions } from "@/lib/workshop-session";
 import { recordUserActivity, recordUserAudit } from "@/lib/auditLogger";
 
 // GET /api/taller/ordenes/[id]/servicios/[servicioId]
@@ -25,7 +26,7 @@ export async function GET(
       return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión inválida o expirada." }, { status: 401 });
     }
 
-    const perms = await getModulePermissions("TALLER", session.usuario_id);
+    const perms = await getScreenPermissions("TALLER_ORDENES", session.usuario_id);
     if (!perms.puede_ver) {
       return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permiso para consultar este servicio." }, { status: 403 });
     }
@@ -188,7 +189,7 @@ export async function PUT(
   }
   const sessionUserId = session.usuario_id;
 
-  const perms = await getModulePermissions("TALLER", session.usuario_id);
+  const perms = await getScreenPermissions("TALLER_ORDENES", session.usuario_id);
   if (!perms.puede_editar) {
     return NextResponse.json({ error: "FORBIDDEN", message: "No posee permiso para modificar servicios." }, { status: 403 });
   }
@@ -894,9 +895,9 @@ export async function DELETE(
   }
   const sessionUserId = session.usuario_id;
 
-  const perms = await getModulePermissions("TALLER", session.usuario_id);
-  if (!perms.puede_eliminar) {
-    return NextResponse.json({ error: "FORBIDDEN", message: "No posee permiso para eliminar servicios." }, { status: 403 });
+  const perms = await getScreenPermissions("TALLER_ORDENES", session.usuario_id);
+  if (!perms.puede_eliminar && !perms.puede_inactivar) {
+    return NextResponse.json({ error: "FORBIDDEN", message: "No posee permiso para eliminar servicios. Se requiere el privilegio ELIMINAR o INACTIVAR." }, { status: 403 });
   }
 
   const pool = getPool();

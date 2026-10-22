@@ -9,6 +9,7 @@ interface ReportHeaderProps {
   title: string;
   subtitle: string;
   consultationDate?: string;
+  canExport?: boolean;
   onRefresh?: () => void;
   onExportExcel?: () => void;
   onExportPdf?: () => void;
@@ -22,6 +23,7 @@ export function ReportHeader({
   title,
   subtitle,
   consultationDate,
+  canExport = false,
   onRefresh,
   onExportExcel,
   onExportPdf,
@@ -71,7 +73,7 @@ export function ReportHeader({
           </button>
         )}
 
-        {onExportExcel && (
+        {Boolean(canExport) === true && onExportExcel && (
           <button
             type="button"
             onClick={onExportExcel}
@@ -88,7 +90,7 @@ export function ReportHeader({
           </button>
         )}
 
-        {onExportPdf && (
+        {Boolean(canExport) === true && onExportPdf && (
           <button
             type="button"
             onClick={onExportPdf}

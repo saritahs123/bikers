@@ -54,9 +54,10 @@ export interface SupplierSummaryRow {
 
 interface InventorySupplierReportViewProps {
   initialCompany?: string;
+  canExport?: boolean;
 }
 
-export function InventorySupplierReportView({ initialCompany }: InventorySupplierReportViewProps) {
+export function InventorySupplierReportView({ initialCompany, canExport }: InventorySupplierReportViewProps) {
   // Data state
   const [data, setData] = useState<InventorySupplierRow[]>([]);
   const [supplierSummary, setSupplierSummary] = useState<SupplierSummaryRow[]>([]);
@@ -319,6 +320,7 @@ export function InventorySupplierReportView({ initialCompany }: InventorySupplie
       <ReportHeader
         title="Inventario Total por Suplidor"
         subtitle="Existencias y valoración de inventario consolidadas y agrupadas por suplidor"
+        canExport={canExport}
         onRefresh={fetchData}
         onExportExcel={handleExportExcel}
         onExportPdf={handleExportPdf}

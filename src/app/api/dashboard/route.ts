@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { getWorkshopSession } from "@/lib/workshop-session";
+import { getWorkshopSession, getScreenPermissions } from "@/lib/workshop-session";
 
 interface DateRow {
   from_date: string;
@@ -133,6 +133,7 @@ interface RawPaymentRow {
   fecha_factura?: string;
   orden_trabajo_id: number | null;
   codigo_orden: string | null;
+  fecha_orden?: string | null;
   cliente_nombre: string;
   origen_principal: string;
   monto_servicios_taller: number | string;
@@ -154,6 +155,11 @@ export async function GET(request: NextRequest) {
     const empresaId = session.empresa_id;
     if (!empresaId) {
       return NextResponse.json({ error: "FORBIDDEN_COMPANY", message: "No se pudo determinar la empresa del usuario." }, { status: 403 });
+    }
+
+    const perms = await getScreenPermissions("/", session.usuario_id);
+    if (!perms.puede_ver) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No posees permisos para acceder al Dashboard." }, { status: 403 });
     }
 
     const { searchParams } = new URL(request.url);
@@ -694,6 +700,7 @@ export async function GET(request: NextRequest) {
         s.fecha_factura_date::text AS fecha_factura,
         f.orden_trabajo_id,
         ot.codigo_orden,
+        (ot.fecha_registro AT TIME ZONE 'America/Santo_Domingo')::date::text AS fecha_orden,
         COALESCE(c.nombre, 'Cliente Mostrador') AS cliente_nombre,
         CASE
           WHEN s.orden_trabajo_id IS NULL THEN 'VENTA_DIRECTA'
@@ -807,7 +814,11 @@ export async function GET(request: NextRequest) {
     let recaudadoVentaDirecta = 0;
 
     for (const p of filteredPayments) {
-      const isAnterior = p.fecha_factura ? p.fecha_factura < startDateStr : false;
+      // Si el pago proviene de una orden de trabajo, la fecha determinante para evaluar si es del período
+      // es la fecha de creación de la OT (ot.fecha_registro). Si es venta directa, la fecha de la factura.
+      const fechaOrigen = p.orden_trabajo_id !== null && p.fecha_orden ? p.fecha_orden : p.fecha_factura;
+      const isAnterior = fechaOrigen ? fechaOrigen < startDateStr : false;
+
       if (isAnterior) {
         recaudadoFacturasAnteriores += p.monto_efectivo;
       } else if (p.orden_trabajo_id !== null) {

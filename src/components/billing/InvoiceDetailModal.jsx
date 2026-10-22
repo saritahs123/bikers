@@ -362,12 +362,12 @@ export default function InvoiceDetailModal({
   const puedeAnular =
     factura &&
     factura.estado !== "ANULADA" &&
-    (!effectivePerms || effectivePerms.puede_eliminar || effectivePerms.puede_inactivar || effectivePerms.puede_editar);
+    Boolean(effectivePerms?.puede_aprobar);
 
   const puedeEditarTerminos =
     factura &&
     factura.estado !== "ANULADA" &&
-    (!effectivePerms || effectivePerms.puede_editar || effectivePerms.puede_crear);
+    Boolean(effectivePerms?.puede_editar);
 
   const handleOpenEditTerms = () => {
     setEditCondicion(factura?.condicion_venta || "CONTADO");

@@ -45,9 +45,10 @@ export interface CustomerActivityRow {
 
 interface CustomerActivityReportViewProps {
   initialCompany?: string;
+  canExport?: boolean;
 }
 
-export function CustomerActivityReportView({ initialCompany }: CustomerActivityReportViewProps) {
+export function CustomerActivityReportView({ initialCompany, canExport }: CustomerActivityReportViewProps) {
   // Data state
   const [data, setData] = useState<CustomerActivityRow[]>([]);
   const [kpis, setKpis] = useState({
@@ -309,6 +310,7 @@ export function CustomerActivityReportView({ initialCompany }: CustomerActivityR
       <ReportHeader
         title="Antigüedad de Servicios por Cliente"
         subtitle="Identificación y categorización de clientes según el tiempo transcurrido desde su último servicio"
+        canExport={canExport}
         onRefresh={fetchData}
         onExportExcel={handleExportExcel}
         onExportPdf={handleExportPdf}

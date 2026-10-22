@@ -46,9 +46,10 @@ export interface ReceivableRow {
 
 interface ReceivablesReportViewProps {
   initialCompany?: string;
+  canExport?: boolean;
 }
 
-export function ReceivablesReportView({ initialCompany }: ReceivablesReportViewProps) {
+export function ReceivablesReportView({ initialCompany, canExport }: ReceivablesReportViewProps) {
   const todayStr = getTodaySantoDomingo();
 
   // Data state
@@ -343,6 +344,7 @@ export function ReceivablesReportView({ initialCompany }: ReceivablesReportViewP
       <ReportHeader
         title="Cuentas por Cobrar"
         subtitle="Identificación y seguimiento de facturas de clientes con saldo pendiente de cobro"
+        canExport={canExport}
         onRefresh={fetchData}
         onExportExcel={handleExportExcel}
         onExportPdf={handleExportPdf}

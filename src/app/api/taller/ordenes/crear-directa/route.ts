@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { getWorkshopSession, getScreenPermissions } from "@/lib/workshop-session";
 import { executeReceptionWithWorkOrder } from "@/lib/workshop/receptionOrderService";
 
 // POST /api/taller/ordenes/crear-directa
@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const perms = await getModulePermissions("TALLER", session.usuario_id);
+    const perms = await getScreenPermissions("TALLER_ORDENES", session.usuario_id);
     if (!perms.puede_crear) {
       return NextResponse.json(
         { error: "FORBIDDEN", message: "No tienes permiso para registrar Órdenes de Trabajo en el Taller." },

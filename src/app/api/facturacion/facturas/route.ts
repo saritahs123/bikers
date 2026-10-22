@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { getWorkshopSession, getScreenPermissions } from "@/lib/workshop-session";
 import { crearFactura } from "@/lib/billing/billingService";
 import { CrearFacturaInput, TipoLineaFactura } from "@/lib/billing/billingTypes";
 import { StockInsuficienteError, InventoryError } from "@/lib/inventory/inventoryMovementService";
@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const perms = await getModulePermissions("FACTURACION", session.usuario_id);
+    const perms = await getScreenPermissions("FACTURACION_FACTURAS", session.usuario_id);
     if (!perms.puede_ver) {
       return NextResponse.json(
         { error: "FORBIDDEN", message: "No tienes permisos para consultar facturación." },
@@ -348,7 +348,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const perms = await getModulePermissions("FACTURACION", session.usuario_id);
+    const perms = await getScreenPermissions("FACTURACION_FACTURAS", session.usuario_id);
     if (!perms.puede_crear) {
       return NextResponse.json(
         { error: "FORBIDDEN", message: "No tienes permisos para crear facturas." },

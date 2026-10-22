@@ -5,6 +5,7 @@ import { validateEmail, validatePasswordPolicy } from "@/lib/validations";
 import { recordUserActivity, recordUserAudit } from "@/lib/auditLogger";
 import { authorizeUserCreate } from "@/lib/userAuth";
 import { sweepExpiredSessions } from "@/lib/sessionLifecycle";
+import { getWorkshopSession, getScreenPermissions, isSuperAdmin } from "@/lib/workshop-session";
 
 interface UserRow {
   id: number;
@@ -51,7 +52,26 @@ const parseNum = (val: unknown) => {
 
 export async function GET() {
   try {
+    const session = await getWorkshopSession();
+    if (!session || !session.usuario_id) {
+      return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión no válida o expirada." }, { status: 401 });
+    }
+
+    const perms = await getScreenPermissions("/settings/security/users", session.usuario_id);
+    if (!perms.puede_ver) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "No posees permisos para consultar la lista de usuarios." }, { status: 403 });
+    }
+
     await sweepExpiredSessions().catch(() => {});
+
+    const isSuper = await isSuperAdmin(session.usuario_id);
+    const params: unknown[] = [];
+    let whereClause = "";
+
+    if (!isSuper && session.empresa_id) {
+      params.push(session.empresa_id);
+      whereClause = "WHERE u.empresa_id = $1";
+    }
 
     // 1. We join the primary identity, security, access config, role and type tables.
     const sql = `
@@ -116,10 +136,11 @@ export async function GET() {
       LEFT JOIN admin.usuario_seguridad us ON u.usuario_id = us.usuario_id
       LEFT JOIN admin.rol_funcional r ON u.rol_principal_id = r.rol_funcional_id
       LEFT JOIN admin.tipo_usuario tu ON u.tipo_usuario_id = tu.tipo_usuario_id
+      ${whereClause}
       ORDER BY u.usuario_id DESC
     `;
     
-    const usersRes = await query(sql);
+    const usersRes = await query(sql, params);
     
     // Convert properties correctly for the frontend component
     const mappedUsers = ((usersRes as unknown as UserRow[]) || []).map((u: UserRow) => {

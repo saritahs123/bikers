@@ -1747,7 +1747,7 @@ export default function DashboardView({ initialMetrics }: { initialMetrics?: Ini
                   </span>
                 </div>
                 <div className="flex justify-between items-center text-foreground-muted">
-                  <span className="truncate pr-1">Facturas anteriores:</span>
+                  <span className="truncate pr-1">Facturas / OTs anteriores:</span>
                   <span className="font-bold text-foreground shrink-0">
                     {formatRD(desgloseRecaudado.facturasAnteriores)}
                   </span>

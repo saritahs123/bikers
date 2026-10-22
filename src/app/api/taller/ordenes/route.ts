@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPool, query } from "@/lib/db";
-import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { getWorkshopSession, getScreenPermissions } from "@/lib/workshop-session";
 import { recordUserActivity, recordUserAudit } from "@/lib/auditLogger";
 import { ensureWorkOrderTracking } from "@/lib/tracking/workOrderTrackingService";
 import { sendWelcomeNotification } from "@/lib/notifications/workOrderNotificationService";
@@ -18,8 +18,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "FORBIDDEN_COMPANY", message: "No se pudo determinar la empresa del usuario." }, { status: 403 });
     }
 
-    // Check IAM permission for Módulo TALLER
-    const perms = await getModulePermissions("TALLER", session.usuario_id);
+    // Check IAM permission for Módulo TALLER / Pantalla TALLER_ORDENES
+    const perms = await getScreenPermissions("TALLER_ORDENES", session.usuario_id);
     if (!perms.puede_ver) {
       return NextResponse.json({ error: "FORBIDDEN", message: "No posee permiso de lectura para acceder a las órdenes de trabajo." }, { status: 403 });
     }
@@ -34,8 +34,8 @@ export async function GET(req: NextRequest) {
     const from = searchParams.get("from") || "";
     const to = searchParams.get("to") || "";
     const sortBy = (searchParams.get("sort_by") || searchParams.get("sortBy") || "").trim().toLowerCase();
-    const sortOrderRaw = (searchParams.get("sort_order") || searchParams.get("sortOrder") || "ASC").trim().toUpperCase();
-    const sortDirection = sortOrderRaw === "DESC" ? "DESC" : "ASC";
+    const sortOrderRaw = (searchParams.get("sort_order") || searchParams.get("sortOrder") || "DESC").trim().toUpperCase();
+    const sortDirection = sortOrderRaw === "ASC" ? "ASC" : "DESC";
     const page = parseInt(searchParams.get("page") || "1", 10);
     const limit = parseInt(searchParams.get("limit") || "20", 10);
     const offset = (page - 1) * limit;
@@ -143,11 +143,10 @@ export async function GET(req: NextRequest) {
     const countRes = await query(countSql, queryParams);
     const total = parseInt(countRes[0]?.total || "0", 10);
 
-    // Whitelist Order By construction
+    // Whitelist Order By construction: default descending by creation date (most recent first)
     let orderBySql = `
-      DATE_TRUNC('day', ot.fecha_registro AT TIME ZONE 'America/Santo_Domingo') ASC,
-      ot.prioridad_orden_id DESC,
-      ot.orden_trabajo_id ASC
+      ot.fecha_registro DESC,
+      ot.orden_trabajo_id DESC
     `;
 
     if (sortBy === "codigo") {
@@ -372,7 +371,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "UNAUTHORIZED", message: "Sesión inválida o expirada." }, { status: 401 });
     }
 
-    const perms = await getModulePermissions("TALLER", session.usuario_id);
+    const perms = await getScreenPermissions("TALLER_ORDENES", session.usuario_id);
     if (!perms.puede_crear) {
       return NextResponse.json({ error: "FORBIDDEN", message: "No posee permiso de creación para Órdenes de Trabajo." }, { status: 403 });
     }

@@ -30,6 +30,7 @@ import { COMPANY_LOGO_BASE64 } from "@/lib/assets/logoBase64";
 
 interface DailyInvoicesReportViewProps {
   initialCompany?: string;
+  canExport?: boolean;
 }
 
 export interface InvoiceDailyDetailRow {
@@ -67,7 +68,7 @@ export interface InvoiceDailyGroupSummary {
   facturas?: InvoiceDailyDetailRow[];
 }
 
-export function DailyInvoicesReportView({ initialCompany = "Ride Lab" }: DailyInvoicesReportViewProps) {
+export function DailyInvoicesReportView({ initialCompany = "Ride Lab", canExport }: DailyInvoicesReportViewProps) {
   const defaultFrom = useMemo(() => getDaysAgoSantoDomingo(6), []);
   const defaultTo = useMemo(() => getTodaySantoDomingo(), []);
 
@@ -852,6 +853,7 @@ export function DailyInvoicesReportView({ initialCompany = "Ride Lab" }: DailyIn
         title="REPORTE DE FACTURAS POR DÍA"
         subtitle="Consolidado diario de emisión de facturas, recaudación efectiva y saldos pendientes."
         totalRecords={meta.totalRecords}
+        canExport={canExport}
         isLoading={loading}
         onRefresh={fetchData}
         onExportExcel={handleExportExcel}
