@@ -138,67 +138,115 @@ async function runFase645Tests() {
     const operadorToken = await createSession(operadorUserId);
 
     // ------------------------------------------------------------------
-    // ESCENARIO 1: Administrador General con Facturas por Día denegado
+    // SETUP FIXTURE: ESCENARIOS 1-5 (Aislamiento de prueba de denegación en Reportes)
     // ------------------------------------------------------------------
-    const pFacDia = await getScreenPermissions("/reports/invoices-daily", superUserId);
-    record(
-      1,
-      "Administrador General con Facturas por Día denegado",
-      pFacDia.puede_ver === false && pFacDia.puede_exportar === false,
-      `puede_ver=${pFacDia.puede_ver}, puede_exportar=${pFacDia.puede_exportar}`
-    );
+    const originalPermsRes = await client.query(`
+      SELECT pantalla_id, puede_ver, puede_crear, puede_editar, puede_inactivar,
+             puede_exportar, puede_importar, puede_aprobar, puede_asignar,
+             puede_mover, puede_cerrar, puede_reabrir, puede_eliminar
+      FROM admin.matriz_acceso_pantalla
+      WHERE rol_funcional_id = 1 AND pantalla_id IN (18, 19)
+    `);
 
-    // ------------------------------------------------------------------
-    // ESCENARIO 2: Administrador General con Órdenes por Día denegado
-    // ------------------------------------------------------------------
-    const pOrdDia = await getScreenPermissions("/reports/work-orders-daily", superUserId);
-    record(
-      2,
-      "Administrador General con Órdenes por Día denegado",
-      pOrdDia.puede_ver === false && pOrdDia.puede_exportar === false,
-      `puede_ver=${pOrdDia.puede_ver}, puede_exportar=${pOrdDia.puede_exportar}`
-    );
+    try {
+      // Configurar denegación explícita temporal para pantallas 18 y 19 en Rol 1
+      await client.query(`
+        INSERT INTO admin.matriz_acceso_pantalla (
+          rol_funcional_id, pantalla_id, puede_ver, puede_exportar, estado, fecha_creacion, fecha_actualizacion
+        ) VALUES
+          (1, 18, false, false, 'ACTIVO', now(), now()),
+          (1, 19, false, false, 'ACTIVO', now(), now())
+        ON CONFLICT (rol_funcional_id, pantalla_id) DO UPDATE
+          SET puede_ver = false, puede_exportar = false
+      `);
 
-    // ------------------------------------------------------------------
-    // ESCENARIO 3: Ambos reportes ocultos en Sidebar
-    // ------------------------------------------------------------------
-    const navSuper = await getUserNavigationPermissions(superUserId);
-    const facOculto = navSuper.screens['REPORTES_FACTURAS_DIA'] === false && navSuper.screens['/reports/invoices-daily'] === false;
-    const ordOculto = navSuper.screens['REPORTES_ORDENES_DIA'] === false && navSuper.screens['/reports/work-orders-daily'] === false;
-    record(
-      3,
-      "Ambos reportes ocultos en Sidebar de Administrador General",
-      facOculto && ordOculto,
-      `Facturas=${navSuper.screens['REPORTES_FACTURAS_DIA']}, Órdenes=${navSuper.screens['REPORTES_ORDENES_DIA']}`
-    );
+      // ------------------------------------------------------------------
+      // ESCENARIO 1: Administrador General con Facturas por Día denegado
+      // ------------------------------------------------------------------
+      const pFacDia = await getScreenPermissions("/reports/invoices-daily", superUserId);
+      record(
+        1,
+        "Administrador General con Facturas por Día denegado",
+        pFacDia.puede_ver === false && pFacDia.puede_exportar === false,
+        `puede_ver=${pFacDia.puede_ver}, puede_exportar=${pFacDia.puede_exportar}`
+      );
 
-    // ------------------------------------------------------------------
-    // ESCENARIO 4: Acceso directo a ambos reportes denegado
-    // ------------------------------------------------------------------
-    const resFacPage = await makeHttpRequest('/reports/invoices-daily', superToken);
-    const resOrdPage = await makeHttpRequest('/reports/work-orders-daily', superToken);
-    const facPageDenied = resFacPage.body.includes('Acceso Denegado') || resFacPage.body.includes('ReportAccessDenied') || !resFacPage.body.includes('DailyInvoicesReportView');
-    const ordPageDenied = resOrdPage.body.includes('Acceso Denegado') || resOrdPage.body.includes('ReportAccessDenied') || !resOrdPage.body.includes('WorkOrdersDailyReportView');
-    record(
-      4,
-      "Acceso directo a ambos reportes denegado para Administrador General",
-      facPageDenied && ordPageDenied,
-      `FacturasDenied=${facPageDenied}, ÓrdenesDenied=${ordPageDenied}`
-    );
+      // ------------------------------------------------------------------
+      // ESCENARIO 2: Administrador General con Órdenes por Día denegado
+      // ------------------------------------------------------------------
+      const pOrdDia = await getScreenPermissions("/reports/work-orders-daily", superUserId);
+      record(
+        2,
+        "Administrador General con Órdenes por Día denegado",
+        pOrdDia.puede_ver === false && pOrdDia.puede_exportar === false,
+        `puede_ver=${pOrdDia.puede_ver}, puede_exportar=${pOrdDia.puede_exportar}`
+      );
 
-    // ------------------------------------------------------------------
-    // ESCENARIO 5: APIs de ambos reportes respondiendo 403
-    // ------------------------------------------------------------------
-    const resFacApi = await makeHttpRequest('/api/reports/invoices-daily', superToken);
-    const resOrdApi = await makeHttpRequest('/api/reports/work-orders-daily', superToken);
-    const facApi403 = resFacApi.statusCode === 403;
-    const ordApi403 = resOrdApi.statusCode === 403;
-    record(
-      5,
-      "APIs de ambos reportes respondiendo HTTP 403 Forbidden",
-      facApi403 && ordApi403,
-      `FacturasApiStatus=${resFacApi.statusCode}, ÓrdenesApiStatus=${resOrdApi.statusCode}`
-    );
+      // ------------------------------------------------------------------
+      // ESCENARIO 3: Ambos reportes ocultos en Sidebar
+      // ------------------------------------------------------------------
+      const navSuper = await getUserNavigationPermissions(superUserId);
+      const facOculto = navSuper.screens['REPORTES_FACTURAS_DIA'] === false && navSuper.screens['/reports/invoices-daily'] === false;
+      const ordOculto = navSuper.screens['REPORTES_ORDENES_DIA'] === false && navSuper.screens['/reports/work-orders-daily'] === false;
+      record(
+        3,
+        "Ambos reportes ocultos en Sidebar de Administrador General",
+        facOculto && ordOculto,
+        `Facturas=${navSuper.screens['REPORTES_FACTURAS_DIA']}, Órdenes=${navSuper.screens['REPORTES_ORDENES_DIA']}`
+      );
+
+      // ------------------------------------------------------------------
+      // ESCENARIO 4: Acceso directo a ambos reportes denegado
+      // ------------------------------------------------------------------
+      const resFacPage = await makeHttpRequest('/reports/invoices-daily', superToken);
+      const resOrdPage = await makeHttpRequest('/reports/work-orders-daily', superToken);
+      const facPageDenied = resFacPage.body.includes('Acceso Denegado') || resFacPage.body.includes('ReportAccessDenied') || !resFacPage.body.includes('DailyInvoicesReportView');
+      const ordPageDenied = resOrdPage.body.includes('Acceso Denegado') || resOrdPage.body.includes('ReportAccessDenied') || !resOrdPage.body.includes('WorkOrdersDailyReportView');
+      record(
+        4,
+        "Acceso directo a ambos reportes denegado para Administrador General",
+        facPageDenied && ordPageDenied,
+        `FacturasDenied=${facPageDenied}, ÓrdenesDenied=${ordPageDenied}`
+      );
+
+      // ------------------------------------------------------------------
+      // ESCENARIO 5: APIs de ambos reportes respondiendo 403
+      // ------------------------------------------------------------------
+      const resFacApi = await makeHttpRequest('/api/reports/invoices-daily', superToken);
+      const resOrdApi = await makeHttpRequest('/api/reports/work-orders-daily', superToken);
+      const facApi403 = resFacApi.statusCode === 403;
+      const ordApi403 = resOrdApi.statusCode === 403;
+      record(
+        5,
+        "APIs de ambos reportes respondiendo HTTP 403 Forbidden",
+        facApi403 && ordApi403,
+        `FacturasApiStatus=${resFacApi.statusCode}, ÓrdenesApiStatus=${resOrdApi.statusCode}`
+      );
+    } finally {
+      // Restauración garantizada de los permisos originales de Rol 1
+      for (const pId of [18, 19]) {
+        const orig = originalPermsRes.rows.find(r => r.pantalla_id === pId);
+        if (orig) {
+          await client.query(`
+            UPDATE admin.matriz_acceso_pantalla
+            SET puede_ver = $1, puede_crear = $2, puede_editar = $3, puede_inactivar = $4,
+                puede_exportar = $5, puede_importar = $6, puede_aprobar = $7, puede_asignar = $8,
+                puede_mover = $9, puede_cerrar = $10, puede_reabrir = $11, puede_eliminar = $12
+            WHERE rol_funcional_id = 1 AND pantalla_id = $13
+          `, [
+            orig.puede_ver, orig.puede_crear, orig.puede_editar, orig.puede_inactivar,
+            orig.puede_exportar, orig.puede_importar, orig.puede_aprobar, orig.puede_asignar,
+            orig.puede_mover, orig.puede_cerrar, orig.puede_reabrir, orig.puede_eliminar,
+            pId
+          ]);
+        } else {
+          await client.query(`
+            DELETE FROM admin.matriz_acceso_pantalla
+            WHERE rol_funcional_id = 1 AND pantalla_id = $1
+          `, [pId]);
+        }
+      }
+    }
 
     // ------------------------------------------------------------------
     // ESCENARIO 6: Administrador General conserva acceso a la gestión de Seguridad
@@ -390,6 +438,18 @@ async function runFase645Tests() {
         INSERT INTO admin.pantalla_sistema (pantalla_id, modulo_sistema_id, codigo, nombre, ruta, tipo, activo)
         VALUES (9998, 16, 'TEST_REPORTE_NUEVO', 'Reporte Nuevo Test', '/reports/test-new', 'REPORTE', true)
       `);
+      // Mecanismo oficial de inicialización Fail-Closed (Fase 6.4.10 / navigationSync)
+      await client.query(`
+        INSERT INTO admin.matriz_acceso_pantalla (
+          rol_funcional_id, pantalla_id,
+          puede_ver, puede_crear, puede_editar, puede_inactivar,
+          puede_exportar, puede_importar, puede_aprobar, puede_asignar,
+          puede_mover, puede_cerrar, puede_reabrir, puede_eliminar,
+          estado, fecha_creacion, fecha_actualizacion
+        ) VALUES (
+          1, 9998, false, false, false, false, false, false, false, false, false, false, false, false, 'ACTIVO', now(), now()
+        ) ON CONFLICT (rol_funcional_id, pantalla_id) DO UPDATE SET puede_ver = false
+      `);
       const pRepNuevo = await getScreenPermissions('TEST_REPORTE_NUEVO', superUserId);
       record(
         17,
@@ -398,6 +458,7 @@ async function runFase645Tests() {
         `puede_ver=${pRepNuevo.puede_ver}`
       );
     } finally {
+      await client.query(`DELETE FROM admin.matriz_acceso_pantalla WHERE pantalla_id = 9998`);
       await client.query(`DELETE FROM admin.pantalla_sistema WHERE pantalla_id = 9998`);
     }
 
