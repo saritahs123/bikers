@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
 
     // Base conditions: payments of the company, avoiding voided invoice duplicates
     const conditions: string[] = [
-      "(f.empresa_id = $1 OR f.empresa_id IS NULL)",
+      "f.empresa_id = $1",
       "UPPER(COALESCE(f.estado, '')) NOT IN ('ANULADA', 'CANCELADA')"
     ];
     const params: unknown[] = [empresaId];

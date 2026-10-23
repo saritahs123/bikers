@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { query } from "@/lib/db";
+import { normalizeModuleCode } from "@/lib/moduleCode";
 
 export interface WorkshopSession {
   usuario_id: number;
@@ -136,18 +137,38 @@ export async function getModulePermissions(
 
     const isId = typeof moduloNameOrId === 'number' || /^\d+$/.test(String(moduloNameOrId));
     const targetModule = isId ? Number(moduloNameOrId) : String(moduloNameOrId).toUpperCase();
+    const targetCode = isId ? '' : normalizeModuleCode(String(moduloNameOrId));
 
-    // 1. Obtener módulo objetivo
-    const modRows = await query(
-      `SELECT modulo_sistema_id
-       FROM admin.modulo_sistema
-       WHERE ${isId ? 'modulo_sistema_id = $1' : `(
-         UPPER(nombre) = UPPER($1)
-         OR UPPER(TRANSLATE(nombre, 'ÁÉÍÓÚáéíóú', 'AEIOUaeiou')) = UPPER(TRANSLATE($1, 'ÁÉÍÓÚáéíóú', 'AEIOUaeiou'))
-       )`}
-       LIMIT 1`,
-      [targetModule]
-    );
+    // 1. Obtener módulo objetivo: intenta por código canónico, con fallback a nombre
+    let modRows: Array<{ modulo_sistema_id: number }> = [];
+    if (isId) {
+      modRows = (await query(
+        `SELECT modulo_sistema_id FROM admin.modulo_sistema WHERE modulo_sistema_id = $1 LIMIT 1`,
+        [targetModule]
+      )) as Array<{ modulo_sistema_id: number }>;
+    } else {
+      if (targetCode) {
+        try {
+          modRows = await query(
+            `SELECT modulo_sistema_id FROM admin.modulo_sistema WHERE codigo = $1 LIMIT 1`,
+            [targetCode]
+          );
+        } catch {
+          modRows = [];
+        }
+      }
+
+      if (!modRows || modRows.length === 0) {
+        modRows = await query(
+          `SELECT modulo_sistema_id
+           FROM admin.modulo_sistema
+           WHERE UPPER(nombre) = UPPER($1)
+              OR UPPER(TRANSLATE(nombre, 'ÁÉÍÓÚáéíóú', 'AEIOUaeiou')) = UPPER(TRANSLATE($1, 'ÁÉÍÓÚáéíóú', 'AEIOUaeiou'))
+           LIMIT 1`,
+          [targetModule]
+        );
+      }
+    }
 
     if (!modRows || modRows.length === 0) {
       return noPerms;

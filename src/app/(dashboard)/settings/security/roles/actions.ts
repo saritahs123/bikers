@@ -2,6 +2,7 @@
 
 import { query } from "@/lib/db";
 import { revalidatePath } from "next/cache";
+import { getWorkshopSession, isSuperAdmin } from "@/lib/workshop-session";
 
 export type FullRoleData = {
   roles: any[];
@@ -11,6 +12,15 @@ export type FullRoleData = {
 
 export async function getUnifiedRoleData(): Promise<FullRoleData> {
   try {
+    const session = await getWorkshopSession();
+    if (!session || !session.usuario_id) {
+      return { roles: [], modulos: [], matriz: [] };
+    }
+    const isSuper = await isSuperAdmin(session.usuario_id);
+    if (!isSuper) {
+      return { roles: [], modulos: [], matriz: [] };
+    }
+
     const rolesRes = await query(
       "SELECT rol_funcional_id, nombre, descripcion, estado, fecha_creacion FROM admin.rol_funcional ORDER BY rol_funcional_id ASC"
     );
@@ -33,6 +43,15 @@ export async function getUnifiedRoleData(): Promise<FullRoleData> {
 }
 
 export async function createRole(formData: FormData) {
+  const session = await getWorkshopSession();
+  if (!session || !session.usuario_id) {
+    return { error: "No autenticado" };
+  }
+  const isSuper = await isSuperAdmin(session.usuario_id);
+  if (!isSuper) {
+    return { error: "No autorizado: se requieren permisos de Administrador General" };
+  }
+
   const nombre = formData.get("nombre") as string;
   const descripcion = formData.get("descripcion") as string;
 
@@ -84,6 +103,15 @@ export type MatrixRowUpdate = {
 };
 
 export async function saveRoleMatrix(rol_funcional_id: number, updates: MatrixRowUpdate[]) {
+  const session = await getWorkshopSession();
+  if (!session || !session.usuario_id) {
+    return { error: "No autenticado" };
+  }
+  const isSuper = await isSuperAdmin(session.usuario_id);
+  if (!isSuper) {
+    return { error: "No autorizado: se requieren permisos de Administrador General" };
+  }
+
   try {
     for (const update of updates) {
       const existing = await query(

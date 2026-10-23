@@ -1,26 +1,15 @@
-"use client";
+import { redirect } from "next/navigation";
+import { ProtectedServerPage } from "@/components/auth/ProtectedServerPage";
 
-import { Suspense, useEffect } from "react";
-import { useRouter } from "next/navigation";
-
-function InventoryRedirect() {
-  const router = useRouter();
-  useEffect(() => {
-    router.replace("/inventory/summary");
-  }, [router]);
+function InventoryRedirectServer(): null {
+  redirect("/inventory/summary");
   return null;
 }
 
 export default function InventoryPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="p-8 text-center text-foreground-muted animate-pulse">
-          Cargando Inventario...
-        </div>
-      }
-    >
-      <InventoryRedirect />
-    </Suspense>
+    <ProtectedServerPage screenCode="INVENTARIO_SALIDAS_AJUSTES" title="Módulo de Inventario">
+      <InventoryRedirectServer />
+    </ProtectedServerPage>
   );
 }

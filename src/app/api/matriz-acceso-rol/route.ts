@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getPool, query } from "@/lib/db";
 import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
 import { CANONICAL_NAVIGATION, normalizeCode } from "@/config/navigationConfig";
+import { normalizeModuleCode, isValidModuleCode } from "@/lib/moduleCode";
 
 interface DbModuloRow {
   id: number;
@@ -406,9 +407,20 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "FORBIDDEN", message: "No tienes permisos para crear módulos en el sistema." }, { status: 403 });
     }
 
-    const { nombre } = await req.json();
+    const body = await req.json();
+    const nombre = body.nombre;
+    const rawCodigo = body.codigo;
+
     if (!nombre || !nombre.trim()) {
       return NextResponse.json({ error: "VALIDATION_ERROR", message: "El nombre del módulo es requerido." }, { status: 400 });
+    }
+
+    const codigo = rawCodigo && String(rawCodigo).trim()
+      ? normalizeModuleCode(String(rawCodigo))
+      : normalizeModuleCode(nombre);
+
+    if (!isValidModuleCode(codigo)) {
+      return NextResponse.json({ error: "VALIDATION_ERROR", message: "No se pudo generar un código alfanumérico válido para el módulo." }, { status: 400 });
     }
 
     interface MaxIdResult {
@@ -422,8 +434,8 @@ export async function POST(req: Request) {
     const nextOrden = maxRes[0]?.next_orden || 1;
 
     await query(
-      "INSERT INTO admin.modulo_sistema (modulo_sistema_id, nombre, orden, estado, fecha_creacion, fecha_actualizacion) VALUES ($1, $2, $3, 'ACTIVO', now(), now())",
-      [nextId, nombre.trim().toUpperCase(), nextOrden]
+      "INSERT INTO admin.modulo_sistema (modulo_sistema_id, codigo, nombre, orden, estado, fecha_creacion, fecha_actualizacion) VALUES ($1, $2, $3, $4, 'ACTIVO', now(), now())",
+      [nextId, codigo, nombre.trim().toUpperCase(), nextOrden]
     );
 
     return NextResponse.json({ success: true, message: "Módulo creado exitosamente." });

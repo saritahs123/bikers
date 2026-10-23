@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import WorkOrdersPageClient from "@/components/workshop/WorkOrdersPageClient";
 import { Loader2 } from "lucide-react";
+import { ProtectedServerPage } from "@/components/auth/ProtectedServerPage";
 
 export const metadata = {
   title: "Órdenes de Trabajo | Ride Lab",
@@ -9,15 +10,17 @@ export const metadata = {
 
 export default function WorkOrdersPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="max-w-[1440px] mx-auto p-12 flex items-center justify-center font-mono text-xs text-slate-400 gap-2">
-          <Loader2 className="w-5 h-5 animate-spin text-[#bfce7f]" />
-          Cargando Órdenes de Trabajo...
-        </div>
-      }
-    >
-      <WorkOrdersPageClient />
-    </Suspense>
+    <ProtectedServerPage screenCode="TALLER_ORDENES" title="Órdenes de Trabajo">
+      <Suspense
+        fallback={
+          <div className="max-w-[1440px] mx-auto p-12 flex items-center justify-center font-mono text-xs text-slate-400 gap-2">
+            <Loader2 className="w-5 h-5 animate-spin text-[#bfce7f]" />
+            Cargando Órdenes de Trabajo...
+          </div>
+        }
+      >
+        <WorkOrdersPageClient />
+      </Suspense>
+    </ProtectedServerPage>
   );
 }

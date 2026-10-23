@@ -1,5 +1,6 @@
 import { query } from "@/lib/db";
 import { CANONICAL_NAVIGATION, normalizeCode } from "@/config/navigationConfig";
+import { normalizeModuleCode } from "@/lib/moduleCode";
 
 export interface SyncResult {
   success: boolean;
@@ -162,10 +163,11 @@ export async function syncNavigationToDatabase(force = false): Promise<SyncResul
           "SELECT COALESCE(MAX(modulo_sistema_id), 0) + 1 AS next_id FROM admin.modulo_sistema"
         )) as unknown as Array<{ next_id: number }>;
         moduloId = nextIdRes[0]?.next_id || menu.orden;
+        const code = normalizeModuleCode(menu.nombre);
 
         await query(
-          "INSERT INTO admin.modulo_sistema (modulo_sistema_id, nombre, orden, estado, fecha_creacion, fecha_actualizacion) VALUES ($1, $2, $3, 'ACTIVO', clock_timestamp(), clock_timestamp())",
-          [moduloId, menu.nombre.toUpperCase(), menu.orden]
+          "INSERT INTO admin.modulo_sistema (modulo_sistema_id, codigo, nombre, orden, estado, fecha_creacion, fecha_actualizacion) VALUES ($1, $2, $3, $4, 'ACTIVO', clock_timestamp(), clock_timestamp())",
+          [moduloId, code, menu.nombre.toUpperCase(), menu.orden]
         );
       }
       menusSynced++;

@@ -1,3 +1,4 @@
+import { ProtectedServerPage } from "@/components/auth/ProtectedServerPage";
 import InventoryInitialView from "@/components/inventory/InventoryInitialView";
 
 export const metadata = {
@@ -6,5 +7,9 @@ export const metadata = {
 };
 
 export default function InventoryInitialPage() {
-  return <InventoryInitialView />;
+  return (
+    <ProtectedServerPage screenCode="CONFIG_INVENTARIO_INICIAL">
+      <InventoryInitialView />
+    </ProtectedServerPage>
+  );
 }

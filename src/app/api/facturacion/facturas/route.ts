@@ -309,9 +309,10 @@ export async function GET(request: NextRequest) {
       total_lineas: Number(row.total_lineas || 0)
     }));
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data,
+      permissions: perms,
       pagination: {
         page,
         limit,
@@ -326,6 +327,10 @@ export async function GET(request: NextRequest) {
         total_facturas: totalRecords
       }
     });
+    response.headers.set("x-perm-crear", String(Boolean(perms.puede_crear)));
+    response.headers.set("x-perm-ver", String(Boolean(perms.puede_ver)));
+    response.headers.set("x-perm-aprobar", String(Boolean(perms.puede_aprobar)));
+    return response;
   } catch (err) {
     console.error("Error en GET /api/facturacion/facturas:", err);
     return NextResponse.json(

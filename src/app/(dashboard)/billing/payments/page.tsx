@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import PaymentsView from "@/components/billing/PaymentsView";
+import { ProtectedServerPage } from "@/components/auth/ProtectedServerPage";
 
 export const metadata = {
   title: "Pagos | Ride Lab",
@@ -8,8 +9,10 @@ export const metadata = {
 
 export default function PaymentsPage() {
   return (
-    <Suspense fallback={<div className="p-8 text-xs font-mono text-foreground-muted">Cargando Pagos...</div>}>
-      <PaymentsView />
-    </Suspense>
+    <ProtectedServerPage screenCode="FACTURACION_PAGOS" title="Cobros y Pagos">
+      <Suspense fallback={<div className="p-8 text-xs font-mono text-foreground-muted">Cargando Pagos...</div>}>
+        <PaymentsView />
+      </Suspense>
+    </ProtectedServerPage>
   );
 }

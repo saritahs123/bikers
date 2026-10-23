@@ -1,5 +1,6 @@
 import { query } from "@/lib/db";
 import { getWorkshopSession } from "@/lib/workshop-session";
+import { ProtectedServerPage } from "@/components/auth/ProtectedServerPage";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +15,14 @@ interface BillingInvoiceItem {
 }
 
 export default async function BillingPage() {
+  return (
+    <ProtectedServerPage screenCode="FACTURACION_FACTURAS" title="Módulo de Facturación">
+      <BillingContent />
+    </ProtectedServerPage>
+  );
+}
+
+async function BillingContent() {
   const session = await getWorkshopSession();
   const empresaId = session?.empresa_id;
 
