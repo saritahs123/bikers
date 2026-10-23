@@ -95,8 +95,16 @@ export function formatDurationText(hours, minutes) {
   return parts.join(' ');
 }
 
-export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode = false, selfUserId = null }) {
+export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode = false, selfUserId = null, userPermissions = null }) {
   const router = useRouter();
+  const [permissions, setPermissions] = useState({
+    puede_ver: userPermissions?.puede_ver ?? true,
+    puede_crear: userPermissions?.puede_crear ?? false,
+    puede_editar: userPermissions?.puede_editar ?? false,
+    puede_eliminar: userPermissions?.puede_eliminar ?? false,
+    puede_exportar: userPermissions?.puede_exportar ?? false,
+    puede_asignar: userPermissions?.puede_asignar ?? false
+  });
   const [data, setData] = useState([]);
   const [nowTimestamp] = useState(() => Date.now());
   const [isLoading, setIsLoading] = useState(true);
@@ -203,6 +211,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
   };
 
   const handleOpenResetPasswordModal = async (user) => {
+    if (!permissions.puede_editar) return;
     setResetPasswordUser(user);
     setResetNewPassword('');
     setResetConfirmPassword('');
@@ -287,8 +296,30 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
   const fetchUsers = async () => {
     try {
       setIsLoading(true);
-      const res = await usersService.getAllUsers();
-      setData(res || []);
+      const response = await fetch('/api/usuarios', { cache: 'no-store' });
+      if (response.ok) {
+        const canVer = response.headers.get('x-perm-ver');
+        const canCrear = response.headers.get('x-perm-crear');
+        const canEditar = response.headers.get('x-perm-editar');
+        const canEliminar = response.headers.get('x-perm-eliminar');
+        const canExportar = response.headers.get('x-perm-exportar');
+        const canAsignar = response.headers.get('x-perm-asignar');
+
+        if (canVer !== null) {
+          setPermissions({
+            puede_ver: canVer === 'true',
+            puede_crear: canCrear === 'true',
+            puede_editar: canEditar === 'true',
+            puede_eliminar: canEliminar === 'true',
+            puede_exportar: canExportar === 'true',
+            puede_asignar: canAsignar === 'true'
+          });
+        }
+        const res = await response.json();
+        setData(Array.isArray(res) ? res : (res?.data || []));
+      } else {
+        setData([]);
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -603,6 +634,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
   });
 
   const handleExecuteSave360 = async () => {
+    if (!permissions.puede_editar) return;
     setShowConfirmSaveModal(false);
     const targetData = wizardData || detailUser;
     if (!targetData) return;
@@ -1309,6 +1341,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
 
   // WIZARD CONTROL Flow
   const handleAddNew = () => {
+    if (!permissions.puede_crear) return;
     loadCatalogos();
     setFormError('');
     setFieldErrors({});
@@ -1378,6 +1411,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
   };
 
   const handleStartEdit360 = async (user, tab = 'resumen') => {
+    if (!permissions.puede_editar) return;
     setEdit360Error('');
     setFormErrors360({});
 
@@ -1667,6 +1701,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
   };
 
   const handleSaveUser = () => {
+    if (!permissions.puede_crear) return;
     const timestamp = new Date().toISOString();
     const cleanUser = { ...wizardData };
 
@@ -2801,22 +2836,34 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     const items = [];
 
     // Most accounts can edit profile
-    items.push(
-      <button
-        key="edit-profile"
-        className={btnClass}
-        onClick={() => { closeMenu(); handleStartEdit360(item, 'resumen'); }}
-      >
-        <Edit2 size={13} className="text-foreground-muted shrink-0" /> Editar perfil
-      </button>,
-      <button
-        key="reset-password-manual"
-        className={btnClass}
-        onClick={() => { closeMenu(); handleOpenResetPasswordModal(item); }}
-      >
-        <KeyRound size={13} className="text-primary shrink-0" /> Restablecer contraseña
-      </button>
-    );
+    if (permissions.puede_editar) {
+      items.push(
+        <button
+          key="edit-profile"
+          className={btnClass}
+          onClick={() => { closeMenu(); handleStartEdit360(item, 'resumen'); }}
+        >
+          <Edit2 size={13} className="text-foreground-muted shrink-0" /> Editar perfil
+        </button>,
+        <button
+          key="reset-password-manual"
+          className={btnClass}
+          onClick={() => { closeMenu(); handleOpenResetPasswordModal(item); }}
+        >
+          <KeyRound size={13} className="text-primary shrink-0" /> Restablecer contraseña
+        </button>
+      );
+    } else {
+      items.push(
+        <button
+          key="view-profile"
+          className={btnClass}
+          onClick={() => { closeMenu(); handleSelectUser(item); }}
+        >
+          <Eye size={13} className="text-foreground-muted shrink-0" /> Ver perfil
+        </button>
+      );
+    }
 
     // Conditional activation actions
     if (accessMethod === 'EMAIL') {
@@ -3236,23 +3283,27 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
               </>
             ) : (
               <>
-                <button
-                  type="button"
-                  onClick={() => handleOpenResetPasswordModal(detailUser)}
-                  className="px-4 py-2 rounded-xl border border-primary/40 hover:bg-primary/20 text-xs font-bold transition-all text-primary bg-primary/10 flex items-center gap-2 cursor-pointer shadow-lg"
-                >
-                  <KeyRound size={13} />
-                  <span>Restablecer contraseña</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleStartEdit360(detailUser, 'resumen');
-                  }}
-                  className="px-4 py-2 rounded-xl border border-primary/40 hover:bg-primary/20 text-xs font-bold transition-all text-primary bg-primary/10 flex items-center gap-2 cursor-pointer shadow-lg"
-                >
-                  <Edit2 size={13} /> Editar
-                </button>
+                {permissions.puede_editar && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenResetPasswordModal(detailUser)}
+                      className="px-4 py-2 rounded-xl border border-primary/40 hover:bg-primary/20 text-xs font-bold transition-all text-primary bg-primary/10 flex items-center gap-2 cursor-pointer shadow-lg"
+                    >
+                      <KeyRound size={13} />
+                      <span>Restablecer contraseña</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleStartEdit360(detailUser, 'resumen');
+                      }}
+                      className="px-4 py-2 rounded-xl border border-primary/40 hover:bg-primary/20 text-xs font-bold transition-all text-primary bg-primary/10 flex items-center gap-2 cursor-pointer shadow-lg"
+                    >
+                      <Edit2 size={13} /> Editar
+                    </button>
+                  </>
+                )}
               </>
             )}
             <button onClick={handleGoBack} className="p-2 text-foreground-muted hover:text-foreground hover:bg-surface-subtle rounded-xl transition-all cursor-pointer" title="Cerrar detalle">
@@ -3303,7 +3354,14 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                     )}
                   </div>
 
-                  <div className="space-y-4">
+                  {!permissions.puede_editar && (
+                    <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-500 text-xs font-mono flex items-center gap-2 mb-4">
+                      <AlertTriangle size={15} className="shrink-0" />
+                      <span>Modo lectura: No posees permisos de edición para este registro.</span>
+                    </div>
+                  )}
+
+                  <fieldset disabled={!permissions.puede_editar} className="space-y-4">
                     {/* Row 1: Nombre * | Apellido * */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
@@ -3409,6 +3467,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                       <div>
                         <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Rol principal *</label>
                         <select
+                          disabled={!permissions.puede_asignar}
                           value={wizardData.rol_id || ''}
                           onChange={(e) => {
                             const rId = e.target.value ? Number(e.target.value) : '';
@@ -3422,7 +3481,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                               }
                             }
                           }}
-                          className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none cursor-pointer transition-colors ${formErrors360.rol_id ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
+                          className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none cursor-pointer transition-colors ${formErrors360.rol_id ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'} disabled:opacity-50 disabled:cursor-not-allowed`}
                         >
                           <option value="">-- Selecciona Rol --</option>
                           {availableRoles.map(r => (
@@ -3462,6 +3521,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                       <div>
                         <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Roles adicionales</label>
                         <select
+                          disabled={!permissions.puede_asignar}
                           id="user-360-add-role-select"
                           value=""
                           onChange={(e) => {
@@ -3473,7 +3533,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                               }
                             }
                           }}
-                          className="w-full bg-input border border-border focus:border-primary rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none cursor-pointer transition-colors"
+                          className="w-full bg-input border border-border focus:border-primary rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <option value="">+ Asignar rol secundario...</option>
                           {availableRolesForAdditional.map(r => (
@@ -3495,11 +3555,12 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                                   <span>{rObj ? (rObj.nombre || rObj.name) : `Rol ${rId}`}</span>
                                   <button
                                     type="button"
+                                    disabled={!permissions.puede_asignar}
                                     onClick={() => {
                                       const updated = (wizardData.roles_additional || []).filter(id => Number(id) !== Number(rId));
                                       handleChange('roles_additional', updated);
                                     }}
-                                    className="p-0.5 hover:bg-purple-500/20 rounded text-purple-300 hover:text-rose-400 transition-colors cursor-pointer"
+                                    className="p-0.5 hover:bg-purple-500/20 rounded text-purple-300 hover:text-rose-400 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                                     title="Quitar rol"
                                   >
                                     <X size={12} />
@@ -3628,7 +3689,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                         );
                       })()}
                     </div>
-                  </div>
+                  </fieldset>
 
                   {/* Actions Footer */}
                   <div className="flex items-center justify-end gap-3 pt-4 border-t border-border">
@@ -3639,14 +3700,16 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                     >
                       Cancelar
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => handleTriggerSaveEdit360()}
-                      disabled={isSaving}
-                      className="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs transition-colors flex items-center gap-2 cursor-pointer shadow-lg disabled:opacity-50"
-                    >
-                      <Save size={14} /> {isSaving ? 'Guardando...' : 'Guardar cambios'}
-                    </button>
+                    {permissions.puede_editar && (
+                      <button
+                        type="button"
+                        onClick={() => handleTriggerSaveEdit360()}
+                        disabled={isSaving}
+                        className="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs transition-colors flex items-center gap-2 cursor-pointer shadow-lg disabled:opacity-50"
+                      >
+                        <Save size={14} /> {isSaving ? 'Guardando...' : 'Guardar cambios'}
+                      </button>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -5220,19 +5283,23 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">
-          <button
-            onClick={handleExport}
-            className="bg-card border border-border hover:border-primary text-foreground font-mono text-xs font-bold px-4 py-3 rounded-xl shadow-lg flex items-center gap-2 transition-all cursor-pointer"
-            title="Exportar a Excel (CSV)"
-          >
-            <Download size={16}/> Exportar Excel
-          </button>
-          <button
-            onClick={handleAddNew}
-            className="bg-primary hover:bg-primary text-primary-foreground font-mono text-xs font-bold px-5 py-3 rounded-xl shadow-lg flex items-center gap-2 transition-all cursor-pointer"
-          >
-            <UserPlus size={18}/> Nuevo usuario
-          </button>
+          {permissions.puede_exportar && (
+            <button
+              onClick={handleExport}
+              className="bg-card border border-border hover:border-primary text-foreground font-mono text-xs font-bold px-4 py-3 rounded-xl shadow-lg flex items-center gap-2 transition-all cursor-pointer"
+              title="Exportar a Excel (CSV)"
+            >
+              <Download size={16}/> Exportar Excel
+            </button>
+          )}
+          {permissions.puede_crear && (
+            <button
+              onClick={handleAddNew}
+              className="bg-primary hover:bg-primary text-primary-foreground font-mono text-xs font-bold px-5 py-3 rounded-xl shadow-lg flex items-center gap-2 transition-all cursor-pointer"
+            >
+              <UserPlus size={18}/> Nuevo usuario
+            </button>
+          )}
         </div>
       </div>
 
@@ -6075,6 +6142,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                         <div>
                           <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Rol principal *</label>
                           <select
+                            disabled={!permissions.puede_asignar}
                             value={wizardData.rol_id || ''}
                             onChange={(e) => {
                               const rId = e.target.value ? Number(e.target.value) : '';
@@ -6088,7 +6156,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                                 }
                               }
                             }}
-                            className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none cursor-pointer transition-colors ${fieldErrors.rol_id ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
+                            className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none cursor-pointer transition-colors ${fieldErrors.rol_id ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'} disabled:opacity-50 disabled:cursor-not-allowed`}
                           >
                             <option value="">-- Selecciona Rol --</option>
                             {availableRoles.map(r => (
@@ -6128,6 +6196,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                         <div>
                           <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Roles adicionales</label>
                           <select
+                            disabled={!permissions.puede_asignar}
                             id="wizard-add-role-select"
                             value=""
                             onChange={(e) => {
@@ -6139,7 +6208,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                                 }
                               }
                             }}
-                            className="w-full bg-input border border-border focus:border-primary rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none cursor-pointer transition-colors"
+                            className="w-full bg-input border border-border focus:border-primary rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             <option value="">+ Asignar rol secundario...</option>
                             {availableRolesForAdditional.map(r => (
@@ -6161,11 +6230,12 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                                     <span>{rObj ? (rObj.nombre || rObj.name) : `Rol ${rId}`}</span>
                                     <button
                                       type="button"
+                                      disabled={!permissions.puede_asignar}
                                       onClick={() => {
                                         const updated = (wizardData.roles_additional || []).filter(id => Number(id) !== Number(rId));
                                         handleChange('roles_additional', updated);
                                       }}
-                                      className="p-0.5 hover:bg-purple-500/20 rounded text-purple-300 hover:text-rose-400 transition-colors cursor-pointer"
+                                      className="p-0.5 hover:bg-purple-500/20 rounded text-purple-300 hover:text-rose-400 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                                       title="Quitar rol"
                                     >
                                       <X size={12} />

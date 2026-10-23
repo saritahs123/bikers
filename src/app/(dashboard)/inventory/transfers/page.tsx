@@ -8,7 +8,7 @@ export const metadata = {
 
 export default function InventoryTransfersPage() {
   return (
-    <ProtectedServerPage screenCode="INVENTARIO_TRANSFERENCIAS" title="Transferencias de Inventario">
+    <ProtectedServerPage screenCode="INVENTARIO_TRANSFERENCIAS" requiredAction="puede_mover" title="Transferencias de Inventario">
       <InventoryTransfersView />
     </ProtectedServerPage>
   );

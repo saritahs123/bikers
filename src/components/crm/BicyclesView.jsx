@@ -244,11 +244,11 @@ export default function BicyclesView({ initialBikeId = null, initialTab = "gener
 
         if (permVer !== null || permCrear !== null) {
           setPermissions({
-            puede_ver: permVer === null ? true : permVer === "true",
-            puede_crear: permCrear === null ? true : permCrear === "true",
-            puede_editar: permEditar === null ? true : permEditar === "true",
-            puede_eliminar: permEliminar === null ? true : permEliminar === "true",
-            puede_exportar: permExportar === null ? true : permExportar === "true"
+            puede_ver: permVer === "true",
+            puede_crear: permCrear === "true",
+            puede_editar: permEditar === "true",
+            puede_eliminar: permEliminar === "true",
+            puede_exportar: permExportar === "true"
           });
         }
 

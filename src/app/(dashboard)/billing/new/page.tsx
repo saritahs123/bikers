@@ -8,7 +8,12 @@ export const metadata = {
 
 export default function NewBillingPage() {
   return (
-    <ProtectedServerPage screenCode="FACTURACION_NUEVA" title="Nueva Factura">
+    <ProtectedServerPage
+      screenCode="FACTURACION_NUEVA"
+      title="Nueva Factura"
+      requiredAction="puede_crear"
+      message="Tu rol de usuario actual no dispone de permisos para crear o emitir nuevas facturas."
+    >
       <NewInvoiceView />
     </ProtectedServerPage>
   );

@@ -26,6 +26,14 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const perms = await getModulePermissions("CRM", session.usuario_id);
+    if (!perms.puede_ver) {
+      return NextResponse.json(
+        { error: "FORBIDDEN", message: "No tienes permisos para consultar niveles de cliente." },
+        { status: 403 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const soloActivos = searchParams.get("activos") === "true";
 
@@ -60,10 +68,21 @@ export async function GET(request: NextRequest) {
       clientes_count: Number(r.clientes_count || 0)
     }));
 
-    return NextResponse.json({
-      success: true,
-      data: formatted
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        data: formatted
+      },
+      {
+        headers: {
+          "x-perm-ver": String(perms.puede_ver),
+          "x-perm-crear": String(perms.puede_crear),
+          "x-perm-editar": String(perms.puede_editar),
+          "x-perm-eliminar": String(perms.puede_eliminar),
+          "x-perm-exportar": String(perms.puede_exportar)
+        }
+      }
+    );
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Error desconocido";
     console.error("Error en GET /api/crm/niveles-cliente:", error);

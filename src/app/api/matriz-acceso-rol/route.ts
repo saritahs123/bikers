@@ -190,7 +190,7 @@ export async function GET() {
       });
     });
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       modules: modulesWithScreens,
       roles: rolesRes,
@@ -198,11 +198,24 @@ export async function GET() {
       screenMatrix: screenMatrixMap,
       rawMatrix: matrizRes,
       userPermissions: {
+        puede_ver: perms.puede_ver,
         puede_crear: perms.puede_crear,
         puede_editar: perms.puede_editar,
         puede_eliminar: perms.puede_eliminar
       }
     });
+
+    response.headers.set('x-perm-puede-ver', String(perms.puede_ver));
+    response.headers.set('x-perm-puede-crear', String(perms.puede_crear));
+    response.headers.set('x-perm-puede-editar', String(perms.puede_editar));
+    response.headers.set('x-perm-puede-eliminar', String(perms.puede_eliminar));
+
+    response.headers.set('x-perm-ver', String(perms.puede_ver));
+    response.headers.set('x-perm-crear', String(perms.puede_crear));
+    response.headers.set('x-perm-editar', String(perms.puede_editar));
+    response.headers.set('x-perm-eliminar', String(perms.puede_eliminar));
+
+    return response;
   } catch (error: unknown) {
     console.error("Error in GET /api/matriz-acceso-rol:", error);
     return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al obtener la matriz de roles y pantallas." }, { status: 500 });

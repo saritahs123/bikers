@@ -31,6 +31,7 @@ import DigitalSignatureCanvasModal from "./DigitalSignatureCanvasModal";
 import CustomerFormDrawer from "@/components/crm/CustomerFormDrawer";
 import BikeFormDrawer from "@/components/crm/BikeFormDrawer";
 import SecurityConfirmDialog from "@/components/security/SecurityConfirmDialog";
+import RestrictedSectionCard from "@/components/auth/RestrictedSectionCard";
 
 export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreated }) {
   const router = useRouter();
@@ -56,9 +57,10 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  // CRM Permissions
+  // CRM & Workshop Permissions
   const [canCreateClient, setCanCreateClient] = useState(true);
   const [canCreateBike, setCanCreateBike] = useState(true);
+  const [canCreateReception, setCanCreateReception] = useState(true);
 
   // Client Autocomplete State
   const [clientSearch, setClientSearch] = useState("");
@@ -151,10 +153,11 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
     setLoadingInit(true);
     setError("");
     try {
-      const [resClients, resCats, resBikes] = await Promise.all([
+      const [resClients, resCats, resBikes, resRecs] = await Promise.all([
         fetch("/api/crm/clientes"),
         fetch("/api/taller/catalogos"),
-        fetch("/api/crm/bicicletas")
+        fetch("/api/crm/bicicletas"),
+        fetch("/api/taller/recepciones?limit=1")
       ]);
 
       // Check RBAC permissions from headers
@@ -165,6 +168,10 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
       const bikePermCrear = resBikes.headers.get("x-perm-crear");
       if (bikePermCrear !== null) {
         setCanCreateBike(bikePermCrear === "true");
+      }
+      const recPermCrear = resRecs.headers.get("x-perm-crear");
+      if (recPermCrear !== null) {
+        setCanCreateReception(recPermCrear === "true");
       }
 
       const clientsJson = await resClients.json().catch(() => []);
@@ -996,6 +1003,27 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
   };
 
   if (!isOpen) return null;
+
+  if (!canCreateReception) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="w-full max-w-lg bg-card border border-border rounded-2xl p-6 shadow-2xl">
+          <RestrictedSectionCard
+            title="Creación de Recepción Restringida"
+            description="No posees los permisos necesarios para registrar recepciones en el taller."
+          />
+          <div className="mt-4 flex justify-end">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-surface hover:bg-hover border border-border text-foreground rounded-xl text-xs font-mono font-bold cursor-pointer transition-colors"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>

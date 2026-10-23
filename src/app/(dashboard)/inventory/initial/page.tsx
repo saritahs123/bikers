@@ -8,7 +8,7 @@ export const metadata = {
 
 export default function InventoryInitialPage() {
   return (
-    <ProtectedServerPage screenCode="CONFIG_INVENTARIO_INICIAL">
+    <ProtectedServerPage screenCode="CONFIG_INVENTARIO_INICIAL" requiredAction="puede_crear" title="Inventario Inicial">
       <InventoryInitialView />
     </ProtectedServerPage>
   );

@@ -66,10 +66,10 @@ export default function InvoicesView() {
   const [isQuickPrintModalOpen, setIsQuickPrintModalOpen] = useState(false);
   const [loadingPrintData, setLoadingPrintData] = useState(false);
 
-  // GAP-05: Estado de permisos RBAC para control visual de acciones
+  // GAP-05: Estado de permisos RBAC para control visual de acciones (Fase 6.4.13: Fail-safe defaults)
   const [permissions, setPermissions] = useState({
     puede_ver: true,
-    puede_crear: true,
+    puede_crear: false,
     puede_editar: false,
     puede_aprobar: false,
     puede_eliminar: false

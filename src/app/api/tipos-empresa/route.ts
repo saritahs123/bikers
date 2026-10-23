@@ -45,7 +45,15 @@ export async function GET() {
       };
     });
 
-    return NextResponse.json(mapped);
+    return NextResponse.json(mapped, {
+      headers: {
+        "x-perm-ver": String(perms.puede_ver),
+        "x-perm-crear": String(perms.puede_crear),
+        "x-perm-editar": String(perms.puede_editar),
+        "x-perm-eliminar": String(perms.puede_eliminar),
+        "x-perm-exportar": String(perms.puede_exportar)
+      }
+    });
   } catch (error: any) {
     console.error("Error in GET /api/tipos-empresa:", error);
     return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al obtener los tipos de empresa." }, { status: 500 });
