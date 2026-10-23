@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { query } from "@/lib/db";
 import { normalizeModuleCode } from "@/lib/moduleCode";
+import { CANONICAL_NAVIGATION, normalizeCode } from "@/config/navigationConfig";
 
 export interface WorkshopSession {
   usuario_id: number;
@@ -79,20 +80,66 @@ export async function getWorkshopSession(): Promise<WorkshopSession | null> {
   }
 }
 
+/**
+ * Salvaguarda Institucional de Seguridad (Modelo B - GAP-06)
+ * Recursos administrativos indispensables a los cuales el Administrador General (Rol 1)
+ * conserva acceso garantizado e inmutable para prevenir bloqueos de administración.
+ */
+export const INSTITUTIONAL_SECURITY_SCREEN_CODES = new Set([
+  "SEGURIDAD",
+  "SEGURIDAD_USUARIOS",
+  "SEGURIDAD_ROLES",
+  "SEGURIDAD_PERMISOS",
+  "SEGURIDAD_EMPRESAS",
+  "SEGURIDAD_TIPOS_EMPRESA",
+  "SEGURIDAD_TIPOS_USUARIO",
+]);
+
+export const INSTITUTIONAL_SECURITY_PATHS = new Set([
+  "/settings/security/roles",
+  "/settings/security/users",
+  "/settings/security/permissions",
+  "/settings/security/companies",
+  "/settings/security/company-types",
+  "/settings/security/user-types",
+  "/settings/security/departments",
+  "/settings/security/positions",
+  "/settings/security/areas",
+  "/settings/security/data-scopes",
+]);
+
+export function isInstitutionalSecurityTarget(target: string | number): boolean {
+  if (typeof target === "number") {
+    return target === 2; // modulo_sistema_id = 2 es SEGURIDAD
+  }
+  const clean = String(target).trim();
+  const upper = clean.toUpperCase();
+  if (upper === "SEGURIDAD") return true;
+  if (INSTITUTIONAL_SECURITY_SCREEN_CODES.has(upper)) return true;
+  if (INSTITUTIONAL_SECURITY_PATHS.has(clean)) return true;
+  for (const path of INSTITUTIONAL_SECURITY_PATHS) {
+    if (clean === path || clean.startsWith(path + "/") || clean.startsWith(path + "?")) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export async function isSuperAdmin(usuarioId: number): Promise<boolean> {
   if (!usuarioId) return false;
   try {
     const rows = await query(
       `SELECT 1
        FROM admin.usuario u
-       JOIN admin.rol_funcional r ON u.rol_principal_id = r.rol_funcional_id
+       JOIN admin.rol_funcional r ON r.rol_funcional_id = 1 AND r.estado = 'ACTIVO'
        WHERE u.usuario_id = $1
-         AND (u.estado = 'ACTIVO' OR u.estado IS NULL)
-         AND (r.estado = 'ACTIVO' OR r.estado IS NULL)
+         AND u.estado = 'ACTIVO'
          AND (
            u.rol_principal_id = 1
-           OR UPPER(COALESCE(r.nombre, '')) = 'ADMINISTRADOR GENERAL'
-           OR UPPER(COALESCE(r.nombre, '')) LIKE '%SUPER%'
+           OR EXISTS (
+             SELECT 1 FROM admin.usuario_rol_adicional ura
+             WHERE ura.usuario_id = u.usuario_id AND ura.rol_funcional_id = 1
+           )
          )
        LIMIT 1`,
       [usuarioId]
@@ -131,7 +178,7 @@ export async function getModulePermissions(
       return noPerms;
     }
 
-    if (await isSuperAdmin(usuarioId)) {
+    if ((await isSuperAdmin(usuarioId)) && isInstitutionalSecurityTarget(moduloNameOrId)) {
       return fullPerms;
     }
 
@@ -280,7 +327,7 @@ export async function getScreenPermissions(
       return noPerms;
     }
 
-    if (await isSuperAdmin(usuarioId)) {
+    if ((await isSuperAdmin(usuarioId)) && isInstitutionalSecurityTarget(screenCodeOrPath)) {
       return fullPerms;
     }
 
@@ -295,7 +342,12 @@ export async function getScreenPermissions(
            OR (ruta LIKE '%?%' AND split_part(ruta, '?', 1) = split_part($1, '?', 1))
            OR ($1 LIKE (ruta || '%'))
          )
-       ORDER BY CASE WHEN ruta = $1 THEN 1 WHEN UPPER(codigo) = UPPER($1) THEN 2 ELSE 3 END
+       ORDER BY CASE
+         WHEN ruta = $1 THEN 1
+         WHEN UPPER(codigo) = UPPER($1) THEN 2
+         WHEN ($1 = '/workshop' OR $1 = '/workshop/') AND ruta = '/workshop?view=list' THEN 3
+         ELSE 4
+       END, orden ASC, pantalla_id ASC
        LIMIT 1`,
       [screenCodeOrPath]
     );
@@ -307,6 +359,10 @@ export async function getScreenPermissions(
 
     const pantallaId = screenRows[0].pantalla_id;
     const moduloId = screenRows[0].modulo_sistema_id;
+
+    if (moduloId === 2 && (await isSuperAdmin(usuarioId))) {
+      return fullPerms;
+    }
 
     // 2. Precedencia:
     //    1) user_custom_screen (permiso personalizado usuario en pantalla)
@@ -418,9 +474,6 @@ export async function getUserNavigationPermissions(usuarioId: number): Promise<{
     }
 
     const isSuper = await isSuperAdmin(usuarioId);
-    if (isSuper) {
-      return { isSuperAdmin: true, modules: {}, screens: {} };
-    }
 
     // 1. Module-level visibility (user custom override > role permission)
     const modRows = await query(
@@ -527,8 +580,19 @@ export async function getUserNavigationPermissions(usuarioId: number): Promise<{
       }
     });
 
+    if (isSuper) {
+      // Salvaguarda institucional inmutable para Administrador General (Modelo B)
+      modules["SEGURIDAD"] = true;
+      for (const code of INSTITUTIONAL_SECURITY_SCREEN_CODES) {
+        screens[code] = true;
+      }
+      for (const path of INSTITUTIONAL_SECURITY_PATHS) {
+        screens[path] = true;
+      }
+    }
+
     return {
-      isSuperAdmin: false,
+      isSuperAdmin: isSuper,
       modules,
       screens
     };
@@ -549,7 +613,7 @@ export async function canUser(
   target: string | number
 ): Promise<boolean> {
   if (!usuarioId) return false;
-  if (await isSuperAdmin(usuarioId)) return true;
+  if ((await isSuperAdmin(usuarioId)) && isInstitutionalSecurityTarget(target)) return true;
 
   if (typeof target === "string" && (target.startsWith("/") || target.includes("_"))) {
     const perms = await getScreenPermissions(target, usuarioId);
@@ -571,4 +635,92 @@ export function validateCompanyAccess(
   if (isSuperAdminUser) return true;
   if (!sessionEmpresaId || !targetEmpresaId) return false;
   return Number(sessionEmpresaId) === Number(targetEmpresaId);
+}
+
+/**
+ * Resuelve el destino inicial autorizado para un usuario autenticado
+ * cuando no tiene acceso a DASHBOARD_MAIN ('/').
+ *
+ * Condiciones:
+ * 1. Prioriza módulos según el orden canónico documentado:
+ *    TALLER -> FACTURACIÓN -> CRM -> INVENTARIO -> REPORTES -> CONFIGURACIÓN -> SEGURIDAD
+ * 2. Valida permisos efectivos de pantalla en el motor RBAC (no únicamente de módulo).
+ * 3. Admite rutas con query parameters (ej. /workshop?view=work_orders).
+ * 4. Excluye rutas de creación (/new, /create), edición (/edit), eliminación (/delete).
+ * 5. Excluye APIs (/api/*), tracking público (/tracking/*) y rutas externas.
+ * 6. Excluye '/' para evitar bucles de redirección.
+ * 7. Prioriza listados, consultas y resúmenes.
+ * 8. Retorna la ruta destino autorizada o null si el usuario no tiene pantallas operativas.
+ */
+export async function resolveDefaultAuthorizedPath(usuarioId: number | string): Promise<string | null> {
+  const numUserId = typeof usuarioId === "string" ? parseInt(usuarioId, 10) : usuarioId;
+  if (!numUserId || isNaN(numUserId)) return null;
+
+  try {
+    const navPerms = await getUserNavigationPermissions(numUserId);
+    if (!navPerms || !navPerms.modules || !navPerms.screens) {
+      return null;
+    }
+
+    for (const menu of CANONICAL_NAVIGATION) {
+      // Ignorar home/dashboard porque la función se llama cuando DASHBOARD_MAIN está denegado
+      if (menu.id === "home") continue;
+
+      const menuKey = normalizeCode(menu.codigo);
+      const hasModulePerm = Boolean(navPerms.modules[menuKey]);
+
+      for (const screen of menu.screens) {
+        const ruta = (screen.ruta || "").trim();
+        if (!ruta) continue;
+
+        // Descartar '/' para evitar bucle
+        if (ruta === "/") continue;
+
+        // Descartar APIs, tracking público y rutas externas
+        if (
+          ruta.startsWith("/api") ||
+          ruta.startsWith("/tracking") ||
+          ruta.startsWith("http://") ||
+          ruta.startsWith("https://") ||
+          ruta.startsWith("//")
+        ) {
+          continue;
+        }
+
+        // Descartar rutas de creación, edición, eliminación o auxiliares
+        const lowerRuta = ruta.toLowerCase();
+        if (
+          lowerRuta.includes("/new") ||
+          lowerRuta.includes("/nuevo") ||
+          lowerRuta.includes("/nueva") ||
+          lowerRuta.includes("/create") ||
+          lowerRuta.includes("/crear") ||
+          lowerRuta.includes("/edit") ||
+          lowerRuta.includes("/editar") ||
+          lowerRuta.includes("/delete") ||
+          lowerRuta.includes("/eliminar")
+        ) {
+          continue;
+        }
+
+        // Validar permisos de pantalla (no únicamente de módulo)
+        const screenExplicitPerm =
+          navPerms.screens[screen.codigo] !== undefined
+            ? navPerms.screens[screen.codigo]
+            : navPerms.screens[ruta];
+
+        const isAuthorized =
+          screenExplicitPerm !== undefined ? Boolean(screenExplicitPerm) : hasModulePerm;
+
+        if (isAuthorized) {
+          return ruta;
+        }
+      }
+    }
+
+    return null;
+  } catch (err) {
+    console.error("Error in resolveDefaultAuthorizedPath:", err);
+    return null;
+  }
 }

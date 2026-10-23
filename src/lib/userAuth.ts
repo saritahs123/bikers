@@ -29,6 +29,7 @@ export function parseAndValidateUserId(paramId: string): number | null {
  * - Company Scope Check (HTTP 403 if users belong to different non-null companies)
  */
 import { validateAndTouchSession } from "@/lib/sessionLifecycle";
+import { isSuperAdmin } from "@/lib/workshop-session";
 
 export async function authorizeUserAccess(paramId: string): Promise<AuthResult> {
   const targetUserId = parseAndValidateUserId(paramId);
@@ -131,21 +132,15 @@ export async function authorizeUserAccess(paramId: string): Promise<AuthResult> 
   }
 
   // 4. Company Scope Check (Must belong to same company if both companies are specified and caller is not global admin)
-  const isGlobalAdmin = await query(
-    `SELECT 1
-     FROM admin.usuario u
-     LEFT JOIN admin.rol_funcional r ON u.rol_principal_id = r.rol_funcional_id
-     LEFT JOIN admin.usuario_alcance alc ON u.usuario_id = alc.usuario_id
-     WHERE u.usuario_id = $1
-       AND (
-         UPPER(COALESCE(r.nombre, '')) = 'ADMINISTRADOR GENERAL'
-         OR UPPER(COALESCE(r.nombre, '')) LIKE '%SUPER%'
-         OR alc.nivel_alcance = 'TODA_EMPRESA'
-       )
-     LIMIT 1`,
-    [authUserId]
-  );
-  const hasGlobalScope = Boolean(isGlobalAdmin && isGlobalAdmin.length > 0);
+  const callerIsSuper = await isSuperAdmin(authUserId);
+  let hasGlobalScope = callerIsSuper;
+  if (!hasGlobalScope) {
+    const scopeCheck = await query(
+      `SELECT 1 FROM admin.usuario_alcance WHERE usuario_id = $1 AND nivel_alcance = 'TODA_EMPRESA' LIMIT 1`,
+      [authUserId]
+    );
+    hasGlobalScope = Boolean(scopeCheck && scopeCheck.length > 0);
+  }
 
   if (!hasGlobalScope) {
     if (authUserCompanyId && targetUserCompanyId && authUserCompanyId !== targetUserCompanyId) {
@@ -267,6 +262,19 @@ export async function authorizeUserUpdate(paramId: string): Promise<AuthUpdateRe
     };
   }
 
+  // Check if target user has Role 1 (SuperAdmin) and caller is not SuperAdmin
+  const targetIsSuper = await isSuperAdmin(targetUserId);
+  const callerIsSuper = await isSuperAdmin(authUserId);
+
+  if (targetIsSuper && !callerIsSuper) {
+    return {
+      success: false,
+      status: 403,
+      error: "FORBIDDEN",
+      message: "Acceso denegado. Solo un SuperAdmin institucional puede modificar una cuenta con Rol 1 (Administrador General)."
+    };
+  }
+
   const editPermission = await query(
     `SELECT 1
      FROM admin.matriz_acceso_rol m
@@ -292,21 +300,14 @@ export async function authorizeUserUpdate(paramId: string): Promise<AuthUpdateRe
     };
   }
 
-  const isGlobalAdmin = await query(
-    `SELECT 1
-     FROM admin.usuario u
-     LEFT JOIN admin.rol_funcional r ON u.rol_principal_id = r.rol_funcional_id
-     LEFT JOIN admin.usuario_alcance alc ON u.usuario_id = alc.usuario_id
-     WHERE u.usuario_id = $1
-       AND (
-         UPPER(COALESCE(r.nombre, '')) = 'ADMINISTRADOR GENERAL'
-         OR UPPER(COALESCE(r.nombre, '')) LIKE '%SUPER%'
-         OR alc.nivel_alcance = 'TODA_EMPRESA'
-       )
-     LIMIT 1`,
-    [authUserId]
-  );
-  const hasGlobalScope = Boolean(isGlobalAdmin && isGlobalAdmin.length > 0);
+  let hasGlobalScope = callerIsSuper;
+  if (!hasGlobalScope) {
+    const scopeCheck = await query(
+      `SELECT 1 FROM admin.usuario_alcance WHERE usuario_id = $1 AND nivel_alcance = 'TODA_EMPRESA' LIMIT 1`,
+      [authUserId]
+    );
+    hasGlobalScope = Boolean(scopeCheck && scopeCheck.length > 0);
+  }
 
   if (!hasGlobalScope) {
     if (
@@ -424,21 +425,15 @@ export async function authorizeUserCreate(targetCompanyId?: number | null): Prom
     };
   }
 
-  const isGlobalAdmin = await query(
-    `SELECT 1
-     FROM admin.usuario u
-     LEFT JOIN admin.rol_funcional r ON u.rol_principal_id = r.rol_funcional_id
-     LEFT JOIN admin.usuario_alcance alc ON u.usuario_id = alc.usuario_id
-     WHERE u.usuario_id = $1
-       AND (
-         UPPER(COALESCE(r.nombre, '')) = 'ADMINISTRADOR GENERAL'
-         OR UPPER(COALESCE(r.nombre, '')) LIKE '%SUPER%'
-         OR alc.nivel_alcance = 'TODA_EMPRESA'
-       )
-     LIMIT 1`,
-    [authUserId]
-  );
-  const hasGlobalScope = Boolean(isGlobalAdmin && isGlobalAdmin.length > 0);
+  const callerIsSuper = await isSuperAdmin(authUserId);
+  let hasGlobalScope = callerIsSuper;
+  if (!hasGlobalScope) {
+    const scopeCheck = await query(
+      `SELECT 1 FROM admin.usuario_alcance WHERE usuario_id = $1 AND nivel_alcance = 'TODA_EMPRESA' LIMIT 1`,
+      [authUserId]
+    );
+    hasGlobalScope = Boolean(scopeCheck && scopeCheck.length > 0);
+  }
 
   if (!hasGlobalScope) {
     if (
@@ -459,5 +454,494 @@ export async function authorizeUserCreate(targetCompanyId?: number | null): Prom
     success: true,
     authUserId,
     authUserCompanyId
+  };
+}
+
+/**
+ * Extrae el rol principal de un payload independientemente de la clave o formato utilizado.
+ */
+export function extractPrimaryRoleId(body: Record<string, unknown>): unknown {
+  if (!body || typeof body !== 'object') return undefined;
+  return body.roleId ?? body.rol_id ?? body.rol_principal_id ?? body.role_id ?? body.role;
+}
+
+/**
+ * Extrae los roles adicionales de un payload independientemente de la clave o formato utilizado.
+ */
+export function extractAdditionalRoles(body: Record<string, unknown>): unknown {
+  if (!body || typeof body !== 'object') return undefined;
+  return body.roles_additional ?? body.roles_adicionales ?? body.additional_roles;
+}
+
+/**
+ * Resolución y validación estricta de un rol funcional.
+ * - Verifica existencia en admin.rol_funcional
+ * - Verifica que el estado sea 'ACTIVO'
+ * - Impide la asignación del Rol 1 si el ejecutor no es SuperAdmin
+ */
+export async function resolveAndValidateRole(
+  rawRole: unknown,
+  callerIsSuperAdmin: boolean,
+  isMandatory: boolean = false
+): Promise<{
+  valid: boolean;
+  status: 400 | 403;
+  error: string;
+  message: string;
+  field?: string;
+  roleId?: number;
+}> {
+  if (rawRole === undefined || rawRole === null || rawRole === '') {
+    if (isMandatory) {
+      return {
+        valid: false,
+        status: 400,
+        error: "VALIDATION_ERROR",
+        message: "El rol principal es obligatorio.",
+        field: "roleId"
+      };
+    }
+    return {
+      valid: true,
+      status: 400,
+      error: "",
+      message: "",
+      roleId: undefined
+    };
+  }
+
+  let resolvedId: number | null = null;
+
+  if (typeof rawRole === 'number') {
+    resolvedId = Number.isInteger(rawRole) && rawRole > 0 ? rawRole : null;
+  } else if (typeof rawRole === 'string') {
+    const trimmed = rawRole.trim();
+    if (/^\d+$/.test(trimmed)) {
+      resolvedId = parseInt(trimmed, 10);
+    } else if (trimmed.length > 0) {
+      const rRes = await query<{ rol_funcional_id: number }>(
+        `SELECT rol_funcional_id FROM admin.rol_funcional WHERE UPPER(nombre) = UPPER($1) LIMIT 1`,
+        [trimmed]
+      );
+      if (rRes && rRes.length > 0) {
+        resolvedId = rRes[0].rol_funcional_id;
+      }
+    }
+  } else if (typeof rawRole === 'object' && rawRole !== null) {
+    const obj = rawRole as Record<string, unknown>;
+    const candidate = obj.id ?? obj.rol_funcional_id ?? obj.rol_id;
+    if (candidate !== undefined && candidate !== null) {
+      const num = Number(candidate);
+      if (Number.isInteger(num) && num > 0) {
+        resolvedId = num;
+      }
+    }
+  }
+
+  if (resolvedId === null || isNaN(resolvedId) || resolvedId <= 0) {
+    return {
+      valid: false,
+      status: 400,
+      error: "VALIDATION_ERROR",
+      message: "El rol principal especificado no es válido o no existe.",
+      field: "roleId"
+    };
+  }
+
+  // Verificar en la base de datos existencia y estado
+  const roleRows = await query<{ rol_funcional_id: number; nombre: string; estado: string }>(
+    `SELECT rol_funcional_id, nombre, estado FROM admin.rol_funcional WHERE rol_funcional_id = $1 LIMIT 1`,
+    [resolvedId]
+  );
+
+  if (!roleRows || roleRows.length === 0) {
+    return {
+      valid: false,
+      status: 400,
+      error: "VALIDATION_ERROR",
+      message: "El rol principal especificado no existe.",
+      field: "roleId"
+    };
+  }
+
+  if (roleRows[0].estado !== 'ACTIVO') {
+    return {
+      valid: false,
+      status: 400,
+      error: "VALIDATION_ERROR",
+      message: "El rol principal especificado se encuentra inactivo.",
+      field: "roleId"
+    };
+  }
+
+  // Blindaje Rol 1: Solo SuperAdmin institucional puede asignarlo
+  if (resolvedId === 1 && !callerIsSuperAdmin) {
+    return {
+      valid: false,
+      status: 403,
+      error: "FORBIDDEN",
+      message: "Acceso denegado. Solo un SuperAdmin institucional puede asignar el Rol 1 (Administrador General).",
+      field: "roleId"
+    };
+  }
+
+  return {
+    valid: true,
+    status: 400,
+    error: "",
+    message: "",
+    roleId: resolvedId
+  };
+}
+
+/**
+ * Validación y resolución de roles adicionales (`roles_additional`).
+ * - Verifica estructura (debe ser arreglo)
+ * - Rechaza duplicados
+ * - Rechaza roles iguales al rol principal
+ * - Verifica existencia y estado 'ACTIVO'
+ * - Impide la asignación del Rol 1 si el ejecutor no es SuperAdmin
+ */
+export async function resolveAndValidateAdditionalRoles(
+  rawAdd: unknown,
+  callerIsSuperAdmin: boolean,
+  primaryRoleId?: number | null
+): Promise<{
+  valid: boolean;
+  status: 400 | 403;
+  error: string;
+  message: string;
+  field?: string;
+  roleIds: number[];
+}> {
+  if (rawAdd === undefined || rawAdd === null) {
+    return {
+      valid: true,
+      status: 400,
+      error: "",
+      message: "",
+      roleIds: []
+    };
+  }
+
+  if (!Array.isArray(rawAdd)) {
+    return {
+      valid: false,
+      status: 400,
+      error: "VALIDATION_ERROR",
+      message: "El campo de roles adicionales debe ser un arreglo.",
+      field: "roles_additional",
+      roleIds: []
+    };
+  }
+
+  if (rawAdd.length === 0) {
+    return {
+      valid: true,
+      status: 400,
+      error: "",
+      message: "",
+      roleIds: []
+    };
+  }
+
+  const roleIds: number[] = [];
+  const seen = new Set<number>();
+
+  for (const item of rawAdd) {
+    let id: number | null = null;
+    if (typeof item === 'number') {
+      id = Number.isInteger(item) && item > 0 ? item : null;
+    } else if (typeof item === 'string') {
+      const trimmed = item.trim();
+      if (/^\d+$/.test(trimmed)) {
+        id = parseInt(trimmed, 10);
+      } else {
+        const rRes = await query<{ rol_funcional_id: number }>(
+          `SELECT rol_funcional_id FROM admin.rol_funcional WHERE UPPER(nombre) = UPPER($1) LIMIT 1`,
+          [trimmed]
+        );
+        if (rRes && rRes.length > 0) {
+          id = rRes[0].rol_funcional_id;
+        }
+      }
+    } else if (typeof item === 'object' && item !== null) {
+      const obj = item as Record<string, unknown>;
+      const candidate = obj.id ?? obj.rol_funcional_id ?? obj.rol_id;
+      if (candidate !== undefined && candidate !== null) {
+        const num = Number(candidate);
+        if (Number.isInteger(num) && num > 0) id = num;
+      }
+    }
+
+    if (id === null || isNaN(id) || id <= 0) {
+      return {
+        valid: false,
+        status: 400,
+        error: "VALIDATION_ERROR",
+        message: "El arreglo de roles adicionales contiene identificadores inválidos.",
+        field: "roles_additional",
+        roleIds: []
+      };
+    }
+
+    if (seen.has(id)) {
+      return {
+        valid: false,
+        status: 400,
+        error: "VALIDATION_ERROR",
+        message: "No se permiten roles adicionales duplicados.",
+        field: "roles_additional",
+        roleIds: []
+      };
+    }
+    seen.add(id);
+
+    if (primaryRoleId && id === primaryRoleId) {
+      return {
+        valid: false,
+        status: 400,
+        error: "VALIDATION_ERROR",
+        message: "Un rol no puede ser asignado simultáneamente como rol principal y adicional.",
+        field: "roles_additional",
+        roleIds: []
+      };
+    }
+
+    // Blindaje Rol 1 en adicionales
+    if (id === 1 && !callerIsSuperAdmin) {
+      return {
+        valid: false,
+        status: 403,
+        error: "FORBIDDEN",
+        message: "Acceso denegado. Solo un SuperAdmin institucional puede asignar el Rol 1 como rol adicional.",
+        field: "roles_additional",
+        roleIds: []
+      };
+    }
+
+    // Validar existencia y estado
+    const rCheck = await query<{ rol_funcional_id: number; estado: string }>(
+      `SELECT rol_funcional_id, estado FROM admin.rol_funcional WHERE rol_funcional_id = $1 LIMIT 1`,
+      [id]
+    );
+
+    if (!rCheck || rCheck.length === 0) {
+      return {
+        valid: false,
+        status: 400,
+        error: "VALIDATION_ERROR",
+        message: "Uno o más roles adicionales especificados no existen.",
+        field: "roles_additional",
+        roleIds: []
+      };
+    }
+
+    if (rCheck[0].estado !== 'ACTIVO') {
+      return {
+        valid: false,
+        status: 400,
+        error: "VALIDATION_ERROR",
+        message: "Uno o más roles adicionales especificados se encuentran inactivos.",
+        field: "roles_additional",
+        roleIds: []
+      };
+    }
+
+    roleIds.push(id);
+  }
+
+  return {
+    valid: true,
+    status: 400,
+    error: "",
+    message: "",
+    roleIds
+  };
+}
+
+/**
+ * Guardia Anti-Autoescalamiento Estricta (Self-Profile Guard).
+ * Se aplica SIEMPRE que un usuario intente modificar su propia cuenta (isSelf === true).
+ * Ningún usuario (ni siquiera SuperAdmin ni administradores con permisos de edición)
+ * puede modificar atributos administrativos/privilegiados mediante el endpoint ordinario de perfil.
+ */
+export function validateSelfProfileUpdate(
+  body: Record<string, unknown>,
+  current: Record<string, unknown>
+): {
+  allowed: boolean;
+  status: 400 | 403;
+  error: string;
+  message: string;
+  field?: string;
+} {
+  const isChanged = (newVal: unknown, oldVal: unknown): boolean => {
+    if (newVal === undefined || newVal === null) return false;
+    return String(newVal).trim() !== String(oldVal ?? '').trim();
+  };
+
+  // 1. Rol principal
+  const triedRole = extractPrimaryRoleId(body);
+  if (triedRole !== undefined && triedRole !== null && String(triedRole).trim() !== '') {
+    const isDifferent = String(triedRole).trim() !== String(current.rol_principal_id ?? '').trim() &&
+                        String(triedRole).trim().toUpperCase() !== String(current.rol_nombre ?? '').trim().toUpperCase();
+    if (isDifferent) {
+      return {
+        allowed: false,
+        status: 403,
+        error: "FORBIDDEN",
+        message: "No posee permisos para modificar el rol de su propia cuenta.",
+        field: "roleId"
+      };
+    }
+  }
+
+  // 2. Roles adicionales
+  const triedAdd = extractAdditionalRoles(body);
+  if (triedAdd !== undefined && triedAdd !== null) {
+    return {
+      allowed: false,
+      status: 403,
+      error: "FORBIDDEN",
+      message: "No posee permisos para modificar roles adicionales de su propia cuenta.",
+      field: "roles_additional"
+    };
+  }
+
+  // 3. Empresa
+  const triedCompany = body.companyId ?? body.empresa_id;
+  if (isChanged(triedCompany, current.empresa_id)) {
+    return {
+      allowed: false,
+      status: 403,
+      error: "FORBIDDEN",
+      message: "No posee permisos para modificar la empresa de su propia cuenta.",
+      field: "companyId"
+    };
+  }
+  if (body.empresa_nombre !== undefined && body.empresa_nombre !== null && isChanged(body.empresa_nombre, current.empresa_nombre)) {
+    return {
+      allowed: false,
+      status: 403,
+      error: "FORBIDDEN",
+      message: "No posee permisos para modificar la empresa de su propia cuenta.",
+      field: "companyId"
+    };
+  }
+
+  // 4. Ámbito de seguridad / Alcance
+  if (
+    body.scope_type !== undefined ||
+    body.nivel_alcance !== undefined ||
+    body.scope_entity_ids !== undefined ||
+    body.include_children !== undefined ||
+    body.incluir_herencia_jerarquica !== undefined
+  ) {
+    return {
+      allowed: false,
+      status: 403,
+      error: "FORBIDDEN",
+      message: "No posee permisos para modificar el ámbito de seguridad o alcance de su propia cuenta.",
+      field: "scope_type"
+    };
+  }
+
+  // 5. Estado administrativo de la cuenta
+  const triedStatus = body.status ?? body.estado;
+  if (isChanged(triedStatus, current.estado)) {
+    return {
+      allowed: false,
+      status: 403,
+      error: "FORBIDDEN",
+      message: "No posee permisos para modificar el estado administrativo de su propia cuenta.",
+      field: "estado"
+    };
+  }
+
+  // 6. Estado de activación
+  const triedActivation = body.estado_activacion ?? body.activation;
+  if (isChanged(triedActivation, current.estado_activacion)) {
+    return {
+      allowed: false,
+      status: 403,
+      error: "FORBIDDEN",
+      message: "No posee permisos para modificar el estado de activación de su propia cuenta.",
+      field: "estado_activacion"
+    };
+  }
+
+  // 7. Tipo de usuario
+  const triedUserType = body.user_type_id ?? body.tipo_usuario_id ?? body.userTypeId;
+  if (isChanged(triedUserType, current.tipo_usuario_id)) {
+    return {
+      allowed: false,
+      status: 403,
+      error: "FORBIDDEN",
+      message: "No posee permisos para modificar el tipo de usuario de su propia cuenta.",
+      field: "tipo_usuario_id"
+    };
+  }
+
+  // 8. Duración de sesión
+  if (
+    body.duracion_sesion_minutos !== undefined &&
+    current.duracion_sesion_minutos !== undefined &&
+    Number(body.duracion_sesion_minutos) !== Number(current.duracion_sesion_minutos)
+  ) {
+    return {
+      allowed: false,
+      status: 403,
+      error: "FORBIDDEN",
+      message: "No posee permisos para modificar la duración de sesión de su propia cuenta.",
+      field: "duracion_sesion_minutos"
+    };
+  }
+
+  // 9. Permisos personalizados
+  if (body.permissionsOverride !== undefined || body.permisos_personalizados !== undefined) {
+    return {
+      allowed: false,
+      status: 403,
+      error: "FORBIDDEN",
+      message: "No posee permisos para modificar permisos personalizados de su propia cuenta.",
+      field: "permissionsOverride"
+    };
+  }
+
+  // 10. Contraseña y credenciales (debe usar flujo específico de cambio de contraseña)
+  if (body.password !== undefined || body.confirm_password !== undefined) {
+    return {
+      allowed: false,
+      status: 403,
+      error: "FORBIDDEN",
+      message: "La actualización de contraseña de su propia cuenta debe realizarse mediante el flujo seguro de cambio de clave.",
+      field: "password"
+    };
+  }
+
+  // 11. Políticas de seguridad y MFA
+  if (
+    body.forzar_cambio_clave !== undefined ||
+    body.requiere_cambio_clave !== undefined ||
+    body.mfaEnabled !== undefined ||
+    body.mfa_activo !== undefined ||
+    body.mfa_tipo !== undefined ||
+    body.mfa_method !== undefined
+  ) {
+    return {
+      allowed: false,
+      status: 403,
+      error: "FORBIDDEN",
+      message: "No posee permisos para modificar políticas de seguridad o autenticación de su propia cuenta.",
+      field: "mfaEnabled"
+    };
+  }
+
+  return {
+    allowed: true,
+    status: 400,
+    error: "",
+    message: ""
   };
 }

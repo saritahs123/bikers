@@ -3,7 +3,13 @@ import { query, withTransaction } from "@/lib/db";
 import { hashPassword, maskEmail } from "@/lib/auth";
 import { validateEmail, validatePasswordPolicy } from "@/lib/validations";
 import { recordUserActivity, recordUserAudit } from "@/lib/auditLogger";
-import { authorizeUserCreate } from "@/lib/userAuth";
+import {
+  authorizeUserCreate,
+  extractPrimaryRoleId,
+  extractAdditionalRoles,
+  resolveAndValidateRole,
+  resolveAndValidateAdditionalRoles
+} from "@/lib/userAuth";
 import { sweepExpiredSessions } from "@/lib/sessionLifecycle";
 import { getWorkshopSession, getScreenPermissions, isSuperAdmin } from "@/lib/workshop-session";
 
@@ -42,6 +48,7 @@ interface UserRow {
   fecha_inicio_sesion?: string | null;
   fecha_expiracion_sesion?: string | null;
   estado_sesion?: string | null;
+  roles_additional?: number[] | null;
 }
 
 const parseNum = (val: unknown) => {
@@ -130,7 +137,15 @@ export async function GET() {
         us.forzar_cambio_clave,
         us.idioma_preferido,
         us.zona_horaria,
-        us.formato_fecha
+        us.formato_fecha,
+        COALESCE(
+          (
+            SELECT array_agg(ura.rol_funcional_id ORDER BY ura.rol_funcional_id)
+            FROM admin.usuario_rol_adicional ura
+            WHERE ura.usuario_id = u.usuario_id
+          ),
+          ARRAY[]::integer[]
+        ) AS roles_additional
       FROM admin.usuario u
       LEFT JOIN admin.usuario_identidad ui ON u.usuario_id = ui.usuario_id
       LEFT JOIN admin.usuario_seguridad us ON u.usuario_id = us.usuario_id
@@ -162,6 +177,7 @@ export async function GET() {
         role: u.role || 'Sin Rol',
         user_type: u.user_type || 'Sin Tipo',
         primary_access_type: u.primary_access_type || 'EMAIL',
+        roles_additional: Array.isArray(u.roles_additional) ? u.roles_additional.map(Number) : [],
         identificador_principal: primaryAccessValue,
         login_identifiers: [
           {
@@ -213,7 +229,8 @@ export async function POST(req: Request) {
     
     const companyId = parseNum(body.companyId || body.empresa_id);
     const userTypeId = parseNum(body.tipo_usuario_id || body.user_type_id || body.userTypeId);
-    let rolId = parseNum(body.rol_id || body.role_id || body.roleId || body.rol_principal_id);
+    const rawRol = extractPrimaryRoleId(body);
+    const rawAdd = extractAdditionalRoles(body);
     const sessionMinutes = body.duracion_sesion_minutos !== undefined ? parseNum(body.duracion_sesion_minutos) : 480;
 
     if (sessionMinutes === null || sessionMinutes < 1) {
@@ -224,21 +241,34 @@ export async function POST(req: Request) {
     const authCheck = await authorizeUserCreate(companyId);
     if (!authCheck.success) {
       return NextResponse.json(
-        { error: authCheck.message },
+        { error: authCheck.message, message: authCheck.message },
         { status: authCheck.status }
       );
     }
     const authAdminId = authCheck.authUserId;
+    const callerIsSuper = await isSuperAdmin(authAdminId);
 
-    if (!rolId && body.role) {
-      try {
-        const rRes = await query(`SELECT rol_funcional_id FROM admin.rol_funcional WHERE LOWER(nombre) = LOWER($1) LIMIT 1`, [body.role]);
-        if (rRes && rRes.length > 0) {
-          rolId = parseNum(rRes[0].rol_funcional_id);
-        }
-      } catch (e) {
-        console.warn("Could not resolve role by name:", e);
+    // Validate primary role (must exist, be active, and if rolId === 1 caller must be SuperAdmin)
+    const roleCheck = await resolveAndValidateRole(rawRol, callerIsSuper, true);
+    if (!roleCheck.valid) {
+      return NextResponse.json(
+        { error: roleCheck.message, message: roleCheck.message, field: roleCheck.field },
+        { status: roleCheck.status }
+      );
+    }
+    const rolId = roleCheck.roleId!;
+
+    // Validate additional roles if provided
+    let additionalRoleIds: number[] = [];
+    if (rawAdd !== undefined && rawAdd !== null) {
+      const addCheck = await resolveAndValidateAdditionalRoles(rawAdd, callerIsSuper, rolId);
+      if (!addCheck.valid) {
+        return NextResponse.json(
+          { error: addCheck.message, message: addCheck.message, field: addCheck.field },
+          { status: addCheck.status }
+        );
       }
+      additionalRoleIds = addCheck.roleIds;
     }
 
     const deptId = parseNum(body.department_id || body.departamento_id);
@@ -378,15 +408,13 @@ export async function POST(req: Request) {
       );
 
       // 5. Additional roles (admin.usuario_rol_adicional)
-      if (Array.isArray(body.roles_additional) && body.roles_additional.length > 0) {
-        for (const addRol of body.roles_additional) {
-          const addRolId = parseNum(typeof addRol === 'object' ? (addRol.id || addRol.rol_funcional_id) : addRol);
-          if (addRolId && addRolId !== rolId) {
-            await client.query(
-              `INSERT INTO admin.usuario_rol_adicional (usuario_id, rol_funcional_id) VALUES ($1, $2)`,
-              [createdUserId, addRolId]
-            );
-          }
+      if (additionalRoleIds.length > 0) {
+        for (const addRolId of additionalRoleIds) {
+          await client.query(
+            `INSERT INTO admin.usuario_rol_adicional (usuario_id, rol_funcional_id)
+             VALUES ($1, $2)`,
+            [createdUserId, addRolId]
+          );
         }
       }
 

@@ -487,6 +487,14 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
           if (apiData.rawMatrix) setRbacMatrix(apiData.rawMatrix);
         }
       }).catch(() => {});
+
+    fetch('/api/auth/me', { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : null)
+      .then(meData => {
+        if (meData?.user?.is_superadmin || meData?.is_superadmin) {
+          setCurrentUserIsSuperAdmin(true);
+        }
+      }).catch(() => {});
   };
 
   useEffect(() => {
@@ -622,6 +630,9 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         rol_id: Number(targetData.rol_id),
         roleId: Number(targetData.rol_id),
         rol_principal_id: Number(targetData.rol_id),
+        roles_additional: Array.isArray(targetData.roles_additional)
+          ? targetData.roles_additional.map(Number)
+          : (targetData.roles_additional !== undefined ? [] : undefined),
         tipo_usuario_id: Number(targetData.tipo_usuario_id),
         user_type_id: Number(targetData.tipo_usuario_id),
         duracion_sesion_minutos: (
@@ -730,6 +741,23 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
   const [wizardData, setWizardData] = useState(null);
   const [formError, setFormError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
+  const [currentUserIsSuperAdmin, setCurrentUserIsSuperAdmin] = useState(false);
+
+  const availableRoles = useMemo(() => {
+    if (currentUserIsSuperAdmin) {
+      return roles;
+    }
+    return (roles || []).filter(r => Number(r.numericId || r.id) !== 1);
+  }, [roles, currentUserIsSuperAdmin]);
+
+  const availableRolesForAdditional = useMemo(() => {
+    const currentPrimary = Number(wizardData?.rol_id);
+    const currentAdditional = new Set((wizardData?.roles_additional || []).map(Number));
+    return availableRoles.filter(r => {
+      const rId = Number(r.numericId || r.id);
+      return rId !== currentPrimary && !currentAdditional.has(rId);
+    });
+  }, [availableRoles, wizardData?.rol_id, wizardData?.roles_additional]);
   const [showJobDropdown, setShowJobDropdown] = useState(false);
   const [showUserTypeDropdown, setShowUserTypeDropdown] = useState(false);
   const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
@@ -1338,6 +1366,9 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     // Deep copy permissions or create empty override structure
     setWizardData({
       ...user,
+      roles_additional: Array.isArray(user.roles_additional)
+        ? user.roles_additional.map(Number)
+        : (Array.isArray(user.additional_roles) ? user.additional_roles.map(r => Number(r.id || r)) : []),
       primary_access_type: user.login_identifiers?.find(id => id.is_primary)?.identifier_type || 'EMAIL',
       password: '',
       confirm_password: '',
@@ -1391,6 +1422,10 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
       const sHoras = Math.floor(durMins / 60);
       const sMinutos = durMins % 60;
 
+      const userAdditionalRoles = Array.isArray(sourceUser.roles_additional)
+        ? sourceUser.roles_additional.map(Number)
+        : (Array.isArray(sourceUser.additional_roles) ? sourceUser.additional_roles.map(r => Number(r.id || r)) : []);
+
       return {
         ...sourceUser,
         id: sourceUser.id || sourceUser.usuario_id,
@@ -1404,6 +1439,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
         companyId: compId ? Number(compId) : '',
         rol_id: rId ? Number(rId) : '',
         role: rName,
+        roles_additional: userAdditionalRoles,
         tipo_usuario_id: userTypeId ? Number(userTypeId) : '',
         user_type: userTypeName,
         duracion_sesion_minutos: durMins,
@@ -1646,8 +1682,9 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
     cleanUser.user_type_id = cleanUser.tipo_usuario_id;
     cleanUser.department_id = null;
     cleanUser.area_id = null;
-    cleanUser.cargo_id = null;
-    cleanUser.roles_additional = [];
+    cleanUser.roles_additional = Array.isArray(wizardData.roles_additional)
+      ? wizardData.roles_additional.map(Number)
+      : [];
     cleanUser.must_change_password = Boolean(cleanUser.must_change_password);
     cleanUser.forzar_cambio_clave = Boolean(cleanUser.must_change_password);
     cleanUser.primary_access_type = 'EMAIL';
@@ -3156,6 +3193,19 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                     : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
                 }`}>{detailUser.status || detailUser.estado}</span>
                 <span className="px-2.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/10 text-indigo-300 border border-indigo-500/30 uppercase tracking-wider">{detailUser.role}</span>
+                {Array.isArray(detailUser.additional_roles) && detailUser.additional_roles.map((ar, idx) => (
+                  <span key={ar.id || idx} className="px-2.5 py-0.5 rounded text-[10px] font-bold bg-purple-500/10 text-purple-300 border border-purple-500/30 uppercase tracking-wider">
+                    + {ar.name || `Rol ${ar.id}`}
+                  </span>
+                ))}
+                {!detailUser.additional_roles && Array.isArray(detailUser.roles_additional) && detailUser.roles_additional.map((rId, idx) => {
+                  const rObj = (roles || []).find(r => Number(r.numericId || r.id) === Number(rId));
+                  return (
+                    <span key={rId || idx} className="px-2.5 py-0.5 rounded text-[10px] font-bold bg-purple-500/10 text-purple-300 border border-purple-500/30 uppercase tracking-wider">
+                      + {rObj ? (rObj.nombre || rObj.name) : `Rol ${rId}`}
+                    </span>
+                  );
+                })}
               </div>
               <p className="text-xs text-foreground-muted font-mono mt-1 flex items-center gap-2">
                 <span>{detailUser.login_identifiers?.find(id => id.is_primary)?.identifier_type === 'DOCUMENT' ? 'Documento' : 'Correo'}: <strong className="text-primary">{detailUser.login_identifiers?.find(id => id.is_primary)?.identifier_value || detailUser.email}</strong></span> • <span>MFA: <strong className="text-foreground">{detailUser.mfaEnabled ? 'Activo' : 'Inactivo'}</strong></span>
@@ -3365,11 +3415,17 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                             handleChange('rol_id', rId);
                             const rolObj = roles.find(r => Number(r.numericId || r.id) === Number(rId));
                             if (rolObj) handleChange('role', rolObj.nombre || rolObj.name);
+                            if (rId && Array.isArray(wizardData.roles_additional)) {
+                              const filteredAdd = wizardData.roles_additional.filter(id => Number(id) !== Number(rId));
+                              if (filteredAdd.length !== wizardData.roles_additional.length) {
+                                handleChange('roles_additional', filteredAdd);
+                              }
+                            }
                           }}
                           className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none cursor-pointer transition-colors ${formErrors360.rol_id ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
                         >
                           <option value="">-- Selecciona Rol --</option>
-                          {roles.map(r => (
+                          {availableRoles.map(r => (
                             <option key={r.numericId || r.id} value={r.numericId || r.id}>
                               {r.nombre || r.name}
                             </option>
@@ -3379,7 +3435,7 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                       </div>
                     </div>
 
-                    {/* Row 5: Tipo de usuario * */}
+                    {/* Row 5: Tipo de usuario * | Roles adicionales */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Tipo de usuario *</label>
@@ -3401,6 +3457,60 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                           ))}
                         </select>
                         {formErrors360.tipo_usuario_id && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{formErrors360.tipo_usuario_id}</span>}
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Roles adicionales</label>
+                        <select
+                          id="user-360-add-role-select"
+                          value=""
+                          onChange={(e) => {
+                            const val = e.target.value ? Number(e.target.value) : null;
+                            if (val) {
+                              const currentAdd = Array.isArray(wizardData.roles_additional) ? wizardData.roles_additional : [];
+                              if (!currentAdd.includes(val)) {
+                                handleChange('roles_additional', [...currentAdd, val]);
+                              }
+                            }
+                          }}
+                          className="w-full bg-input border border-border focus:border-primary rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none cursor-pointer transition-colors"
+                        >
+                          <option value="">+ Asignar rol secundario...</option>
+                          {availableRolesForAdditional.map(r => (
+                            <option key={r.numericId || r.id} value={r.numericId || r.id}>
+                              {r.nombre || r.name}
+                            </option>
+                          ))}
+                        </select>
+                        {Array.isArray(wizardData.roles_additional) && wizardData.roles_additional.length > 0 ? (
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {wizardData.roles_additional.map(rId => {
+                              const rObj = roles.find(r => Number(r.numericId || r.id) === Number(rId));
+                              return (
+                                <span
+                                  key={rId}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-purple-500/10 text-purple-400 dark:text-purple-300 border border-purple-500/30 animate-in fade-in"
+                                >
+                                  <Shield size={12} className="text-purple-400 shrink-0" />
+                                  <span>{rObj ? (rObj.nombre || rObj.name) : `Rol ${rId}`}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const updated = (wizardData.roles_additional || []).filter(id => Number(id) !== Number(rId));
+                                      handleChange('roles_additional', updated);
+                                    }}
+                                    className="p-0.5 hover:bg-purple-500/20 rounded text-purple-300 hover:text-rose-400 transition-colors cursor-pointer"
+                                    title="Quitar rol"
+                                  >
+                                    <X size={12} />
+                                  </button>
+                                </span>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-foreground-muted mt-1 block">Sin roles adicionales asignados</span>
+                        )}
                       </div>
                     </div>
 
@@ -3590,7 +3700,31 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-[140px_1fr] sm:grid-cols-[160px_1fr] items-center gap-2 border-b border-border/50 pb-2.5 md:col-span-2">
+                    <div className="grid grid-cols-[140px_1fr] sm:grid-cols-[160px_1fr] items-center gap-2 border-b border-border/50 pb-2.5">
+                      <span className="text-foreground-muted font-bold">Roles adicionales:</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {((detailUser.additional_roles && detailUser.additional_roles.length > 0)
+                          ? detailUser.additional_roles.map((ar, idx) => (
+                              <span key={ar.id || idx} className="bg-purple-500/10 text-purple-400 dark:text-purple-300 border border-purple-500/30 px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
+                                {ar.name || `Rol ${ar.id}`}
+                              </span>
+                            ))
+                          : ((detailUser.roles_additional && detailUser.roles_additional.length > 0)
+                              ? detailUser.roles_additional.map((rId, idx) => {
+                                  const rObj = (roles || []).find(r => Number(r.numericId || r.id) === Number(rId));
+                                  return (
+                                    <span key={rId || idx} className="bg-purple-500/10 text-purple-400 dark:text-purple-300 border border-purple-500/30 px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
+                                      {rObj ? (rObj.nombre || rObj.name) : `Rol ${rId}`}
+                                    </span>
+                                  );
+                                })
+                              : <span className="text-foreground-secondary text-xs font-normal">Ninguno</span>
+                            )
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-[140px_1fr] sm:grid-cols-[160px_1fr] items-center gap-2 border-b border-border/50 pb-2.5">
                       <span className="text-foreground-muted font-bold">Tipo de usuario:</span>
                       <span className="bg-surface-subtle border border-border text-foreground-secondary font-mono text-[10px] font-bold tracking-wider px-2 py-0.5 rounded w-fit">
                         {detailUser.user_type || (userTypes || []).find(t => t.id == detailUser.tipo_usuario_id || t.tipo_usuario_id == detailUser.tipo_usuario_id)?.nombre || (userTypes || []).find(t => t.id == detailUser.tipo_usuario_id || t.tipo_usuario_id == detailUser.tipo_usuario_id)?.name || '—'}
@@ -5947,11 +6081,17 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                               handleChange('rol_id', rId);
                               const rolObj = roles.find(r => Number(r.numericId || r.id) === Number(rId));
                               if (rolObj) handleChange('role', rolObj.nombre || rolObj.name);
+                              if (rId && Array.isArray(wizardData.roles_additional)) {
+                                const filteredAdd = wizardData.roles_additional.filter(id => Number(id) !== Number(rId));
+                                if (filteredAdd.length !== wizardData.roles_additional.length) {
+                                  handleChange('roles_additional', filteredAdd);
+                                }
+                              }
                             }}
                             className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none cursor-pointer transition-colors ${fieldErrors.rol_id ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
                           >
                             <option value="">-- Selecciona Rol --</option>
-                            {roles.map(r => (
+                            {availableRoles.map(r => (
                               <option key={r.numericId || r.id} value={r.numericId || r.id}>
                                 {r.nombre || r.name}
                               </option>
@@ -5961,27 +6101,83 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                         </div>
                       </div>
 
-                      {/* Row 5: Tipo de usuario * */}
-                      <div>
-                        <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Tipo de usuario *</label>
-                        <select
-                          value={wizardData.tipo_usuario_id || ''}
-                          onChange={(e) => {
-                            const tuId = e.target.value ? Number(e.target.value) : '';
-                            handleChange('tipo_usuario_id', tuId);
-                            const tuObj = userTypes.find(t => Number(t.tipo_usuario_id || t.id) === Number(tuId));
-                            if (tuObj) handleChange('user_type', tuObj.nombre || tuObj.name);
-                          }}
-                          className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none cursor-pointer transition-colors ${fieldErrors.tipo_usuario_id ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
-                        >
-                          <option value="">-- Selecciona Tipo de Usuario --</option>
-                          {userTypes.map(t => (
-                            <option key={t.tipo_usuario_id || t.id} value={t.tipo_usuario_id || t.id}>
-                              {t.nombre || t.name}
-                            </option>
-                          ))}
-                        </select>
-                        {fieldErrors.tipo_usuario_id && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{fieldErrors.tipo_usuario_id}</span>}
+                      {/* Row 5: Tipo de usuario * | Roles adicionales */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Tipo de usuario *</label>
+                          <select
+                            value={wizardData.tipo_usuario_id || ''}
+                            onChange={(e) => {
+                              const tuId = e.target.value ? Number(e.target.value) : '';
+                              handleChange('tipo_usuario_id', tuId);
+                              const tuObj = userTypes.find(t => Number(t.tipo_usuario_id || t.id) === Number(tuId));
+                              if (tuObj) handleChange('user_type', tuObj.nombre || tuObj.name);
+                            }}
+                            className={`w-full bg-input border rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none cursor-pointer transition-colors ${fieldErrors.tipo_usuario_id ? 'border-rose-500 bg-rose-500/5' : 'border-border focus:border-primary'}`}
+                          >
+                            <option value="">-- Selecciona Tipo de Usuario --</option>
+                            {userTypes.map(t => (
+                              <option key={t.tipo_usuario_id || t.id} value={t.tipo_usuario_id || t.id}>
+                                {t.nombre || t.name}
+                              </option>
+                            ))}
+                          </select>
+                          {fieldErrors.tipo_usuario_id && <span className="text-rose-400 text-[11px] mt-1 font-medium block">{fieldErrors.tipo_usuario_id}</span>}
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-foreground-secondary mb-1.5">Roles adicionales</label>
+                          <select
+                            id="wizard-add-role-select"
+                            value=""
+                            onChange={(e) => {
+                              const val = e.target.value ? Number(e.target.value) : null;
+                              if (val) {
+                                const currentAdd = Array.isArray(wizardData.roles_additional) ? wizardData.roles_additional : [];
+                                if (!currentAdd.includes(val)) {
+                                  handleChange('roles_additional', [...currentAdd, val]);
+                                }
+                              }
+                            }}
+                            className="w-full bg-input border border-border focus:border-primary rounded-xl px-3.5 py-2.5 text-xs font-normal text-foreground focus:outline-none cursor-pointer transition-colors"
+                          >
+                            <option value="">+ Asignar rol secundario...</option>
+                            {availableRolesForAdditional.map(r => (
+                              <option key={r.numericId || r.id} value={r.numericId || r.id}>
+                                {r.nombre || r.name}
+                              </option>
+                            ))}
+                          </select>
+                          {Array.isArray(wizardData.roles_additional) && wizardData.roles_additional.length > 0 ? (
+                            <div className="flex flex-wrap gap-2 mt-2">
+                              {wizardData.roles_additional.map(rId => {
+                                const rObj = roles.find(r => Number(r.numericId || r.id) === Number(rId));
+                                return (
+                                  <span
+                                    key={rId}
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-purple-500/10 text-purple-400 dark:text-purple-300 border border-purple-500/30 animate-in fade-in"
+                                  >
+                                    <Shield size={12} className="text-purple-400 shrink-0" />
+                                    <span>{rObj ? (rObj.nombre || rObj.name) : `Rol ${rId}`}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const updated = (wizardData.roles_additional || []).filter(id => Number(id) !== Number(rId));
+                                        handleChange('roles_additional', updated);
+                                      }}
+                                      className="p-0.5 hover:bg-purple-500/20 rounded text-purple-300 hover:text-rose-400 transition-colors cursor-pointer"
+                                      title="Quitar rol"
+                                    >
+                                      <X size={12} />
+                                    </button>
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <span className="text-[11px] text-foreground-muted mt-1 block">Sin roles adicionales asignados</span>
+                          )}
+                        </div>
                       </div>
 
                       {/* Row 5: Contraseña * | Confirmar contraseña * */}
@@ -6197,6 +6393,17 @@ export default function UsersSecurityView({ onOpenSidebar = () => {}, isSelfMode
                           <span className="text-foreground-muted font-medium">Rol principal:</span>
                           <span className="font-bold text-primary">
                             {roles.find(r => (r.numericId || r.id) == wizardData.rol_id)?.nombre || wizardData.role || 'Rol seleccionado'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between border-b border-border/50 pb-2">
+                          <span className="text-foreground-muted font-medium">Roles adicionales:</span>
+                          <span className="font-semibold text-foreground">
+                            {Array.isArray(wizardData.roles_additional) && wizardData.roles_additional.length > 0
+                              ? wizardData.roles_additional.map(id => {
+                                  const rObj = roles.find(r => Number(r.numericId || r.id) === Number(id));
+                                  return rObj ? (rObj.nombre || rObj.name) : `Rol ${id}`;
+                                }).join(', ')
+                              : 'Ninguno'}
                           </span>
                         </div>
                         <div className="flex justify-between border-b border-border/50 pb-2">

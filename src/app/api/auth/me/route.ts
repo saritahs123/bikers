@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { query } from "@/lib/db";
 import { validateAndTouchSession } from "@/lib/sessionLifecycle";
+import { isSuperAdmin } from "@/lib/workshop-session";
 
 export const dynamic = "force-dynamic";
 
@@ -54,6 +55,7 @@ export async function GET() {
     const userRows = await query(
       `SELECT 
          u.usuario_id,
+         u.rol_principal_id,
          u.estado AS usuario_estado,
          ui.nombre,
          ui.apellido,
@@ -113,6 +115,14 @@ export async function GET() {
     const cargoNombre = row.cargo_nombre || rolNombre;
     const empresaNombre = row.empresa_nombre || "Biker's Fort";
 
+    const callerIsSuper = await isSuperAdmin(targetUserId);
+
+    const additionalRolesRows = await query<{ rol_funcional_id: number }>(
+      `SELECT rol_funcional_id FROM admin.usuario_rol_adicional WHERE usuario_id = $1 ORDER BY rol_funcional_id`,
+      [targetUserId]
+    );
+    const rolesAdditional = (additionalRolesRows || []).map(r => Number(r.rol_funcional_id));
+
     const userPayload = {
       usuario_id: row.usuario_id,
       nombre,
@@ -124,6 +134,9 @@ export async function GET() {
       forzar_cambio_clave: Boolean(row.forzar_cambio_clave || row.requiere_cambio_clave),
       rol: rolNombre,
       rol_nombre: rolNombre,
+      rol_id: row.rol_principal_id,
+      roles_additional: rolesAdditional,
+      is_superadmin: Boolean(callerIsSuper),
       cargo_nombre: cargoNombre,
       empresa_nombre: empresaNombre,
       iniciales,
@@ -135,7 +148,7 @@ export async function GET() {
       data: userPayload,
       user: userPayload
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("GET /api/auth/me error:", error);
     return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al validar la sesión del usuario." }, { status: 500 });
   }
