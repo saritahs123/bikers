@@ -58,10 +58,20 @@ Siguiendo estrictamente las directrices del proyecto:
    - **Archivos:** `scripts/register-ts.js`, `scripts/fix_test_role_dashboard_access.js`, `scripts/test_phase6_user_acceptance.js`, `scripts/test_fase_6_4_1_regression.js`, `scripts/test_fase_6_4_5_rbac.js`, `scripts/test_fase_6_4_6_navigation.js`, `scripts/test_fase_6_4_8_privilege_escalation.js`, `scripts/test_fase_6_4_9_roles_adicionales.js`, `scripts/test_fase_6_4_10_navigation_sync.js`.
 
 5. **Commit 5 — Documentación Técnica de Auditoría**
-   - **Hash:** *(Se registrará al commitear el bloque de informes técnicos)*
+   - **Hash:** `cac114a`
    - **Mensaje:** `docs(rbac): document security audit and migration readiness`
    - **Alcance:** Consolidación de informes técnicos de las fases 6.4.8, 6.4.9, 6.4.10, 6.4.11 y 6.4.12.
    - **Archivos:** `fase_6_4_8_informe_blindaje_privilegios_rbac.md`, `fase_6_4_9_informe_roles_adicionales_migracion_047.md`, `fase_6_4_10_informe_sincronizacion_segura_rbac.md`, `fase_6_4_11_informe_auditoria_final_rbac.md`, `fase_6_4_12_informe_cierre_commits_rbac.md`.
+
+6. **Commit 6 — Ajustes de Reportes y Cuadre de Caja**
+   - **Hash:** `d418c22`
+   - **Mensaje:** `fix(reports): balance PDF table widths and integrate cash method reconciliation in KPI row`
+   - **Alcance:** Escalamiento proporcional de columnas en reportes PDF para eliminar espacios en blanco, integración de Conciliación por Método en la misma línea de tarjetas KPI y actualización de subtítulo a "Cobros Recibidos".
+   - **Archivos:** `src/lib/reports/reportExportService.ts`, `src/components/reports/ReportKpiCard.tsx`, `src/components/reports/DailyCashReportView.tsx`.
+
+7. **Commit 7 — Consolidación Parte 49**
+   - **Mensaje:** `feat: Modificacion de todo el flujo de generar la orden de trabajo,  Parte 49, Implementación del motor de migracion y control de versiones controladas y en el modulo de seguridad Matriz RBAC`
+   - **Alcance:** Consolidación final del ciclo de control de versiones y motor RBAC previo al push remoto.
 
 ---
 
