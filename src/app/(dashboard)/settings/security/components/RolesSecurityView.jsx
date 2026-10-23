@@ -84,14 +84,9 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
       setScreenMatrixState(data.screenMatrix || {});
       setHasChanges(false);
 
-      // Default expand all modules on initial load
+      // Iniciar con todos los módulos contraídos por defecto
       if (!isRefresh) {
-        setExpandedModules(prev => {
-          if (Object.keys(prev).length > 0) return prev;
-          const initialExpanded = {};
-          mods.forEach(m => { initialExpanded[m.id] = true; });
-          return initialExpanded;
-        });
+        setExpandedModules({});
       }
 
       setActiveRole(prev => {
@@ -354,6 +349,7 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
       setNewRoleDesc('');
       showToast('Rol funcional agregado con éxito');
       setActiveRole(createdName);
+      setExpandedModules({});
       fetchMatrix(true);
     } catch (error) {
       console.error('Error adding role:', error);
@@ -637,7 +633,10 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
                       }
                       setHasChanges(false);
                     }
-                    setActiveRole(role.nombre);
+                    if (activeRole !== role.nombre) {
+                      setActiveRole(role.nombre);
+                      setExpandedModules({});
+                    }
                   }}
                 >
                   <div className="truncate pr-2 flex-1 min-w-0">
@@ -901,9 +900,6 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
                                   )}
                                   <span className="font-semibold text-foreground font-sans text-xs">
                                     {screen.label}
-                                  </span>
-                                  <span className="hidden xl:inline text-[10px] text-foreground-muted font-mono truncate max-w-[200px]" title={screen.ruta}>
-                                    {screen.ruta}
                                   </span>
                                 </div>
                               </td>

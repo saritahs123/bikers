@@ -1,4 +1,5 @@
 import React, { Suspense } from "react";
+import { ProtectedServerPage } from "@/components/auth/ProtectedServerPage";
 import WorkOrderServicesPageClient from "@/app/(dashboard)/work-orders/[id]/services/WorkOrderServicesPageClient";
 
 export const metadata = {
@@ -9,8 +10,10 @@ export const metadata = {
 export default async function WorkshopServicesPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   return (
-    <Suspense fallback={<div className="p-8 text-xs text-slate-400 font-mono">Cargando Gestión de Servicios...</div>}>
-      <WorkOrderServicesPageClient ordenId={id} />
-    </Suspense>
+    <ProtectedServerPage screenCode="TALLER_ORDENES">
+      <Suspense fallback={<div className="p-8 text-xs text-slate-400 font-mono">Cargando Gestión de Servicios...</div>}>
+        <WorkOrderServicesPageClient ordenId={id} />
+      </Suspense>
+    </ProtectedServerPage>
   );
 }

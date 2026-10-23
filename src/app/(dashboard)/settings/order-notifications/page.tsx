@@ -1,3 +1,4 @@
+import { ProtectedServerPage } from "@/components/auth/ProtectedServerPage";
 import OrderNotificationsView from "@/components/settings/OrderNotificationsView";
 
 export const metadata = {
@@ -7,8 +8,10 @@ export const metadata = {
 
 export default function OrderNotificationsPage() {
   return (
-    <div className="w-full h-full flex flex-col min-h-0 relative bg-background text-foreground">
-      <OrderNotificationsView />
-    </div>
+    <ProtectedServerPage screenCode="CONFIG_NOTIFICACIONES_ORDENES">
+      <div className="w-full h-full flex flex-col min-h-0 relative bg-background text-foreground">
+        <OrderNotificationsView />
+      </div>
+    </ProtectedServerPage>
   );
 }

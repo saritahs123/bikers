@@ -36,7 +36,7 @@ if (process.env.DATABASE_URL && process.env.DATABASE_URL.includes('db.bikerrd.co
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
+  ssl: (process.env.DATABASE_URL?.includes('127.0.0.1') || process.env.DATABASE_URL?.includes('localhost')) ? false : { rejectUnauthorized: false }
 });
 
 function hashPassword(password) {
@@ -177,7 +177,7 @@ async function runPhase6Tests() {
           [scrOtId]: { ver: true, crear: false, editar: false, eliminar: false, asignar: false, cerrar: false, reabrir: false, mover: false },
           [scrTransId]: { ver: true, mover: false },
           [scrAjuId]: { ver: true, crear: false, aprobar: false },
-          [scrDashId]: { ver: true },
+          [scrDashId]: { ver: false },
         },
         modPerms: {
           [modFacId]: { ver: true, crear: false, editar: false },
@@ -580,7 +580,7 @@ async function runPhase6Tests() {
     assert(p1Me.data?.user?.rol === 'TEST_ROL_SOLO_LECTURA', 'P1: Rol funcional correcto en sesión');
 
     const p1Dash = await apiRequest(p1, 'GET', '/api/dashboard');
-    assert(p1Dash.status === 200, 'P1: Dashboard accesible para solo lectura (HTTP 200)');
+    assert(p1Dash.status === 403, 'P1: Dashboard DENEGADO para solo lectura (HTTP 403 Forbidden)', `Status: ${p1Dash.status}`);
 
     const p1FacGet = await apiRequest(p1, 'GET', '/api/facturacion/facturas');
     assert(p1FacGet.status === 200, 'P1: Consulta de facturas permitida (HTTP 200)');

@@ -102,6 +102,7 @@ export async function GET(request: NextRequest) {
         referencia: r.referencia || "-",
         usuario: r.usuario_nombre || "Sistema",
       })),
+      permissions: perms,
     });
   } catch (error: any) {
     console.error("Error en GET /api/inventario/ajustes:", error);

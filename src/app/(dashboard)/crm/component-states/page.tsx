@@ -1,5 +1,10 @@
+import { ProtectedServerPage } from "@/components/auth/ProtectedServerPage";
 import ComponentStatesView from "@/components/crm/ComponentStatesView";
 
 export default function ComponentStatesPage() {
-  return <ComponentStatesView />;
+  return (
+    <ProtectedServerPage screenCode="CONFIG_ESTADOS_COMPONENTES">
+      <ComponentStatesView />
+    </ProtectedServerPage>
+  );
 }

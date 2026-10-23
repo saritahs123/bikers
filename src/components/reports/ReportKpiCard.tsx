@@ -87,7 +87,7 @@ export function ReportKpiGrid({
 }) {
   const defaultCols =
     cols === 5
-      ? "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5"
+      ? "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5"
       : "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4";
 
   return (

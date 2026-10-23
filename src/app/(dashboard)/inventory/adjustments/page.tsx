@@ -1,4 +1,5 @@
 import InventoryAdjustmentsView from "@/components/inventory/InventoryAdjustmentsView";
+import { ProtectedServerPage } from "@/components/auth/ProtectedServerPage";
 
 export const metadata = {
   title: "Salidas y Ajustes de Inventario | Ride Lab",
@@ -6,5 +7,9 @@ export const metadata = {
 };
 
 export default function InventoryAdjustmentsPage() {
-  return <InventoryAdjustmentsView />;
+  return (
+    <ProtectedServerPage screenCode="INVENTARIO_SALIDAS_AJUSTES" title="Salidas y Ajustes de Inventario">
+      <InventoryAdjustmentsView />
+    </ProtectedServerPage>
+  );
 }

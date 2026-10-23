@@ -1,5 +1,10 @@
+import { ProtectedServerPage } from "@/components/auth/ProtectedServerPage";
 import ServiceTypesView from "@/components/workshop/ServiceTypesView";
 
 export default function ServiceTypesPage() {
-  return <ServiceTypesView />;
+  return (
+    <ProtectedServerPage screenCode="CONFIG_SERVICIOS">
+      <ServiceTypesView />
+    </ProtectedServerPage>
+  );
 }

@@ -22,11 +22,13 @@ export async function POST() {
       );
     }
 
-    await syncNavigationToDatabase();
+    const syncRes = await syncNavigationToDatabase(true);
 
     return NextResponse.json({
-      success: true,
-      message: "Catálogo de menús y pantallas sincronizado exitosamente con la configuración canónica."
+      success: syncRes.success,
+      menusSynced: syncRes.menusSynced,
+      screensSynced: syncRes.screensSynced,
+      message: syncRes.message || "Catálogo de menús y pantallas sincronizado exitosamente con la configuración canónica."
     });
   } catch (error: unknown) {
     console.error("Error in POST /api/matriz-acceso-rol/sync:", error);

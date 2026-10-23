@@ -4,6 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:test": "node scripts/start_test_server.js",
+    "db:test:status": "node scripts/db_migrations.js status --env=test",
+    "db:test:plan": "node scripts/db_migrations.js plan --env=test",
+    "db:test:migrate": "node scripts/db_migrations.js migrate --env=test",
+    "db:test:verify": "node scripts/db_migrations.js verify --env=test",
+    "db:prod:plan": "node scripts/db_migrations.js plan --env=production",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"

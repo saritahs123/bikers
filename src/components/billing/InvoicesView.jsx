@@ -66,6 +66,15 @@ export default function InvoicesView() {
   const [isQuickPrintModalOpen, setIsQuickPrintModalOpen] = useState(false);
   const [loadingPrintData, setLoadingPrintData] = useState(false);
 
+  // GAP-05: Estado de permisos RBAC para control visual de acciones
+  const [permissions, setPermissions] = useState({
+    puede_ver: true,
+    puede_crear: true,
+    puede_editar: false,
+    puede_aprobar: false,
+    puede_eliminar: false
+  });
+
   // Debounce search input
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -111,6 +120,20 @@ export default function InvoicesView() {
 
       if (!res.ok) {
         throw new Error(json.message || json.error || "Error al cargar facturas.");
+      }
+
+      // Extraer permisos efectivos enviados por el backend
+      if (json.permissions) {
+        setPermissions(json.permissions);
+      } else {
+        const permCrear = res.headers.get("x-perm-crear");
+        if (permCrear !== null) {
+          setPermissions(prev => ({
+            ...prev,
+            puede_crear: permCrear === "true",
+            puede_aprobar: res.headers.get("x-perm-aprobar") === "true"
+          }));
+        }
       }
 
       setInvoices(json.data || []);
@@ -311,15 +334,17 @@ export default function InvoicesView() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5">
-          <Link
-            href="/billing/new"
-            className="flex items-center gap-2 px-4 py-2 text-xs font-mono font-bold uppercase tracking-wider rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-all shadow-md shadow-primary/20"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Nueva Factura</span>
-          </Link>
-        </div>
+        {permissions.puede_crear && (
+          <div className="flex items-center gap-2.5">
+            <Link
+              href="/billing/new"
+              className="flex items-center gap-2 px-4 py-2 text-xs font-mono font-bold uppercase tracking-wider rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-all shadow-md shadow-primary/20"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Nueva Factura</span>
+            </Link>
+          </div>
+        )}
       </div>
 
       {/* 2. Tarjetas de Métricas Superiores (Sección 2) */}

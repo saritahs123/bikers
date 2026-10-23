@@ -91,6 +91,24 @@ export async function sendTextBeeSms({
   timeoutMs,
 }: TextBeeSendSmsParams): Promise<TextBeeSendSmsResult> {
   const effectiveTimeout = timeoutMs || getTextBeeTimeoutMs();
+
+  // BLOQUEO EN MODO TEST: Simulación segura sin salida externa
+  if (
+    process.env.APP_ENV === "test" ||
+    process.env.DISABLE_EXTERNAL_SERVICES === "true" ||
+    process.env.ENABLE_SMS === "false"
+  ) {
+    const mockBatchId = `mock-batch-${Date.now()}`;
+    console.log(`[TEST MODE] Envío de SMS interceptado y simulado a ${recipient}`);
+    return {
+      success: true,
+      statusCode: 200,
+      smsBatchId: mockBatchId,
+      providerResponse: { mock: true, recipient, message },
+      errorMessage: null,
+    };
+  }
+
   const apiUrl = process.env.TEXTBEE_API_URL?.trim() || DEFAULT_TEXTBEE_URL;
   const apiKey = process.env.TEXTBEE_API_KEY?.trim();
   const deviceId = process.env.TEXTBEE_DEVICE_ID?.trim();
@@ -273,6 +291,24 @@ export async function getTextBeeBatchStatus(
   timeoutMs: number = 8000
 ): Promise<TextBeeBatchStatusResult> {
   const gatewayBase = getGatewayBaseUrl();
+
+  // BLOQUEO EN MODO TEST: Simulación segura de estado
+  if (
+    process.env.APP_ENV === "test" ||
+    process.env.DISABLE_EXTERNAL_SERVICES === "true" ||
+    process.env.ENABLE_SMS === "false"
+  ) {
+    return {
+      success: true,
+      statusCode: 200,
+      status: "delivered",
+      rawStatus: "delivered",
+      smsBatchId,
+      providerResponse: { mock: true, batchId: smsBatchId },
+      sentAt: new Date(),
+      deliveredAt: new Date(),
+    };
+  }
   const apiKey = process.env.TEXTBEE_API_KEY?.trim();
   const deviceId = process.env.TEXTBEE_DEVICE_ID?.trim();
 

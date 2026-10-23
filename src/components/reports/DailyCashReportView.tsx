@@ -12,8 +12,7 @@ import {
   ArrowRightLeft, 
   CreditCard, 
   Receipt, 
-  AlertCircle, 
-  Info 
+  AlertCircle
 } from "lucide-react";
 import { ReportHeader } from "./ReportHeader";
 import { ReportKpiCard, ReportKpiGrid } from "./ReportKpiCard";
@@ -260,7 +259,7 @@ export function DailyCashReportView({ initialCompany, canExport }: DailyCashRepo
     }
 
     const exportKpis: ReportKpi[] = [
-      { label: "Total Cobros Efectivos", value: formatCurrency(json.kpis.totalCobrosEfectivos), sublabel: "Cobros válidos aplicados" },
+      { label: "Total Cobros Efectivos", value: formatCurrency(json.kpis.totalCobrosEfectivos), sublabel: "Cobros Recibidos" },
       { label: "Cobros en Efectivo", value: formatCurrency(json.kpis.totalEfectivo), sublabel: "Total en billetes / monedas" },
       { label: "Cobros por Transferencia", value: formatCurrency(json.kpis.totalTransferencia), sublabel: "Depósitos y transferencias" },
       { label: "Tarjetas y Otros", value: formatCurrency(json.kpis.totalTarjeta + json.kpis.totalOtros), sublabel: "POS y otros métodos" },
@@ -366,20 +365,12 @@ export function DailyCashReportView({ initialCompany, canExport }: DailyCashRepo
         totalRecords={totalRecords}
       />
 
-      {/* Nota de Conciliación Operativa */}
-      <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-primary/20 bg-primary/5 text-primary text-[11px]">
-        <Info className="w-3.5 h-3.5 shrink-0" />
-        <span>
-          Conciliación de ingresos registrados en tiempo real por terminal. Todos los importes corresponden a cobros validados y trazables en el sistema.
-        </span>
-      </div>
-
-      {/* 2. Tarjetas KPI */}
-      <ReportKpiGrid>
+      {/* 2. Tarjetas KPI y Conciliación por Método de Pago en la misma línea */}
+      <ReportKpiGrid cols={5}>
         <ReportKpiCard
           label="Total Cobros Efectivos"
           value={formatCurrency(kpis.totalCobrosEfectivos)}
-          sublabel="Cobros aplicados en la jornada"
+          sublabel="Cobros Recibidos"
           icon={<Receipt className="w-4 h-4 text-primary" />}
           variant="primary"
           isLoading={loading}
@@ -408,43 +399,43 @@ export function DailyCashReportView({ initialCompany, canExport }: DailyCashRepo
           variant="amber"
           isLoading={loading}
         />
-      </ReportKpiGrid>
 
-      {/* Resumen por Método de Pago */}
-      {methodSummary.length > 0 && (
-        <div className="bg-surface border border-border rounded-xl p-3 md:p-3.5 shadow-sm space-y-2">
-          <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-foreground">
-            <span className="flex items-center gap-1.5">
+        {/* Tarjeta 5: Conciliación por Método de Pago (en la misma línea que las tarjetas) */}
+        <div className="relative overflow-hidden rounded-xl border border-primary/30 bg-primary/5 py-2.5 px-3 md:px-3.5 flex flex-col justify-between font-mono shadow-sm transition-all hover:shadow-md h-full min-h-[76px]">
+          <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary" />
+
+          <div className="flex items-center justify-between gap-1.5 mb-1 pl-1">
+            <span className="text-[10px] font-bold text-foreground-muted tracking-wider uppercase truncate" title="Conciliación por Método de Pago">
+              Conciliación Método
+            </span>
+            <div className="p-1 rounded-md bg-surface-subtle/80 border border-border/50 shrink-0">
               <CreditCard className="w-3.5 h-3.5 text-primary" />
-              Conciliación por Método de Pago
-            </span>
-            <span className="text-emerald-500 font-bold">
-              Total Jornada: {formatCurrency(kpis.totalCobrosEfectivos)}
-            </span>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-2 pt-0.5">
-            {methodSummary.map((m, idx) => (
-              <div
-                key={idx}
-                className="p-2 rounded-lg border border-border bg-surface-subtle flex flex-col justify-between"
-              >
-                <div className="flex items-center justify-between gap-1 mb-0.5">
-                  <span className="font-bold text-[11px] text-foreground truncate">
-                    {m.metodo_pago}
-                  </span>
-                  <span className="text-[10px] text-foreground-muted shrink-0">
-                    {m.cantidad} transac.
-                  </span>
-                </div>
-                <div className="text-right text-[11px] font-bold text-emerald-500 pt-0.5 border-t border-border/50">
-                  {formatCurrency(m.total_monto)}
-                </div>
+          <div className="pl-1 flex-1 flex flex-col justify-center">
+            {loading ? (
+              <div className="h-5 w-24 bg-surface-subtle animate-pulse rounded my-0.5" />
+            ) : methodSummary.length === 0 ? (
+              <span className="text-[11px] text-foreground-muted">Sin cobros en la jornada</span>
+            ) : (
+              <div className="space-y-1 max-h-[85px] overflow-y-auto pr-0.5 custom-scrollbar">
+                {methodSummary.map((m, idx) => (
+                  <div key={idx} className="flex items-center justify-between gap-1.5 text-[11px] leading-tight">
+                    <span className="font-semibold text-foreground truncate" title={m.metodo_pago}>
+                      {m.metodo_pago}
+                      <span className="text-[10px] text-foreground-muted ml-1">({m.cantidad})</span>
+                    </span>
+                    <span className="font-bold text-emerald-500 shrink-0 text-xs">
+                      {formatCurrency(m.total_monto)}
+                    </span>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
         </div>
-      )}
+      </ReportKpiGrid>
 
       {/* 3. Panel de Filtros */}
       <div className="bg-surface border border-border rounded-xl p-3 md:p-3.5 shadow-sm space-y-2.5">
