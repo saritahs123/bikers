@@ -101,9 +101,9 @@ export async function GET() {
        ORDER BY orden ASC, pantalla_id ASC`
     )) as unknown as DbPantallaRow[];
 
-    // Filtrar módulos para asegurar que solo correspondan a los menús reales del Sidebar
+    // Catálogo de módulos activos oficiales o registrados en el sistema
     const canonicalCodes = new Set(CANONICAL_NAVIGATION.map(m => normalizeCode(m.codigo)));
-    const modulesFiltered = modulosDb.filter(m => canonicalCodes.has(normalizeCode(m.label)));
+    const modulesFiltered = modulosDb.filter(m => canonicalCodes.has(normalizeCode(m.label)) || m.estado === 'ACTIVO');
 
     // Asociar pantallas a cada módulo
     const modulesWithScreens = modulesFiltered.map(m => {
@@ -438,7 +438,33 @@ export async function POST(req: Request) {
       [nextId, codigo, nombre.trim().toUpperCase(), nextOrden]
     );
 
-    return NextResponse.json({ success: true, message: "Módulo creado exitosamente." });
+    // Fail-Closed: Inicializar las 12 acciones RBAC en false para todos los roles existentes
+    const activeRoles = (await query(
+      "SELECT rol_funcional_id FROM admin.rol_funcional WHERE estado = 'ACTIVO' OR estado IS NULL"
+    )) as unknown as Array<{ rol_funcional_id: number }>;
+
+    const maxMatrizRes = (await query(
+      "SELECT COALESCE(MAX(matriz_acceso_rol_id), 0) AS max_id FROM admin.matriz_acceso_rol"
+    )) as unknown as Array<{ max_id: number }>;
+    let currentMatrizId = Number(maxMatrizRes[0]?.max_id || 0);
+
+    for (const role of activeRoles) {
+      currentMatrizId++;
+      await query(
+        `INSERT INTO admin.matriz_acceso_rol (
+           matriz_acceso_rol_id, rol_funcional_id, modulo_sistema_id,
+           puede_ver, puede_crear, puede_editar, puede_inactivar,
+           puede_exportar, puede_importar, puede_aprobar, puede_asignar,
+           puede_mover, puede_cerrar, puede_reabrir, puede_eliminar,
+           estado, fecha_creacion, fecha_actualizacion
+         )
+         VALUES ($1, $2, $3, false, false, false, false, false, false, false, false, false, false, false, false, 'ACTIVO', now(), now())
+         ON CONFLICT (rol_funcional_id, modulo_sistema_id) DO NOTHING`,
+        [currentMatrizId, role.rol_funcional_id, nextId]
+      );
+    }
+
+    return NextResponse.json({ success: true, message: "Módulo creado exitosamente con permisos inicializados en modo seguro (Fail-Closed)." });
   } catch (error: unknown) {
     console.error("Error in POST /api/matriz-acceso-rol:", error);
     return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al crear el módulo del sistema." }, { status: 500 });

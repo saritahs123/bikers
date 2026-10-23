@@ -530,5 +530,12 @@ export function matchScreenByPath(pathname: string, searchParams?: URLSearchPara
     }
   }
 
+  // Regla explícita de resolución sin ambigüedad:
+  // Si pathname === "/workshop" y no se especifica view o view === "list", resuelve a TALLER_RECEPCIONES
+  if (pathname === "/workshop" && (!currentView || currentView === "list")) {
+    const taller = CANONICAL_NAVIGATION.find(m => m.codigo === "TALLER");
+    return taller?.screens.find(s => s.codigo === "TALLER_RECEPCIONES") || null;
+  }
+
   return null;
 }

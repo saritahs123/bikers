@@ -60,16 +60,14 @@ function SidebarContent({
     }
 
     const navPerms = user.navigationPermissions;
-    const isSuper = Boolean(navPerms.isSuperAdmin);
 
     return CANONICAL_NAVIGATION.map(menu => {
       const menuKey = normalizeCode(menu.codigo);
-      // Denegación por defecto: sólo permitido si es superadmin o si el módulo está explícitamente en true
-      const hasMenuPerm = isSuper || Boolean(navPerms.modules?.[menuKey]);
+      // Denegación por defecto: sólo permitido si el módulo está explícitamente en true
+      const hasMenuPerm = Boolean(navPerms.modules?.[menuKey]);
 
       // Filtrar pantallas hijas con Fail-Closed
       const visibleScreens = menu.screens.filter(screen => {
-        if (isSuper) return true;
         // Check screen override first
         const screenKey = screen.codigo;
         const screenRoute = screen.ruta;
@@ -84,7 +82,7 @@ function SidebarContent({
       });
 
       // Special handling for backward compatibility with can_view_reports
-      if (menu.id === "reportes" && user?.can_view_reports !== undefined && !isSuper) {
+      if (menu.id === "reportes" && user?.can_view_reports !== undefined) {
         if (!user.can_view_reports) return null;
       }
 
@@ -100,7 +98,7 @@ function SidebarContent({
 
       // For HOME / single link menu
       if (menu.id === "home") {
-        if (!isSuper && !hasMenuPerm) {
+        if (!hasMenuPerm) {
           return null;
         }
         return {

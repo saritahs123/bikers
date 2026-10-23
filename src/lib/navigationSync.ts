@@ -40,8 +40,8 @@ export async function syncNavigationToDatabase(force = false): Promise<SyncResul
   try {
     let menusSynced = 0;
     let screensSynced = 0;
-    let menusInactivated = 0;
-    let screensInactivated = 0;
+    const menusInactivated = 0;
+    const screensInactivated = 0;
 
     // 1. Obtener módulos y pantallas existentes en la base de datos (Lectura segura)
     interface DbMod {
@@ -101,27 +101,6 @@ export async function syncNavigationToDatabase(force = false): Promise<SyncResul
         }
         if (needsWrite) break;
       }
-
-      // Validar inactivaciones necesarias
-      if (!needsWrite) {
-        const canonicalModKeys = new Set(CANONICAL_NAVIGATION.map(m => normalizeCode(m.codigo)));
-        const canonicalScrKeys = new Set(CANONICAL_NAVIGATION.flatMap(m => m.screens.map(s => normalizeCode(s.codigo))));
-
-        for (const mod of existingModsRes) {
-          if (!canonicalModKeys.has(normalizeCode(mod.nombre)) && mod.estado === "ACTIVO") {
-            needsWrite = true;
-            break;
-          }
-        }
-        if (!needsWrite) {
-          for (const scr of existingScreensRes) {
-            if (!canonicalScrKeys.has(normalizeCode(scr.codigo)) && scr.activo) {
-              needsWrite = true;
-              break;
-            }
-          }
-        }
-      }
     }
 
     // Si no requiere escrituras, retornar inmediatamente como lectura pura
@@ -136,6 +115,14 @@ export async function syncNavigationToDatabase(force = false): Promise<SyncResul
         message: "Catálogo en total sincronía (cero escrituras DML ejecutadas)."
       };
     }
+
+    // Catálogo de roles funcionales activos para inicialización Fail-Closed
+    interface DbRoleItem {
+      rol_funcional_id: number;
+    }
+    const activeRolesRes = (await query(
+      "SELECT rol_funcional_id FROM admin.rol_funcional WHERE estado = 'ACTIVO' OR estado IS NULL"
+    )) as unknown as DbRoleItem[];
 
     // 2. Procesar cada menú de CANONICAL_NAVIGATION cuando hay discrepancias reales
     for (const menu of CANONICAL_NAVIGATION) {
@@ -169,6 +156,28 @@ export async function syncNavigationToDatabase(force = false): Promise<SyncResul
           "INSERT INTO admin.modulo_sistema (modulo_sistema_id, codigo, nombre, orden, estado, fecha_creacion, fecha_actualizacion) VALUES ($1, $2, $3, $4, 'ACTIVO', clock_timestamp(), clock_timestamp())",
           [moduloId, code, menu.nombre.toUpperCase(), menu.orden]
         );
+
+        // Inicializar las 12 acciones RBAC en false para todos los roles funcionales (Fail-Closed)
+        const maxMatrizRes = (await query(
+          "SELECT COALESCE(MAX(matriz_acceso_rol_id), 0) AS max_id FROM admin.matriz_acceso_rol"
+        )) as unknown as Array<{ max_id: number }>;
+        let currentMatrizId = Number(maxMatrizRes[0]?.max_id || 0);
+
+        for (const role of activeRolesRes) {
+          currentMatrizId++;
+          await query(
+            `INSERT INTO admin.matriz_acceso_rol (
+               matriz_acceso_rol_id, rol_funcional_id, modulo_sistema_id,
+               puede_ver, puede_crear, puede_editar, puede_inactivar,
+               puede_exportar, puede_importar, puede_aprobar, puede_asignar,
+               puede_mover, puede_cerrar, puede_reabrir, puede_eliminar,
+               estado, fecha_creacion, fecha_actualizacion
+             )
+             VALUES ($1, $2, $3, false, false, false, false, false, false, false, false, false, false, false, false, 'ACTIVO', clock_timestamp(), clock_timestamp())
+             ON CONFLICT (rol_funcional_id, modulo_sistema_id) DO NOTHING`,
+            [currentMatrizId, role.rol_funcional_id, moduloId]
+          );
+        }
       }
       menusSynced++;
 
@@ -208,33 +217,31 @@ export async function syncNavigationToDatabase(force = false): Promise<SyncResul
              VALUES ($1, $2, $3, $4, $5, $6, $7, true, clock_timestamp(), clock_timestamp())`,
             [nextScreenId, moduloId, scr.codigo, scr.nombre, scr.ruta, scr.tipo, scr.orden]
           );
+
+          // Inicializar las 12 acciones RBAC en false en admin.matriz_acceso_pantalla para todos los roles (Fail-Closed)
+          // Previene la herencia automática indebida de puede_ver del módulo padre
+          for (const role of activeRolesRes) {
+            await query(
+              `INSERT INTO admin.matriz_acceso_pantalla (
+                 rol_funcional_id, pantalla_id,
+                 puede_ver, puede_crear, puede_editar, puede_inactivar,
+                 puede_exportar, puede_importar, puede_aprobar, puede_asignar,
+                 puede_mover, puede_cerrar, puede_reabrir, puede_eliminar,
+                 estado, fecha_creacion, fecha_actualizacion
+               )
+               VALUES ($1, $2, false, false, false, false, false, false, false, false, false, false, false, false, 'ACTIVO', clock_timestamp(), clock_timestamp())
+               ON CONFLICT (rol_funcional_id, pantalla_id) DO NOTHING`,
+              [role.rol_funcional_id, nextScreenId]
+            );
+          }
         }
         screensSynced++;
       }
     }
 
-    // 4. Inactivar de forma segura módulos que ya no están en CANONICAL_NAVIGATION (sin borrar registros ni permisos)
-    for (const mod of existingModsRes) {
-      if (!activeCanonicalCodes.has(normalizeCode(mod.nombre)) && mod.estado === "ACTIVO") {
-        await query(
-          "UPDATE admin.modulo_sistema SET estado = 'INACTIVO', fecha_actualizacion = clock_timestamp() WHERE modulo_sistema_id = $1",
-          [mod.modulo_sistema_id]
-        );
-        menusInactivated++;
-      }
-    }
-
-    // 5. Inactivar pantallas que ya no están en CANONICAL_NAVIGATION
-    for (const scr of existingScreensRes) {
-      if (!activeCanonicalScreenCodes.has(normalizeCode(scr.codigo)) && scr.activo) {
-        await query(
-          "UPDATE admin.pantalla_sistema SET activo = false, fecha_actualizacion = clock_timestamp() WHERE pantalla_id = $1",
-          [scr.pantalla_id]
-        );
-        screensInactivated++;
-      }
-    }
-
+    // Preservación estricta de módulos y pantallas manuales:
+    // Conforme a la política de seguridad y ciclo de vida de la Fase 6.4.10, NO se desactivan
+    // automáticamente módulos ni pantallas creados manualmente en la base de datos.
     lastSyncTimestamp = Date.now();
     return {
       success: true,
