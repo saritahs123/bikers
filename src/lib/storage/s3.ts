@@ -126,6 +126,18 @@ export async function getPresignedUploadUrl(params: {
   contentType: string;
   expiresIn?: number;
 }): Promise<{ uploadUrl: string; expiresIn: number }> {
+  // BLOQUEO EN MODO TEST: Simulación segura de subida
+  if (
+    process.env.APP_ENV === "test" ||
+    process.env.DISABLE_EXTERNAL_SERVICES === "true"
+  ) {
+    const base = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    return {
+      uploadUrl: `${base}/api/mock-storage/upload?key=${encodeURIComponent(params.key)}`,
+      expiresIn: 300
+    };
+  }
+
   const expiresIn = getPresignedExpirationSeconds(params.expiresIn);
   
   const command = new PutObjectCommand({
@@ -145,6 +157,18 @@ export async function getPresignedDownloadUrl(params: {
   key: string;
   expiresIn?: number;
 }): Promise<{ downloadUrl: string; expiresIn: number }> {
+  // BLOQUEO EN MODO TEST: Simulación segura de descarga
+  if (
+    process.env.APP_ENV === "test" ||
+    process.env.DISABLE_EXTERNAL_SERVICES === "true"
+  ) {
+    const base = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    return {
+      downloadUrl: `${base}/api/mock-storage/download?key=${encodeURIComponent(params.key)}`,
+      expiresIn: 300
+    };
+  }
+
   const expiresIn = getPresignedExpirationSeconds(params.expiresIn);
 
   const command = new GetObjectCommand({
@@ -160,6 +184,15 @@ export async function getPresignedDownloadUrl(params: {
  * Deletes object from S3 bucket using canonical S3 client.
  */
 export async function deleteS3Object(key: string): Promise<boolean> {
+  // BLOQUEO EN MODO TEST: Prevenir borrado en buckets productivos
+  if (
+    process.env.APP_ENV === "test" ||
+    process.env.DISABLE_EXTERNAL_SERVICES === "true"
+  ) {
+    console.log(`[TEST MODE] Eliminación S3 interceptada (simulada): ${key}`);
+    return true;
+  }
+
   if (!isS3Configured()) return false;
   try {
     const command = new DeleteObjectCommand({
@@ -178,6 +211,13 @@ export async function deleteS3Object(key: string): Promise<boolean> {
  * Checks if object exists in S3 bucket using HeadObject.
  */
 export async function checkS3ObjectExists(key: string): Promise<boolean> {
+  if (
+    process.env.APP_ENV === "test" ||
+    process.env.DISABLE_EXTERNAL_SERVICES === "true"
+  ) {
+    return true;
+  }
+
   if (!isS3Configured()) return false;
   try {
     const command = new HeadObjectCommand({
@@ -208,6 +248,17 @@ export async function verifyS3ObjectMetadata(key: string): Promise<{
   contentType: string;
   error?: string;
 }> {
+  if (
+    process.env.APP_ENV === "test" ||
+    process.env.DISABLE_EXTERNAL_SERVICES === "true"
+  ) {
+    return {
+      valid: true,
+      contentLength: 2048,
+      contentType: "image/jpeg"
+    };
+  }
+
   if (!isS3Configured()) {
     const missing = getMissingS3EnvVars();
     return {
