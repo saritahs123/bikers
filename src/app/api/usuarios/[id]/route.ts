@@ -5,11 +5,12 @@ import {
   authorizeUserUpdate,
   extractPrimaryRoleId,
   extractAdditionalRoles,
+  findUnrecognizedRoleKeys,
   resolveAndValidateRole,
   resolveAndValidateAdditionalRoles,
   validateSelfProfileUpdate
 } from "@/lib/userAuth";
-import { getModulePermissions, isSuperAdmin } from "@/lib/workshop-session";
+import { getModulePermissions, isSuperAdmin, canUser } from "@/lib/workshop-session";
 import { recordUserActivity, recordUserAudit } from "@/lib/auditLogger";
 import { sweepExpiredSessions } from "@/lib/sessionLifecycle";
 
@@ -362,6 +363,20 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         );
       }
     } else {
+      // Unrecognized role keys guard: reject unaccepted role assignment parameters
+      const unrecKeys = findUnrecognizedRoleKeys(body);
+      if (unrecKeys.length > 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "VALIDATION_ERROR",
+            message: `Campo de rol no reconocido: '${unrecKeys[0]}'. No se aceptan parámetros de asignación de roles no reconocidos.`,
+            field: unrecKeys[0]
+          },
+          { status: 400 }
+        );
+      }
+
       // Modifying another user: only SuperAdmin can modify a user holding Role 1
       if (targetIsSuper && !callerIsSuper) {
         return NextResponse.json(
@@ -376,7 +391,9 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
       // Check primary role if provided in body
       const rawRole = extractPrimaryRoleId(body);
+      let isPrimaryRoleProvided = false;
       if (rawRole !== undefined && rawRole !== null && rawRole !== '') {
+        isPrimaryRoleProvided = true;
         const roleCheck = await resolveAndValidateRole(rawRole, callerIsSuper, false);
         if (!roleCheck.valid) {
           return NextResponse.json(
@@ -409,6 +426,44 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         }
         validatedAdditionalRoleIds = addCheck.roleIds;
         additionalRolesExplicitlyProvided = true;
+      }
+
+      // Detect real role changes
+      const isPrimaryRoleChanged = isPrimaryRoleProvided && (newRolId !== current.rol_principal_id);
+
+      let isAdditionalRolesChanged = false;
+      if (additionalRolesExplicitlyProvided && validatedAdditionalRoleIds !== null) {
+        const currentAddRows = await query<{ rol_funcional_id: number }>(
+          `SELECT rol_funcional_id FROM admin.usuario_rol_adicional WHERE usuario_id = $1`,
+          [targetUserId]
+        );
+        const currentSet = new Set((currentAddRows || []).map(r => Number(r.rol_funcional_id)));
+        if (validatedAdditionalRoleIds.length !== currentSet.size) {
+          isAdditionalRolesChanged = true;
+        } else {
+          for (const rId of validatedAdditionalRoleIds) {
+            if (!currentSet.has(rId)) {
+              isAdditionalRolesChanged = true;
+              break;
+            }
+          }
+        }
+      }
+
+      // If there is any real role change, require puede_asignar
+      if (isPrimaryRoleChanged || isAdditionalRolesChanged) {
+        const callerCanAssign = callerIsSuper || (await canUser(authUserId, 'puede_asignar', 'SEGURIDAD_USUARIOS'));
+        if (!callerCanAssign) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: "FORBIDDEN",
+              message: "No tienes permisos para asignar o modificar roles de usuario. Se requiere el privilegio ASIGNAR.",
+              field: isPrimaryRoleChanged ? "roleId" : "roles_additional"
+            },
+            { status: 403 }
+          );
+        }
       }
     }
 
