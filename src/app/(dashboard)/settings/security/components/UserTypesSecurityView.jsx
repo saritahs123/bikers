@@ -19,7 +19,9 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
-  AlertCircle
+  AlertCircle,
+  Eye,
+  Lock
 } from "lucide-react";
 import { validateRequiredText } from "@/lib/validations";
 import SecurityConfirmDialog from "@/components/security/SecurityConfirmDialog";
@@ -27,6 +29,15 @@ import SecurityConfirmDialog from "@/components/security/SecurityConfirmDialog";
 export default function UserTypesSecurityView() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Permisos RBAC efectivos (Fase 6.4.13: Fail-safe defaults)
+  const [permissions, setPermissions] = useState({
+    puede_ver: false,
+    puede_crear: false,
+    puede_editar: false,
+    puede_eliminar: false,
+    puede_exportar: false
+  });
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("Todos");
   const [sortColumn, setSortColumn] = useState("id");
@@ -100,6 +111,22 @@ export default function UserTypesSecurityView() {
     try {
       setLoading(true);
       const res = await fetch('/api/tipos-usuario');
+
+      // Fase 6.4.13: Extracción de permisos RBAC del header
+      const puedeVer = res.headers.get('x-perm-puede-ver') === 'true';
+      const puedeCrear = res.headers.get('x-perm-puede-crear') === 'true';
+      const puedeEditar = res.headers.get('x-perm-puede-editar') === 'true';
+      const puedeEliminar = res.headers.get('x-perm-puede-eliminar') === 'true';
+      const puedeExportar = res.headers.get('x-perm-puede-exportar') === 'true';
+
+      setPermissions({
+        puede_ver: puedeVer,
+        puede_crear: puedeCrear,
+        puede_editar: puedeEditar,
+        puede_eliminar: puedeEliminar,
+        puede_exportar: puedeExportar
+      });
+
       if (res.ok) {
         const result = await res.json();
         setData(result || []);
@@ -117,6 +144,10 @@ export default function UserTypesSecurityView() {
   };
 
   const handleOpenCreate = () => {
+    if (!permissions.puede_crear) {
+      showToast("No tiene permisos para crear tipos de usuario.");
+      return;
+    }
     setEditingItem(null);
     setFormData({
       codigo: "",
@@ -145,6 +176,14 @@ export default function UserTypesSecurityView() {
 
   const handleSave = async (e) => {
     if (e) e.preventDefault();
+
+    // Fase 6.4.13: Validación preventiva de autorización
+    const canSave = editingItem ? permissions.puede_editar : permissions.puede_crear;
+    if (!canSave) {
+      showToast("Operación denegada por permisos de seguridad.");
+      return;
+    }
+
     if (!validateForm()) {
       showToast("Por favor complete los campos obligatorios.");
       return;
@@ -198,6 +237,10 @@ export default function UserTypesSecurityView() {
 
   const handleDelete = async () => {
     if (!itemToDelete) return;
+    if (!permissions.puede_eliminar) {
+      showToast("No tiene permisos para eliminar tipos de usuario.");
+      return;
+    }
     try {
       setIsSaving(true);
       const res = await fetch(`/api/tipos-usuario/${itemToDelete.id}`, {
@@ -364,23 +407,27 @@ export default function UserTypesSecurityView() {
         </div>
 
         <div className="flex items-center gap-3">
-          <button 
-            type="button"
-            onClick={exportToExcel}
-            className="flex items-center gap-2 px-4 py-2 bg-surface-subtle hover:bg-hover border border-border text-foreground font-mono text-xs rounded-xl transition-all shadow-sm cursor-pointer"
-          >
-            <Download size={14} className="text-primary" />
-            <span>Exportar Excel</span>
-          </button>
+          {permissions.puede_exportar && (
+            <button 
+              type="button"
+              onClick={exportToExcel}
+              className="flex items-center gap-2 px-4 py-2 bg-surface-subtle hover:bg-hover border border-border text-foreground font-mono text-xs rounded-xl transition-all shadow-sm cursor-pointer"
+            >
+              <Download size={14} className="text-primary" />
+              <span>Exportar Excel</span>
+            </button>
+          )}
 
-          <button 
-            type="button"
-            onClick={handleOpenCreate}
-            className="flex items-center gap-2 px-5 py-2 bg-primary-button-bg hover:brightness-110 text-primary-foreground font-mono text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer"
-          >
-            <Plus size={16} />
-            <span>Crear Nuevo</span>
-          </button>
+          {permissions.puede_crear && (
+            <button 
+              type="button"
+              onClick={handleOpenCreate}
+              className="flex items-center gap-2 px-5 py-2 bg-primary-button-bg hover:brightness-110 text-primary-foreground font-mono text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer"
+            >
+              <Plus size={16} />
+              <span>Crear Nuevo</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -525,25 +572,39 @@ export default function UserTypesSecurityView() {
                     </td>
                     <td className="px-6 py-4 text-right sticky right-0 bg-card group-hover:bg-hover shadow-[-8px_0_12px_rgba(0,0,0,0.06)] z-10 transition-colors">
                       <div className="flex items-center justify-end gap-2">
-                        <button 
-                          type="button"
-                          onClick={() => handleOpenEdit(item)}
-                          className="p-2 bg-surface hover:bg-primary/20 text-foreground-secondary hover:text-primary border border-border hover:border-primary/40 rounded-lg transition-all cursor-pointer"
-                          title="Editar"
-                        >
-                          <Edit2 size={14} />
-                        </button>
-                        <button 
-                          type="button"
-                          onClick={() => {
-                            setItemToDelete(item);
-                            setIsDeletingModalOpen(true);
-                          }}
-                          className="p-2 bg-surface hover:bg-error/20 text-foreground-secondary hover:text-error border border-border hover:border-error/40 rounded-lg transition-all cursor-pointer"
-                          title="Eliminar"
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                        {permissions.puede_editar && (
+                          <button 
+                            type="button"
+                            onClick={() => handleOpenEdit(item)}
+                            className="p-2 bg-surface hover:bg-primary/20 text-foreground-secondary hover:text-primary border border-border hover:border-primary/40 rounded-lg transition-all cursor-pointer"
+                            title="Editar"
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                        )}
+                        {!permissions.puede_editar && permissions.puede_ver && (
+                          <button 
+                            type="button"
+                            onClick={() => handleOpenEdit(item)}
+                            className="p-2 bg-surface hover:bg-hover text-foreground-secondary hover:text-foreground border border-border rounded-lg transition-all cursor-pointer"
+                            title="Consultar"
+                          >
+                            <Eye size={14} />
+                          </button>
+                        )}
+                        {permissions.puede_eliminar && (
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              setItemToDelete(item);
+                              setIsDeletingModalOpen(true);
+                            }}
+                            className="p-2 bg-surface hover:bg-error/20 text-foreground-secondary hover:text-error border border-border hover:border-error/40 rounded-lg transition-all cursor-pointer"
+                            title="Eliminar"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -620,7 +681,9 @@ export default function UserTypesSecurityView() {
             <div className="p-5 border-b border-border bg-surface-subtle flex items-start justify-between">
               <div>
                 <h2 className="text-lg font-bold font-sans text-foreground tracking-tight">
-                  {editingItem ? "Editar Tipo de Usuario" : "Nuevo Tipo de Usuario"}
+                  {editingItem 
+                    ? (permissions.puede_editar ? "Editar Tipo de Usuario" : "Consultar Tipo de Usuario") 
+                    : "Nuevo Tipo de Usuario"}
                 </h2>
                 <p className="text-xs text-foreground-muted mt-0.5 font-sans">
                   {editingItem ? "Modifica los parámetros del tipo de usuario." : "Completa los campos para registrar un nuevo tipo de usuario."}
@@ -637,179 +700,204 @@ export default function UserTypesSecurityView() {
             </div>
 
             {/* Drawer Form Body */}
-            <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
-              {/* CÓDIGO */}
-              <div className="space-y-1">
-                <label className="font-mono text-[11px] text-foreground-secondary font-bold tracking-wider uppercase block">
-                  CÓDIGO *
-                </label>
-                <input 
-                  type="text"
-                  required
-                  maxLength={50}
-                  value={formData.codigo}
-                  onChange={(e) => updateField("codigo", e.target.value)}
-                  placeholder="Ej. ADMIN, EMPLEADO, CLIENTE"
-                  className={`w-full bg-input border rounded-xl px-3 py-2.5 text-xs text-foreground placeholder:text-foreground-disabled focus:outline-none transition-all ${
-                    formErrors.codigo ? "border-error focus:border-error text-error" : "border-border focus:border-primary"
-                  }`}
-                />
-                {formErrors.codigo && (
-                  <div className="flex items-center gap-1 mt-1 text-[11px] text-error font-mono">
-                    <AlertCircle size={12} className="shrink-0 text-error" />
-                    <span>{formErrors.codigo}</span>
-                  </div>
-                )}
-              </div>
+            {(() => {
+              const canSave = editingItem ? permissions.puede_editar : permissions.puede_crear;
+              return (
+                <>
+                  <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
+                    {/* Read-only Alert if user lacks edit/create permission */}
+                    {!canSave && (
+                      <div className="p-3 bg-amber-500/10 border border-amber-500/30 text-amber-500 text-xs rounded-xl flex items-center gap-2 mb-2 font-mono">
+                        <Shield size={15} className="text-amber-500 shrink-0" />
+                        <span>Modo Solo Lectura: Tu rol de usuario no tiene permisos de modificación asignados.</span>
+                      </div>
+                    )}
 
-              {/* NOMBRE */}
-              <div className="space-y-1">
-                <label className="font-mono text-[11px] text-foreground-secondary font-bold tracking-wider uppercase block">
-                  NOMBRE *
-                </label>
-                <input 
-                  type="text"
-                  required
-                  maxLength={100}
-                  value={formData.nombre}
-                  onChange={(e) => updateField("nombre", e.target.value)}
-                  placeholder="Ej. Administrador del Sistema, Empleado Interno"
-                  className={`w-full bg-input border rounded-xl px-3 py-2.5 text-xs text-foreground placeholder:text-foreground-disabled focus:outline-none transition-all ${
-                    formErrors.nombre ? "border-error focus:border-error text-error" : "border-border focus:border-primary"
-                  }`}
-                />
-                {formErrors.nombre && (
-                  <div className="flex items-center gap-1 mt-1 text-[11px] text-error font-mono">
-                    <AlertCircle size={12} className="shrink-0 text-error" />
-                    <span>{formErrors.nombre}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* NIVEL DE ACCESO */}
-              <div className="space-y-1">
-                <label className="font-mono text-[11px] text-foreground-secondary font-bold tracking-wider uppercase block">
-                  NIVEL DE ACCESO (JERARQUÍA) *
-                </label>
-                <input 
-                  type="number"
-                  min={1}
-                  max={99}
-                  required
-                  value={formData.nivel_acceso}
-                  onChange={(e) => updateField("nivel_acceso", e.target.value)}
-                  className={`w-full bg-input border rounded-xl px-3 py-2.5 text-xs text-foreground font-mono focus:outline-none transition-all ${
-                    formErrors.nivel_acceso ? "border-error focus:border-error text-error" : "border-border focus:border-primary"
-                  }`}
-                />
-                {formErrors.nivel_acceso && (
-                  <div className="flex items-center gap-1 mt-1 text-[11px] text-error font-mono">
-                    <AlertCircle size={12} className="shrink-0 text-error" />
-                    <span>{formErrors.nivel_acceso}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* DESCRIPCIÓN */}
-              <div className="space-y-1">
-                <label className="font-mono text-[11px] text-foreground-secondary font-bold tracking-wider uppercase block">
-                  DESCRIPCIÓN
-                </label>
-                <textarea 
-                  rows={3}
-                  maxLength={255}
-                  value={formData.descripcion}
-                  onChange={(e) => updateField("descripcion", e.target.value)}
-                  placeholder="Detalles sobre las responsabilidades o alcance de este tipo de usuario..."
-                  className="w-full bg-input border border-border rounded-xl px-3 py-2.5 text-xs text-foreground placeholder:text-foreground-disabled focus:outline-none focus:border-primary transition-all resize-none"
-                />
-              </div>
-
-              {/* ESTADO INICIAL */}
-              <div className="space-y-1 pt-2">
-                <label className="font-mono text-[11px] text-foreground-secondary font-bold tracking-wider uppercase block">
-                  ESTADO INICIAL
-                </label>
-                
-                <div className="grid grid-cols-2 gap-3">
-                  {/* Activo Option */}
-                  <div 
-                    onClick={() => setFormData({ ...formData, estado: "ACTIVO" })}
-                    className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center gap-2.5 ${
-                      (formData.estado || "").toUpperCase() === "ACTIVO" 
-                        ? "bg-primary/10 border-2 border-primary" 
-                        : "bg-input border-border hover:border-primary/40"
-                    }`}
-                  >
-                    <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                      (formData.estado || "").toUpperCase() === "ACTIVO" 
-                        ? "border-primary" 
-                        : "border-foreground-muted"
-                    }`}>
-                      {(formData.estado || "").toUpperCase() === "ACTIVO" && (
-                        <div className="w-2 h-2 rounded-full bg-primary" />
+                    {/* CÓDIGO */}
+                    <div className="space-y-1">
+                      <label className="font-mono text-[11px] text-foreground-secondary font-bold tracking-wider uppercase block">
+                        CÓDIGO *
+                      </label>
+                      <input 
+                        type="text"
+                        required
+                        disabled={isSaving || !canSave}
+                        readOnly={!canSave}
+                        maxLength={50}
+                        value={formData.codigo}
+                        onChange={(e) => updateField("codigo", e.target.value)}
+                        placeholder="Ej. ADMIN, EMPLEADO, CLIENTE"
+                        className={`w-full bg-input border rounded-xl px-3 py-2.5 text-xs text-foreground placeholder:text-foreground-disabled focus:outline-none transition-all disabled:opacity-60 disabled:cursor-not-allowed ${
+                          formErrors.codigo ? "border-error focus:border-error text-error" : "border-border focus:border-primary"
+                        }`}
+                      />
+                      {formErrors.codigo && (
+                        <div className="flex items-center gap-1 mt-1 text-[11px] text-error font-mono">
+                          <AlertCircle size={12} className="shrink-0 text-error" />
+                          <span>{formErrors.codigo}</span>
+                        </div>
                       )}
                     </div>
-                    <div>
-                      <p className="text-xs font-bold text-foreground leading-tight">Activo</p>
-                      <p className="text-[10px] text-foreground-muted mt-0.5">Asignable a usuarios</p>
-                    </div>
-                  </div>
 
-                  {/* Inactivo Option */}
-                  <div 
-                    onClick={() => setFormData({ ...formData, estado: "INACTIVO" })}
-                    className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center gap-2.5 ${
-                      (formData.estado || "").toUpperCase() === "INACTIVO" 
-                        ? "bg-error/10 border-2 border-error" 
-                        : "bg-input border-border hover:border-error/40"
-                    }`}
-                  >
-                    <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                      (formData.estado || "").toUpperCase() === "INACTIVO" 
-                        ? "border-error" 
-                        : "border-foreground-muted"
-                    }`}>
-                      {(formData.estado || "").toUpperCase() === "INACTIVO" && (
-                        <div className="w-2 h-2 rounded-full bg-error" />
+                    {/* NOMBRE */}
+                    <div className="space-y-1">
+                      <label className="font-mono text-[11px] text-foreground-secondary font-bold tracking-wider uppercase block">
+                        NOMBRE *
+                      </label>
+                      <input 
+                        type="text"
+                        required
+                        disabled={isSaving || !canSave}
+                        readOnly={!canSave}
+                        maxLength={100}
+                        value={formData.nombre}
+                        onChange={(e) => updateField("nombre", e.target.value)}
+                        placeholder="Ej. Administrador del Sistema, Empleado Interno"
+                        className={`w-full bg-input border rounded-xl px-3 py-2.5 text-xs text-foreground placeholder:text-foreground-disabled focus:outline-none transition-all disabled:opacity-60 disabled:cursor-not-allowed ${
+                          formErrors.nombre ? "border-error focus:border-error text-error" : "border-border focus:border-primary"
+                        }`}
+                      />
+                      {formErrors.nombre && (
+                        <div className="flex items-center gap-1 mt-1 text-[11px] text-error font-mono">
+                          <AlertCircle size={12} className="shrink-0 text-error" />
+                          <span>{formErrors.nombre}</span>
+                        </div>
                       )}
                     </div>
-                    <div>
-                      <p className="text-xs font-bold text-foreground leading-tight">Inactivo</p>
-                      <p className="text-[10px] text-foreground-muted mt-0.5">Oculto temporalmente</p>
+
+                    {/* NIVEL DE ACCESO */}
+                    <div className="space-y-1">
+                      <label className="font-mono text-[11px] text-foreground-secondary font-bold tracking-wider uppercase block">
+                        NIVEL DE ACCESO (JERARQUÍA) *
+                      </label>
+                      <input 
+                        type="number"
+                        min={1}
+                        max={99}
+                        required
+                        disabled={isSaving || !canSave}
+                        readOnly={!canSave}
+                        value={formData.nivel_acceso}
+                        onChange={(e) => updateField("nivel_acceso", e.target.value)}
+                        className={`w-full bg-input border rounded-xl px-3 py-2.5 text-xs text-foreground font-mono focus:outline-none transition-all disabled:opacity-60 disabled:cursor-not-allowed ${
+                          formErrors.nivel_acceso ? "border-error focus:border-error text-error" : "border-border focus:border-primary"
+                        }`}
+                      />
+                      {formErrors.nivel_acceso && (
+                        <div className="flex items-center gap-1 mt-1 text-[11px] text-error font-mono">
+                          <AlertCircle size={12} className="shrink-0 text-error" />
+                          <span>{formErrors.nivel_acceso}</span>
+                        </div>
+                      )}
                     </div>
+
+                    {/* DESCRIPCIÓN */}
+                    <div className="space-y-1">
+                      <label className="font-mono text-[11px] text-foreground-secondary font-bold tracking-wider uppercase block">
+                        DESCRIPCIÓN
+                      </label>
+                      <textarea 
+                        rows={3}
+                        maxLength={255}
+                        disabled={isSaving || !canSave}
+                        readOnly={!canSave}
+                        value={formData.descripcion}
+                        onChange={(e) => updateField("descripcion", e.target.value)}
+                        placeholder="Detalles sobre las responsabilidades o alcance de este tipo de usuario..."
+                        className="w-full bg-input border border-border rounded-xl px-3 py-2.5 text-xs text-foreground placeholder:text-foreground-disabled focus:outline-none focus:border-primary transition-all resize-none disabled:opacity-60 disabled:cursor-not-allowed"
+                      />
+                    </div>
+
+                    {/* ESTADO INICIAL */}
+                    <div className="space-y-1 pt-2">
+                      <label className="font-mono text-[11px] text-foreground-secondary font-bold tracking-wider uppercase block">
+                        ESTADO INICIAL
+                      </label>
+                      
+                      <div className="grid grid-cols-2 gap-3">
+                        {/* Activo Option */}
+                        <div 
+                          onClick={() => canSave && setFormData({ ...formData, estado: "ACTIVO" })}
+                          className={`p-3 rounded-xl border transition-all ${canSave ? "cursor-pointer" : "cursor-not-allowed opacity-60"} flex items-center gap-2.5 ${
+                            (formData.estado || "").toUpperCase() === "ACTIVO" 
+                              ? "bg-primary/10 border-2 border-primary" 
+                              : "bg-input border-border hover:border-primary/40"
+                          }`}
+                        >
+                          <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                            (formData.estado || "").toUpperCase() === "ACTIVO" 
+                              ? "border-primary" 
+                              : "border-foreground-muted"
+                          }`}>
+                            {(formData.estado || "").toUpperCase() === "ACTIVO" && (
+                              <div className="w-2 h-2 rounded-full bg-primary" />
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-foreground leading-tight">Activo</p>
+                            <p className="text-[10px] text-foreground-muted mt-0.5">Asignable a usuarios</p>
+                          </div>
+                        </div>
+
+                        {/* Inactivo Option */}
+                        <div 
+                          onClick={() => canSave && setFormData({ ...formData, estado: "INACTIVO" })}
+                          className={`p-3 rounded-xl border transition-all ${canSave ? "cursor-pointer" : "cursor-not-allowed opacity-60"} flex items-center gap-2.5 ${
+                            (formData.estado || "").toUpperCase() === "INACTIVO" 
+                              ? "bg-error/10 border-2 border-error" 
+                              : "bg-input border-border hover:border-error/40"
+                          }`}
+                        >
+                          <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                            (formData.estado || "").toUpperCase() === "INACTIVO" 
+                              ? "border-error" 
+                              : "border-foreground-muted"
+                          }`}>
+                            {(formData.estado || "").toUpperCase() === "INACTIVO" && (
+                              <div className="w-2 h-2 rounded-full bg-error" />
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-foreground leading-tight">Inactivo</p>
+                            <p className="text-[10px] text-foreground-muted mt-0.5">Oculto temporalmente</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Info Notice Box */}
+                    <div className="p-3 bg-surface-subtle border border-border rounded-xl flex items-center gap-2.5 mt-4">
+                      <Info size={16} className="text-primary shrink-0" />
+                      <p className="text-[11px] text-foreground-secondary leading-tight font-sans">
+                        El nivel de acceso define la jerarquía base de los usuarios antes de la asignación de roles.
+                      </p>
+                    </div>
+                  </form>
+
+                  {/* Drawer Footer */}
+                  <div className="p-4 border-t border-border bg-surface-subtle flex gap-3">
+                    <button 
+                      type="button"
+                      onClick={() => setIsDrawerOpen(false)}
+                      className="flex-1 py-2.5 border border-border bg-surface text-foreground hover:bg-hover transition-all font-mono text-xs font-bold rounded-xl cursor-pointer"
+                    >
+                      {canSave ? "Cancelar" : "Cerrar"}
+                    </button>
+                    {canSave && (
+                      <button 
+                        type="button"
+                        onClick={handleSave}
+                        disabled={isSaving || !formData.codigo.trim() || !formData.nombre.trim()}
+                        className="flex-1 py-2.5 bg-primary-button-bg hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed text-primary-foreground font-mono text-xs font-bold rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <Save size={14} />
+                        <span>{isSaving ? "Guardando..." : "Guardar Cambios"}</span>
+                      </button>
+                    )}
                   </div>
-                </div>
-              </div>
-
-              {/* Info Notice Box */}
-              <div className="p-3 bg-surface-subtle border border-border rounded-xl flex items-center gap-2.5 mt-4">
-                <Info size={16} className="text-primary shrink-0" />
-                <p className="text-[11px] text-foreground-secondary leading-tight font-sans">
-                  El nivel de acceso define la jerarquía base de los usuarios antes de la asignación de roles.
-                </p>
-              </div>
-            </form>
-
-            {/* Drawer Footer */}
-            <div className="p-4 border-t border-border bg-surface-subtle flex gap-3">
-              <button 
-                type="button"
-                onClick={() => setIsDrawerOpen(false)}
-                className="flex-1 py-2.5 border border-border bg-surface text-foreground hover:bg-hover transition-all font-mono text-xs font-bold rounded-xl cursor-pointer"
-              >
-                Cancelar
-              </button>
-              <button 
-                type="button"
-                onClick={handleSave}
-                disabled={isSaving || !formData.codigo.trim() || !formData.nombre.trim()}
-                className="flex-1 py-2.5 bg-primary-button-bg hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed text-primary-foreground font-mono text-xs font-bold rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <Save size={14} />
-                <span>{isSaving ? "Guardando..." : "Guardar Cambios"}</span>
-              </button>
-            </div>
+                </>
+              );
+            })()}
           </div>
         </div>,
         document.body

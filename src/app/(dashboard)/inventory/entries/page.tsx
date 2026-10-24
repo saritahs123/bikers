@@ -8,7 +8,7 @@ export const metadata = {
 
 export default function InventoryEntriesPage() {
   return (
-    <ProtectedServerPage screenCode="INVENTARIO_ENTRADAS">
+    <ProtectedServerPage screenCode="INVENTARIO_ENTRADAS" requiredAction="puede_crear" title="Entradas de Inventario">
       <InventoryEntriesView />
     </ProtectedServerPage>
   );

@@ -458,11 +458,58 @@ export async function authorizeUserCreate(targetCompanyId?: number | null): Prom
 }
 
 /**
+ * Claves reconocidas para la extracción del rol principal.
+ */
+export const KNOWN_ROLE_PRIMARY_KEYS = new Set([
+  'roleid', 'rolid', 'rolprincipalid', 'role_id', 'rol_id', 'rol_principal_id',
+  'role', 'rol', 'primaryroleid', 'primary_role_id', 'rolprincipal'
+]);
+
+/**
+ * Claves reconocidas para la extracción de roles adicionales.
+ */
+export const KNOWN_ROLE_ADDITIONAL_KEYS = new Set([
+  'roles_additional', 'roles_adicionales', 'additional_roles', 'additionalroleids',
+  'additional_role_ids', 'rolesadicionales', 'roles_secundarios', 'rolessecundarios',
+  'additionalroles', 'rolesadditional'
+]);
+
+/**
+ * Detecta claves no reconocidas en el payload que intenten asignar o manipular roles.
+ */
+export function findUnrecognizedRoleKeys(body: Record<string, unknown>): string[] {
+  if (!body || typeof body !== 'object') return [];
+  const unrecognized: string[] = [];
+  for (const k of Object.keys(body)) {
+    const lower = k.toLowerCase();
+    const norm = lower.replace(/[-_]/g, '');
+    if (norm.includes('role') || norm.includes('rol')) {
+      if (!KNOWN_ROLE_PRIMARY_KEYS.has(lower) && !KNOWN_ROLE_PRIMARY_KEYS.has(norm) &&
+          !KNOWN_ROLE_ADDITIONAL_KEYS.has(lower) && !KNOWN_ROLE_ADDITIONAL_KEYS.has(norm)) {
+        unrecognized.push(k);
+      }
+    }
+  }
+  return unrecognized;
+}
+
+/**
  * Extrae el rol principal de un payload independientemente de la clave o formato utilizado.
  */
 export function extractPrimaryRoleId(body: Record<string, unknown>): unknown {
   if (!body || typeof body !== 'object') return undefined;
-  return body.roleId ?? body.rol_id ?? body.rol_principal_id ?? body.role_id ?? body.role;
+  return (
+    body.roleId ??
+    body.rol_id ??
+    body.rol_principal_id ??
+    body.role_id ??
+    body.role ??
+    body.rol ??
+    body.primaryRoleId ??
+    body.primary_role_id ??
+    body.rolPrincipalId ??
+    body.rolPrincipal
+  );
 }
 
 /**
@@ -470,7 +517,16 @@ export function extractPrimaryRoleId(body: Record<string, unknown>): unknown {
  */
 export function extractAdditionalRoles(body: Record<string, unknown>): unknown {
   if (!body || typeof body !== 'object') return undefined;
-  return body.roles_additional ?? body.roles_adicionales ?? body.additional_roles;
+  return (
+    body.roles_additional ??
+    body.roles_adicionales ??
+    body.additional_roles ??
+    body.additionalRoleIds ??
+    body.additional_role_ids ??
+    body.rolesAdicionales ??
+    body.roles_secundarios ??
+    body.rolesSecundarios
+  );
 }
 
 /**

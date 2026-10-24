@@ -19,7 +19,9 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
-  AlertCircle
+  AlertCircle,
+  Eye,
+  Lock
 } from "lucide-react";
 import { validateRequiredText } from "@/lib/validations";
 import SecurityConfirmDialog from "@/components/security/SecurityConfirmDialog";
@@ -28,6 +30,15 @@ export default function AreasSecurityView() {
   const [data, setData] = useState([]);
   const [departamentos, setDepartamentos] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Permisos RBAC efectivos (Fase 6.4.13: Fail-safe defaults)
+  const [permissions, setPermissions] = useState({
+    puede_ver: false,
+    puede_crear: false,
+    puede_editar: false,
+    puede_eliminar: false,
+    puede_exportar: false
+  });
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("Todos");
   const [sortColumn, setSortColumn] = useState("id");
@@ -92,6 +103,22 @@ export default function AreasSecurityView() {
       setLoading(true);
       const res = await fetch('/api/areas');
       if (res.ok) {
+        const permVer = res.headers.get("x-perm-ver");
+        const permCrear = res.headers.get("x-perm-crear");
+        const permEditar = res.headers.get("x-perm-editar");
+        const permEliminar = res.headers.get("x-perm-eliminar");
+        const permExportar = res.headers.get("x-perm-exportar");
+
+        if (permVer !== null) {
+          setPermissions({
+            puede_ver: permVer !== "false",
+            puede_crear: permCrear === "true",
+            puede_editar: permEditar === "true",
+            puede_eliminar: permEliminar === "true",
+            puede_exportar: permExportar === "true"
+          });
+        }
+
         const result = await res.json();
         setData(result || []);
       }
@@ -114,12 +141,16 @@ export default function AreasSecurityView() {
     }
   };
 
-  const showToast = (msg) => {
+  const showToast = (msg, type = "success") => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
   };
 
   const handleOpenCreate = () => {
+    if (!permissions.puede_crear) {
+      showToast("No tienes permisos para crear áreas.", "error");
+      return;
+    }
     setEditingItem(null);
     setFormData({
       departamento_id: "",
@@ -132,6 +163,10 @@ export default function AreasSecurityView() {
   };
 
   const handleOpenEdit = (item) => {
+    if (!permissions.puede_editar && !permissions.puede_ver) {
+      showToast("No tienes permisos para consultar o editar áreas.", "error");
+      return;
+    }
     setEditingItem(item);
     setFormData({
       departamento_id: item.departamento_id || "",
@@ -144,8 +179,17 @@ export default function AreasSecurityView() {
 
   const handleSave = async (e) => {
     if (e) e.preventDefault();
+    if (editingItem && !permissions.puede_editar) {
+      showToast("No tienes permisos para modificar áreas.", "error");
+      return;
+    }
+    if (!editingItem && !permissions.puede_crear) {
+      showToast("No tienes permisos para crear áreas.", "error");
+      return;
+    }
+
     if (!validateForm()) {
-      showToast("Complete los campos obligatorios.");
+      showToast("Complete los campos obligatorios.", "error");
       return;
     }
 
@@ -189,7 +233,7 @@ export default function AreasSecurityView() {
       fetchData();
     } catch (err) {
       console.error("Error saving area:", err);
-      showToast(err.message || "Error al procesar la solicitud.");
+      showToast(err.message || "Error al procesar la solicitud.", "error");
     } finally {
       setIsSaving(false);
     }
@@ -197,6 +241,10 @@ export default function AreasSecurityView() {
 
   const handleDelete = async () => {
     if (!itemToDelete) return;
+    if (!permissions.puede_eliminar) {
+      showToast("No tienes permisos para eliminar áreas.", "error");
+      return;
+    }
     try {
       setIsSaving(true);
       const res = await fetch(`/api/areas/${itemToDelete.id}`, {
@@ -214,7 +262,7 @@ export default function AreasSecurityView() {
       fetchData();
     } catch (err) {
       console.error("Error deleting area:", err);
-      showToast(err.message || "Error al eliminar.");
+      showToast(err.message || "Error al eliminar.", "error");
     } finally {
       setIsSaving(false);
     }
@@ -361,23 +409,27 @@ export default function AreasSecurityView() {
         </div>
 
         <div className="flex items-center gap-3">
-          <button 
-            type="button"
-            onClick={exportToExcel}
-            className="flex items-center gap-2 px-4 py-2 bg-surface-subtle hover:bg-hover border border-border text-foreground font-mono text-xs rounded-xl transition-all shadow-sm cursor-pointer"
-          >
-            <Download size={14} className="text-primary" />
-            <span>Exportar Excel</span>
-          </button>
+          {permissions.puede_exportar && (
+            <button 
+              type="button"
+              onClick={exportToExcel}
+              className="flex items-center gap-2 px-4 py-2 bg-surface-subtle hover:bg-hover border border-border text-foreground font-mono text-xs rounded-xl transition-all shadow-sm cursor-pointer"
+            >
+              <Download size={14} className="text-primary" />
+              <span>Exportar Excel</span>
+            </button>
+          )}
 
-          <button 
-            type="button"
-            onClick={handleOpenCreate}
-            className="flex items-center gap-2 px-5 py-2 bg-primary-button-bg hover:brightness-110 text-primary-foreground font-mono text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer"
-          >
-            <Plus size={16} />
-            <span>Crear Nueva</span>
-          </button>
+          {permissions.puede_crear && (
+            <button 
+              type="button"
+              onClick={handleOpenCreate}
+              className="flex items-center gap-2 px-5 py-2 bg-primary-button-bg hover:brightness-110 text-primary-foreground font-mono text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer"
+            >
+              <Plus size={16} />
+              <span>Crear Nueva</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -520,25 +572,39 @@ export default function AreasSecurityView() {
                     </td>
                     <td className="px-6 py-4 text-right sticky right-0 bg-card group-hover:bg-hover shadow-[-8px_0_12px_rgba(0,0,0,0.06)] z-10 transition-colors">
                       <div className="flex items-center justify-end gap-2">
-                        <button 
-                          type="button"
-                          onClick={() => handleOpenEdit(item)}
-                          className="p-2 bg-surface hover:bg-primary/20 text-foreground-secondary hover:text-primary border border-border hover:border-primary/40 rounded-lg transition-all cursor-pointer"
-                          title="Editar"
-                        >
-                          <Edit2 size={14} />
-                        </button>
-                        <button 
-                          type="button"
-                          onClick={() => {
-                            setItemToDelete(item);
-                            setIsDeletingModalOpen(true);
-                          }}
-                          className="p-2 bg-surface hover:bg-error/20 text-foreground-secondary hover:text-error border border-border hover:border-error/40 rounded-lg transition-all cursor-pointer"
-                          title="Eliminar"
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                        {permissions.puede_editar && (
+                          <button 
+                            type="button"
+                            onClick={() => handleOpenEdit(item)}
+                            className="p-2 bg-surface hover:bg-primary/20 text-foreground-secondary hover:text-primary border border-border hover:border-primary/40 rounded-lg transition-all cursor-pointer"
+                            title="Editar"
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                        )}
+                        {!permissions.puede_editar && permissions.puede_ver && (
+                          <button 
+                            type="button"
+                            onClick={() => handleOpenEdit(item)}
+                            className="p-2 bg-surface hover:bg-hover text-foreground-secondary hover:text-foreground border border-border rounded-lg transition-all cursor-pointer"
+                            title="Consultar"
+                          >
+                            <Eye size={14} />
+                          </button>
+                        )}
+                        {permissions.puede_eliminar && (
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              setItemToDelete(item);
+                              setIsDeletingModalOpen(true);
+                            }}
+                            className="p-2 bg-surface hover:bg-error/20 text-foreground-secondary hover:text-error border border-border hover:border-error/40 rounded-lg transition-all cursor-pointer"
+                            title="Eliminar"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -599,175 +665,193 @@ export default function AreasSecurityView() {
           />
           
           {/* Side Drawer Card */}
-          <div 
-            style={{ 
-              position: 'relative', 
-              width: '540px', 
-              maxWidth: '95vw', 
-              height: '100vh', 
-              display: 'flex', 
-              flexDirection: 'column', 
-              zIndex: 1000000 
-            }}
-            className="font-sans bg-surface-elevated border-l border-border shadow-2xl text-foreground"
-          >
-            {/* Drawer Header */}
-            <div className="p-5 border-b border-border bg-surface-subtle flex items-start justify-between">
-              <div>
-                <h2 className="text-lg font-bold font-sans text-foreground tracking-tight">
-                  {editingItem ? "Editar Área" : "Nueva Área"}
-                </h2>
-                <p className="text-xs text-foreground-muted mt-0.5 font-sans">
-                  {editingItem ? "Modifica los datos del área seleccionada." : "Completa los campos para registrar una nueva área."}
-                </p>
-              </div>
-              <button 
-                type="button" 
-                onClick={() => setIsDrawerOpen(false)} 
-                className="p-1.5 text-foreground-muted hover:text-foreground rounded-lg hover:bg-hover transition-colors cursor-pointer"
-                aria-label="Cerrar drawer"
+          {(() => {
+            const canSave = editingItem ? permissions.puede_editar : permissions.puede_crear;
+            return (
+              <div 
+                style={{ 
+                  position: 'relative', 
+                  width: '540px', 
+                  maxWidth: '95vw', 
+                  height: '100vh', 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  zIndex: 1000000 
+                }}
+                className="font-sans bg-surface-elevated border-l border-border shadow-2xl text-foreground"
               >
-                <X size={20} />
-              </button>
-            </div>
-
-            {/* Drawer Form Body */}
-            <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
-              {/* DEPARTAMENTO SELECTOR */}
-              <div className="space-y-1">
-                <label className="font-mono text-[11px] text-foreground-secondary font-bold tracking-wider uppercase block">
-                  DEPARTAMENTO *
-                </label>
-                <select
-                  value={formData.departamento_id}
-                  onChange={(e) => handleDeptChange(e.target.value)}
-                  className={`w-full bg-input border rounded-xl px-3 py-2.5 text-xs text-foreground focus:outline-none transition-all ${
-                    deptError ? "border-error focus:border-error" : "border-border focus:border-primary"
-                  }`}
-                >
-                  <option value="">Seleccione un Departamento...</option>
-                  {departamentos.map(d => (
-                    <option key={d.id} value={d.id}>{d.nombre}</option>
-                  ))}
-                </select>
-                {deptError && (
-                  <div className="flex items-center gap-1 mt-1 text-[11px] text-error font-mono">
-                    <AlertCircle size={12} className="shrink-0 text-error" />
-                    <span>{deptError}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* NOMBRE DEL ÁREA */}
-              <div className="space-y-1">
-                <label className="font-mono text-[11px] text-foreground-secondary font-bold tracking-wider uppercase block">
-                  NOMBRE DEL ÁREA *
-                </label>
-                <input 
-                  type="text"
-                  required
-                  maxLength={100}
-                  value={formData.nombre}
-                  onChange={(e) => handleNameChange(e.target.value)}
-                  placeholder="Ej. Taller Mecánico, Mostrador, Almacén"
-                  className={`w-full bg-input border rounded-xl px-3 py-2.5 text-xs text-foreground placeholder:text-foreground-disabled focus:outline-none transition-all ${
-                    nameError ? "border-error focus:border-error text-error" : "border-border focus:border-primary"
-                  }`}
-                />
-                {nameError && (
-                  <div className="flex items-center gap-1 mt-1 text-[11px] text-error font-mono">
-                    <AlertCircle size={12} className="shrink-0 text-error" />
-                    <span>{nameError}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* ESTADO INICIAL */}
-              <div className="space-y-1 pt-2">
-                <label className="font-mono text-[11px] text-foreground-secondary font-bold tracking-wider uppercase block">
-                  ESTADO INICIAL
-                </label>
-                
-                <div className="grid grid-cols-2 gap-3">
-                  {/* Activo Option */}
-                  <div 
-                    onClick={() => setFormData({ ...formData, estado: "ACTIVO" })}
-                    className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center gap-2.5 ${
-                      (formData.estado || "").toUpperCase() === "ACTIVO" 
-                        ? "bg-primary/10 border-2 border-primary" 
-                        : "bg-input border-border hover:border-primary/40"
-                    }`}
-                  >
-                    <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                      (formData.estado || "").toUpperCase() === "ACTIVO" 
-                        ? "border-primary" 
-                        : "border-foreground-muted"
-                    }`}>
-                      {(formData.estado || "").toUpperCase() === "ACTIVO" && (
-                        <div className="w-2 h-2 rounded-full bg-primary" />
+                {/* Drawer Header */}
+                <div className="p-5 border-b border-border bg-surface-subtle flex items-start justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-lg font-bold font-sans text-foreground tracking-tight">
+                        {editingItem ? (canSave ? "Editar Área" : "Consultar Área") : "Nueva Área"}
+                      </h2>
+                      {!canSave && (
+                        <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-500 text-[10px] font-mono font-bold uppercase tracking-wider">
+                          <Lock size={11} />
+                          <span>Solo Lectura</span>
+                        </div>
                       )}
                     </div>
-                    <div>
-                      <p className="text-xs font-bold text-foreground leading-tight">Activo</p>
-                      <p className="text-[10px] text-foreground-muted mt-0.5">Visible en el sistema</p>
+                    <p className="text-xs text-foreground-muted mt-0.5 font-sans">
+                      {editingItem ? (canSave ? "Modifica los datos del área seleccionada." : "Consulta los datos del área (Modo lectura).") : "Completa los campos para registrar una nueva área."}
+                    </p>
+                  </div>
+                  <button 
+                    type="button" 
+                    onClick={() => setIsDrawerOpen(false)} 
+                    className="p-1.5 text-foreground-muted hover:text-foreground rounded-lg hover:bg-hover transition-colors cursor-pointer"
+                    aria-label="Cerrar drawer"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+
+                {/* Drawer Form Body */}
+                <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
+                  {/* DEPARTAMENTO SELECTOR */}
+                  <div className="space-y-1">
+                    <label className="font-mono text-[11px] text-foreground-secondary font-bold tracking-wider uppercase block">
+                      DEPARTAMENTO *
+                    </label>
+                    <select
+                      disabled={!canSave}
+                      value={formData.departamento_id}
+                      onChange={(e) => handleDeptChange(e.target.value)}
+                      className={`w-full bg-input border rounded-xl px-3 py-2.5 text-xs text-foreground focus:outline-none transition-all ${
+                        !canSave ? "opacity-60 cursor-not-allowed border-border" : deptError ? "border-error focus:border-error" : "border-border focus:border-primary"
+                      }`}
+                    >
+                      <option value="">Seleccione un Departamento...</option>
+                      {departamentos.map(d => (
+                        <option key={d.id} value={d.id}>{d.nombre}</option>
+                      ))}
+                    </select>
+                    {deptError && (
+                      <div className="flex items-center gap-1 mt-1 text-[11px] text-error font-mono">
+                        <AlertCircle size={12} className="shrink-0 text-error" />
+                        <span>{deptError}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* NOMBRE DEL ÁREA */}
+                  <div className="space-y-1">
+                    <label className="font-mono text-[11px] text-foreground-secondary font-bold tracking-wider uppercase block">
+                      NOMBRE DEL ÁREA *
+                    </label>
+                    <input 
+                      type="text"
+                      required
+                      maxLength={100}
+                      disabled={!canSave}
+                      readOnly={!canSave}
+                      value={formData.nombre}
+                      onChange={(e) => handleNameChange(e.target.value)}
+                      placeholder="Ej. Taller Mecánico, Mostrador, Almacén"
+                      className={`w-full bg-input border rounded-xl px-3 py-2.5 text-xs text-foreground placeholder:text-foreground-disabled focus:outline-none transition-all ${
+                        !canSave ? "opacity-60 cursor-not-allowed border-border" : nameError ? "border-error focus:border-error text-error" : "border-border focus:border-primary"
+                      }`}
+                    />
+                    {nameError && (
+                      <div className="flex items-center gap-1 mt-1 text-[11px] text-error font-mono">
+                        <AlertCircle size={12} className="shrink-0 text-error" />
+                        <span>{nameError}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ESTADO INICIAL */}
+                  <div className="space-y-1 pt-2">
+                    <label className="font-mono text-[11px] text-foreground-secondary font-bold tracking-wider uppercase block">
+                      ESTADO INICIAL
+                    </label>
+                    
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* Activo Option */}
+                      <div 
+                        onClick={() => canSave && setFormData({ ...formData, estado: "ACTIVO" })}
+                        className={`p-3 rounded-xl border transition-all ${canSave ? "cursor-pointer" : "cursor-not-allowed opacity-60"} flex items-center gap-2.5 ${
+                          (formData.estado || "").toUpperCase() === "ACTIVO" 
+                            ? "bg-primary/10 border-2 border-primary" 
+                            : "bg-input border-border hover:border-primary/40"
+                        }`}
+                      >
+                        <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                          (formData.estado || "").toUpperCase() === "ACTIVO" 
+                            ? "border-primary" 
+                            : "border-foreground-muted"
+                        }`}>
+                          {(formData.estado || "").toUpperCase() === "ACTIVO" && (
+                            <div className="w-2 h-2 rounded-full bg-primary" />
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-foreground leading-tight">Activo</p>
+                          <p className="text-[10px] text-foreground-muted mt-0.5">Visible en el sistema</p>
+                        </div>
+                      </div>
+
+                      {/* Inactivo Option */}
+                      <div 
+                        onClick={() => canSave && setFormData({ ...formData, estado: "INACTIVO" })}
+                        className={`p-3 rounded-xl border transition-all ${canSave ? "cursor-pointer" : "cursor-not-allowed opacity-60"} flex items-center gap-2.5 ${
+                          (formData.estado || "").toUpperCase() === "INACTIVO" 
+                            ? "bg-error/10 border-2 border-error" 
+                            : "bg-input border-border hover:border-error/40"
+                        }`}
+                      >
+                        <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                          (formData.estado || "").toUpperCase() === "INACTIVO" 
+                            ? "border-error" 
+                            : "border-foreground-muted"
+                        }`}>
+                          {(formData.estado || "").toUpperCase() === "INACTIVO" && (
+                            <div className="w-2 h-2 rounded-full bg-error" />
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-foreground leading-tight">Inactivo</p>
+                          <p className="text-[10px] text-foreground-muted mt-0.5">Oculto temporalmente</p>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Inactivo Option */}
-                  <div 
-                    onClick={() => setFormData({ ...formData, estado: "INACTIVO" })}
-                    className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center gap-2.5 ${
-                      (formData.estado || "").toUpperCase() === "INACTIVO" 
-                        ? "bg-error/10 border-2 border-error" 
-                        : "bg-input border-border hover:border-error/40"
-                    }`}
-                  >
-                    <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                      (formData.estado || "").toUpperCase() === "INACTIVO" 
-                        ? "border-error" 
-                        : "border-foreground-muted"
-                    }`}>
-                      {(formData.estado || "").toUpperCase() === "INACTIVO" && (
-                        <div className="w-2 h-2 rounded-full bg-error" />
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold text-foreground leading-tight">Inactivo</p>
-                      <p className="text-[10px] text-foreground-muted mt-0.5">Oculto temporalmente</p>
-                    </div>
+                  {/* Info Notice Box */}
+                  <div className="p-3 bg-surface-subtle border border-border rounded-xl flex items-center gap-2.5 mt-4">
+                    <Info size={16} className="text-primary shrink-0" />
+                    <p className="text-[11px] text-foreground-secondary leading-tight font-sans">
+                      Las áreas permiten una subdivisión operativa dentro de los departamentos organizacionales.
+                    </p>
                   </div>
+                </form>
+
+                {/* Drawer Footer */}
+                <div className="p-4 border-t border-border bg-surface-subtle flex gap-3">
+                  <button 
+                    type="button"
+                    onClick={() => setIsDrawerOpen(false)}
+                    className="flex-1 py-2.5 border border-border bg-surface text-foreground hover:bg-hover transition-all font-mono text-xs font-bold rounded-xl cursor-pointer"
+                  >
+                    {canSave ? "Cancelar" : "Cerrar"}
+                  </button>
+                  {canSave && (
+                    <button 
+                      type="button"
+                      onClick={handleSave}
+                      disabled={isSaving || !!nameError || !!deptError || !formData.nombre.trim() || !formData.departamento_id}
+                      className="flex-1 py-2.5 bg-primary-button-bg hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed text-primary-foreground font-mono text-xs font-bold rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Save size={14} />
+                      <span>{isSaving ? "Guardando..." : "Guardar Cambios"}</span>
+                    </button>
+                  )}
                 </div>
               </div>
-
-              {/* Info Notice Box */}
-              <div className="p-3 bg-surface-subtle border border-border rounded-xl flex items-center gap-2.5 mt-4">
-                <Info size={16} className="text-primary shrink-0" />
-                <p className="text-[11px] text-foreground-secondary leading-tight font-sans">
-                  Las áreas permiten una subdivisión operativa dentro de los departamentos organizacionales.
-                </p>
-              </div>
-            </form>
-
-            {/* Drawer Footer */}
-            <div className="p-4 border-t border-border bg-surface-subtle flex gap-3">
-              <button 
-                type="button"
-                onClick={() => setIsDrawerOpen(false)}
-                className="flex-1 py-2.5 border border-border bg-surface text-foreground hover:bg-hover transition-all font-mono text-xs font-bold rounded-xl cursor-pointer"
-              >
-                Cancelar
-              </button>
-              <button 
-                type="button"
-                onClick={handleSave}
-                disabled={isSaving || !!nameError || !!deptError || !formData.nombre.trim() || !formData.departamento_id}
-                className="flex-1 py-2.5 bg-primary-button-bg hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed text-primary-foreground font-mono text-xs font-bold rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <Save size={14} />
-                <span>{isSaving ? "Guardando..." : "Guardar Cambios"}</span>
-              </button>
-            </div>
-          </div>
+            );
+          })()}
         </div>,
         document.body
       )}

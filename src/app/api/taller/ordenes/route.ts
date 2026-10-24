@@ -355,6 +355,9 @@ export async function GET(req: NextRequest) {
     resPayload.headers.set("x-perm-editar", perms.puede_editar ? "true" : "false");
     resPayload.headers.set("x-perm-eliminar", perms.puede_eliminar ? "true" : "false");
     resPayload.headers.set("x-perm-exportar", perms.puede_exportar ? "true" : "false");
+    resPayload.headers.set("x-perm-asignar", perms.puede_asignar ? "true" : "false");
+    resPayload.headers.set("x-perm-cerrar", perms.puede_cerrar ? "true" : "false");
+    resPayload.headers.set("x-perm-reabrir", perms.puede_reabrir ? "true" : "false");
     return resPayload;
 
   } catch (error: unknown) {

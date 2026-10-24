@@ -23,6 +23,7 @@ import CustomerFormDrawer from "@/components/crm/CustomerFormDrawer";
 import ProductCreateModal from "@/components/products/ProductCreateModal";
 import SelectWorkOrderModal from "@/components/billing/SelectWorkOrderModal";
 import InvoicePrintSelectorModal from "@/components/billing/InvoicePrintSelectorModal";
+import RestrictedSectionCard from "@/components/auth/RestrictedSectionCard";
 
 export default function NewInvoiceView() {
   // Modal Crear Producto
@@ -855,19 +856,32 @@ export default function NewInvoiceView() {
           </p>
         </div>
 
-        {/* Botón Traer Orden de Trabajo (FAC-3 habilitado) */}
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setIsSelectWorkOrderModalOpen(true)}
-            className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-lg bg-surface hover:bg-hover text-foreground border border-border transition-all cursor-pointer shadow-sm hover:border-primary/50"
-          >
-            <Wrench className="w-4 h-4 text-primary" />
-            <span>Traer Orden de Trabajo</span>
-          </button>
-        </div>
+        {/* Botón Traer Orden de Trabajo (FAC-3 habilitado si tiene permisos de creación) */}
+        {(!permisos || permisos.puede_crear) && (
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setIsSelectWorkOrderModalOpen(true)}
+              className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-lg bg-surface hover:bg-hover text-foreground border border-border transition-all cursor-pointer shadow-sm hover:border-primary/50"
+            >
+              <Wrench className="w-4 h-4 text-primary" />
+              <span>Traer Orden de Trabajo</span>
+            </button>
+          </div>
+        )}
       </div>
 
+      {/* Caso Piloto (Fase 6.4.13): Bloqueo global si carece de puede_crear */}
+      {permisos && !permisos.puede_crear ? (
+        <RestrictedSectionCard
+          title="Emisión de Facturas No Autorizada"
+          message="Tu rol de usuario actual no dispone de permisos para registrar o emitir nuevas facturas. Puedes consultar las facturas emitidas desde el módulo de Facturación."
+          actionRequired="crear"
+          backHref="/billing/invoices"
+          backLabel="Ver Facturas Emitidas"
+        />
+      ) : (
+        <>
       {/* Banner de Factura Recién Generada con Botón Imprimir (Sección 18) */}
       {createdInvoice && (
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 shadow-sm animate-in fade-in">
@@ -1002,12 +1016,6 @@ export default function NewInvoiceView() {
                 </select>
               </div>
             </div>
-
-            {permisos && !permisos.puede_crear && (
-              <div className="p-3 bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs rounded-lg">
-                Tu rol de usuario no cuenta con permisos para crear facturas.
-              </div>
-            )}
 
             {selectedClient ? (
               <div className="flex items-center justify-between p-3 rounded-lg bg-surface border border-primary/30">
@@ -1760,6 +1768,8 @@ export default function NewInvoiceView() {
           }}
           invoiceData={printInvoiceData}
         />
+      )}
+        </>
       )}
     </div>
   );
