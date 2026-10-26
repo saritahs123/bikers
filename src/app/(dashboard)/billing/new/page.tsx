@@ -8,7 +8,10 @@ export const metadata = {
 
 export default function NewBillingPage() {
   return (
-    <ProtectedServerPage screenCode="FACTURACION_NUEVA" title="Nueva Factura">
+    <ProtectedServerPage
+      screenCode="FACTURACION_NUEVA"
+      requiredAction="puede_crear"
+    >
       <NewInvoiceView />
     </ProtectedServerPage>
   );

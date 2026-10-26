@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { getWorkshopSession, getModulePermissions, getScreenPermissions } from "@/lib/workshop-session";
 import { actualizarTerminosFactura } from "@/lib/billing/billingService";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +20,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
     }
 
     const perms = await getModulePermissions("FACTURACION", session.usuario_id);
-    if (!perms.puede_ver) {
+    const invoicePerms = await getScreenPermissions("FACTURACION_FACTURAS", session.usuario_id);
+    const paymentPerms = await getScreenPermissions("FACTURACION_PAGOS", session.usuario_id);
+
+    if (!perms.puede_ver && !invoicePerms.puede_ver) {
       return NextResponse.json(
         { error: "FORBIDDEN", message: "No tienes permisos para ver el detalle de facturas." },
         { status: 403 }
@@ -116,6 +119,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
         ${facCols.has("nivel_cliente_id") ? "f.nivel_cliente_id" : "NULL::int AS nivel_cliente_id"},
         ${facCols.has("porciento_descuento_nivel") ? "COALESCE(f.porciento_descuento_nivel, 0)::numeric AS porciento_descuento_nivel" : "0.00::numeric AS porciento_descuento_nivel"},
         ${facCols.has("descuento_nivel") ? "COALESCE(f.descuento_nivel, 0)::numeric AS descuento_nivel" : "0.00::numeric AS descuento_nivel"},
+        ${facCols.has("porciento_descuento_servicio") ? "f.porciento_descuento_servicio" : "NULL::numeric AS porciento_descuento_servicio"},
+        ${facCols.has("porciento_descuento_producto") ? "f.porciento_descuento_producto" : "NULL::numeric AS porciento_descuento_producto"},
+        ${facCols.has("descuento_servicio") ? "COALESCE(f.descuento_servicio, 0)::numeric AS descuento_servicio" : "0.00::numeric AS descuento_servicio"},
+        ${facCols.has("descuento_producto") ? "COALESCE(f.descuento_producto, 0)::numeric AS descuento_producto" : "0.00::numeric AS descuento_producto"},
         nc.nombre AS nivel_cliente_nombre,
         COALESCE(NULLIF(TRIM(CONCAT_WS(' ', ui_anul.nombre, ui_anul.apellido)), ''), ui_anul.correo_electronico, ('Usuario #' || u_anul.usuario_id::text), NULL) AS usuario_anulacion_nombre,
         COALESCE(NULLIF(TRIM(CONCAT_WS(' ', ui.nombre, ui.apellido)), ''), ui.correo_electronico, ('Usuario #' || u.usuario_id::text), 'Sistema') AS usuario_creacion_nombre
@@ -584,6 +591,14 @@ export async function GET(request: NextRequest, context: RouteContext) {
           nivel_cliente_id: factura.nivel_cliente_id ? Number(factura.nivel_cliente_id) : null,
           porciento_descuento_nivel: parseFloat(Number(factura.porciento_descuento_nivel || 0).toFixed(2)),
           descuento_nivel: parseFloat(Number(factura.descuento_nivel || 0).toFixed(2)),
+          porciento_descuento_servicio: factura.porciento_descuento_servicio !== null && factura.porciento_descuento_servicio !== undefined
+            ? parseFloat(Number(factura.porciento_descuento_servicio).toFixed(2))
+            : null,
+          porciento_descuento_producto: factura.porciento_descuento_producto !== null && factura.porciento_descuento_producto !== undefined
+            ? parseFloat(Number(factura.porciento_descuento_producto).toFixed(2))
+            : null,
+          descuento_servicio: parseFloat(Number(factura.descuento_servicio || 0).toFixed(2)),
+          descuento_producto: parseFloat(Number(factura.descuento_producto || 0).toFixed(2)),
           nivel_cliente_nombre: (factura.nivel_cliente_nombre as string) || null,
           impuesto: parseFloat(Number(factura.impuesto || factura.impuesto_total || 0).toFixed(2)),
           total: parseFloat(Number(factura.total || factura.total_factura || 0).toFixed(2)),
@@ -603,7 +618,13 @@ export async function GET(request: NextRequest, context: RouteContext) {
         pagos,
         empresa,
         anulacion,
-        permisos: perms
+        permisos: {
+          ...perms,
+          puede_ver: Boolean(perms.puede_ver || invoicePerms.puede_ver),
+          puede_crear: Boolean(paymentPerms.puede_crear || invoicePerms.puede_crear),
+          puede_editar: Boolean(perms.puede_editar || invoicePerms.puede_editar),
+          puede_aprobar: Boolean(perms.puede_aprobar || invoicePerms.puede_aprobar)
+        }
       }
     });
   } catch (err: unknown) {

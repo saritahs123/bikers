@@ -14,7 +14,15 @@ import {
 import NewReceptionModal from "./NewReceptionModal";
 import ReceptionDetailView from "./ReceptionDetailView";
 
-export default function ReceptionsListView({ onViewDetail }) {
+export default function ReceptionsListView({ onViewDetail, userPermissions = null }) {
+  const [permissions, setPermissions] = useState({
+    puede_ver: userPermissions?.puede_ver ?? true,
+    puede_crear: userPermissions?.puede_crear ?? false,
+    puede_editar: userPermissions?.puede_editar ?? false,
+    puede_eliminar: userPermissions?.puede_eliminar ?? false,
+    puede_exportar: userPermissions?.puede_exportar ?? false,
+    puede_asignar: userPermissions?.puede_asignar ?? false
+  });
   const [recepciones, setRecepciones] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -55,8 +63,24 @@ export default function ReceptionsListView({ onViewDetail }) {
       } catch {
         throw new Error(res.ok ? "Respuesta inválida del servidor." : `Error del servidor (${res.status})`);
       }
-      if (!res.ok) {
-        throw new Error(json?.message || json?.error || "Error al cargar listado de recepciones.");
+      if (res.ok) {
+        const canVer = res.headers.get("x-perm-ver");
+        const canCrear = res.headers.get("x-perm-crear");
+        const canEditar = res.headers.get("x-perm-editar");
+        const canEliminar = res.headers.get("x-perm-eliminar");
+        const canExportar = res.headers.get("x-perm-exportar");
+        const canAsignar = res.headers.get("x-perm-asignar");
+
+        if (canVer !== null) {
+          setPermissions({
+            puede_ver: canVer === "true",
+            puede_crear: canCrear === "true",
+            puede_editar: canEditar === "true",
+            puede_eliminar: canEliminar === "true",
+            puede_exportar: canExportar === "true",
+            puede_asignar: canAsignar === "true"
+          });
+        }
       }
 
       setRecepciones(json.data || []);
@@ -106,13 +130,15 @@ export default function ReceptionsListView({ onViewDetail }) {
           </p>
         </div>
 
-        <button
-          onClick={() => setIsNewModalOpen(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-primary-button-bg text-primary-foreground rounded-xl hover:bg-primary-button-hover transition-all font-mono text-xs font-bold tracking-wider uppercase shadow-sm cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          NUEVA RECEPCIÓN
-        </button>
+        {permissions.puede_crear && (
+          <button
+            onClick={() => setIsNewModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-primary-button-bg text-primary-foreground rounded-xl hover:bg-primary-button-hover transition-all font-mono text-xs font-bold tracking-wider uppercase shadow-sm cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            NUEVA RECEPCIÓN
+          </button>
+        )}
       </div>
 
       {/* Search & Refresh Toolbar */}
@@ -282,18 +308,20 @@ export default function ReceptionsListView({ onViewDetail }) {
       )}
 
       {/* New Reception Modal */}
-      <NewReceptionModal
-        isOpen={isNewModalOpen}
-        onClose={() => setIsNewModalOpen(false)}
-        onSuccess={() => {
-          setIsNewModalOpen(false);
-          fetchRecepciones();
-        }}
-        onCreated={() => {
-          setIsNewModalOpen(false);
-          fetchRecepciones();
-        }}
-      />
+      {permissions.puede_crear && (
+        <NewReceptionModal
+          isOpen={isNewModalOpen}
+          onClose={() => setIsNewModalOpen(false)}
+          onSuccess={() => {
+            setIsNewModalOpen(false);
+            fetchRecepciones();
+          }}
+          onCreated={() => {
+            setIsNewModalOpen(false);
+            fetchRecepciones();
+          }}
+        />
+      )}
     </div>
   );
 }

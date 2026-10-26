@@ -335,12 +335,18 @@ async function runFase646Tests() {
     // ESCENARIO 14: Los cambios de permisos se reflejan inmediatamente en la siguiente visita a '/'
     // ------------------------------------------------------------------
     try {
-      // Conceder temporalmente CRM a Prueba H
+      // Conceder temporalmente CRM a Prueba H (utilizando una pantalla activa del módulo CRM)
+      const crmScreenRes = await client.query(`
+        SELECT pantalla_id FROM admin.pantalla_sistema
+        WHERE modulo_sistema_id = 3 AND activo = true
+        ORDER BY orden ASC LIMIT 1
+      `);
+      const crmScreenId = crmScreenRes.rows[0]?.pantalla_id || 9;
       await client.query(`
         INSERT INTO admin.usuario_permiso_personalizado (
           usuario_id, modulo_sistema_id, pantalla_id, puede_ver, estado
-        ) VALUES ($1, 3, 11, true, 'ACTIVO')
-      `, [userNoDash.usuario_id]);
+        ) VALUES ($1, 3, $2, true, 'ACTIVO')
+      `, [userNoDash.usuario_id, crmScreenId]);
       const navDynamic = await getUserNavigationPermissions(userNoDash.usuario_id);
       record(
         14,

@@ -31,6 +31,7 @@ import DigitalSignatureCanvasModal from "./DigitalSignatureCanvasModal";
 import CustomerFormDrawer from "@/components/crm/CustomerFormDrawer";
 import BikeFormDrawer from "@/components/crm/BikeFormDrawer";
 import SecurityConfirmDialog from "@/components/security/SecurityConfirmDialog";
+import RestrictedSectionCard from "@/components/auth/RestrictedSectionCard";
 
 export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreated }) {
   const router = useRouter();
@@ -56,9 +57,10 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  // CRM Permissions
+  // CRM & Workshop Permissions
   const [canCreateClient, setCanCreateClient] = useState(true);
   const [canCreateBike, setCanCreateBike] = useState(true);
+  const [canCreateReception, setCanCreateReception] = useState(true);
 
   // Client Autocomplete State
   const [clientSearch, setClientSearch] = useState("");
@@ -151,10 +153,11 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
     setLoadingInit(true);
     setError("");
     try {
-      const [resClients, resCats, resBikes] = await Promise.all([
+      const [resClients, resCats, resBikes, resRecs] = await Promise.all([
         fetch("/api/crm/clientes"),
         fetch("/api/taller/catalogos"),
-        fetch("/api/crm/bicicletas")
+        fetch("/api/crm/bicicletas"),
+        fetch("/api/taller/recepciones?limit=1")
       ]);
 
       // Check RBAC permissions from headers
@@ -165,6 +168,10 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
       const bikePermCrear = resBikes.headers.get("x-perm-crear");
       if (bikePermCrear !== null) {
         setCanCreateBike(bikePermCrear === "true");
+      }
+      const recPermCrear = resRecs.headers.get("x-perm-crear");
+      if (recPermCrear !== null) {
+        setCanCreateReception(recPermCrear === "true");
       }
 
       const clientsJson = await resClients.json().catch(() => []);
@@ -997,6 +1004,27 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
 
   if (!isOpen) return null;
 
+  if (!canCreateReception) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="w-full max-w-lg bg-card border border-border rounded-2xl p-6 shadow-2xl">
+          <RestrictedSectionCard
+            title="Acceso restringido"
+            message="No tienes permisos habilitados para acceder a esta funcionalidad. Si necesitas utilizarla, solicita la autorización correspondiente al administrador del sistema."
+          />
+          <div className="mt-4 flex justify-end">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-surface hover:bg-hover border border-border text-foreground rounded-xl text-xs font-mono font-bold cursor-pointer transition-colors"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
@@ -1145,7 +1173,8 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
                             </span>
                             {selectedClient.nivel_cliente_nombre ? (
                               <span className="text-[10px] font-mono font-bold text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded">
-                                {selectedClient.nivel_cliente_nombre} ({Number(selectedClient.porciento_descuento || 0)}%)
+                                {selectedClient.nivel_cliente_nombre}{" "}
+                                {`(S: ${Number(selectedClient.descuento_servicio ?? selectedClient.porciento_descuento ?? 0)}% / P: ${Number(selectedClient.descuento_producto ?? selectedClient.porciento_descuento ?? 0)}%)`}
                               </span>
                             ) : (
                               <span className="text-[10px] font-mono text-foreground-muted bg-surface border border-border px-2 py-0.5 rounded">

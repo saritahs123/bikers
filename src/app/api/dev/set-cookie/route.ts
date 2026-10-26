@@ -48,5 +48,9 @@ export async function GET(request: Request) {
   const response = NextResponse.redirect(new URL(redirectUrl, request.url));
   response.cookies.set("session_token", rawToken, { path: "/", httpOnly: true });
   response.cookies.set("session_user_id", String(userId), { path: "/" });
+  const theme = searchParams.get("theme");
+  if (theme) {
+    response.cookies.set("bikers-theme", theme, { path: "/" });
+  }
   return response;
 }

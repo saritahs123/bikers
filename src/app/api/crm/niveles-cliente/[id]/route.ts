@@ -12,7 +12,9 @@ interface RouteContext {
 interface NivelClienteRow {
   nivel_cliente_id: number;
   nombre: string;
-  porciento_descuento: number | string;
+  descuento_servicio: number | string;
+  descuento_producto: number | string;
+  porciento_descuento?: number | string;
   descripcion: string | null;
   activo: boolean;
   fecha_creacion: string | Date;
@@ -57,7 +59,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
         nivel_cliente_id: Number(r.nivel_cliente_id),
         id: Number(r.nivel_cliente_id),
         nombre: r.nombre,
-        porciento_descuento: Number(r.porciento_descuento),
+        descuento_servicio: Number(r.descuento_servicio || 0),
+        descuento_producto: Number(r.descuento_producto || 0),
+        porciento_descuento: Number(r.descuento_servicio || 0),
         descripcion: r.descripcion || "",
         activo: Boolean(r.activo),
         fecha_creacion: r.fecha_creacion
@@ -117,8 +121,14 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     const body = await request.json();
 
     const nombre = (body.nombre !== undefined ? body.nombre : before.nombre).trim();
-    const rawPorciento = body.porciento_descuento !== undefined ? body.porciento_descuento : before.porciento_descuento;
-    const porciento_descuento = Number(rawPorciento);
+    const rawServicio = body.descuento_servicio !== undefined
+      ? body.descuento_servicio
+      : (body.porciento_descuento !== undefined ? body.porciento_descuento : before.descuento_servicio);
+    const rawProducto = body.descuento_producto !== undefined
+      ? body.descuento_producto
+      : (body.porciento_descuento !== undefined ? body.porciento_descuento : before.descuento_producto);
+    const descuento_servicio = Number(rawServicio);
+    const descuento_producto = Number(rawProducto);
     const descripcion = body.descripcion !== undefined ? (body.descripcion || "").trim() : before.descripcion;
     const activo = body.activo !== undefined ? Boolean(body.activo) : before.activo;
 
@@ -137,9 +147,16 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       );
     }
 
-    if (isNaN(porciento_descuento) || porciento_descuento < 0 || porciento_descuento > 100) {
+    if (isNaN(descuento_servicio) || descuento_servicio < 0 || descuento_servicio > 100) {
       return NextResponse.json(
-        { error: "VALIDATION_ERROR", message: "El porcentaje de descuento debe estar entre 0 y 100.", field: "porciento_descuento" },
+        { error: "VALIDATION_ERROR", message: "El descuento en servicios debe estar entre 0 y 100.", field: "descuento_servicio" },
+        { status: 400 }
+      );
+    }
+
+    if (isNaN(descuento_producto) || descuento_producto < 0 || descuento_producto > 100) {
+      return NextResponse.json(
+        { error: "VALIDATION_ERROR", message: "El descuento en productos debe estar entre 0 y 100.", field: "descuento_producto" },
         { status: 400 }
       );
     }
@@ -160,16 +177,18 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     const updateSql = `
       UPDATE admin.nivel_cliente
       SET nombre = $1,
-          porciento_descuento = $2,
-          descripcion = $3,
-          activo = $4
-      WHERE nivel_cliente_id = $5
+          descuento_servicio = $2,
+          descuento_producto = $3,
+          descripcion = $4,
+          activo = $5
+      WHERE nivel_cliente_id = $6
       RETURNING *;
     `;
 
     const res = await query<NivelClienteRow>(updateSql, [
       nombre,
-      porciento_descuento,
+      descuento_servicio,
+      descuento_producto,
       descripcion || null,
       activo,
       nivelId
@@ -184,13 +203,15 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       accion: "CRM_NIVEL_CLIENTE_ACTUALIZADO",
       valorAnterior: {
         nombre: before.nombre,
-        porciento_descuento: Number(before.porciento_descuento),
+        descuento_servicio: Number(before.descuento_servicio),
+        descuento_producto: Number(before.descuento_producto),
         descripcion: before.descripcion,
         activo: before.activo
       },
       valorNuevo: {
         nombre,
-        porciento_descuento,
+        descuento_servicio,
+        descuento_producto,
         descripcion,
         activo
       },
@@ -205,7 +226,9 @@ export async function PUT(request: NextRequest, context: RouteContext) {
         nivel_cliente_id: Number(updated.nivel_cliente_id),
         id: Number(updated.nivel_cliente_id),
         nombre: updated.nombre,
-        porciento_descuento: Number(updated.porciento_descuento),
+        descuento_servicio: Number(updated.descuento_servicio),
+        descuento_producto: Number(updated.descuento_producto),
+        porciento_descuento: Number(updated.descuento_servicio),
         descripcion: updated.descripcion || "",
         activo: Boolean(updated.activo),
         fecha_creacion: updated.fecha_creacion

@@ -28,7 +28,7 @@ export default function InventoryTransfersView() {
   const [almacenes, setAlmacenes] = useState([]);
   const [productos, setProductos] = useState([]);
   const [transferencias, setTransferencias] = useState([]);
-  const [permisos, setPermisos] = useState(null);
+  const [permisos, setPermisos] = useState({ puede_ver: true, puede_mover: false });
   const [errorTransferencias, setErrorTransferencias] = useState(null);
   const [, setLoadingCatalogos] = useState(true);
   const [loadingTransferencias, setLoadingTransferencias] = useState(false);
@@ -130,7 +130,18 @@ export default function InventoryTransfersView() {
       if (res.ok) {
         const data = await res.json();
         setTransferencias(data.transferencias || []);
-        if (data.permisos) setPermisos(data.permisos);
+        if (data.permisos) {
+          setPermisos(data.permisos);
+        } else {
+          const canMover = res.headers.get("x-perm-mover");
+          const canVer = res.headers.get("x-perm-ver");
+          if (canMover !== null) {
+            setPermissions({
+              puede_ver: canVer === "true",
+              puede_mover: canMover === "true"
+            });
+          }
+        }
         setErrorTransferencias(null);
       } else {
         setTransferencias([]);
@@ -591,6 +602,13 @@ export default function InventoryTransfersView() {
             </div>
           </div>
 
+          {permisos && !permisos.puede_mover && (
+            <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-500 text-xs font-mono flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>Modo consulta: No posees permisos para realizar transferencias de inventario (Se requiere permiso MOVER).</span>
+            </div>
+          )}
+
           <form onSubmit={handleAddLine} className="space-y-4">
             {/* FILA 1: Almacén Origen, Botón Swap, Almacén Destino */}
             <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
@@ -868,9 +886,9 @@ export default function InventoryTransfersView() {
                 <button
                   type="button"
                   onClick={handleSubmitBatch}
-                  disabled={submitting || (permisos && !permisos.puede_mover) || (lineas.length === 0 && (!selectedProduct || !cantidad))}
+                  disabled={submitting || !permisos?.puede_mover || (lineas.length === 0 && (!selectedProduct || !cantidad))}
                   className="flex items-center gap-2 px-5 py-2.5 text-xs font-bold rounded-lg bg-purple-600 hover:bg-purple-700 text-white shadow-sm transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                  title={permisos && !permisos.puede_mover ? "No tienes permisos para transferir o mover inventario (Se requiere MOVER)" : "Registrar Transferencia"}
+                  title={!permisos?.puede_mover ? "No tienes permisos para transferir o mover inventario (Se requiere MOVER)" : "Registrar Transferencia"}
                 >
                   <ArrowLeftRight className="w-4 h-4" />
                   <span>{submitting ? "Transfiriendo..." : "Registrar Transferencia"}</span>

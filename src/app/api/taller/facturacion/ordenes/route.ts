@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { getWorkshopSession, getScreenPermissions } from "@/lib/workshop-session";
 
 // GET /api/taller/facturacion/ordenes
 export async function GET(req: NextRequest) {
@@ -15,9 +15,12 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "FORBIDDEN_COMPANY", message: "No se pudo determinar la empresa del usuario." }, { status: 403 });
     }
 
-    const perms = await getModulePermissions("TALLER", session.usuario_id);
+    const perms = await getScreenPermissions("FACTURACION_DESPACHO", session.usuario_id);
     if (!perms.puede_ver) {
-      return NextResponse.json({ error: "FORBIDDEN", message: "No posee permiso de lectura para acceder a facturación." }, { status: 403 });
+      return NextResponse.json(
+        { error: "FORBIDDEN", message: "No tienes permiso para consultar el despacho de órdenes. Se requiere el privilegio VER en Despacho de Órdenes (FACTURACION_DESPACHO)." },
+        { status: 403 }
+      );
     }
 
     const { searchParams } = new URL(req.url);
@@ -31,7 +34,7 @@ export async function GET(req: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "100", 10);
     const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
 
-    const queryParams: any[] = [empresaId];
+    const queryParams: (string | number | boolean)[] = [empresaId];
     const whereConditions: string[] = [
       `c.empresa_id = $1`,
       `ot.activo = true`
@@ -203,10 +206,10 @@ export async function GET(req: NextRequest) {
     const rawItems = await query(sql, [...queryParams, limit]);
 
     // Calculate business rules for invoicing per item
-    const items = (rawItems || []).map((r: any) => {
+    const items = (rawItems || []).map((r: Record<string, unknown>) => {
       const isFacturado = Boolean(r.facturado);
       const estadoId = Number(r.estado_orden_id);
-      const totalAmount = parseFloat(r.total_orden || "0");
+      const totalAmount = parseFloat(String(r.total_orden || "0"));
       const incompleteCount = Number(r.servicios_incompletos_count || 0);
       const openTimersCount = Number(r.cronometros_abiertos_count || 0);
 
@@ -269,7 +272,7 @@ export async function GET(req: NextRequest) {
         prioridades: prioridades || []
       }
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error in GET /api/taller/facturacion/ordenes:", error);
     return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al consultar las órdenes para facturación." }, { status: 500 });
   }

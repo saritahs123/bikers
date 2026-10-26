@@ -71,7 +71,17 @@ const formatCreationDate = (dateValue) => {
   return { datePart, timePart };
 };
 
-export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onToggleKanban }) {
+export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onToggleKanban, userPermissions = null }) {
+  const [permissions, setPermissions] = useState({
+    puede_ver: userPermissions?.puede_ver ?? true,
+    puede_crear: userPermissions?.puede_crear ?? false,
+    puede_editar: userPermissions?.puede_editar ?? false,
+    puede_eliminar: userPermissions?.puede_eliminar ?? false,
+    puede_exportar: userPermissions?.puede_exportar ?? false,
+    puede_asignar: userPermissions?.puede_asignar ?? false,
+    puede_cerrar: userPermissions?.puede_cerrar ?? false,
+    puede_reabrir: userPermissions?.puede_reabrir ?? false
+  });
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -212,6 +222,30 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
         data = await res.json();
       } catch {
         throw new Error(res.ok ? "Respuesta inválida del servidor." : `Error del servidor (${res.status})`);
+      }
+
+      if (res.ok) {
+        const canVer = res.headers.get("x-perm-ver");
+        const canCrear = res.headers.get("x-perm-crear");
+        const canEditar = res.headers.get("x-perm-editar");
+        const canEliminar = res.headers.get("x-perm-eliminar");
+        const canExportar = res.headers.get("x-perm-exportar");
+        const canAsignar = res.headers.get("x-perm-asignar");
+        const canCerrar = res.headers.get("x-perm-cerrar");
+        const canReabrir = res.headers.get("x-perm-reabrir");
+
+        if (canVer !== null) {
+          setPermissions({
+            puede_ver: canVer === "true",
+            puede_crear: canCrear === "true",
+            puede_editar: canEditar === "true",
+            puede_eliminar: canEliminar === "true",
+            puede_exportar: canExportar === "true",
+            puede_asignar: canAsignar === "true",
+            puede_cerrar: canCerrar === "true",
+            puede_reabrir: canReabrir === "true"
+          });
+        }
       }
 
       if (currentSeq !== fetchSequenceRef.current) return;
@@ -406,15 +440,17 @@ export default function WorkOrdersListView({ onViewDetail, onOpenNewModal, onTog
             Administra las recepciones, servicios, reparaciones y entregas del taller.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            onClick={onOpenNewModal}
-            className="flex items-center gap-2 px-4 py-2 bg-primary-button-bg text-primary-foreground rounded-xl hover:bg-primary-button-hover transition-all font-mono text-xs font-bold tracking-wider uppercase shadow-md shadow-primary/20 cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            NUEVA ORDEN
-          </button>
-        </div>
+        {permissions.puede_crear && (
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={onOpenNewModal}
+              className="flex items-center gap-2 px-4 py-2 bg-primary-button-bg text-primary-foreground rounded-xl hover:bg-primary-button-hover transition-all font-mono text-xs font-bold tracking-wider uppercase shadow-md shadow-primary/20 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              NUEVA ORDEN
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Summary Bento Cards Grid */}

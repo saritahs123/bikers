@@ -5,7 +5,7 @@ import {
   Shield, Key, CheckSquare, Square, Save, Search,
   Info, Activity, Users, PanelLeftOpen, Loader2, Plus, Edit2, Trash2,
   ArrowUp, ArrowDown, ArrowUpDown, ChevronDown, ChevronRight, RotateCcw,
-  LayoutGrid, CheckCheck, SlidersHorizontal
+  LayoutGrid, CheckCheck, SlidersHorizontal, RefreshCw
 } from 'lucide-react';
 import { RBAC_ACTIONS } from '@/config/navigationConfig';
 
@@ -19,6 +19,15 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
   const [screenMatrixState, setScreenMatrixState] = useState({});
   const [modules, setModules] = useState([]);
   const [roles, setRoles] = useState([]);
+
+  // Permisos RBAC efectivos (Fase 6.4.13: Fail-safe defaults)
+  const [permissions, setPermissions] = useState({
+    puede_ver: false,
+    puede_crear: false,
+    puede_editar: false,
+    puede_eliminar: false
+  });
+  const [syncing, setSyncing] = useState(false);
 
   // Unsaved changes tracking
   const [hasChanges, setHasChanges] = useState(false);
@@ -72,8 +81,22 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
         setLoading(true);
       }
       const res = await fetch(`${apiBase}/matriz-acceso-rol?_t=${Date.now()}`);
+
+      // Fase 6.4.13: Extracción de permisos RBAC del usuario autenticado
+      const puedeVer = res.headers.get('x-perm-puede-ver') === 'true';
+      const puedeCrear = res.headers.get('x-perm-puede-crear') === 'true';
+      const puedeEditar = res.headers.get('x-perm-puede-editar') === 'true';
+      const puedeEliminar = res.headers.get('x-perm-puede-eliminar') === 'true';
+
       if (!res.ok) throw new Error('Error fetching data');
       const data = await res.json();
+
+      setPermissions({
+        puede_ver: puedeVer || Boolean(data.userPermissions?.puede_ver),
+        puede_crear: puedeCrear || Boolean(data.userPermissions?.puede_crear),
+        puede_editar: puedeEditar || Boolean(data.userPermissions?.puede_editar),
+        puede_eliminar: puedeEliminar || Boolean(data.userPermissions?.puede_eliminar)
+      });
 
       const mods = data.modules || [];
       const rls = data.roles || [];
@@ -116,6 +139,7 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
 
   // Toggle permission at menu level
   const handleTogglePermission = (moduleId, actionId) => {
+    if (!permissions.puede_editar) return;
     const rolePerms = { ...currentPermissions };
     const actionList = rolePerms[moduleId] ? [...rolePerms[moduleId]] : [];
 
@@ -161,6 +185,7 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
 
   // Toggle FULL actions for menu
   const handleToggleFull = (moduleId) => {
+    if (!permissions.puede_editar) return;
     const rolePerms = { ...currentPermissions };
     const currentActions = rolePerms[moduleId] || [];
 
@@ -201,6 +226,7 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
 
   // Toggle specific screen permission (marks as override)
   const handleToggleScreenPermission = (screenId, actionId, parentModuleId) => {
+    if (!permissions.puede_editar) return;
     const currentScreens = { ...currentScreenPermissions };
     const screenObj = currentScreens[screenId];
     const parentActions = currentPermissions[parentModuleId] || [];
@@ -229,6 +255,7 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
 
   // Toggle FULL for a specific screen (marks as override)
   const handleToggleScreenFull = (screenId) => {
+    if (!permissions.puede_editar) return;
     const currentScreens = { ...currentScreenPermissions };
     const screenObj = currentScreens[screenId];
     const currentActions = screenObj?.actions || [];
@@ -248,6 +275,7 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
 
   // Reset a screen override to inherit from parent menu
   const handleResetScreenOverride = (screenId, parentModuleId) => {
+    if (!permissions.puede_editar) return;
     const currentScreens = { ...currentScreenPermissions };
     const parentActions = currentPermissions[parentModuleId] || [];
 
@@ -282,10 +310,18 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
   };
 
   const handleSaveClick = () => {
+    if (!permissions.puede_editar) {
+      showToast('No tienes permisos de edición en la matriz de roles.', 'error');
+      return;
+    }
     setShowSaveConfirmModal(true);
   };
 
   const handleExecuteSave = async () => {
+    if (!permissions.puede_editar) {
+      showToast('No tienes permisos de edición en la matriz de roles.', 'error');
+      return;
+    }
     setShowSaveConfirmModal(false);
     setSaving(true);
     try {
@@ -326,8 +362,34 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
     }
   };
 
+  const handleSyncNavigation = async () => {
+    if (!permissions.puede_editar && !permissions.puede_crear) {
+      showToast('No tienes privilegios para ejecutar la sincronización de navegación.', 'error');
+      return;
+    }
+    try {
+      setSyncing(true);
+      const res = await fetch(`${apiBase}/matriz-acceso-rol/sync`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || 'Error en sincronización');
+      }
+      showToast(`Sincronización completada (${data.menusSynced || 0} menús, ${data.screensSynced || 0} pantallas)`);
+      fetchMatrix(true);
+    } catch (err) {
+      console.error('Error syncing navigation:', err);
+      showToast(err.message || 'Error al sincronizar navegación', 'error');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const handleAddRole = async (e) => {
     e.preventDefault();
+    if (!permissions.puede_crear) {
+      showToast('No tienes permisos para crear roles funcionales.', 'error');
+      return;
+    }
     if (!newRoleName.trim()) return;
 
     try {
@@ -361,6 +423,10 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
 
   const handleEditRole = async (e) => {
     e.preventDefault();
+    if (!permissions.puede_editar) {
+      showToast('No tienes permisos para editar roles funcionales.', 'error');
+      return;
+    }
     if (!editRoleName.trim() || !editingRole) return;
 
     try {
@@ -397,6 +463,10 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
   };
 
   const handleDeleteRole = (role) => {
+    if (!permissions.puede_eliminar) {
+      showToast('No tienes permisos para inactivar roles funcionales.', 'error');
+      return;
+    }
     setDeleteContext({ type: 'role', item: role });
   };
 
@@ -544,21 +614,44 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
             </div>
           )}
 
-          <button
-            type="button"
-            onClick={handleSaveClick}
-            disabled={saving}
-            className={`flex-1 md:flex-initial font-mono font-bold text-xs px-5 py-2.5 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer ${
-              hasChanges
-                ? 'bg-primary text-primary-foreground hover:brightness-110 ring-2 ring-primary/40'
-                : 'bg-primary text-primary-foreground hover:brightness-110'
-            } disabled:opacity-50`}
-          >
-            {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
-            {saving ? 'Guardando...' : 'Guardar Cambios'}
-          </button>
+          {permissions.puede_editar && (
+            <button
+              type="button"
+              onClick={handleSyncNavigation}
+              disabled={syncing}
+              className="px-4 py-2.5 rounded-xl border border-border bg-surface-subtle hover:bg-hover text-foreground font-mono text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Sincronizar menús y pantallas canónicas en la base de datos"
+            >
+              <RefreshCw size={14} className={syncing ? "animate-spin text-primary" : "text-primary"} />
+              <span>{syncing ? 'Sincronizando...' : 'Sincronizar'}</span>
+            </button>
+          )}
+
+          {permissions.puede_editar && (
+            <button
+              type="button"
+              onClick={handleSaveClick}
+              disabled={saving || !hasChanges}
+              className={`flex-1 md:flex-initial font-mono font-bold text-xs px-5 py-2.5 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                hasChanges
+                  ? 'bg-primary text-primary-foreground hover:brightness-110 ring-2 ring-primary/40'
+                  : 'bg-primary text-primary-foreground hover:brightness-110'
+              } disabled:opacity-50 disabled:cursor-not-allowed`}
+            >
+              {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+              {saving ? 'Guardando...' : 'Guardar Cambios'}
+            </button>
+          )}
         </div>
       </header>
+
+      {/* Read-Only Mode Banner */}
+      {!permissions.puede_editar && (
+        <div className="p-4 bg-amber-500/10 border border-amber-500/30 text-amber-500 text-xs rounded-xl flex items-center gap-2.5 font-mono shadow-sm">
+          <Shield size={16} className="text-amber-500 shrink-0" />
+          <span>Modo Solo Lectura: Tu rol actual no posee permisos de edición sobre la Gobernanza RBAC. Las opciones de modificación y sincronización se encuentran deshabilitadas.</span>
+        </div>
+      )}
 
       {/* KPI Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -603,14 +696,16 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
               <Users size={14} className="text-primary" />
               Roles Funcionales ({roles.length})
             </h3>
-            <button
-              type="button"
-              onClick={() => setShowAddRoleModal(true)}
-              className="bg-primary text-primary-foreground hover:brightness-110 p-1.5 rounded-lg shadow-sm transition-all cursor-pointer"
-              title="Agregar Nuevo Rol"
-            >
-              <Plus size={14} className="stroke-[2.5]" />
-            </button>
+            {permissions.puede_crear && (
+              <button
+                type="button"
+                onClick={() => setShowAddRoleModal(true)}
+                className="bg-primary text-primary-foreground hover:brightness-110 p-1.5 rounded-lg shadow-sm transition-all cursor-pointer"
+                title="Agregar Nuevo Rol"
+              >
+                <Plus size={14} className="stroke-[2.5]" />
+              </button>
+            )}
           </div>
 
           <div className="space-y-1.5 overflow-y-auto max-h-[600px] lg:max-h-[calc(100vh-22rem)] pr-1 custom-scrollbar">
@@ -654,23 +749,25 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
                     }`}>
                       {permissionsCount}
                     </span>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setEditingRole(role);
-                        setEditRoleName(role.nombre);
-                        setEditRoleDesc(role.descripcion || '');
-                        setShowEditRoleModal(true);
-                      }}
-                      className={`p-1 rounded-md transition-colors ${
-                        isActive ? 'text-primary-foreground/80 hover:text-primary-foreground hover:bg-black/20' : 'text-foreground-muted hover:text-primary hover:bg-hover'
-                      }`}
-                      title="Editar Rol"
-                    >
-                      <Edit2 size={12} className="stroke-[2.5]" />
-                    </button>
-                    {role.numericId !== 1 && (
+                    {permissions.puede_editar && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingRole(role);
+                          setEditRoleName(role.nombre);
+                          setEditRoleDesc(role.descripcion || '');
+                          setShowEditRoleModal(true);
+                        }}
+                        className={`p-1 rounded-md transition-colors ${
+                          isActive ? 'text-primary-foreground/80 hover:text-primary-foreground hover:bg-black/20' : 'text-foreground-muted hover:text-primary hover:bg-hover'
+                        }`}
+                        title="Editar Rol"
+                      >
+                        <Edit2 size={12} className="stroke-[2.5]" />
+                      </button>
+                    )}
+                    {role.numericId !== 1 && permissions.puede_eliminar && (
                       <button
                         type="button"
                         onClick={(e) => {
@@ -836,12 +933,15 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
                             <button
                               type="button"
                               onClick={() => handleToggleFull(mod.id)}
-                              className={`p-1.5 rounded-lg border transition-all hover:scale-105 cursor-pointer flex items-center justify-center mx-auto ${
+                              disabled={!permissions.puede_editar}
+                              className={`p-1.5 rounded-lg border transition-all ${
+                                permissions.puede_editar ? 'hover:scale-105 cursor-pointer' : 'opacity-40 cursor-not-allowed'
+                              } flex items-center justify-center mx-auto ${
                                 isFullMenu
                                   ? 'bg-primary border-primary text-primary-foreground shadow-sm'
                                   : 'bg-surface border-border text-foreground-muted hover:border-primary/40 hover:text-foreground'
                               }`}
-                              title={isFullMenu ? 'Desmarcar todo el menú' : 'Conceder todas las acciones al menú'}
+                              title={!permissions.puede_editar ? 'Modo solo lectura' : (isFullMenu ? 'Desmarcar todo el menú' : 'Conceder todas las acciones al menú')}
                             >
                               {isFullMenu ? <CheckSquare size={13} className="stroke-[2.5]" /> : <Square size={13} className="stroke-[2]" />}
                             </button>
@@ -855,12 +955,15 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
                                 <button
                                   type="button"
                                   onClick={() => handleTogglePermission(mod.id, act.id)}
-                                  className={`p-1.5 rounded-lg border transition-all hover:scale-105 cursor-pointer flex items-center justify-center mx-auto ${
+                                  disabled={!permissions.puede_editar}
+                                  className={`p-1.5 rounded-lg border transition-all ${
+                                    permissions.puede_editar ? 'hover:scale-105 cursor-pointer' : 'opacity-40 cursor-not-allowed'
+                                  } flex items-center justify-center mx-auto ${
                                     isChecked
                                       ? 'bg-primary border-primary text-primary-foreground shadow-sm'
                                       : 'bg-surface border-border text-foreground-muted hover:border-primary/40 hover:text-foreground'
                                   }`}
-                                  title={`${isChecked ? 'Remover' : 'Conceder'} ${act.label} en menú ${mod.label}`}
+                                  title={!permissions.puede_editar ? 'Modo solo lectura' : `${isChecked ? 'Remover' : 'Conceder'} ${act.label} en menú ${mod.label}`}
                                 >
                                   {isChecked ? <CheckSquare size={13} className="stroke-[2.5]" /> : <Square size={13} className="stroke-[2]" />}
                                 </button>
@@ -909,12 +1012,15 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
                                 <button
                                   type="button"
                                   onClick={() => handleToggleScreenFull(screen.id)}
-                                  className={`p-1.5 rounded-lg border transition-all hover:scale-105 cursor-pointer flex items-center justify-center mx-auto ${
+                                  disabled={!permissions.puede_editar}
+                                  className={`p-1.5 rounded-lg border transition-all ${
+                                    permissions.puede_editar ? 'hover:scale-105 cursor-pointer' : 'opacity-40 cursor-not-allowed'
+                                  } flex items-center justify-center mx-auto ${
                                     isFullScreen
                                       ? (isOverride ? 'bg-emerald-500 border-emerald-500 text-white shadow-sm' : 'bg-primary/20 border-primary/40 text-primary')
                                       : 'bg-surface/50 border-border/60 text-foreground-muted hover:border-primary/40 hover:text-foreground'
                                   }`}
-                                  title={isFullScreen ? 'Desmarcar todas las acciones de pantalla' : 'Conceder todas las acciones a esta pantalla (anulará el menú)'}
+                                  title={!permissions.puede_editar ? 'Modo solo lectura' : (isFullScreen ? 'Desmarcar todas las acciones de pantalla' : 'Conceder todas las acciones a esta pantalla (anulará el menú)')}
                                 >
                                   {isFullScreen ? (
                                     isOverride ? <CheckCheck size={13} className="stroke-[2.5]" /> : <CheckSquare size={13} className="stroke-[2]" />
@@ -934,7 +1040,10 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
                                     <button
                                       type="button"
                                       onClick={() => handleToggleScreenPermission(screen.id, act.id, mod.id)}
-                                      className={`p-1.5 rounded-lg border transition-all hover:scale-105 cursor-pointer flex items-center justify-center mx-auto ${
+                                      disabled={!permissions.puede_editar}
+                                      className={`p-1.5 rounded-lg border transition-all ${
+                                        permissions.puede_editar ? 'hover:scale-105 cursor-pointer' : 'opacity-40 cursor-not-allowed'
+                                      } flex items-center justify-center mx-auto ${
                                         isActionGranted
                                           ? isInherited
                                             ? 'bg-primary/10 border-primary/30 text-primary hover:border-primary'
@@ -944,9 +1053,11 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
                                             : 'bg-destructive/15 border-destructive/40 text-destructive'
                                       }`}
                                       title={
-                                        isInherited
-                                          ? `Heredado de ${mod.label}: ${isActionGranted ? 'Concedido' : 'Denegado'}. Haz clic para personalizar.`
-                                          : `Sobrescrito para ${screen.label}: ${isActionGranted ? 'Concedido' : 'Denegado'}.`
+                                        !permissions.puede_editar
+                                          ? 'Modo solo lectura'
+                                          : isInherited
+                                            ? `Heredado de ${mod.label}: ${isActionGranted ? 'Concedido' : 'Denegado'}. Haz clic para personalizar.`
+                                            : `Sobrescrito para ${screen.label}: ${isActionGranted ? 'Concedido' : 'Denegado'}.`
                                       }
                                     >
                                       {isActionGranted ? (
@@ -962,15 +1073,21 @@ export default function RolesSecurityView({ onOpenSidebar = () => {} }) {
                               {/* Screen Override Status & Reset */}
                               <td className="py-2 px-2 text-center border-l border-border">
                                 {isOverride ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleResetScreenOverride(screen.id, mod.id)}
-                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9.5px] font-mono font-bold bg-amber-500/15 text-amber-500 hover:bg-amber-500/25 border border-amber-500/30 transition-colors cursor-pointer"
-                                    title="Restablecer a permisos heredados del menú"
-                                  >
-                                    <RotateCcw size={10} />
-                                    <span>Heredar</span>
-                                  </button>
+                                  permissions.puede_editar ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleResetScreenOverride(screen.id, mod.id)}
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9.5px] font-mono font-bold bg-amber-500/15 text-amber-500 hover:bg-amber-500/25 border border-amber-500/30 transition-colors cursor-pointer"
+                                      title="Restablecer a permisos heredados del menú"
+                                    >
+                                      <RotateCcw size={10} />
+                                      <span>Heredar</span>
+                                    </button>
+                                  ) : (
+                                    <span className="text-[9.5px] font-mono font-bold text-amber-500" title="Sobrescrito en pantalla">
+                                      Sobrescrito
+                                    </span>
+                                  )
                                 ) : (
                                   <span className="text-[9.5px] font-mono text-foreground-muted" title="Hereda exactamente los permisos del menú padre">
                                     Heredado

@@ -23,6 +23,8 @@ interface RawOrderRow {
   cliente_correo: string | null;
   nivel_cliente_id: number | null;
   cliente_nivel_nombre: string | null;
+  cliente_descuento_servicio: number | string | null;
+  cliente_descuento_producto: number | string | null;
   cliente_porciento_descuento: number | string | null;
   cliente_nivel_activo: boolean | null;
   b_id: number | null;
@@ -122,7 +124,9 @@ export async function GET(request: Request) {
         c.correo AS cliente_correo,
         c.nivel_cliente_id,
         nc.nombre AS cliente_nivel_nombre,
-        COALESCE(nc.porciento_descuento, 0)::numeric AS cliente_porciento_descuento,
+        COALESCE(nc.descuento_servicio, 0)::numeric AS cliente_descuento_servicio,
+        COALESCE(nc.descuento_producto, 0)::numeric AS cliente_descuento_producto,
+        COALESCE(nc.descuento_servicio, 0)::numeric AS cliente_porciento_descuento,
         nc.activo AS cliente_nivel_activo,
         b.bicicleta_id AS b_id,
         COALESCE(b.marca, 'Bicicleta') AS bicicleta_marca,
@@ -274,7 +278,9 @@ export async function GET(request: Request) {
           correo: ot.cliente_correo || "",
           nivel_cliente_id: ot.nivel_cliente_id ? Number(ot.nivel_cliente_id) : null,
           nivel_cliente_nombre: ot.cliente_nivel_nombre || null,
-          porciento_descuento: ot.cliente_nivel_activo ? Number(ot.cliente_porciento_descuento || 0) : 0,
+          descuento_servicio: ot.cliente_nivel_activo ? Number(ot.cliente_descuento_servicio || 0) : 0,
+          descuento_producto: ot.cliente_nivel_activo ? Number(ot.cliente_descuento_producto || 0) : 0,
+          porciento_descuento: ot.cliente_nivel_activo ? Number(ot.cliente_descuento_servicio || 0) : 0,
           nivel_cliente_activo: ot.cliente_nivel_activo !== undefined && ot.cliente_nivel_activo !== null ? Boolean(ot.cliente_nivel_activo) : null
         },
         bicicleta: ot.b_id ? {

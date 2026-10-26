@@ -675,7 +675,8 @@ export default function CustomersView() {
       "ID",
       "Nombre Completo",
       "Nivel de Cliente",
-      "Descuento Nivel (%)",
+      "Descuento Servicios (%)",
+      "Descuento Productos (%)",
       "Tipo Cliente",
       "Identificación",
       "Teléfono",
@@ -690,7 +691,8 @@ export default function CustomersView() {
       c.id || c.cliente_id,
       `"${(c.nombre_completo || "").replace(/"/g, '""')}"`,
       `"${c.nivel_cliente_nombre || "Sin nivel asignado"}"`,
-      c.nivel_cliente_nombre ? Number(c.porciento_descuento || 0) : "",
+      c.nivel_cliente_nombre ? Number(c.descuento_servicio ?? c.porciento_descuento ?? 0) : "",
+      c.nivel_cliente_nombre ? Number(c.descuento_producto ?? c.porciento_descuento ?? 0) : "",
       getTipoClienteLabel(c.tipo_cliente),
       `"${c.identificacion || ""}"`,
       `"${c.telefono_principal || ""}"`,
@@ -830,7 +832,8 @@ export default function CustomersView() {
                       {detailUser.nivel_cliente_nombre ? (
                         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-primary/10 text-primary border border-primary/30 font-mono">
                           <Award size={13} />
-                          {detailUser.nivel_cliente_nombre} ({Number(detailUser.porciento_descuento)}% Desc.)
+                          {detailUser.nivel_cliente_nombre}{" "}
+                          {`(Serv: ${Number(detailUser.descuento_servicio ?? detailUser.porciento_descuento ?? 0)}% / Prod: ${Number(detailUser.descuento_producto ?? detailUser.porciento_descuento ?? 0)}%)`}
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-surface text-foreground-muted border border-border font-mono">
@@ -1646,7 +1649,7 @@ export default function CustomersView() {
                 <thead>
                   <tr className="bg-surface border-b border-border select-none">
                     {renderSortableHeader("CLIENTE", "nombre_completo", "py-3.5 px-5")}
-                    {renderSortableHeader("NIVEL DESCUENTO", "nivel_cliente_nombre", "py-3.5 px-4")}
+                    {renderSortableHeader("NIVEL DESCUENTO", "nivel_cliente_nombre", "py-3.5 px-4 whitespace-nowrap")}
                     {renderSortableHeader("TIPO", "tipo_cliente", "py-3.5 px-4 text-center")}
                     {renderSortableHeader("IDENTIFICACIÓN", "identificacion", "py-3.5 px-4")}
                     {renderSortableHeader("CIUDAD", "ciudad", "py-3.5 px-4")}
@@ -1714,12 +1717,14 @@ export default function CustomersView() {
                         </td>
 
                         {/* Nivel de Cliente */}
-                        <td className="py-3.5 px-4">
+                        <td className="py-3.5 px-4 whitespace-nowrap">
                           {item.nivel_cliente_nombre ? (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-primary/10 text-primary border border-primary/20 font-mono">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-primary/10 text-primary border border-primary/20 font-mono whitespace-nowrap">
                               <Award size={12} className="shrink-0" />
                               <span>{item.nivel_cliente_nombre}</span>
-                              <span className="text-[11px] opacity-80">({Number(item.porciento_descuento || 0)}%)</span>
+                              <span className="text-[11px] opacity-80 whitespace-nowrap">
+                                {`(${Number(item.descuento_servicio ?? item.porciento_descuento ?? 0)}% S / ${Number(item.descuento_producto ?? item.porciento_descuento ?? 0)}% P)`}
+                              </span>
                             </span>
                           ) : (
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono text-foreground-muted bg-surface-subtle border border-border">
@@ -1834,7 +1839,10 @@ export default function CustomersView() {
                             {item.nivel_cliente_nombre ? (
                               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-primary/10 text-primary border border-primary/20 font-mono">
                                 <Award size={10} className="shrink-0" />
-                                <span>{item.nivel_cliente_nombre} ({Number(item.porciento_descuento || 0)}%)</span>
+                                <span>
+                                  {item.nivel_cliente_nombre}{" "}
+                                  {`(${Number(item.descuento_servicio ?? item.porciento_descuento ?? 0)}% S / ${Number(item.descuento_producto ?? item.porciento_descuento ?? 0)}% P)`}
+                                </span>
                               </span>
                             ) : (
                               <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono text-foreground-muted bg-surface border border-border">

@@ -49,7 +49,9 @@ export async function GET() {
         c.usuario_modificacion,
         c.nivel_cliente_id,
         nc.nombre AS nivel_cliente_nombre,
-        COALESCE(nc.porciento_descuento, 0)::numeric AS porciento_descuento,
+        COALESCE(nc.descuento_servicio, 0)::numeric AS descuento_servicio,
+        COALESCE(nc.descuento_producto, 0)::numeric AS descuento_producto,
+        COALESCE(nc.descuento_servicio, 0)::numeric AS porciento_descuento,
         nc.activo AS nivel_cliente_activo
       FROM admin.clientes c
       LEFT JOIN admin.nivel_cliente nc ON c.nivel_cliente_id = nc.nivel_cliente_id
@@ -85,6 +87,8 @@ export async function GET() {
       fecha_creacion: string | Date | null;
       nivel_cliente_id: number | null;
       nivel_cliente_nombre: string | null;
+      descuento_servicio: number | string | null;
+      descuento_producto: number | string | null;
       porciento_descuento: number | string | null;
       nivel_cliente_activo: boolean | null;
     }
@@ -120,7 +124,9 @@ export async function GET() {
       fecha_creacion: r.fecha_creacion ? String(r.fecha_creacion).substring(0, 10) : null,
       nivel_cliente_id: r.nivel_cliente_id ? Number(r.nivel_cliente_id) : null,
       nivel_cliente_nombre: r.nivel_cliente_nombre || null,
-      porciento_descuento: r.porciento_descuento !== undefined && r.porciento_descuento !== null ? Number(r.porciento_descuento) : 0,
+      descuento_servicio: r.nivel_cliente_activo ? Number(r.descuento_servicio || 0) : 0,
+      descuento_producto: r.nivel_cliente_activo ? Number(r.descuento_producto || 0) : 0,
+      porciento_descuento: r.nivel_cliente_activo ? Number(r.descuento_servicio || 0) : 0,
       nivel_cliente_activo: r.nivel_cliente_activo !== undefined && r.nivel_cliente_activo !== null ? Boolean(r.nivel_cliente_activo) : null
     }));
 
@@ -220,14 +226,27 @@ export async function POST(req: Request) {
 
     // Validar nivel_cliente_id si se especificó
     let nivel_cliente_id: number | null = null;
-    let nivelInfo: { nivel_cliente_id: number; nombre: string; porciento_descuento: number; activo: boolean } | null = null;
+    let nivelInfo: {
+      nivel_cliente_id: number;
+      nombre: string;
+      descuento_servicio: number;
+      descuento_producto: number;
+      porciento_descuento: number;
+      activo: boolean;
+    } | null = null;
     if (body.nivel_cliente_id !== undefined && body.nivel_cliente_id !== null && body.nivel_cliente_id !== "") {
       const parsedNivel = parseInt(body.nivel_cliente_id, 10);
       if (isNaN(parsedNivel) || parsedNivel <= 0) {
         return NextResponse.json({ success: false, message: "ID de nivel de cliente no válido.", field: "nivel_cliente_id" }, { status: 400 });
       }
-      const nivelRows = await query<{ nivel_cliente_id: number; nombre: string; porciento_descuento: number; activo: boolean }>(`
-        SELECT nivel_cliente_id, nombre, porciento_descuento, activo
+      const nivelRows = await query<{
+        nivel_cliente_id: number;
+        nombre: string;
+        descuento_servicio: number | string;
+        descuento_producto: number | string;
+        activo: boolean;
+      }>(`
+        SELECT nivel_cliente_id, nombre, descuento_servicio, descuento_producto, activo
         FROM admin.nivel_cliente
         WHERE nivel_cliente_id = $1
       `, [parsedNivel]);
@@ -238,7 +257,15 @@ export async function POST(req: Request) {
         return NextResponse.json({ success: false, message: "El nivel de cliente seleccionado se encuentra inactivo.", field: "nivel_cliente_id" }, { status: 400 });
       }
       nivel_cliente_id = parsedNivel;
-      nivelInfo = nivelRows[0];
+      const nRow = nivelRows[0];
+      nivelInfo = {
+        nivel_cliente_id: Number(nRow.nivel_cliente_id),
+        nombre: nRow.nombre,
+        descuento_servicio: Number(nRow.descuento_servicio || 0),
+        descuento_producto: Number(nRow.descuento_producto || 0),
+        porciento_descuento: Number(nRow.descuento_servicio || 0),
+        activo: Boolean(nRow.activo)
+      };
     }
 
     const maxIdRes = await query("SELECT COALESCE(MAX(cliente_id), 0) + 1 AS next_id FROM admin.clientes");
@@ -310,6 +337,8 @@ export async function POST(req: Request) {
       fecha_creacion: r.fecha_creacion || new Date().toISOString(),
       nivel_cliente_id: r.nivel_cliente_id ? Number(r.nivel_cliente_id) : null,
       nivel_cliente_nombre: nivelInfo ? nivelInfo.nombre : null,
+      descuento_servicio: nivelInfo ? nivelInfo.descuento_servicio : 0,
+      descuento_producto: nivelInfo ? nivelInfo.descuento_producto : 0,
       porciento_descuento: nivelInfo ? Number(nivelInfo.porciento_descuento) : 0,
       nivel_cliente_activo: nivelInfo ? Boolean(nivelInfo.activo) : null
     };

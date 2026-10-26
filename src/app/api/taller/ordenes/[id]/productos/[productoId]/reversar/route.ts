@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
-import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { getWorkshopSession, getScreenPermissions } from "@/lib/workshop-session";
 import { recordUserActivity } from "@/lib/auditLogger";
 import {
   INVENTORY_SYSTEM_CODES,
@@ -33,10 +33,10 @@ export async function POST(
   }
 
   // 2. Validar permisos de taller
-  const perms = await getModulePermissions("TALLER_ORDENES", session.usuario_id);
-  if (!perms.puede_editar && !perms.puede_crear && session.rol_principal_id !== 1) {
+  const perms = await getScreenPermissions("TALLER_ORDENES", session.usuario_id);
+  if (!perms.puede_editar) {
     return NextResponse.json(
-      { error: "FORBIDDEN", message: "No tienes permisos para modificar órdenes de trabajo." },
+      { error: "FORBIDDEN", message: "No tienes permisos para modificar órdenes de trabajo. Se requiere el privilegio EDITAR." },
       { status: 403 }
     );
   }

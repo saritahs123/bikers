@@ -65,10 +65,10 @@ function InventoryAdjustmentsContent() {
   const [loadingMovimientos, setLoadingMovimientos] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // GAP-05: Estado de permisos RBAC para control visual de acciones
+  // GAP-05: Estado de permisos RBAC para control visual de acciones (fail-closed)
   const [permissions, setPermissions] = useState({
     puede_ver: true,
-    puede_crear: true,
+    puede_crear: false,
     puede_editar: false,
     puede_aprobar: false,
   });
@@ -164,6 +164,19 @@ function InventoryAdjustmentsContent() {
         setMovimientos(data.movimientos || []);
         if (data.permissions) {
           setPermissions(data.permissions);
+        } else {
+          const canCrear = res.headers.get("x-perm-crear");
+          const canVer = res.headers.get("x-perm-ver");
+          const canEditar = res.headers.get("x-perm-editar");
+          const canAprobar = res.headers.get("x-perm-aprobar");
+          if (canCrear !== null) {
+            setPermissions({
+              puede_ver: canVer === "true",
+              puede_crear: canCrear === "true",
+              puede_editar: canEditar === "true",
+              puede_aprobar: canAprobar === "true"
+            });
+          }
         }
         setErrorMovimientos(null);
       } else {

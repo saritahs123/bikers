@@ -34,6 +34,10 @@ export interface BillingInvoicePrintData {
     nivel_cliente_id?: number | null;
     porciento_descuento_nivel?: number | null;
     descuento_nivel?: number | null;
+    porciento_descuento_servicio?: number | null;
+    porciento_descuento_producto?: number | null;
+    descuento_servicio?: number | null;
+    descuento_producto?: number | null;
     nivel_cliente_nombre?: string | null;
   };
   cliente?: {
@@ -595,7 +599,50 @@ export function generateInvoiceModel1Pdf(data: BillingInvoicePrintData): jsPDF {
   const descTotal = Number(data.factura.descuento || 0);
   const descManual = Math.max(0, parseFloat((descTotal - descNivel).toFixed(2)));
 
-  if (descNivel > 0) {
+  const isDiferenciado = data.factura.porciento_descuento_servicio !== null && data.factura.porciento_descuento_servicio !== undefined;
+
+  if (isDiferenciado) {
+    if (descManual > 0) {
+      finLines.push({
+        label: "Descuento Manual",
+        val: `-${formatMoney(descManual)}`
+      });
+    }
+    const descServ = Number(data.factura.descuento_servicio || 0);
+    const descProd = Number(data.factura.descuento_producto || 0);
+    const pctServ = Number(data.factura.porciento_descuento_servicio || 0);
+    const pctProd = Number(data.factura.porciento_descuento_producto || 0);
+
+    if (descServ > 0) {
+      finLines.push({
+        label: `Desc. Servicios (${pctServ}%):`,
+        val: `-${formatMoney(descServ)}`
+      });
+    }
+    if (descProd > 0) {
+      finLines.push({
+        label: `Desc. Productos (${pctProd}%):`,
+        val: `-${formatMoney(descProd)}`
+      });
+    }
+    if (descServ === 0 && descProd === 0 && descNivel > 0) {
+      finLines.push({
+        label: "Descuento Nivel:",
+        val: `-${formatMoney(descNivel)}`
+      });
+    }
+    if (descTotal > 0 && ((descManual > 0 && descNivel > 0) || (descServ > 0 && descProd > 0))) {
+      finLines.push({
+        label: "Descuento Total",
+        val: `-${formatMoney(descTotal)}`
+      });
+    } else if (descTotal === 0) {
+      finLines.push({
+        label: "Descuento",
+        val: "RD$ 0.00"
+      });
+    }
+  } else if (descNivel > 0) {
     if (descManual > 0) {
       finLines.push({
         label: "Descuento Manual",
@@ -1047,7 +1094,30 @@ function renderTicketContent(doc: jsPDF, data: BillingInvoicePrintData): number 
   const ticketDescTotal = Number(data.factura.descuento || 0);
   const ticketDescManual = Math.max(0, parseFloat((ticketDescTotal - ticketDescNivel).toFixed(2)));
 
-  if (ticketDescNivel > 0) {
+  const isTicketDiferenciado = data.factura.porciento_descuento_servicio !== null && data.factura.porciento_descuento_servicio !== undefined;
+
+  if (isTicketDiferenciado) {
+    if (ticketDescManual > 0) {
+      drawRow("Desc. Manual:", `-${formatMoney(ticketDescManual)}`);
+    }
+    const descServ = Number(data.factura.descuento_servicio || 0);
+    const descProd = Number(data.factura.descuento_producto || 0);
+    const pctServ = Number(data.factura.porciento_descuento_servicio || 0);
+    const pctProd = Number(data.factura.porciento_descuento_producto || 0);
+
+    if (descServ > 0) {
+      drawRow(`Desc. Serv. (${pctServ}%):`, `-${formatMoney(descServ)}`);
+    }
+    if (descProd > 0) {
+      drawRow(`Desc. Prod. (${pctProd}%):`, `-${formatMoney(descProd)}`);
+    }
+    if (descServ === 0 && descProd === 0 && ticketDescNivel > 0) {
+      drawRow("Descuento Nivel:", `-${formatMoney(ticketDescNivel)}`);
+    }
+    if (ticketDescTotal > 0 && ((ticketDescManual > 0 && ticketDescNivel > 0) || (descServ > 0 && descProd > 0))) {
+      drawRow("Descuento Total:", `-${formatMoney(ticketDescTotal)}`);
+    }
+  } else if (ticketDescNivel > 0) {
     if (ticketDescManual > 0) {
       drawRow("Desc. Manual:", `-${formatMoney(ticketDescManual)}`);
     }

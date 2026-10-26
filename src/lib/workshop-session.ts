@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { query } from "@/lib/db";
 import { normalizeModuleCode } from "@/lib/moduleCode";
-import { CANONICAL_NAVIGATION, normalizeCode } from "@/config/navigationConfig";
+import { CANONICAL_NAVIGATION, normalizeCode, getRequiredActionForScreen } from "@/config/navigationConfig";
 
 export interface WorkshopSession {
   usuario_id: number;
@@ -535,7 +535,18 @@ export async function getUserNavigationPermissions(usuarioId: number): Promise<{
            ps.modulo_sistema_id,
            ps.codigo,
            ps.ruta,
-           BOOL_OR(COALESCE(map.puede_ver, mar.puede_ver, false)) AS puede_ver_rol
+           BOOL_OR(COALESCE(map.puede_ver, mar.puede_ver, false)) AS puede_ver_rol,
+           BOOL_OR(COALESCE(map.puede_crear, mar.puede_crear, false)) AS puede_crear_rol,
+           BOOL_OR(COALESCE(map.puede_editar, mar.puede_editar, false)) AS puede_editar_rol,
+           BOOL_OR(COALESCE(map.puede_inactivar, mar.puede_inactivar, false)) AS puede_inactivar_rol,
+           BOOL_OR(COALESCE(map.puede_exportar, mar.puede_exportar, false)) AS puede_exportar_rol,
+           BOOL_OR(COALESCE(map.puede_importar, mar.puede_importar, false)) AS puede_importar_rol,
+           BOOL_OR(COALESCE(map.puede_aprobar, mar.puede_aprobar, false)) AS puede_aprobar_rol,
+           BOOL_OR(COALESCE(map.puede_asignar, mar.puede_asignar, false)) AS puede_asignar_rol,
+           BOOL_OR(COALESCE(map.puede_mover, mar.puede_mover, false)) AS puede_mover_rol,
+           BOOL_OR(COALESCE(map.puede_cerrar, mar.puede_cerrar, false)) AS puede_cerrar_rol,
+           BOOL_OR(COALESCE(map.puede_reabrir, mar.puede_reabrir, false)) AS puede_reabrir_rol,
+           BOOL_OR(COALESCE(map.puede_eliminar, mar.puede_eliminar, false)) AS puede_eliminar_rol
          FROM admin.pantalla_sistema ps
          LEFT JOIN user_roles ur ON true
          LEFT JOIN admin.matriz_acceso_pantalla map
@@ -549,7 +560,18 @@ export async function getUserNavigationPermissions(usuarioId: number): Promise<{
          rsv.codigo AS pantalla_codigo,
          rsv.ruta AS pantalla_ruta,
          UPPER(TRANSLATE(ms.nombre, 'ÁÉÍÓÚáéíóú', 'AEIOUaeiou')) AS modulo_key,
-         COALESCE(ucs.puede_ver, ucm.puede_ver, rsv.puede_ver_rol, false) AS puede_ver
+         COALESCE(ucs.puede_ver, ucm.puede_ver, rsv.puede_ver_rol, false) AS puede_ver,
+         COALESCE(ucs.puede_crear, ucm.puede_crear, rsv.puede_crear_rol, false) AS puede_crear,
+         COALESCE(ucs.puede_editar, ucm.puede_editar, rsv.puede_editar_rol, false) AS puede_editar,
+         COALESCE(ucs.puede_inactivar, ucm.puede_inactivar, rsv.puede_inactivar_rol, false) AS puede_inactivar,
+         COALESCE(ucs.puede_exportar, ucm.puede_exportar, rsv.puede_exportar_rol, false) AS puede_exportar,
+         COALESCE(ucs.puede_importar, ucm.puede_importar, rsv.puede_importar_rol, false) AS puede_importar,
+         COALESCE(ucs.puede_aprobar, ucm.puede_aprobar, rsv.puede_aprobar_rol, false) AS puede_aprobar,
+         COALESCE(ucs.puede_asignar, ucm.puede_asignar, rsv.puede_asignar_rol, false) AS puede_asignar,
+         COALESCE(ucs.puede_mover, ucm.puede_mover, rsv.puede_mover_rol, false) AS puede_mover,
+         COALESCE(ucs.puede_cerrar, ucm.puede_cerrar, rsv.puede_cerrar_rol, false) AS puede_cerrar,
+         COALESCE(ucs.puede_reabrir, ucm.puede_reabrir, rsv.puede_reabrir_rol, false) AS puede_reabrir,
+         COALESCE(ucs.puede_eliminar, ucm.puede_eliminar, rsv.puede_eliminar_rol, false) AS puede_eliminar
        FROM role_screen_visibility rsv
        JOIN admin.modulo_sistema ms ON rsv.modulo_sistema_id = ms.modulo_sistema_id
        LEFT JOIN admin.usuario_permiso_personalizado ucs
@@ -569,13 +591,32 @@ export async function getUserNavigationPermissions(usuarioId: number): Promise<{
       pantalla_ruta: string;
       modulo_key: string;
       puede_ver: boolean;
+      puede_crear: boolean;
+      puede_editar: boolean;
+      puede_inactivar: boolean;
+      puede_exportar: boolean;
+      puede_importar: boolean;
+      puede_aprobar: boolean;
+      puede_asignar: boolean;
+      puede_mover: boolean;
+      puede_cerrar: boolean;
+      puede_reabrir: boolean;
+      puede_eliminar: boolean;
+      [key: string]: unknown;
     }
     const screens: Record<string, boolean> = {};
     ((screenRows || []) as unknown as ScreenRow[]).forEach((row) => {
-      screens[row.pantalla_codigo] = Boolean(row.puede_ver);
-      screens[row.pantalla_ruta] = Boolean(row.puede_ver);
+      const requiredAction = getRequiredActionForScreen(row.pantalla_codigo) || "puede_ver";
+      const hasBaseVer = Boolean(row.puede_ver);
+      let isAllowed = hasBaseVer;
+      if (hasBaseVer && requiredAction !== "puede_ver") {
+        isAllowed = Boolean(row[requiredAction]);
+      }
+
+      screens[row.pantalla_codigo] = isAllowed;
+      screens[row.pantalla_ruta] = isAllowed;
       // Si el usuario tiene acceso a alguna pantalla de un módulo, el módulo debe ser visible
-      if (row.puede_ver && row.modulo_key) {
+      if (isAllowed && row.modulo_key) {
         modules[row.modulo_key] = true;
       }
     });

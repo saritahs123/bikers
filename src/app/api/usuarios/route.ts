@@ -7,11 +7,12 @@ import {
   authorizeUserCreate,
   extractPrimaryRoleId,
   extractAdditionalRoles,
+  findUnrecognizedRoleKeys,
   resolveAndValidateRole,
   resolveAndValidateAdditionalRoles
 } from "@/lib/userAuth";
 import { sweepExpiredSessions } from "@/lib/sessionLifecycle";
-import { getWorkshopSession, getScreenPermissions, isSuperAdmin } from "@/lib/workshop-session";
+import { getWorkshopSession, getScreenPermissions, isSuperAdmin, canUser } from "@/lib/workshop-session";
 
 interface UserRow {
   id: number;
@@ -210,7 +211,16 @@ export async function GET() {
       };
     });
 
-    return NextResponse.json(mappedUsers);
+    return NextResponse.json(mappedUsers, {
+      headers: {
+        "x-perm-ver": String(perms.puede_ver),
+        "x-perm-crear": String(perms.puede_crear),
+        "x-perm-editar": String(perms.puede_editar),
+        "x-perm-eliminar": String(perms.puede_eliminar),
+        "x-perm-exportar": String(perms.puede_exportar),
+        "x-perm-asignar": String(perms.puede_asignar)
+      }
+    });
   } catch (error: unknown) {
     console.error("Error in GET /api/usuarios:", error);
     return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al obtener la lista de usuarios." }, { status: 500 });
@@ -247,6 +257,34 @@ export async function POST(req: Request) {
     }
     const authAdminId = authCheck.authUserId;
     const callerIsSuper = await isSuperAdmin(authAdminId);
+
+    // Reject unrecognized role keys in POST payload
+    const unrecKeys = findUnrecognizedRoleKeys(body);
+    if (unrecKeys.length > 0) {
+      return NextResponse.json(
+        {
+          error: `Campo de rol no reconocido: '${unrecKeys[0]}'. No se aceptan parámetros de asignación de roles no reconocidos.`,
+          message: `Campo de rol no reconocido: '${unrecKeys[0]}'. No se aceptan parámetros de asignación de roles no reconocidos.`,
+          field: unrecKeys[0]
+        },
+        { status: 400 }
+      );
+    }
+
+    // Require puede_asignar for assigning functional roles upon user creation
+    if (!callerIsSuper) {
+      const canAssign = await canUser(authAdminId, 'puede_asignar', 'SEGURIDAD_USUARIOS');
+      if (!canAssign) {
+        return NextResponse.json(
+          {
+            error: "No tienes permisos para asignar roles a usuarios. Se requiere el privilegio ASIGNAR.",
+            message: "No tienes permisos para asignar roles a usuarios. Se requiere el privilegio ASIGNAR.",
+            field: "roleId"
+          },
+          { status: 403 }
+        );
+      }
+    }
 
     // Validate primary role (must exist, be active, and if rolId === 1 caller must be SuperAdmin)
     const roleCheck = await resolveAndValidateRole(rawRol, callerIsSuper, true);

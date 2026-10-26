@@ -2,67 +2,101 @@
 
 import React from "react";
 import Link from "next/link";
-import { ShieldAlert, ArrowLeft, Lock, RefreshCw } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Lock, ArrowLeft, Home } from "lucide-react";
 
-interface AccessDeniedViewProps {
+export interface AccessDeniedViewProps {
   screenCode?: string;
   title?: string;
   message?: string;
+  showHomeButton?: boolean;
+  showBackButton?: boolean;
+  homeHref?: string;
 }
 
+/**
+ * Standardized RBAC Restricted Access View (Fase 6.4.21)
+ *
+ * Provides a corporate, minimalist and neutral visual presentation for legitimate
+ * RBAC authorization restrictions, avoiding alarmist red alerts, critical crash cues,
+ * or raw technical error codes.
+ */
 export function AccessDeniedView({
   screenCode,
-  title = "Acceso Restringido",
-  message = "No tienes los permisos necesarios para visualizar o gestionar esta sección."
+  title = "Acceso restringido",
+  message = "No tienes permisos habilitados para acceder a esta funcionalidad. Si necesitas utilizarla, solicita la autorización correspondiente al administrador del sistema.",
+  showHomeButton = true,
+  showBackButton = true,
+  homeHref = "/"
 }: AccessDeniedViewProps) {
+  const router = useRouter();
+
+  const handleBack = () => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+    } else {
+      router.push(homeHref);
+    }
+  };
+
+  React.useEffect(() => {
+    if (process.env.NODE_ENV === "development" && screenCode) {
+      console.debug("[RBAC Access Denied]", {
+        screenCode,
+        path: typeof window !== "undefined" ? window.location.pathname : undefined,
+        timestamp: new Date().toISOString()
+      });
+    }
+  }, [screenCode]);
+
   return (
-    <div className="min-h-[70vh] flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-card border border-rose-500/30 rounded-3xl p-8 text-center shadow-2xl relative overflow-hidden backdrop-blur-sm">
-        {/* Glow accent */}
-        <div className="absolute -top-12 -right-12 w-32 h-32 bg-rose-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-12 -left-12 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+    <div
+      data-testid="access-denied-view"
+      data-screen-code={screenCode}
+      className="min-h-[60vh] sm:min-h-[70vh] flex items-center justify-center p-4 sm:p-6 md:p-8"
+    >
+      <div className="max-w-md w-full bg-card border border-border rounded-2xl sm:rounded-3xl p-6 sm:p-8 md:p-10 text-center shadow-lg shadow-black/5 relative overflow-hidden transition-colors">
+        {/* Subtle neutral ambient glow */}
+        <div className="absolute -top-16 -right-16 w-32 h-32 bg-surface-elevated/40 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-16 -left-16 w-32 h-32 bg-surface-elevated/40 rounded-full blur-3xl pointer-events-none" />
 
-        <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-500 shadow-inner">
-          <ShieldAlert className="w-8 h-8" />
+        {/* Informational neutral icon container */}
+        <div className="w-14 h-14 sm:w-16 sm:h-16 mx-auto mb-5 rounded-2xl bg-surface-subtle border border-border flex items-center justify-center text-foreground-secondary shadow-sm">
+          <Lock className="w-6 h-6 sm:w-7 sm:h-7 stroke-[1.75]" aria-hidden="true" />
         </div>
 
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-500 dark:text-rose-400 text-[11px] font-mono font-bold uppercase tracking-wider mb-3">
-          <Lock className="w-3 h-3" />
-          <span>HTTP 403 Forbidden</span>
-        </div>
-
-        <h1 className="text-xl font-bold font-mono tracking-tight text-foreground mb-2">
+        {/* Standardized Title */}
+        <h1 className="text-lg sm:text-xl font-semibold tracking-tight text-foreground mb-2">
           {title}
         </h1>
 
-        <p className="text-xs text-foreground-secondary leading-relaxed mb-6 font-mono">
+        {/* Standardized Informational Message */}
+        <p className="text-xs sm:text-sm text-foreground-secondary leading-relaxed mb-6 sm:mb-8 max-w-sm mx-auto">
           {message}
         </p>
 
-        {screenCode && (
-          <div className="mb-6 p-2.5 rounded-xl bg-surface-subtle border border-border/80 text-[11px] font-mono text-foreground-muted">
-            <span className="text-foreground-secondary font-bold">Identificador de Recurso:</span>{" "}
-            <code className="text-primary font-bold">{screenCode}</code>
-          </div>
-        )}
+        {/* Action Buttons: Volver al inicio (principal) & Volver atrás (secundario) */}
+        <div className="flex flex-col-reverse sm:flex-row items-center justify-center gap-2.5 sm:gap-3 w-full">
+          {showBackButton && (
+            <button
+              type="button"
+              onClick={handleBack}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-surface-subtle text-foreground text-xs sm:text-sm font-medium hover:bg-hover hover:border-border-strong transition-all cursor-pointer"
+            >
+              <ArrowLeft className="w-4 h-4 text-foreground-secondary" />
+              <span>Volver atrás</span>
+            </button>
+          )}
 
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-          <Link
-            href="/"
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-mono text-xs font-bold uppercase tracking-wider hover:bg-primary/90 transition-all shadow-md shadow-primary/20"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Volver al Inicio</span>
-          </Link>
-
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-surface-subtle text-foreground font-mono text-xs font-bold uppercase tracking-wider hover:bg-hover hover:border-primary/40 transition-all"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>Reintentar</span>
-          </button>
+          {showHomeButton && (
+            <Link
+              href={homeHref}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs sm:text-sm font-medium hover:bg-primary-hover transition-all shadow-sm cursor-pointer"
+            >
+              <Home className="w-4 h-4" />
+              <span>Volver al inicio</span>
+            </Link>
+          )}
         </div>
       </div>
     </div>

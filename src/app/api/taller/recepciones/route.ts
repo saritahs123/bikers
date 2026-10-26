@@ -182,6 +182,15 @@ export async function GET(req: Request) {
         recepciones_pendientes: Number(metricsObj.recepciones_pendientes || 0),
         convertidas_ot: Number(metricsObj.convertidas_ot || 0)
       }
+    }, {
+      headers: {
+        "x-perm-ver": String(perms.puede_ver),
+        "x-perm-crear": String(perms.puede_crear),
+        "x-perm-editar": String(perms.puede_editar),
+        "x-perm-eliminar": String(perms.puede_eliminar),
+        "x-perm-exportar": String(perms.puede_exportar),
+        "x-perm-asignar": String(perms.puede_asignar)
+      }
     });
   } catch (error: any) {
     console.error("Error in GET /api/taller/recepciones:", error);

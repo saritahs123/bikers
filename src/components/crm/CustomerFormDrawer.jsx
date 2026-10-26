@@ -387,7 +387,8 @@ export default function CustomerFormDrawer({
                     {selectedNivel ? (
                       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-primary/10 text-primary border border-primary/20 font-mono">
                         <Award size={11} />
-                        {selectedNivel.nombre} ({Number(selectedNivel.porciento_descuento)}%)
+                        {selectedNivel.nombre}{" "}
+                        {`(Serv: ${Number(selectedNivel.descuento_servicio ?? selectedNivel.porciento_descuento ?? 0)}% / Prod: ${Number(selectedNivel.descuento_producto ?? selectedNivel.porciento_descuento ?? 0)}%)`}
                       </span>
                     ) : (
                       <span className="text-[10px] text-foreground-muted font-mono">Sin nivel asignado</span>
@@ -401,11 +402,14 @@ export default function CustomerFormDrawer({
                     disabled={loadingNiveles}
                   >
                     <option value="">Sin nivel asignado</option>
-                    {niveles.map((n) => (
-                      <option key={n.nivel_cliente_id} value={n.nivel_cliente_id}>
-                        {n.nombre} ({Number(n.porciento_descuento)}%)
-                      </option>
-                    ))}
+                    {niveles.map((n) => {
+                      const descLabel = `(Serv: ${Number(n.descuento_servicio ?? n.porciento_descuento ?? 0)}% / Prod: ${Number(n.descuento_producto ?? n.porciento_descuento ?? 0)}%)`;
+                      return (
+                        <option key={n.nivel_cliente_id} value={n.nivel_cliente_id}>
+                          {n.nombre} {descLabel}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
               </div>
