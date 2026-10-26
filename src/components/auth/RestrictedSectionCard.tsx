@@ -1,56 +1,72 @@
 "use client";
 
 import React from "react";
-import { Lock, ShieldAlert, ArrowLeft } from "lucide-react";
+import { Lock, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
 interface RestrictedSectionCardProps {
   title?: string;
   message?: string;
+  description?: string;
   actionRequired?: string;
   backHref?: string;
   backLabel?: string;
+  onClose?: () => void;
 }
 
 /**
  * Reusable visual component for rendering an access-restricted state
- * within forms, modals or page sections when a user lacks specific permissions (Fase 6.4.13).
+ * within forms, modals or page sections in a corporate, minimalist and neutral presentation.
  */
 export function RestrictedSectionCard({
-  title = "Acceso Restringido",
-  message = "Tu rol de usuario no dispone de los permisos necesarios para realizar esta operación.",
+  title = "Acceso restringido",
+  message,
+  description,
   actionRequired,
   backHref,
-  backLabel = "Volver"
+  backLabel = "Volver",
+  onClose
 }: RestrictedSectionCardProps) {
+  const displayMessage =
+    message ||
+    description ||
+    "No tienes permisos habilitados para acceder a esta funcionalidad. Si necesitas utilizarla, solicita la autorización correspondiente al administrador del sistema.";
+
   return (
-    <div className="w-full p-8 md:p-12 rounded-2xl bg-card border border-amber-500/20 shadow-lg text-center flex flex-col items-center justify-center font-mono">
-      <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-500 mb-4 shadow-sm">
-        <Lock className="w-7 h-7" />
+    <div
+      data-testid="restricted-section-card"
+      data-action-required={actionRequired}
+      className="w-full p-6 sm:p-8 rounded-2xl bg-card border border-border shadow-xs text-center flex flex-col items-center justify-center transition-colors"
+    >
+      <div className="w-12 h-12 rounded-xl bg-surface-subtle border border-border flex items-center justify-center text-foreground-secondary mb-3 shadow-xs">
+        <Lock className="w-5 h-5 stroke-[1.75]" aria-hidden="true" />
       </div>
 
-      <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-500 text-[11px] font-bold uppercase tracking-wider mb-2">
-        <ShieldAlert className="w-3.5 h-3.5" />
-        <span>Permiso Requerido {actionRequired ? `(${actionRequired.toUpperCase()})` : ""}</span>
-      </div>
-
-      <h3 className="text-base md:text-lg font-bold text-foreground mb-2 tracking-tight">
+      <h3 className="text-base sm:text-lg font-semibold text-foreground mb-1.5 tracking-tight">
         {title}
       </h3>
 
-      <p className="text-xs text-foreground-secondary max-w-md leading-relaxed mb-6">
-        {message}
+      <p className="text-xs sm:text-sm text-foreground-secondary max-w-md leading-relaxed mb-5">
+        {displayMessage}
       </p>
 
-      {backHref && (
+      {backHref ? (
         <Link
           href={backHref}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-surface-subtle hover:bg-hover border border-border text-foreground text-xs font-bold uppercase tracking-wider transition-all"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-surface-subtle hover:bg-hover border border-border text-foreground text-xs sm:text-sm font-medium transition-all"
         >
-          <ArrowLeft className="w-4 h-4" />
+          <ArrowLeft className="w-4 h-4 text-foreground-secondary" />
           <span>{backLabel}</span>
         </Link>
-      )}
+      ) : onClose ? (
+        <button
+          type="button"
+          onClick={onClose}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-surface-subtle hover:bg-hover border border-border text-foreground text-xs sm:text-sm font-medium transition-all cursor-pointer"
+        >
+          <span>{backLabel}</span>
+        </button>
+      ) : null}
     </div>
   );
 }

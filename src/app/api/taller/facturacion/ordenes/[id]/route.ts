@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { getWorkshopSession, getScreenPermissions } from "@/lib/workshop-session";
 import { getOrCreateInvoiceForWorkOrder } from "@/lib/billing/billingService";
 
 // GET /api/taller/facturacion/ordenes/[id]
@@ -34,10 +34,10 @@ export async function GET(
       );
     }
 
-    const perms = await getModulePermissions("TALLER", session.usuario_id);
+    const perms = await getScreenPermissions("FACTURACION_DESPACHO", session.usuario_id);
     if (!perms.puede_ver) {
       return NextResponse.json(
-        { error: "FORBIDDEN", message: "No tienes permiso para consultar esta orden." },
+        { error: "FORBIDDEN", message: "No tienes permiso para consultar esta orden en Despacho. Se requiere el privilegio VER en Despacho de Órdenes (FACTURACION_DESPACHO)." },
         { status: 403 }
       );
     }
@@ -471,10 +471,10 @@ export async function POST(
       );
     }
 
-    const perms = await getModulePermissions("TALLER", session.usuario_id);
-    if (!perms.puede_ver && !perms.puede_crear && !perms.puede_editar) {
+    const perms = await getScreenPermissions("FACTURACION_DESPACHO", session.usuario_id);
+    if (!perms.puede_crear && !perms.puede_editar) {
       return NextResponse.json(
-        { error: "FORBIDDEN", message: "No tienes permiso para facturar esta orden." },
+        { error: "FORBIDDEN", message: "No tienes permiso para facturar esta orden. Se requiere el privilegio CREAR o EDITAR en Despacho de Órdenes (FACTURACION_DESPACHO)." },
         { status: 403 }
       );
     }

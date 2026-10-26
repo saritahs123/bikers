@@ -14,7 +14,7 @@ export type CondicionVenta = "CONTADO" | "CREDITO";
 
 export type TipoPagoCodigo = "EFECTIVO" | "TARJETA" | "TRANSFERENCIA";
 
-export type EstadoFactura = "BORRADOR" | "PENDIENTE" | "PARCIAL" | "PAGADA" | "ANULADA";
+export type EstadoFactura = "BORRADOR" | "PENDIENTE" | "EMITIDA" | "PARCIAL" | "PAGADA" | "ANULADA";
 
 export type TipoLineaFactura = "PRODUCTO" | "SERVICIO" | "REPUESTO";
 
@@ -112,8 +112,12 @@ export interface FacturaRow {
   cliente_nombre?: string;
   nivel_cliente_id?: number | null;
   nivel_cliente_nombre?: string | null;
-  porciento_descuento_nivel?: number;
+  porciento_descuento_nivel?: number | null;
   descuento_nivel?: number;
+  porciento_descuento_servicio?: number | null;
+  porciento_descuento_producto?: number | null;
+  descuento_servicio?: number;
+  descuento_producto?: number;
   orden_trabajo_id: number | null;
   codigo_orden?: string;
   fecha_factura: Date | string;

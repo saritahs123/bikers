@@ -883,8 +883,8 @@ export default function NewWorkOrderModal({ isOpen, onClose, onSuccess }) {
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
         <div className="w-full max-w-lg bg-card border border-border rounded-2xl p-6 shadow-2xl">
           <RestrictedSectionCard
-            title="Creación de Orden Restringida"
-            description="No posees los permisos necesarios para emitir nuevas órdenes de trabajo en el taller."
+            title="Acceso restringido"
+            message="No tienes permisos habilitados para acceder a esta funcionalidad. Si necesitas utilizarla, solicita la autorización correspondiente al administrador del sistema."
           />
           <div className="mt-4 flex justify-end">
             <button
@@ -1050,7 +1050,8 @@ export default function NewWorkOrderModal({ isOpen, onClose, onSuccess }) {
                             </span>
                             {selectedClient.nivel_cliente_nombre ? (
                               <span className="text-[9px] font-mono font-bold text-primary bg-primary/10 border border-primary/20 px-1.5 py-0.2 rounded">
-                                {selectedClient.nivel_cliente_nombre} ({Number(selectedClient.porciento_descuento || 0)}%)
+                                {selectedClient.nivel_cliente_nombre}{" "}
+                                {`(S: ${Number(selectedClient.descuento_servicio ?? selectedClient.porciento_descuento ?? 0)}% / P: ${Number(selectedClient.descuento_producto ?? selectedClient.porciento_descuento ?? 0)}%)`}
                               </span>
                             ) : (
                               <span className="text-[9px] font-mono text-foreground-muted bg-surface border border-border px-1.5 py-0.2 rounded">

@@ -274,9 +274,15 @@ export default function NewInvoiceView() {
         correo: newClient.correo || "",
         nivel_cliente_id: foundInList?.nivel_cliente_id ?? newClient.nivel_cliente_id ?? null,
         nivel_cliente_nombre: foundInList?.nivel_cliente_nombre ?? newClient.nivel_cliente_nombre ?? null,
+        descuento_servicio: foundInList
+          ? (foundInList.nivel_cliente_activo ? Number(foundInList.descuento_servicio ?? foundInList.porciento_descuento ?? 0) : 0)
+          : Number(newClient.descuento_servicio ?? newClient.porciento_descuento ?? 0),
+        descuento_producto: foundInList
+          ? (foundInList.nivel_cliente_activo ? Number(foundInList.descuento_producto ?? foundInList.porciento_descuento ?? 0) : 0)
+          : Number(newClient.descuento_producto ?? newClient.porciento_descuento ?? 0),
         porciento_descuento: foundInList
-          ? (foundInList.nivel_cliente_activo ? Number(foundInList.porciento_descuento || 0) : 0)
-          : Number(newClient.porciento_descuento || 0),
+          ? (foundInList.nivel_cliente_activo ? Number(foundInList.descuento_servicio ?? foundInList.porciento_descuento ?? 0) : 0)
+          : Number(newClient.descuento_servicio ?? newClient.porciento_descuento ?? 0),
         nivel_cliente_activo: foundInList?.nivel_cliente_activo ?? true,
       };
 
@@ -533,19 +539,56 @@ export default function NewInvoiceView() {
     return Math.max(0, parseFloat((subtotalGeneral - descuentoManualGeneral).toFixed(2)));
   }, [subtotalGeneral, descuentoManualGeneral]);
 
-  // Porcentaje del nivel del cliente seleccionado
-  const porcientoDescuentoNivel = useMemo(() => {
-    if (!selectedClient) return 0;
-    if (selectedClient.nivel_cliente_activo === false) return 0;
-    const pct = Number(selectedClient.porciento_descuento);
+  // Porcentajes de descuento por nivel según servicio o producto
+  const porcientoDescuentoServicio = useMemo(() => {
+    if (!selectedClient || selectedClient.nivel_cliente_activo === false) return 0;
+    const pct = Number(selectedClient.descuento_servicio ?? selectedClient.porciento_descuento ?? 0);
     return isNaN(pct) || pct < 0 ? 0 : Math.min(100, pct);
   }, [selectedClient]);
 
-  // Descuento de nivel aplicado sobre la base elegible
-  const descuentoNivelGeneral = useMemo(() => {
-    if (porcientoDescuentoNivel <= 0 || baseElegibleNivel <= 0) return 0;
-    return parseFloat(((baseElegibleNivel * (porcientoDescuentoNivel / 100))).toFixed(2));
-  }, [baseElegibleNivel, porcientoDescuentoNivel]);
+  const porcientoDescuentoProducto = useMemo(() => {
+    if (!selectedClient || selectedClient.nivel_cliente_activo === false) return 0;
+    const pct = Number(selectedClient.descuento_producto ?? selectedClient.porciento_descuento ?? 0);
+    return isNaN(pct) || pct < 0 ? 0 : Math.min(100, pct);
+  }, [selectedClient]);
+
+  // Descuento de nivel diferenciado por tipo de línea
+  const { descuentoServicioNivel, descuentoProductoNivel, descuentoNivelGeneral } = useMemo(() => {
+    let servNivel = 0;
+    let prodNivel = 0;
+
+    lineas.forEach((l) => {
+      const cant = Number(l.cantidad || 0);
+      const prec = Number(l.precio_unitario || 0);
+      const descManual = Number(l.descuento || 0);
+      const bruto = parseFloat((cant * prec).toFixed(2));
+      const base = Math.max(0, parseFloat((bruto - descManual).toFixed(2)));
+
+      if (base > 0) {
+        if (l.tipo_linea === "SERVICIO") {
+          if (porcientoDescuentoServicio > 0) {
+            const d = Math.min(base, parseFloat((base * (porcientoDescuentoServicio / 100)).toFixed(2)));
+            servNivel += d;
+          }
+        } else {
+          if (porcientoDescuentoProducto > 0) {
+            const d = Math.min(base, parseFloat((base * (porcientoDescuentoProducto / 100)).toFixed(2)));
+            prodNivel += d;
+          }
+        }
+      }
+    });
+
+    servNivel = parseFloat(servNivel.toFixed(2));
+    prodNivel = parseFloat(prodNivel.toFixed(2));
+    const totalNivel = parseFloat((servNivel + prodNivel).toFixed(2));
+
+    return {
+      descuentoServicioNivel: servNivel,
+      descuentoProductoNivel: prodNivel,
+      descuentoNivelGeneral: totalNivel
+    };
+  }, [lineas, porcientoDescuentoServicio, porcientoDescuentoProducto]);
 
   // Descuento total (manual + nivel)
   const descuentoGeneral = useMemo(() => {
@@ -586,10 +629,12 @@ export default function NewInvoiceView() {
         nombre_completo: ot.cliente.nombre_completo,
         identificacion: ot.cliente.identificacion,
         telefono_principal: ot.cliente.telefono_principal,
-        correo: ot.cliente.correo,
+        correo: ot.cliente.correo || "",
         nivel_cliente_id: ot.cliente.nivel_cliente_id || null,
         nivel_cliente_nombre: ot.cliente.nivel_cliente_nombre || null,
-        porciento_descuento: ot.cliente.nivel_cliente_activo !== false ? Number(ot.cliente.porciento_descuento || 0) : 0,
+        descuento_servicio: ot.cliente.nivel_cliente_activo !== false ? Number(ot.cliente.descuento_servicio ?? ot.cliente.porciento_descuento ?? 0) : 0,
+        descuento_producto: ot.cliente.nivel_cliente_activo !== false ? Number(ot.cliente.descuento_producto ?? ot.cliente.porciento_descuento ?? 0) : 0,
+        porciento_descuento: ot.cliente.nivel_cliente_activo !== false ? Number(ot.cliente.descuento_servicio ?? ot.cliente.porciento_descuento ?? 0) : 0,
         nivel_cliente_activo: ot.cliente.nivel_cliente_activo ?? true,
       });
       setClientSearch("");
@@ -871,11 +916,11 @@ export default function NewInvoiceView() {
         )}
       </div>
 
-      {/* Caso Piloto (Fase 6.4.13): Bloqueo global si carece de puede_crear */}
+      {/* Bloqueo estandarizado si carece de puede_crear */}
       {permisos && !permisos.puede_crear ? (
         <RestrictedSectionCard
-          title="Emisión de Facturas No Autorizada"
-          message="Tu rol de usuario actual no dispone de permisos para registrar o emitir nuevas facturas. Puedes consultar las facturas emitidas desde el módulo de Facturación."
+          title="Acceso restringido"
+          message="No tienes permisos habilitados para acceder a esta funcionalidad. Si necesitas utilizarla, solicita la autorización correspondiente al administrador del sistema."
           actionRequired="crear"
           backHref="/billing/invoices"
           backLabel="Ver Facturas Emitidas"
@@ -1027,7 +1072,8 @@ export default function NewInvoiceView() {
                     {selectedClient.nivel_cliente_nombre ? (
                       <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
                         <Award className="w-3 h-3" />
-                        Nivel {selectedClient.nivel_cliente_nombre} ({Number(selectedClient.porciento_descuento || 0)}% Desc.)
+                        Nivel {selectedClient.nivel_cliente_nombre}{" "}
+                        {`(Serv: ${Number(selectedClient.descuento_servicio ?? selectedClient.porciento_descuento ?? 0)}% / Prod: ${Number(selectedClient.descuento_producto ?? selectedClient.porciento_descuento ?? 0)}%)`}
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-surface-subtle text-foreground-muted border border-border">
@@ -1108,7 +1154,8 @@ export default function NewInvoiceView() {
                                   {c.nivel_cliente_nombre && (
                                     <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">
                                       <Award className="w-2.5 h-2.5" />
-                                      {c.nivel_cliente_nombre} ({Number(c.porciento_descuento || 0)}%)
+                                      {c.nivel_cliente_nombre}{" "}
+                                      {`(S: ${Number(c.descuento_servicio ?? c.porciento_descuento ?? 0)}% / P: ${Number(c.descuento_producto ?? c.porciento_descuento ?? 0)}%)`}
                                     </span>
                                   )}
                                 </div>
@@ -1484,17 +1531,28 @@ export default function NewInvoiceView() {
                 </div>
               )}
               {selectedClient?.nivel_cliente_nombre && (
-                <div className="flex justify-between items-center text-foreground-secondary">
-                  <span className="flex items-center gap-1">
-                    <Award className="w-3 h-3 text-emerald-400" />
-                    <span>Descuento ({porcientoDescuentoNivel}%):</span>
-                  </span>
-                  <span className={descuentoNivelGeneral > 0 ? "text-emerald-400 font-medium" : "text-foreground-muted"}>
-                    {descuentoNivelGeneral > 0 ? `- RD$ ${descuentoNivelGeneral.toFixed(2)}` : "RD$ 0.00"}
-                  </span>
-                </div>
+                <>
+                  <div className="flex justify-between items-center text-foreground-secondary">
+                    <span className="flex items-center gap-1">
+                      <Award className="w-3 h-3 text-blue-400" />
+                      <span>Desc. Servicios ({porcientoDescuentoServicio}%):</span>
+                    </span>
+                    <span className={descuentoServicioNivel > 0 ? "text-blue-400 font-medium" : "text-foreground-muted"}>
+                      {descuentoServicioNivel > 0 ? `- RD$ ${descuentoServicioNivel.toFixed(2)}` : "RD$ 0.00"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-foreground-secondary">
+                    <span className="flex items-center gap-1">
+                      <Award className="w-3 h-3 text-emerald-400" />
+                      <span>Desc. Productos ({porcientoDescuentoProducto}%):</span>
+                    </span>
+                    <span className={descuentoProductoNivel > 0 ? "text-emerald-400 font-medium" : "text-foreground-muted"}>
+                      {descuentoProductoNivel > 0 ? `- RD$ ${descuentoProductoNivel.toFixed(2)}` : "RD$ 0.00"}
+                    </span>
+                  </div>
+                </>
               )}
-              {descuentoGeneral > 0 && (descuentoManualGeneral > 0 && descuentoNivelGeneral > 0) && (
+              {descuentoGeneral > 0 && ((descuentoManualGeneral > 0 && descuentoNivelGeneral > 0) || (descuentoServicioNivel > 0 && descuentoProductoNivel > 0)) && (
                 <div className="flex justify-between text-foreground-secondary font-medium pt-1 border-t border-border/40">
                   <span>Descuento Total:</span>
                   <span className="text-amber-400">- RD$ {descuentoGeneral.toFixed(2)}</span>

@@ -770,23 +770,35 @@ export default function InvoicesView() {
 
                       {/* DESCUENTO */}
                       <td className="py-3 px-3 text-right font-mono whitespace-nowrap">
-                        {Number(inv.descuento || 0) > 0 ? (
-                          <span className="text-emerald-600 dark:text-emerald-400 font-medium">
-                            {formatMoney(inv.descuento)}{" "}
-                            <span className="text-[10px] text-foreground-muted font-normal">
-                              ({Number(inv.porciento_descuento_nivel || 0)}%)
-                            </span>
-                          </span>
-                        ) : Number(inv.porciento_descuento_nivel || 0) > 0 ? (
-                          <span className="text-foreground-muted font-normal">
-                            RD$ 0.00{" "}
-                            <span className="text-[10px]">
-                              ({Number(inv.porciento_descuento_nivel)}%)
-                            </span>
-                          </span>
-                        ) : (
-                          <span className="text-foreground-muted font-normal">—</span>
-                        )}
+                        {(() => {
+                          const isDiferenciado = inv.porciento_descuento_servicio != null && inv.porciento_descuento_producto != null;
+                          const pctLabel = isDiferenciado
+                            ? (Number(inv.porciento_descuento_servicio) === Number(inv.porciento_descuento_producto)
+                                ? `(${Number(inv.porciento_descuento_servicio)}%)`
+                                : `(S:${Number(inv.porciento_descuento_servicio)}% / P:${Number(inv.porciento_descuento_producto)}%)`)
+                            : (Number(inv.porciento_descuento_nivel || 0) > 0 ? `(${Number(inv.porciento_descuento_nivel)}%)` : null);
+
+                          if (Number(inv.descuento || 0) > 0) {
+                            return (
+                              <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                                {formatMoney(inv.descuento)}{" "}
+                                {pctLabel && (
+                                  <span className="text-[10px] text-foreground-muted font-normal">
+                                    {pctLabel}
+                                  </span>
+                                )}
+                              </span>
+                            );
+                          }
+                          if (pctLabel) {
+                            return (
+                              <span className="text-foreground-muted font-normal">
+                                RD$ 0.00 <span className="text-[10px]">{pctLabel}</span>
+                              </span>
+                            );
+                          }
+                          return <span className="text-foreground-muted font-normal">—</span>;
+                        })()}
                       </td>
 
                       {/* TOTAL */}

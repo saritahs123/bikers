@@ -20,6 +20,12 @@
 
 const { Pool } = require('pg');
 const crypto = require('crypto');
+const dotenv = require('dotenv');
+const fs = require('fs');
+
+if (fs.existsSync('.env.test.local')) {
+  dotenv.config({ path: '.env.test.local', override: true });
+}
 
 const BASE_URL = process.env.TEST_APP_URL || 'http://localhost:3000';
 
@@ -144,7 +150,7 @@ async function runPhase6Tests() {
     const prevOts = (await client.query("SELECT orden_trabajo_id FROM admin.ordenes_trabajo WHERE codigo_orden LIKE 'TEST-P6-%'")).rows.map(r => r.orden_trabajo_id);
     if (prevOts.length > 0) {
       await client.query("DELETE FROM admin.facturas WHERE orden_trabajo_id = ANY($1::int[])", [prevOts]);
-      await client.query("DELETE FROM admin.orden_historial WHERE orden_trabajo_id = ANY($1::int[])", [prevOts]);
+      await client.query("DELETE FROM admin.orden_historial_estado WHERE orden_trabajo_id = ANY($1::int[])", [prevOts]);
       await client.query("DELETE FROM admin.orden_servicios WHERE orden_trabajo_id = ANY($1::int[])", [prevOts]);
       await client.query("DELETE FROM admin.orden_productos WHERE orden_trabajo_id = ANY($1::int[])", [prevOts]);
       await client.query("DELETE FROM admin.ordenes_trabajo WHERE orden_trabajo_id = ANY($1::int[])", [prevOts]);
@@ -156,6 +162,7 @@ async function runPhase6Tests() {
       await client.query("DELETE FROM admin.detalle_factura WHERE factura_id = ANY($1::int[])", [prevFacs]);
       await client.query("DELETE FROM admin.facturas WHERE factura_id = ANY($1::int[])", [prevFacs]);
     }
+    await client.query("SELECT setval('admin.detalle_factura_detalle_factura_id_seq', (SELECT COALESCE(MAX(detalle_factura_id), 1) FROM admin.detalle_factura))");
 
     // 2. Definición de perfiles
     const maxU = Number((await client.query("SELECT COALESCE(MAX(usuario_id), 0) as m FROM admin.usuario")).rows[0].m);
@@ -654,12 +661,16 @@ async function runPhase6Tests() {
     const p3OtAsignar = await apiRequest(p3, 'PUT', `/api/taller/ordenes/${testOtId}`, { mecanico_id: null, diagnostico_inicial: 'Asignado por supervisor' });
     assert(p3OtAsignar.status === 200, 'P3: Asignación de mecánico AUTORIZADA (HTTP 200)');
 
-    // Para probar cierre (ENTREGADA), preparar la orden en estado 7 (LISTA_ENTREGA)
+    // Para probar cierre (ENTREGADA), preparar la orden en estado 7 (LISTA_ENTREGA) con servicios completados
     await client.query("UPDATE admin.ordenes_trabajo SET estado_orden_id = 7 WHERE orden_trabajo_id = $1", [testOtId]);
+    await client.query("UPDATE admin.orden_servicios SET estado_orden_servicio_id = (SELECT estado_orden_servicio_id FROM admin.estado_orden_servicio WHERE UPPER(codigo) = 'COMPLETADO' LIMIT 1) WHERE orden_trabajo_id = $1", [testOtId]);
 
     // Supervisor cierra orden (ENTREGADA) -> AUTORIZADO
     const p3OtCerrar = await apiRequest(p3, 'PUT', `/api/taller/ordenes/${testOtId}`, { estado_orden_id: 8 });
-    assert(p3OtCerrar.status === 200, 'P3: Cierre de orden (ENTREGADA) AUTORIZADO (HTTP 200)');
+    assert(p3OtCerrar.status === 200, 'P3: Cierre de orden (ENTREGADA) AUTORIZADO (HTTP 200)', `Status: ${p3OtCerrar.status}, Data: ${JSON.stringify(p3OtCerrar.data)}`);
+
+    // Restaurar orden a estado 5 (REPARACION) para siguientes perfiles respetando ck_orden_facturacion_integridad
+    await client.query("UPDATE admin.ordenes_trabajo SET estado_orden_id = 5, facturado = false, fecha_facturacion = NULL, usuario_facturacion_id = NULL, fecha_entrega_real = NULL WHERE orden_trabajo_id = $1", [testOtId]);
 
     // Supervisor anula factura -> AUTORIZADO
     const p3FacAnular = await apiRequest(p3, 'POST', `/api/facturacion/facturas/${testFacId}/anular`, {
@@ -792,7 +803,7 @@ async function runPhase6Tests() {
     `, [p1.roleId, scrOtId]);
 
     const p1DynEdit1 = await apiRequest(p1, 'PUT', `/api/taller/ordenes/${testOtId}`, { diagnostico_inicial: 'Dinámicamente editado' });
-    assert(p1DynEdit1.status === 200, 'Dinámico: Tras otorgar privilegio al rol, petición inmediata es AUTORIZADA (HTTP 200)');
+    assert(p1DynEdit1.status === 200, 'Dinámico: Tras otorgar privilegio al rol, petición inmediata es AUTORIZADA (HTTP 200)', `Status: ${p1DynEdit1.status}, Data: ${JSON.stringify(p1DynEdit1.data)}`);
 
     // Revocamos nuevamente
     await client.query(`
@@ -834,7 +845,7 @@ async function runPhase6Tests() {
 
       // 3. Limpiar órdenes de trabajo e hijos
       if (cleanupWorkOrders.length > 0) {
-        await client.query("DELETE FROM admin.orden_historial WHERE orden_trabajo_id = ANY($1::int[])", [cleanupWorkOrders]);
+        await client.query("DELETE FROM admin.orden_historial_estado WHERE orden_trabajo_id = ANY($1::int[])", [cleanupWorkOrders]);
         await client.query("DELETE FROM admin.orden_servicios WHERE orden_trabajo_id = ANY($1::int[])", [cleanupWorkOrders]);
         await client.query("DELETE FROM admin.orden_productos WHERE orden_trabajo_id = ANY($1::int[])", [cleanupWorkOrders]);
         await client.query("DELETE FROM admin.ordenes_trabajo WHERE orden_trabajo_id = ANY($1::int[])", [cleanupWorkOrders]);

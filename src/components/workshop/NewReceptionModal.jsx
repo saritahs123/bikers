@@ -1009,8 +1009,8 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
         <div className="w-full max-w-lg bg-card border border-border rounded-2xl p-6 shadow-2xl">
           <RestrictedSectionCard
-            title="Creación de Recepción Restringida"
-            description="No posees los permisos necesarios para registrar recepciones en el taller."
+            title="Acceso restringido"
+            message="No tienes permisos habilitados para acceder a esta funcionalidad. Si necesitas utilizarla, solicita la autorización correspondiente al administrador del sistema."
           />
           <div className="mt-4 flex justify-end">
             <button
@@ -1173,7 +1173,8 @@ export default function NewReceptionModal({ isOpen, onClose, onSuccess, onCreate
                             </span>
                             {selectedClient.nivel_cliente_nombre ? (
                               <span className="text-[10px] font-mono font-bold text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded">
-                                {selectedClient.nivel_cliente_nombre} ({Number(selectedClient.porciento_descuento || 0)}%)
+                                {selectedClient.nivel_cliente_nombre}{" "}
+                                {`(S: ${Number(selectedClient.descuento_servicio ?? selectedClient.porciento_descuento ?? 0)}% / P: ${Number(selectedClient.descuento_producto ?? selectedClient.porciento_descuento ?? 0)}%)`}
                               </span>
                             ) : (
                               <span className="text-[10px] font-mono text-foreground-muted bg-surface border border-border px-2 py-0.5 rounded">

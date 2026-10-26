@@ -77,6 +77,10 @@ function SidebarContent({
         if (navPerms.screens?.[screenRoute] !== undefined) {
           return Boolean(navPerms.screens[screenRoute]);
         }
+        // Fail-Closed: si la pantalla requiere una acción operativa y no está explícitamente autorizada en screens, no mostrarla
+        if (screen.requiredAction && screen.requiredAction !== "puede_ver") {
+          return false;
+        }
         // Fallback a permiso de módulo padre
         return hasMenuPerm;
       });

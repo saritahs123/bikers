@@ -27,7 +27,9 @@ export async function GET(req: Request, context: { params: Promise<{ id: string 
       SELECT
         c.*,
         nc.nombre AS nivel_cliente_nombre,
-        COALESCE(nc.porciento_descuento, 0)::numeric AS porciento_descuento,
+        COALESCE(nc.descuento_servicio, 0)::numeric AS descuento_servicio,
+        COALESCE(nc.descuento_producto, 0)::numeric AS descuento_producto,
+        COALESCE(nc.descuento_servicio, 0)::numeric AS porciento_descuento,
         nc.activo AS nivel_cliente_activo
       FROM admin.clientes c
       LEFT JOIN admin.nivel_cliente nc ON c.nivel_cliente_id = nc.nivel_cliente_id
@@ -429,7 +431,7 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
           return NextResponse.json({ success: false, message: "ID de nivel de cliente no válido.", field: "nivel_cliente_id" }, { status: 400 });
         }
         const nivelRows = await query(`
-          SELECT nivel_cliente_id, nombre, porciento_descuento, activo
+          SELECT nivel_cliente_id, nombre, descuento_servicio, descuento_producto, activo
           FROM admin.nivel_cliente
           WHERE nivel_cliente_id = $1
         `, [parsedNivel]);
@@ -440,16 +442,32 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
           return NextResponse.json({ success: false, message: "El nivel de cliente seleccionado se encuentra inactivo.", field: "nivel_cliente_id" }, { status: 400 });
         }
         nivel_cliente_id = parsedNivel;
-        nivelInfo = nivelRows[0];
+        const nRow = nivelRows[0];
+        nivelInfo = {
+          nivel_cliente_id: Number(nRow.nivel_cliente_id),
+          nombre: nRow.nombre,
+          descuento_servicio: Number(nRow.descuento_servicio || 0),
+          descuento_producto: Number(nRow.descuento_producto || 0),
+          porciento_descuento: Number(nRow.descuento_servicio || 0),
+          activo: Boolean(nRow.activo)
+        };
       }
     } else if (nivel_cliente_id) {
       const existingNivel = await query(`
-        SELECT nivel_cliente_id, nombre, porciento_descuento, activo
+        SELECT nivel_cliente_id, nombre, descuento_servicio, descuento_producto, activo
         FROM admin.nivel_cliente
         WHERE nivel_cliente_id = $1
       `, [nivel_cliente_id]);
       if (existingNivel && existingNivel.length > 0) {
-        nivelInfo = existingNivel[0];
+        const nRow = existingNivel[0];
+        nivelInfo = {
+          nivel_cliente_id: Number(nRow.nivel_cliente_id),
+          nombre: nRow.nombre,
+          descuento_servicio: Number(nRow.descuento_servicio || 0),
+          descuento_producto: Number(nRow.descuento_producto || 0),
+          porciento_descuento: Number(nRow.descuento_servicio || 0),
+          activo: Boolean(nRow.activo)
+        };
       }
     }
 
@@ -514,7 +532,9 @@ export async function PUT(req: Request, context: { params: Promise<{ id: string 
       ...result[0],
       nivel_cliente_id: result[0].nivel_cliente_id ? Number(result[0].nivel_cliente_id) : null,
       nivel_cliente_nombre: nivelInfo ? nivelInfo.nombre : null,
-      porciento_descuento: nivelInfo ? Number(nivelInfo.porciento_descuento) : 0,
+      descuento_servicio: nivelInfo ? Number(nivelInfo.descuento_servicio || 0) : 0,
+      descuento_producto: nivelInfo ? Number(nivelInfo.descuento_producto || 0) : 0,
+      porciento_descuento: nivelInfo ? Number(nivelInfo.porciento_descuento || 0) : 0,
       nivel_cliente_activo: nivelInfo ? Boolean(nivelInfo.activo) : null
     };
 

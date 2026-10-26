@@ -1397,7 +1397,8 @@ export async function PUT(
         );
       }
     } else if (targetStateId === estadoEntregadaId) {
-      if (!perms.puede_cerrar) {
+      const despachoPerms = await getScreenPermissions("FACTURACION_DESPACHO", session.usuario_id);
+      if (!perms.puede_cerrar && !despachoPerms.puede_cerrar) {
         await client.query("ROLLBACK");
         return NextResponse.json(
           { error: "FORBIDDEN", message: "No tienes permiso para cerrar o entregar esta orden de trabajo. Se requiere el privilegio CERRAR." },

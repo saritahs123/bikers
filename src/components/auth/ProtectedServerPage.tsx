@@ -43,27 +43,17 @@ function normalizeActionKey(action?: string): RbacActionKey {
   return `puede_${action}` as RbacActionKey;
 }
 
-const ACTION_DESCRIPTIONS: Record<RbacActionKey, string> = {
-  puede_ver: "consultar o visualizar",
-  puede_crear: "crear o registrar nuevos elementos",
-  puede_editar: "modificar o editar registros",
-  puede_inactivar: "inactivar registros",
-  puede_exportar: "exportar datos",
-  puede_importar: "importar datos",
-  puede_aprobar: "aprobar o anular operaciones",
-  puede_asignar: "asignar recursos o roles",
-  puede_mover: "trasladar o mover inventario",
-  puede_cerrar: "cerrar registros u órdenes",
-  puede_reabrir: "reabrir registros u órdenes",
-  puede_eliminar: "eliminar registros"
-};
+const DEFAULT_RESTRICTED_TITLE = "Acceso restringido";
+const DEFAULT_RESTRICTED_MESSAGE =
+  "No tienes permisos habilitados para acceder a esta funcionalidad. Si necesitas utilizarla, solicita la autorización correspondiente al administrador del sistema.";
 
 /**
- * Reusable Server Component Guard for Next.js Dashboard Pages (GAP-02 / Fase 6.4.13)
+ * Reusable Server Component Guard for Next.js Dashboard Pages (GAP-02 / Fase 6.4.13 / Fase 6.4.21)
  *
  * Validates session, `puede_ver`, and any specific `requiredAction` on the server
  * before rendering children. If unauthorized, immediately renders AccessDeniedView
- * without mounting the restricted child view or executing its client-side queries.
+ * with a standardized, neutral, corporate presentation without exposing technical
+ * codes or alarmist error cards.
  */
 export async function ProtectedServerPage({
   screenCode,
@@ -72,58 +62,34 @@ export async function ProtectedServerPage({
   message,
   requiredAction = "puede_ver"
 }: ProtectedServerPageProps) {
+  let isAuthorized = false;
+
   try {
     const session = await getWorkshopSession();
-    if (!session || !session.usuario_id) {
-      return (
-        <AccessDeniedView
-          screenCode={screenCode}
-          title="Sesión no iniciada"
-          message="No se encontró una sesión válida. Inicie sesión para acceder a esta pantalla."
-        />
-      );
+    if (session && session.usuario_id) {
+      const perms = await getScreenPermissions(screenCode, session.usuario_id);
+      const actionKey = normalizeActionKey(requiredAction);
+
+      if (perms.puede_ver && !(actionKey !== "puede_ver" && !perms[actionKey])) {
+        isAuthorized = true;
+      }
     }
-
-    const perms = await getScreenPermissions(screenCode, session.usuario_id);
-
-    // Regla global 1: Sin permiso VER, nunca mostrar la pantalla
-    if (!perms.puede_ver) {
-      return (
-        <AccessDeniedView
-          screenCode={screenCode}
-          title={title || "Acceso Denegado"}
-          message={message || "Tu rol de usuario actual no tiene permiso de lectura asignado para este módulo o pantalla."}
-        />
-      );
-    }
-
-    // Regla global 2: Si se requiere una acción específica (ej. CREAR para pantallas exclusivas de alta)
-    const actionKey = normalizeActionKey(requiredAction);
-    if (actionKey !== "puede_ver" && !perms[actionKey]) {
-      const actionDesc = ACTION_DESCRIPTIONS[actionKey] || actionKey.replace("puede_", "");
-      return (
-        <AccessDeniedView
-          screenCode={screenCode}
-          title={title || "Acción No Autorizada"}
-          message={
-            message ||
-            `Tu rol de usuario actual no dispone de permisos para ${actionDesc} en esta sección del sistema.`
-          }
-        />
-      );
-    }
-
-    return <>{children}</>;
   } catch (err) {
     console.error(`ProtectedServerPage authorization error for ${screenCode}:`, err);
+    isAuthorized = false;
+  }
+
+  if (!isAuthorized) {
     return (
       <AccessDeniedView
         screenCode={screenCode}
-        title="Error de Validación de Seguridad"
-        message="Ocurrió un error al verificar los permisos del usuario con el servidor."
+        title={title || DEFAULT_RESTRICTED_TITLE}
+        message={message || DEFAULT_RESTRICTED_MESSAGE}
       />
     );
   }
+
+  return <>{children}</>;
 }
 
 export default ProtectedServerPage;
