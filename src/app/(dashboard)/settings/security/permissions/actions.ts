@@ -2,9 +2,19 @@
 
 import { query } from "@/lib/db";
 import { revalidatePath } from "next/cache";
+import { getWorkshopSession, isSuperAdmin } from "@/lib/workshop-session";
 
 export async function getPermissionsData() {
   try {
+    const session = await getWorkshopSession();
+    if (!session || !session.usuario_id) {
+      return { roles: [], modulos: [], matriz: [] };
+    }
+    const isSuper = await isSuperAdmin(session.usuario_id);
+    if (!isSuper) {
+      return { roles: [], modulos: [], matriz: [] };
+    }
+
     const rolesRes = await query("SELECT rol_funcional_id, nombre FROM admin.rol_funcional WHERE estado = 'ACTIVO' ORDER BY rol_funcional_id ASC");
     const modulosRes = await query("SELECT modulo_sistema_id, nombre, orden FROM admin.modulo_sistema WHERE estado = 'ACTIVO' ORDER BY orden ASC");
     const matrizRes = await query("SELECT * FROM admin.matriz_acceso_rol");
@@ -30,6 +40,15 @@ export type PermissionUpdate = {
 };
 
 export async function savePermissions(updates: PermissionUpdate[]) {
+  const session = await getWorkshopSession();
+  if (!session || !session.usuario_id) {
+    return { error: "No autenticado" };
+  }
+  const isSuper = await isSuperAdmin(session.usuario_id);
+  if (!isSuper) {
+    return { error: "No autorizado: se requieren permisos de Administrador General" };
+  }
+
   try {
     // In a real scenario we might do a transaction, but we'll do sequential updates here for simplicity
     for (const update of updates) {

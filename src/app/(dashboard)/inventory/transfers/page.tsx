@@ -1,4 +1,5 @@
 import InventoryTransfersView from "@/components/inventory/InventoryTransfersView";
+import { ProtectedServerPage } from "@/components/auth/ProtectedServerPage";
 
 export const metadata = {
   title: "Transferencias de Inventario | Ride Lab",
@@ -6,5 +7,9 @@ export const metadata = {
 };
 
 export default function InventoryTransfersPage() {
-  return <InventoryTransfersView />;
+  return (
+    <ProtectedServerPage screenCode="INVENTARIO_TRANSFERENCIAS" requiredAction="puede_mover" title="Transferencias de Inventario">
+      <InventoryTransfersView />
+    </ProtectedServerPage>
+  );
 }

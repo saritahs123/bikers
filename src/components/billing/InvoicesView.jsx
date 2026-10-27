@@ -66,6 +66,15 @@ export default function InvoicesView() {
   const [isQuickPrintModalOpen, setIsQuickPrintModalOpen] = useState(false);
   const [loadingPrintData, setLoadingPrintData] = useState(false);
 
+  // GAP-05: Estado de permisos RBAC para control visual de acciones (Fase 6.4.13: Fail-safe defaults)
+  const [permissions, setPermissions] = useState({
+    puede_ver: true,
+    puede_crear: false,
+    puede_editar: false,
+    puede_aprobar: false,
+    puede_eliminar: false
+  });
+
   // Debounce search input
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -111,6 +120,20 @@ export default function InvoicesView() {
 
       if (!res.ok) {
         throw new Error(json.message || json.error || "Error al cargar facturas.");
+      }
+
+      // Extraer permisos efectivos enviados por el backend
+      if (json.permissions) {
+        setPermissions(json.permissions);
+      } else {
+        const permCrear = res.headers.get("x-perm-crear");
+        if (permCrear !== null) {
+          setPermissions(prev => ({
+            ...prev,
+            puede_crear: permCrear === "true",
+            puede_aprobar: res.headers.get("x-perm-aprobar") === "true"
+          }));
+        }
       }
 
       setInvoices(json.data || []);
@@ -311,15 +334,17 @@ export default function InvoicesView() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5">
-          <Link
-            href="/billing/new"
-            className="flex items-center gap-2 px-4 py-2 text-xs font-mono font-bold uppercase tracking-wider rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-all shadow-md shadow-primary/20"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Nueva Factura</span>
-          </Link>
-        </div>
+        {permissions.puede_crear && (
+          <div className="flex items-center gap-2.5">
+            <Link
+              href="/billing/new"
+              className="flex items-center gap-2 px-4 py-2 text-xs font-mono font-bold uppercase tracking-wider rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-all shadow-md shadow-primary/20"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Nueva Factura</span>
+            </Link>
+          </div>
+        )}
       </div>
 
       {/* 2. Tarjetas de Métricas Superiores (Sección 2) */}
@@ -745,23 +770,35 @@ export default function InvoicesView() {
 
                       {/* DESCUENTO */}
                       <td className="py-3 px-3 text-right font-mono whitespace-nowrap">
-                        {Number(inv.descuento || 0) > 0 ? (
-                          <span className="text-emerald-600 dark:text-emerald-400 font-medium">
-                            {formatMoney(inv.descuento)}{" "}
-                            <span className="text-[10px] text-foreground-muted font-normal">
-                              ({Number(inv.porciento_descuento_nivel || 0)}%)
-                            </span>
-                          </span>
-                        ) : Number(inv.porciento_descuento_nivel || 0) > 0 ? (
-                          <span className="text-foreground-muted font-normal">
-                            RD$ 0.00{" "}
-                            <span className="text-[10px]">
-                              ({Number(inv.porciento_descuento_nivel)}%)
-                            </span>
-                          </span>
-                        ) : (
-                          <span className="text-foreground-muted font-normal">—</span>
-                        )}
+                        {(() => {
+                          const isDiferenciado = inv.porciento_descuento_servicio != null && inv.porciento_descuento_producto != null;
+                          const pctLabel = isDiferenciado
+                            ? (Number(inv.porciento_descuento_servicio) === Number(inv.porciento_descuento_producto)
+                                ? `(${Number(inv.porciento_descuento_servicio)}%)`
+                                : `(S:${Number(inv.porciento_descuento_servicio)}% / P:${Number(inv.porciento_descuento_producto)}%)`)
+                            : (Number(inv.porciento_descuento_nivel || 0) > 0 ? `(${Number(inv.porciento_descuento_nivel)}%)` : null);
+
+                          if (Number(inv.descuento || 0) > 0) {
+                            return (
+                              <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                                {formatMoney(inv.descuento)}{" "}
+                                {pctLabel && (
+                                  <span className="text-[10px] text-foreground-muted font-normal">
+                                    {pctLabel}
+                                  </span>
+                                )}
+                              </span>
+                            );
+                          }
+                          if (pctLabel) {
+                            return (
+                              <span className="text-foreground-muted font-normal">
+                                RD$ 0.00 <span className="text-[10px]">{pctLabel}</span>
+                              </span>
+                            );
+                          }
+                          return <span className="text-foreground-muted font-normal">—</span>;
+                        })()}
                       </td>
 
                       {/* TOTAL */}

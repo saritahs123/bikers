@@ -109,7 +109,7 @@ async function getAuthenticatedUser() {
   };
   try {
     navPerms = await getUserNavigationPermissions(row.usuario_id);
-    canViewReports = navPerms.isSuperAdmin || Boolean(navPerms.modules["REPORTES"]);
+    canViewReports = Boolean(navPerms.modules["REPORTES"]);
   } catch (permErr) {
     console.warn("Error getting navigation permissions for user:", permErr);
     try {

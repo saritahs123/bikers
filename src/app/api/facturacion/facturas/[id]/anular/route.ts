@@ -575,6 +575,10 @@ export async function anularFactura(
           movValues
         );
 
+        await client.query(
+          `SELECT setval('admin.movimientos_inventario_movimiento_inventario_id_seq', (SELECT COALESCE(MAX(movimiento_inventario_id), 1) FROM admin.movimientos_inventario))`
+        );
+
         reversosGenerados.push(nextMovId);
       }
     }

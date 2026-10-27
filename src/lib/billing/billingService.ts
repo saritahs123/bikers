@@ -392,9 +392,11 @@ export async function crearFactura(
       ];
     }
 
-    // 3.2. Consultar Nivel de Cliente y Porcentaje de Descuento (Zero-Trust Backend)
+    // 3.2. Consultar Nivel de Cliente y Porcentajes de Descuento Diferenciados (Zero-Trust Backend)
     let nivelClienteId: number | null = null;
-    let porcientoDescuentoNivel = 0.00;
+    let porcientoDescuentoServicio = 0.00;
+    let porcientoDescuentoProducto = 0.00;
+    let porcientoDescuentoNivelLegacy: number | null = null;
     let nivelClienteNombre: string | null = null;
 
     if (input.cliente_id) {
@@ -402,10 +404,12 @@ export async function crearFactura(
         cliente_id: number;
         nivel_cliente_id: number | null;
         nivel_nombre: string | null;
-        porciento_descuento: number | string | null;
+        descuento_servicio: number | string | null;
+        descuento_producto: number | string | null;
         nivel_activo: boolean | null;
       }>(
-        `SELECT c.cliente_id, c.nivel_cliente_id, nc.nombre AS nivel_nombre, nc.porciento_descuento, nc.activo AS nivel_activo
+        `SELECT c.cliente_id, c.nivel_cliente_id, nc.nombre AS nivel_nombre,
+                nc.descuento_servicio, nc.descuento_producto, nc.activo AS nivel_activo
          FROM admin.clientes c
          LEFT JOIN admin.nivel_cliente nc ON c.nivel_cliente_id = nc.nivel_cliente_id
          WHERE c.cliente_id = $1 AND c.empresa_id = $2 AND c.fecha_eliminacion IS NULL`,
@@ -417,28 +421,48 @@ export async function crearFactura(
         if (cRow.nivel_cliente_id) {
           nivelClienteId = Number(cRow.nivel_cliente_id);
           nivelClienteNombre = cRow.nivel_nombre || null;
-          // Validar que el nivel esté activo para otorgar el descuento
+          // Validar que el nivel esté activo para otorgar descuentos
           if (cRow.nivel_activo) {
-            porcientoDescuentoNivel = Math.min(100, Math.max(0, Number(cRow.porciento_descuento || 0)));
-          } else {
-            porcientoDescuentoNivel = 0.00;
+            porcientoDescuentoServicio = Math.min(100, Math.max(0, Number(cRow.descuento_servicio || 0)));
+            porcientoDescuentoProducto = Math.min(100, Math.max(0, Number(cRow.descuento_producto || 0)));
+            // Si los porcentajes difieren, NO se asigna un porcentaje único artificial: se almacena null
+            porcientoDescuentoNivelLegacy = porcientoDescuentoServicio === porcientoDescuentoProducto
+              ? porcientoDescuentoServicio
+              : null;
           }
         }
       }
     }
 
-    // 4. Calcular Totales de Líneas con validación rigurosa y descuento de nivel
+    // 4. Calcular Totales de Líneas con validación rigurosa y descuentos diferenciados
     let subtotalGeneral = 0;
     let descuentoManualTotal = 0;
+    let descuentoServicioTotal = 0;
+    let descuentoProductoTotal = 0;
+
+    interface CalculatedLineInfo {
+      lineaBruto: number;
+      descManual: number;
+      descNivel: number;
+      descTotal: number;
+      subtotalNeto: number;
+    }
+    const calculatedLines: CalculatedLineInfo[] = [];
 
     for (let i = 0; i < input.lineas.length; i++) {
       const linea = input.lineas[i];
       if (!linea.descripcion || !linea.descripcion.trim()) {
         throw new Error(`La línea #${i + 1} debe contener una descripción válida.`);
       }
+
+      // Validación estricta de tipos de línea admitidos
+      if (!["SERVICIO", "PRODUCTO", "REPUESTO"].includes(linea.tipo_linea)) {
+        throw new Error(`Tipo de línea no reconocido o no admitido en la línea #${i + 1}: ${linea.tipo_linea}`);
+      }
+
       const cant = Number(linea.cantidad);
       const prec = Number(linea.precio_unitario);
-      const desc = Number(linea.descuento || 0);
+      const descManual = Number(linea.descuento || 0);
 
       if (isNaN(cant) || cant <= 0) {
         throw new Error(`La cantidad de la línea #${i + 1} (${linea.descripcion}) debe ser mayor a 0.`);
@@ -446,30 +470,55 @@ export async function crearFactura(
       if (isNaN(prec) || prec < 0) {
         throw new Error(`El precio unitario de la línea #${i + 1} (${linea.descripcion}) no puede ser negativo.`);
       }
-      if (isNaN(desc) || desc < 0) {
+      if (isNaN(descManual) || descManual < 0) {
         throw new Error(`El descuento de la línea #${i + 1} (${linea.descripcion}) no puede ser negativo.`);
       }
 
-      const lineaSubtotalNeto = parseFloat(((cant * prec) - desc).toFixed(2));
-      if (lineaSubtotalNeto < 0) {
-        throw new Error(`El descuento de la línea #${i + 1} no puede superar su importe bruto.`);
+      const lineaBruto = parseFloat((cant * prec).toFixed(2));
+      if (descManual > lineaBruto) {
+        throw new Error(`El descuento manual de la línea #${i + 1} (${linea.descripcion}) no puede superar su importe bruto.`);
       }
 
-      subtotalGeneral += parseFloat((cant * prec).toFixed(2));
-      descuentoManualTotal += desc;
+      // Precedencia: 1. Descuento manual de línea; 2. Descuento de nivel sobre la base restante
+      const lineaBase = Math.max(0, parseFloat((lineaBruto - descManual).toFixed(2)));
+
+      const pctAplicable = linea.tipo_linea === "SERVICIO"
+        ? porcientoDescuentoServicio
+        : porcientoDescuentoProducto;
+
+      let descNivelLinea = 0.00;
+      if (pctAplicable > 0 && lineaBase > 0) {
+        descNivelLinea = parseFloat((lineaBase * (pctAplicable / 100)).toFixed(2));
+        descNivelLinea = Math.min(lineaBase, descNivelLinea);
+      }
+
+      const descTotalLinea = parseFloat((descManual + descNivelLinea).toFixed(2));
+      const lineaSubtotalNeto = Math.max(0, parseFloat((lineaBruto - descTotalLinea).toFixed(2)));
+
+      subtotalGeneral += lineaBruto;
+      descuentoManualTotal += descManual;
+      if (linea.tipo_linea === "SERVICIO") {
+        descuentoServicioTotal += descNivelLinea;
+      } else {
+        descuentoProductoTotal += descNivelLinea;
+      }
+
+      calculatedLines.push({
+        lineaBruto,
+        descManual,
+        descNivel: descNivelLinea,
+        descTotal: descTotalLinea,
+        subtotalNeto: lineaSubtotalNeto
+      });
     }
 
     subtotalGeneral = parseFloat(subtotalGeneral.toFixed(2));
     descuentoManualTotal = parseFloat(descuentoManualTotal.toFixed(2));
-    const baseElegible = Math.max(0, parseFloat((subtotalGeneral - descuentoManualTotal).toFixed(2)));
-
-    // Descuento de Nivel de Cliente sobre la base elegible (sin duplicarlo)
-    const descuentoNivelTotal = porcientoDescuentoNivel > 0
-      ? Math.min(baseElegible, parseFloat((baseElegible * (porcientoDescuentoNivel / 100)).toFixed(2)))
-      : 0.00;
-
+    descuentoServicioTotal = parseFloat(descuentoServicioTotal.toFixed(2));
+    descuentoProductoTotal = parseFloat(descuentoProductoTotal.toFixed(2));
+    const descuentoNivelTotal = parseFloat((descuentoServicioTotal + descuentoProductoTotal).toFixed(2));
     const descuentoGeneral = parseFloat((descuentoManualTotal + descuentoNivelTotal).toFixed(2));
-    const subtotalNeto = Math.max(0, parseFloat((baseElegible - descuentoNivelTotal).toFixed(2)));
+    const subtotalNeto = Math.max(0, parseFloat((subtotalGeneral - descuentoGeneral).toFixed(2)));
 
     // Cálculo de Impuesto
     let impuestoGeneral = 0.00;
@@ -591,8 +640,12 @@ export async function crearFactura(
       descuento: descuentoGeneral,
       descuento_total: descuentoGeneral,
       nivel_cliente_id: nivelClienteId,
-      porciento_descuento_nivel: porcientoDescuentoNivel,
+      porciento_descuento_nivel: porcientoDescuentoNivelLegacy,
       descuento_nivel: descuentoNivelTotal,
+      porciento_descuento_servicio: nivelClienteId ? porcientoDescuentoServicio : null,
+      porciento_descuento_producto: nivelClienteId ? porcientoDescuentoProducto : null,
+      descuento_servicio: descuentoServicioTotal,
+      descuento_producto: descuentoProductoTotal,
       impuesto: impuestoGeneral,
       impuesto_total: impuestoGeneral,
       total: totalFactura,
@@ -625,8 +678,12 @@ export async function crearFactura(
     facturaRow.condicion_venta = condicionVenta;
     facturaRow.fecha_vencimiento = fechaVencimientoObj;
     facturaRow.nivel_cliente_id = nivelClienteId;
-    facturaRow.porciento_descuento_nivel = porcientoDescuentoNivel;
+    facturaRow.porciento_descuento_nivel = porcientoDescuentoNivelLegacy;
     facturaRow.descuento_nivel = descuentoNivelTotal;
+    facturaRow.porciento_descuento_servicio = nivelClienteId ? porcientoDescuentoServicio : null;
+    facturaRow.porciento_descuento_producto = nivelClienteId ? porcientoDescuentoProducto : null;
+    facturaRow.descuento_servicio = descuentoServicioTotal;
+    facturaRow.descuento_producto = descuentoProductoTotal;
     facturaRow.nivel_cliente_nombre = nivelClienteNombre;
 
     // 7.1. Salida física de Inventario para líneas PRODUCTO (FAC-2, FAC-3, Secciones 9, 10, 11)
@@ -735,34 +792,16 @@ export async function crearFactura(
     );
     let nextDetalleId = Number(maxDetRes.rows[0]?.max_id) || 0;
 
-    let acumuladoDescNivel = 0;
     const numLineas = input.lineas.length;
 
     for (let idx = 0; idx < numLineas; idx++) {
       const linea = input.lineas[idx];
+      const calc = calculatedLines[idx];
       nextDetalleId += 1;
       const cant = Number(linea.cantidad);
       const prec = Number(linea.precio_unitario);
-      const descManual = Number(linea.descuento || 0);
-      const lineaBruto = parseFloat((cant * prec).toFixed(2));
-      const lineaBase = Math.max(0, parseFloat((lineaBruto - descManual).toFixed(2)));
-
-      let descNivelLinea = 0;
-      if (descuentoNivelTotal > 0 && baseElegible > 0 && lineaBase > 0) {
-        if (idx === numLineas - 1) {
-          // Última línea absorbe el diferencial por redondeo para cuadre exacto al centavo
-          descNivelLinea = parseFloat((descuentoNivelTotal - acumuladoDescNivel).toFixed(2));
-        } else {
-          descNivelLinea = parseFloat((lineaBase * (porcientoDescuentoNivel / 100)).toFixed(2));
-          if (acumuladoDescNivel + descNivelLinea > descuentoNivelTotal) {
-            descNivelLinea = parseFloat((descuentoNivelTotal - acumuladoDescNivel).toFixed(2));
-          }
-          acumuladoDescNivel = parseFloat((acumuladoDescNivel + descNivelLinea).toFixed(2));
-        }
-      }
-
-      const descTotalLinea = parseFloat((descManual + descNivelLinea).toFixed(2));
-      const sub = Math.max(0, parseFloat((lineaBruto - descTotalLinea).toFixed(2)));
+      const descTotalLinea = calc ? calc.descTotal : Number(linea.descuento || 0);
+      const sub = calc ? calc.subtotalNeto : Math.max(0, parseFloat(((cant * prec) - descTotalLinea).toFixed(2)));
 
       const detData: Record<string, unknown> = {
         detalle_factura_id: nextDetalleId,
@@ -1219,12 +1258,12 @@ export async function registrarPago(
 
     const nuevoBalancePendiente = Math.max(0, parseFloat((totalFactura - nuevoTotalPagado).toFixed(2)));
 
-    // Determinar nuevo estado
+    // Determinar nuevo estado (respetando facturas_estado_ck: PENDIENTE, EMITIDA, PAGADA, ANULADA)
     let nuevoEstado: EstadoFactura = factura.estado;
     if (nuevoTotalPagado >= totalFactura) {
       nuevoEstado = "PAGADA";
-    } else if (nuevoTotalPagado > 0) {
-      nuevoEstado = "PARCIAL";
+    } else {
+      nuevoEstado = (factura.estado === "EMITIDA" || factura.estado === "PENDIENTE") ? factura.estado : "PENDIENTE";
     }
 
     // 4. Insertar registro en admin.pagos generando pago_id seguro
@@ -1386,10 +1425,8 @@ export async function recalcularEstadoFactura(
     nuevoEstado = totalPagado > 0 ? "PAGADA" : "PENDIENTE";
   } else if (totalPagado >= totalFactura) {
     nuevoEstado = "PAGADA";
-  } else if (totalPagado > 0) {
-    nuevoEstado = "PARCIAL";
   } else {
-    nuevoEstado = factura.estado === "BORRADOR" ? "BORRADOR" : "PENDIENTE";
+    nuevoEstado = (factura.estado === "EMITIDA" || factura.estado === "PENDIENTE") ? factura.estado : "PENDIENTE";
   }
 
   // 4. Actualizar cabecera
@@ -1571,6 +1608,14 @@ export async function obtenerFacturaPorId(
       nivel_cliente_id: rawFactura.nivel_cliente_id ? Number(rawFactura.nivel_cliente_id) : null,
       porciento_descuento_nivel: Number(rawFactura.porciento_descuento_nivel || 0),
       descuento_nivel: Number(rawFactura.descuento_nivel || 0),
+      porciento_descuento_servicio: rawFactura.porciento_descuento_servicio !== null && rawFactura.porciento_descuento_servicio !== undefined
+        ? Number(rawFactura.porciento_descuento_servicio)
+        : null,
+      porciento_descuento_producto: rawFactura.porciento_descuento_producto !== null && rawFactura.porciento_descuento_producto !== undefined
+        ? Number(rawFactura.porciento_descuento_producto)
+        : null,
+      descuento_servicio: Number(rawFactura.descuento_servicio || 0),
+      descuento_producto: Number(rawFactura.descuento_producto || 0),
       nivel_cliente_nombre: rawFactura.nivel_cliente_nombre || null
     };
 

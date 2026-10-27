@@ -8,7 +8,9 @@ export const dynamic = "force-dynamic";
 interface NivelClienteRow {
   nivel_cliente_id: number;
   nombre: string;
-  porciento_descuento: number | string;
+  descuento_servicio: number | string;
+  descuento_producto: number | string;
+  porciento_descuento?: number | string;
   descripcion: string | null;
   activo: boolean;
   fecha_creacion: string | Date;
@@ -26,6 +28,14 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const perms = await getModulePermissions("CRM", session.usuario_id);
+    if (!perms.puede_ver) {
+      return NextResponse.json(
+        { error: "FORBIDDEN", message: "No tienes permisos para consultar niveles de cliente." },
+        { status: 403 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const soloActivos = searchParams.get("activos") === "true";
 
@@ -35,7 +45,8 @@ export async function GET(request: NextRequest) {
       SELECT 
         nc.nivel_cliente_id,
         nc.nombre,
-        nc.porciento_descuento::numeric(5,2) AS porciento_descuento,
+        nc.descuento_servicio::numeric(5,2) AS descuento_servicio,
+        nc.descuento_producto::numeric(5,2) AS descuento_producto,
         nc.descripcion,
         nc.activo,
         nc.fecha_creacion,
@@ -43,8 +54,8 @@ export async function GET(request: NextRequest) {
       FROM admin.nivel_cliente nc
       LEFT JOIN admin.clientes c ON nc.nivel_cliente_id = c.nivel_cliente_id AND c.fecha_eliminacion IS NULL
       ${whereClause}
-      GROUP BY nc.nivel_cliente_id, nc.nombre, nc.porciento_descuento, nc.descripcion, nc.activo, nc.fecha_creacion
-      ORDER BY nc.porciento_descuento DESC, nc.nivel_cliente_id ASC;
+      GROUP BY nc.nivel_cliente_id, nc.nombre, nc.descuento_servicio, nc.descuento_producto, nc.descripcion, nc.activo, nc.fecha_creacion
+      ORDER BY nc.descuento_servicio DESC, nc.descuento_producto DESC, nc.nivel_cliente_id ASC;
     `;
 
     const rows = await query<NivelClienteRow>(sql);
@@ -53,17 +64,30 @@ export async function GET(request: NextRequest) {
       nivel_cliente_id: Number(r.nivel_cliente_id),
       id: Number(r.nivel_cliente_id),
       nombre: String(r.nombre),
-      porciento_descuento: Number(r.porciento_descuento || 0),
+      descuento_servicio: Number(r.descuento_servicio || 0),
+      descuento_producto: Number(r.descuento_producto || 0),
+      porciento_descuento: Number(r.descuento_servicio || 0),
       descripcion: r.descripcion || "",
       activo: Boolean(r.activo),
       fecha_creacion: r.fecha_creacion,
       clientes_count: Number(r.clientes_count || 0)
     }));
 
-    return NextResponse.json({
-      success: true,
-      data: formatted
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        data: formatted
+      },
+      {
+        headers: {
+          "x-perm-ver": String(perms.puede_ver),
+          "x-perm-crear": String(perms.puede_crear),
+          "x-perm-editar": String(perms.puede_editar),
+          "x-perm-eliminar": String(perms.puede_eliminar),
+          "x-perm-exportar": String(perms.puede_exportar)
+        }
+      }
+    );
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Error desconocido";
     console.error("Error en GET /api/crm/niveles-cliente:", error);
@@ -95,8 +119,12 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const nombre = (body.nombre || "").trim();
-    const rawPorciento = body.porciento_descuento;
-    const porciento_descuento = Number(rawPorciento);
+
+    // Permitir descuento_servicio y descuento_producto; si viene porciento_descuento usarlo como fallback
+    const rawServicio = body.descuento_servicio !== undefined ? body.descuento_servicio : body.porciento_descuento;
+    const rawProducto = body.descuento_producto !== undefined ? body.descuento_producto : body.porciento_descuento;
+    const descuento_servicio = Number(rawServicio);
+    const descuento_producto = Number(rawProducto);
     const descripcion = (body.descripcion || "").trim();
     const activo = body.activo !== undefined ? Boolean(body.activo) : true;
 
@@ -115,9 +143,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (isNaN(porciento_descuento) || porciento_descuento < 0 || porciento_descuento > 100) {
+    if (isNaN(descuento_servicio) || descuento_servicio < 0 || descuento_servicio > 100) {
       return NextResponse.json(
-        { error: "VALIDATION_ERROR", message: "El porcentaje de descuento debe estar entre 0 y 100.", field: "porciento_descuento" },
+        { error: "VALIDATION_ERROR", message: "El descuento en servicios debe estar entre 0 y 100.", field: "descuento_servicio" },
+        { status: 400 }
+      );
+    }
+
+    if (isNaN(descuento_producto) || descuento_producto < 0 || descuento_producto > 100) {
+      return NextResponse.json(
+        { error: "VALIDATION_ERROR", message: "El descuento en productos debe estar entre 0 y 100.", field: "descuento_producto" },
         { status: 400 }
       );
     }
@@ -136,14 +171,15 @@ export async function POST(request: NextRequest) {
     }
 
     const insertSql = `
-      INSERT INTO admin.nivel_cliente (nombre, porciento_descuento, descripcion, activo, fecha_creacion)
-      VALUES ($1, $2, $3, $4, NOW())
+      INSERT INTO admin.nivel_cliente (nombre, descuento_servicio, descuento_producto, descripcion, activo, fecha_creacion)
+      VALUES ($1, $2, $3, $4, $5, NOW())
       RETURNING *;
     `;
 
     const res = await query<NivelClienteRow>(insertSql, [
       nombre,
-      porciento_descuento,
+      descuento_servicio,
+      descuento_producto,
       descripcion || null,
       activo
     ]);
@@ -155,7 +191,7 @@ export async function POST(request: NextRequest) {
       userId: session.usuario_id,
       adminId: session.usuario_id,
       accion: "CRM_NIVEL_CLIENTE_CREADO",
-      valorNuevo: { nombre, porciento_descuento, descripcion, activo },
+      valorNuevo: { nombre, descuento_servicio, descuento_producto, descripcion, activo },
       motivo: `Creación de nivel de cliente ${nombre}`,
       req: request
     });
@@ -167,7 +203,9 @@ export async function POST(request: NextRequest) {
         nivel_cliente_id: Number(created.nivel_cliente_id),
         id: Number(created.nivel_cliente_id),
         nombre: created.nombre,
-        porciento_descuento: Number(created.porciento_descuento),
+        descuento_servicio: Number(created.descuento_servicio),
+        descuento_producto: Number(created.descuento_producto),
+        porciento_descuento: Number(created.descuento_servicio),
         descripcion: created.descripcion || "",
         activo: Boolean(created.activo),
         fecha_creacion: created.fecha_creacion

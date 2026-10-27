@@ -189,14 +189,53 @@ export async function GET() {
         WHERE u.empresa_id = $1
           AND (u.estado = 'ACTIVO' OR u.estado IS NULL)
           AND (
-            u.rol_principal_id = 1
-            OR EXISTS (
-              SELECT 1
-              FROM admin.matriz_acceso_rol mar
-              JOIN admin.modulo_sistema ms ON mar.modulo_sistema_id = ms.modulo_sistema_id
-              WHERE mar.rol_funcional_id = u.rol_principal_id
-                AND UPPER(TRIM(ms.nombre)) IN ('FACTURACION', 'FACTURACIÓN')
-                AND (mar.puede_aprobar = TRUE OR mar.puede_eliminar = TRUE)
+            EXISTS (
+              SELECT 1 FROM admin.usuario_permiso_personalizado upp
+              JOIN admin.pantalla_sistema ps ON upp.pantalla_id = ps.pantalla_id
+              WHERE upp.usuario_id = u.usuario_id
+                AND ps.codigo = 'FACTURACION_FACTURAS'
+                AND upp.puede_aprobar = true
+                AND (upp.estado = 'ACTIVO' OR upp.estado IS NULL)
+            )
+            OR (
+              NOT EXISTS (
+                SELECT 1 FROM admin.usuario_permiso_personalizado upp
+                JOIN admin.pantalla_sistema ps ON upp.pantalla_id = ps.pantalla_id
+                WHERE upp.usuario_id = u.usuario_id
+                  AND ps.codigo = 'FACTURACION_FACTURAS'
+                  AND upp.puede_aprobar = false
+                  AND (upp.estado = 'ACTIVO' OR upp.estado IS NULL)
+              )
+              AND (
+                EXISTS (
+                  SELECT 1 FROM admin.matriz_acceso_pantalla map
+                  JOIN admin.pantalla_sistema ps ON map.pantalla_id = ps.pantalla_id
+                  WHERE map.rol_funcional_id = u.rol_principal_id
+                    AND ps.codigo = 'FACTURACION_FACTURAS'
+                    AND map.puede_aprobar = true
+                )
+                OR EXISTS (
+                  SELECT 1 FROM admin.usuario_rol_adicional ura
+                  JOIN admin.matriz_acceso_pantalla map ON ura.rol_funcional_id = map.rol_funcional_id
+                  JOIN admin.pantalla_sistema ps ON map.pantalla_id = ps.pantalla_id
+                  WHERE ura.usuario_id = u.usuario_id
+                    AND ps.codigo = 'FACTURACION_FACTURAS'
+                    AND map.puede_aprobar = true
+                )
+                OR EXISTS (
+                  SELECT 1 FROM admin.matriz_acceso_rol mar
+                  JOIN admin.modulo_sistema ms ON mar.modulo_sistema_id = ms.modulo_sistema_id
+                  WHERE (
+                    mar.rol_funcional_id = u.rol_principal_id
+                    OR EXISTS (
+                      SELECT 1 FROM admin.usuario_rol_adicional ura
+                      WHERE ura.usuario_id = u.usuario_id AND ura.rol_funcional_id = mar.rol_funcional_id
+                    )
+                  )
+                    AND UPPER(TRIM(ms.nombre)) IN ('FACTURACION', 'FACTURACIÓN')
+                    AND (mar.puede_aprobar = true OR mar.puede_eliminar = true)
+                )
+              )
             )
           )
         ORDER BY ui.nombre ASC, u.usuario_id ASC;

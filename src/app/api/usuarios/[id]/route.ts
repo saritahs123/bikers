@@ -1,7 +1,16 @@
 import { NextResponse } from "next/server";
-import { query } from "@/lib/db";
-import { authorizeUserAccess, authorizeUserUpdate } from "@/lib/userAuth";
-import { getModulePermissions } from "@/lib/workshop-session";
+import { query, withTransaction } from "@/lib/db";
+import {
+  authorizeUserAccess,
+  authorizeUserUpdate,
+  extractPrimaryRoleId,
+  extractAdditionalRoles,
+  findUnrecognizedRoleKeys,
+  resolveAndValidateRole,
+  resolveAndValidateAdditionalRoles,
+  validateSelfProfileUpdate
+} from "@/lib/userAuth";
+import { getModulePermissions, isSuperAdmin, canUser } from "@/lib/workshop-session";
 import { recordUserActivity, recordUserAudit } from "@/lib/auditLogger";
 import { sweepExpiredSessions } from "@/lib/sessionLifecycle";
 
@@ -169,6 +178,17 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       });
     });
 
+    const additionalRolesRes = await query<{ rol_funcional_id: number; nombre: string }>(
+      `SELECT ura.rol_funcional_id, rf.nombre
+       FROM admin.usuario_rol_adicional ura
+       JOIN admin.rol_funcional rf ON ura.rol_funcional_id = rf.rol_funcional_id
+       WHERE ura.usuario_id = $1
+       ORDER BY ura.rol_funcional_id`,
+      [requestedUserId]
+    );
+    const additionalRoleIds = (additionalRolesRes || []).map(r => Number(r.rol_funcional_id));
+    const additionalRoleObjs = (additionalRolesRes || []).map(r => ({ id: Number(r.rol_funcional_id), name: r.nombre }));
+
     const mappedUser = {
       id: u.id,
       full_name: fullNameComputed,
@@ -190,6 +210,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       user_type: u.user_type ?? null,
       tipo_usuario_id: u.tipo_usuario_id ?? null,
       primary_access_type: u.primary_access_type ?? 'EMAIL',
+      roles_additional: additionalRoleIds,
+      additional_roles: additionalRoleObjs,
       identificador_principal: primaryAccessValue,
       login_identifiers: [
         {
@@ -280,7 +302,9 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       `SELECT
          u.usuario_id,
          u.empresa_id,
+         emp.nombre_comercial AS empresa_nombre,
          u.rol_principal_id,
+         rf.nombre AS rol_nombre,
          u.tipo_usuario_id,
          u.estado,
          u.estado_activacion,
@@ -300,6 +324,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
          us.zona_horaria,
          us.formato_fecha
        FROM admin.usuario u
+       LEFT JOIN admin.empresa emp ON emp.empresa_id = u.empresa_id
+       LEFT JOIN admin.rol_funcional rf ON rf.rol_funcional_id = u.rol_principal_id
        LEFT JOIN admin.usuario_identidad ui ON ui.usuario_id = u.usuario_id
        LEFT JOIN admin.usuario_seguridad us ON us.usuario_id = u.usuario_id
        WHERE u.usuario_id = $1
@@ -315,40 +341,129 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     }
 
     const current = currentRows[0];
+    const callerIsSuper = await isSuperAdmin(authUserId);
+    const targetIsSuper = await isSuperAdmin(targetUserId);
 
-    // Check if caller has administrative edit permissions on module SEGURIDAD
-    const segPerms = await getModulePermissions("SEGURIDAD", authUserId);
-    const hasAdminEditPerm = segPerms.puede_editar;
+    let newRolId: number | null = current.rol_principal_id;
+    let validatedAdditionalRoleIds: number[] | null = null;
+    let additionalRolesExplicitlyProvided = false;
 
-    // Self Profile Guard: Only block admin changes if caller does NOT have SEGURIDAD edit permissions
-    if (isSelf && !hasAdminEditPerm) {
-      const isParamChanged = (newVal: unknown, oldVal: unknown) =>
-        newVal !== undefined && newVal !== null && String(newVal).trim() !== String(oldVal ?? '').trim();
+    // Self Profile Guard: strict anti-self-escalation applied to all users
+    if (isSelf) {
+      const selfCheck = validateSelfProfileUpdate(body, current);
+      if (!selfCheck.allowed) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: selfCheck.error,
+            message: selfCheck.message,
+            field: selfCheck.field
+          },
+          { status: selfCheck.status }
+        );
+      }
+    } else {
+      // Unrecognized role keys guard: reject unaccepted role assignment parameters
+      const unrecKeys = findUnrecognizedRoleKeys(body);
+      if (unrecKeys.length > 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "VALIDATION_ERROR",
+            message: `Campo de rol no reconocido: '${unrecKeys[0]}'. No se aceptan parámetros de asignación de roles no reconocidos.`,
+            field: unrecKeys[0]
+          },
+          { status: 400 }
+        );
+      }
 
-      const triedCompany = body.companyId !== undefined ? body.companyId : body.empresa_id;
-      const triedRole = body.roleId !== undefined ? body.roleId : (body.rol_id !== undefined ? body.rol_id : (body.rol_principal_id !== undefined ? body.rol_principal_id : body.role));
-      const triedStatus = body.status !== undefined ? body.status : body.estado;
-      const triedUserType = body.user_type_id !== undefined ? body.user_type_id : body.tipo_usuario_id;
-      const triedEstadoActivacion = body.estado_activacion !== undefined ? body.estado_activacion : body.activation;
-
-      if (
-        isParamChanged(triedCompany, current.empresa_id) ||
-        (triedRole !== undefined && triedRole !== null && String(triedRole).trim() !== String(current.rol_principal_id ?? '').trim()) ||
-        isParamChanged(triedStatus, current.estado) ||
-        isParamChanged(triedUserType, current.tipo_usuario_id) ||
-        isParamChanged(triedEstadoActivacion, current.estado_activacion) ||
-        (body.duracion_sesion_minutos !== undefined && Number(body.duracion_sesion_minutos) !== Number(current.duracion_sesion_minutos)) ||
-        body.password !== undefined ||
-        body.confirm_password !== undefined
-      ) {
+      // Modifying another user: only SuperAdmin can modify a user holding Role 1
+      if (targetIsSuper && !callerIsSuper) {
         return NextResponse.json(
           {
             success: false,
             error: "FORBIDDEN",
-            message: "No posee permisos para modificar campos administrativos del perfil (rol, empresa, estado, etc.)."
+            message: "Solo un SuperAdmin institucional puede modificar o retirar asignaciones de una cuenta con Rol 1 (Administrador General)."
           },
           { status: 403 }
         );
+      }
+
+      // Check primary role if provided in body
+      const rawRole = extractPrimaryRoleId(body);
+      let isPrimaryRoleProvided = false;
+      if (rawRole !== undefined && rawRole !== null && rawRole !== '') {
+        isPrimaryRoleProvided = true;
+        const roleCheck = await resolveAndValidateRole(rawRole, callerIsSuper, false);
+        if (!roleCheck.valid) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: roleCheck.error,
+              message: roleCheck.message,
+              field: roleCheck.field
+            },
+            { status: roleCheck.status }
+          );
+        }
+        newRolId = roleCheck.roleId ?? current.rol_principal_id;
+      }
+
+      // Check additional roles if provided in body
+      const rawAdd = extractAdditionalRoles(body);
+      if (rawAdd !== undefined && rawAdd !== null) {
+        const addCheck = await resolveAndValidateAdditionalRoles(rawAdd, callerIsSuper, newRolId);
+        if (!addCheck.valid) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: addCheck.error,
+              message: addCheck.message,
+              field: addCheck.field
+            },
+            { status: addCheck.status }
+          );
+        }
+        validatedAdditionalRoleIds = addCheck.roleIds;
+        additionalRolesExplicitlyProvided = true;
+      }
+
+      // Detect real role changes
+      const isPrimaryRoleChanged = isPrimaryRoleProvided && (newRolId !== current.rol_principal_id);
+
+      let isAdditionalRolesChanged = false;
+      if (additionalRolesExplicitlyProvided && validatedAdditionalRoleIds !== null) {
+        const currentAddRows = await query<{ rol_funcional_id: number }>(
+          `SELECT rol_funcional_id FROM admin.usuario_rol_adicional WHERE usuario_id = $1`,
+          [targetUserId]
+        );
+        const currentSet = new Set((currentAddRows || []).map(r => Number(r.rol_funcional_id)));
+        if (validatedAdditionalRoleIds.length !== currentSet.size) {
+          isAdditionalRolesChanged = true;
+        } else {
+          for (const rId of validatedAdditionalRoleIds) {
+            if (!currentSet.has(rId)) {
+              isAdditionalRolesChanged = true;
+              break;
+            }
+          }
+        }
+      }
+
+      // If there is any real role change, require puede_asignar
+      if (isPrimaryRoleChanged || isAdditionalRolesChanged) {
+        const callerCanAssign = callerIsSuper || (await canUser(authUserId, 'puede_asignar', 'SEGURIDAD_USUARIOS'));
+        if (!callerCanAssign) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: "FORBIDDEN",
+              message: "No tienes permisos para asignar o modificar roles de usuario. Se requiere el privilegio ASIGNAR.",
+              field: isPrimaryRoleChanged ? "roleId" : "roles_additional"
+            },
+            { status: 403 }
+          );
+        }
       }
     }
 
@@ -446,21 +561,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     }
     if (newCompanyId === null) newCompanyId = current.empresa_id;
 
-    let newRolId: number | null = null;
-    const rawRol = body.roleId ?? body.rol_id ?? body.rol_principal_id;
-    if (rawRol !== undefined && rawRol !== null && rawRol !== '') {
-      if (typeof rawRol === 'number' || /^\d+$/.test(String(rawRol))) {
-        newRolId = Number(rawRol);
-      } else {
-        const rRes = await query(`SELECT rol_funcional_id FROM admin.rol_funcional WHERE UPPER(nombre) = UPPER($1) LIMIT 1`, [String(rawRol).trim()]);
-        if (rRes && rRes.length > 0) newRolId = rRes[0].rol_funcional_id;
-      }
-    }
-    if (newRolId === null && body.role && typeof body.role === 'string') {
-      const rRes = await query(`SELECT rol_funcional_id FROM admin.rol_funcional WHERE UPPER(nombre) = UPPER($1) LIMIT 1`, [body.role.trim()]);
-      if (rRes && rRes.length > 0) newRolId = rRes[0].rol_funcional_id;
-    }
-    if (newRolId === null) newRolId = current.rol_principal_id;
+    // newRolId was securely validated and assigned above
 
     let newTipoUsuarioId: number | null = null;
     const rawTu = body.user_type_id ?? body.tipo_usuario_id;
@@ -500,21 +601,14 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const newEstado = body.status ?? body.estado ?? current.estado;
     const newEstadoActivacion = body.estado_activacion ?? body.activation ?? current.estado_activacion;
 
-    const isGlobalAdmin = await query(
-      `SELECT 1
-       FROM admin.usuario u
-       LEFT JOIN admin.rol_funcional r ON u.rol_principal_id = r.rol_funcional_id
-       LEFT JOIN admin.usuario_alcance alc ON u.usuario_id = alc.usuario_id
-       WHERE u.usuario_id = $1
-         AND (
-           UPPER(COALESCE(r.nombre, '')) = 'ADMINISTRADOR GENERAL'
-           OR UPPER(COALESCE(r.nombre, '')) LIKE '%SUPER%'
-           OR alc.nivel_alcance = 'TODA_EMPRESA'
-         )
-       LIMIT 1`,
-      [authUserId]
-    );
-    const hasGlobalScope = Boolean(isGlobalAdmin && isGlobalAdmin.length > 0);
+    let hasGlobalScope = callerIsSuper;
+    if (!hasGlobalScope) {
+      const alcCheck = await query<{ usuario_id: number }>(
+        `SELECT usuario_id FROM admin.usuario_alcance WHERE usuario_id = $1 AND nivel_alcance = 'TODA_EMPRESA' LIMIT 1`,
+        [authUserId]
+      );
+      hasGlobalScope = Boolean(alcCheck && alcCheck.length > 0);
+    }
 
     if (!hasGlobalScope) {
       if (authUserCompanyId && newCompanyId && Number(newCompanyId) !== Number(authUserCompanyId)) {
@@ -544,55 +638,6 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       }
     }
 
-    // Update admin.usuario
-    await query(
-      `UPDATE admin.usuario
-       SET empresa_id = $1,
-           rol_principal_id = $2,
-           tipo_usuario_id = $3,
-           estado = $4,
-           estado_activacion = $5,
-           duracion_sesion_minutos = COALESCE($6, duracion_sesion_minutos),
-           fecha_actualizacion = NOW()
-       WHERE usuario_id = $7`,
-      [
-        newCompanyId ? Number(newCompanyId) : null,
-        newRolId ? Number(newRolId) : null,
-        newTipoUsuarioId ? Number(newTipoUsuarioId) : null,
-        newEstado ? String(newEstado) : null,
-        newEstadoActivacion ? String(newEstadoActivacion) : null,
-        rawSessionMinutes !== undefined ? rawSessionMinutes : null,
-        targetUserId
-      ]
-    );
-
-    // If session duration changed, dynamically recalculate expiration for all active sessions
-    if (rawSessionMinutes !== undefined) {
-      await query(
-        `UPDATE admin.usuario_sesion
-         SET fecha_expiracion = fecha_inicio + make_interval(mins => $1),
-             estado = CASE
-               WHEN fecha_inicio + make_interval(mins => $1) <= clock_timestamp() THEN 'EXPIRADA'
-               ELSE estado
-             END,
-             tipo_cierre = CASE
-               WHEN fecha_inicio + make_interval(mins => $1) <= clock_timestamp() THEN 'EXPIRACION'
-               ELSE tipo_cierre
-             END,
-             motivo_cierre = CASE
-               WHEN fecha_inicio + make_interval(mins => $1) <= clock_timestamp() THEN 'Sesión expirada por cambio de duración máxima configurada'
-               ELSE motivo_cierre
-             END,
-             fecha_cierre = CASE
-               WHEN fecha_inicio + make_interval(mins => $1) <= clock_timestamp() THEN clock_timestamp()
-               ELSE fecha_cierre
-             END
-         WHERE usuario_id = $2 AND estado = 'ACTIVA'`,
-        [rawSessionMinutes, targetUserId]
-      );
-    }
-
-    // Update admin.usuario_identidad
     const finalFirstName = updatedFirstName !== null && updatedFirstName !== undefined ? String(updatedFirstName).trim() : null;
     const finalLastName = updatedLastName !== null && updatedLastName !== undefined ? String(updatedLastName).trim() : null;
     const finalPhone = updatedPhone !== null && updatedPhone !== undefined ? String(updatedPhone).trim() : null;
@@ -601,170 +646,251 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const finalAreaId = updatedAreaId ? Number(updatedAreaId) : null;
     const finalCargoId = updatedCargoId ? Number(updatedCargoId) : null;
 
-    const identExists = await query(`SELECT 1 FROM admin.usuario_identidad WHERE usuario_id = $1`, [targetUserId]);
-    if (identExists && identExists.length > 0) {
-      await query(
-        `UPDATE admin.usuario_identidad
-         SET nombre = $1,
-             apellido = $2,
-             correo_electronico = $3,
-             telefono = $4,
-             numero_documento = $5,
-             departamento_id = $6,
-             area_id = $7,
-             cargo_id = $8,
-             fecha_actualizacion = NOW()
-         WHERE usuario_id = $9`,
-        [finalFirstName, finalLastName, updatedEmail, finalPhone, finalDoc, finalDeptId, finalAreaId, finalCargoId, targetUserId]
-      );
-    } else {
-      await query(
-        `INSERT INTO admin.usuario_identidad (usuario_id, nombre, apellido, correo_electronico, telefono, numero_documento, departamento_id, area_id, cargo_id, fecha_actualizacion)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())`,
-        [targetUserId, finalFirstName, finalLastName, updatedEmail, finalPhone, finalDoc, finalDeptId, finalAreaId, finalCargoId]
-      );
-    }
-
-    // Update admin.usuario_seguridad
-    const segExists = await query(`SELECT 1 FROM admin.usuario_seguridad WHERE usuario_id = $1`, [targetUserId]);
-    if (segExists && segExists.length > 0) {
-      await query(
-        `UPDATE admin.usuario_seguridad
-         SET idioma_preferido = COALESCE($1, idioma_preferido),
-             zona_horaria = COALESCE($2, zona_horaria),
-             formato_fecha = COALESCE($3, formato_fecha),
-             correo_acceso = COALESCE($4, correo_acceso),
-             identificador_principal = CASE WHEN metodo_acceso_principal = 'EMAIL' AND $4 IS NOT NULL THEN $4 ELSE identificador_principal END
-         WHERE usuario_id = $5`,
-        [String(updatedIdioma), String(updatedZona), String(updatedFormato), updatedEmail, targetUserId]
-      );
-    } else {
-      await query(
-        `INSERT INTO admin.usuario_seguridad (usuario_seguridad_id, usuario_id, idioma_preferido, zona_horaria, formato_fecha, correo_acceso, identificador_principal, metodo_acceso_principal)
-         SELECT COALESCE(MAX(usuario_seguridad_id), 0) + 1, $1, $2, $3, $4, $5, $5, 'EMAIL' FROM admin.usuario_seguridad`,
-        [targetUserId, String(updatedIdioma), String(updatedZona), String(updatedFormato), updatedEmail]
-      );
-    }
-
-    // 5. Update admin.usuario_alcance and admin.usuario_alcance_detalle if scope fields are provided
     let prevScopeNivel: string | null = null;
     let dbNivel = 'TODA_EMPRESA';
-    if (body.scope_type !== undefined || body.nivel_alcance !== undefined || body.scope_entity_ids !== undefined) {
-      const prevScopeRes = await query<{ nivel_alcance: string }>(`SELECT nivel_alcance FROM admin.usuario_alcance WHERE usuario_id = $1`, [targetUserId]);
-      prevScopeNivel = prevScopeRes?.[0]?.nivel_alcance || 'TODA_EMPRESA';
 
-      const rawScope = body.scope_type || body.nivel_alcance || 'COMPANY';
-      if (rawScope === 'POR_AGRUPACION' || rawScope === 'DEPARTMENT' || rawScope === 'POR_DEPARTAMENTO') dbNivel = 'POR_AGRUPACION';
-      else if (rawScope === 'POR_TERRITORIO' || rawScope === 'AREA' || rawScope === 'POR_AREA') dbNivel = 'POR_TERRITORIO';
-      else if (rawScope === 'POR_AGENCIA' || rawScope === 'BRANCH' || rawScope === 'POR_SUCURSAL' || rawScope === 'SUCURSAL') dbNivel = 'POR_AGENCIA';
-      else dbNivel = 'TODA_EMPRESA';
+    // Execute all mutations atomically in a single transaction with row locking
+    await withTransaction(async (client) => {
+      // Lock target user row to serialize concurrent modifications
+      await client.query('SELECT usuario_id FROM admin.usuario WHERE usuario_id = $1 FOR UPDATE', [targetUserId]);
 
-      const includeChildren = body.include_children !== undefined ? Boolean(body.include_children) : true;
-      const entityIds = Array.isArray(body.scope_entity_ids) ? body.scope_entity_ids.map(Number).filter((n: number) => !isNaN(n)) : [];
+      // 1. Update admin.usuario
+      await client.query(
+        `UPDATE admin.usuario
+         SET empresa_id = $1,
+             rol_principal_id = $2,
+             tipo_usuario_id = $3,
+             estado = $4,
+             estado_activacion = $5,
+             duracion_sesion_minutos = COALESCE($6, duracion_sesion_minutos),
+             fecha_actualizacion = NOW()
+         WHERE usuario_id = $7`,
+        [
+          newCompanyId ? Number(newCompanyId) : null,
+          newRolId ? Number(newRolId) : null,
+          newTipoUsuarioId ? Number(newTipoUsuarioId) : null,
+          newEstado ? String(newEstado) : null,
+          newEstadoActivacion ? String(newEstadoActivacion) : null,
+          rawSessionMinutes !== undefined ? rawSessionMinutes : null,
+          targetUserId
+        ]
+      );
 
-      const currentScope = await query(`SELECT usuario_alcance_id FROM admin.usuario_alcance WHERE usuario_id = $1`, [targetUserId]);
-      let scopeId: number;
+      // 2. If session duration changed, dynamically recalculate expiration for all active sessions
+      if (rawSessionMinutes !== undefined) {
+        await client.query(
+          `UPDATE admin.usuario_sesion
+           SET fecha_expiracion = fecha_inicio + make_interval(mins => $1),
+               estado = CASE
+                 WHEN fecha_inicio + make_interval(mins => $1) <= clock_timestamp() THEN 'EXPIRADA'
+                 ELSE estado
+               END,
+               tipo_cierre = CASE
+                 WHEN fecha_inicio + make_interval(mins => $1) <= clock_timestamp() THEN 'EXPIRACION'
+                 ELSE tipo_cierre
+               END,
+               motivo_cierre = CASE
+                 WHEN fecha_inicio + make_interval(mins => $1) <= clock_timestamp() THEN 'Sesión expirada por cambio de duración máxima configurada'
+                 ELSE motivo_cierre
+               END,
+               fecha_cierre = CASE
+                 WHEN fecha_inicio + make_interval(mins => $1) <= clock_timestamp() THEN clock_timestamp()
+                 ELSE fecha_cierre
+               END
+           WHERE usuario_id = $2 AND estado = 'ACTIVA'`,
+          [rawSessionMinutes, targetUserId]
+        );
+      }
 
-      if (currentScope && currentScope.length > 0) {
-        scopeId = currentScope[0].usuario_alcance_id;
-        await query(
-          `UPDATE admin.usuario_alcance
-           SET nivel_alcance = $1, incluir_herencia_jerarquica = $2
-           WHERE usuario_alcance_id = $3`,
-          [dbNivel, includeChildren, scopeId]
+      // 3. Update admin.usuario_identidad
+
+      const identExists = await client.query(`SELECT 1 FROM admin.usuario_identidad WHERE usuario_id = $1`, [targetUserId]);
+      if (identExists.rows && identExists.rows.length > 0) {
+        await client.query(
+          `UPDATE admin.usuario_identidad
+           SET nombre = $1,
+               apellido = $2,
+               correo_electronico = $3,
+               telefono = $4,
+               numero_documento = $5,
+               departamento_id = $6,
+               area_id = $7,
+               cargo_id = $8,
+               fecha_actualizacion = NOW()
+           WHERE usuario_id = $9`,
+          [finalFirstName, finalLastName, updatedEmail, finalPhone, finalDoc, finalDeptId, finalAreaId, finalCargoId, targetUserId]
         );
       } else {
-        const nextScopeRes = await query(`SELECT COALESCE(MAX(usuario_alcance_id), 0) + 1 AS next_id FROM admin.usuario_alcance`);
-        scopeId = Number(nextScopeRes[0].next_id);
-        await query(
-          `INSERT INTO admin.usuario_alcance (usuario_alcance_id, usuario_id, nivel_alcance, incluir_herencia_jerarquica)
-           VALUES ($1, $2, $3, $4)`,
-          [scopeId, targetUserId, dbNivel, includeChildren]
+        await client.query(
+          `INSERT INTO admin.usuario_identidad (usuario_id, nombre, apellido, correo_electronico, telefono, numero_documento, departamento_id, area_id, cargo_id, fecha_actualizacion)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())`,
+          [targetUserId, finalFirstName, finalLastName, updatedEmail, finalPhone, finalDoc, finalDeptId, finalAreaId, finalCargoId]
         );
       }
 
-      await query(`DELETE FROM admin.usuario_alcance_detalle WHERE usuario_alcance_id = $1`, [scopeId]);
+      // 4. Update admin.usuario_seguridad
+      const segExists = await client.query(`SELECT 1 FROM admin.usuario_seguridad WHERE usuario_id = $1`, [targetUserId]);
+      if (segExists.rows && segExists.rows.length > 0) {
+        await client.query(
+          `UPDATE admin.usuario_seguridad
+           SET idioma_preferido = COALESCE($1, idioma_preferido),
+               zona_horaria = COALESCE($2, zona_horaria),
+               formato_fecha = COALESCE($3, formato_fecha),
+               correo_acceso = COALESCE($4, correo_acceso),
+               identificador_principal = CASE WHEN metodo_acceso_principal = 'EMAIL' AND $4 IS NOT NULL THEN $4 ELSE identificador_principal END
+           WHERE usuario_id = $5`,
+          [String(updatedIdioma), String(updatedZona), String(updatedFormato), updatedEmail, targetUserId]
+        );
+      } else {
+        await client.query(
+          `INSERT INTO admin.usuario_seguridad (usuario_seguridad_id, usuario_id, idioma_preferido, zona_horaria, formato_fecha, correo_acceso, identificador_principal, metodo_acceso_principal)
+           SELECT COALESCE(MAX(usuario_seguridad_id), 0) + 1, $1, $2, $3, $4, $5, $5, 'EMAIL' FROM admin.usuario_seguridad`,
+          [targetUserId, String(updatedIdioma), String(updatedZona), String(updatedFormato), updatedEmail]
+        );
+      }
 
-      if (dbNivel !== 'TODA_EMPRESA' && entityIds.length > 0) {
-        let detalleTipo = 'AGRUPACION';
-        if (dbNivel === 'POR_TERRITORIO') detalleTipo = 'TERRITORIO';
-        if (dbNivel === 'POR_AGENCIA') detalleTipo = 'AGENCIA';
+      // 5. Update admin.usuario_alcance and admin.usuario_alcance_detalle if scope fields are provided
+      if (body.scope_type !== undefined || body.nivel_alcance !== undefined || body.scope_entity_ids !== undefined) {
+        const prevScopeRes = await client.query<{ nivel_alcance: string }>(`SELECT nivel_alcance FROM admin.usuario_alcance WHERE usuario_id = $1`, [targetUserId]);
+        prevScopeNivel = prevScopeRes.rows?.[0]?.nivel_alcance || 'TODA_EMPRESA';
 
-        for (const refId of entityIds) {
-          await query(
-            `INSERT INTO admin.usuario_alcance_detalle (usuario_alcance_detalle_id, usuario_alcance_id, alcance, referencia_id)
-             VALUES ((SELECT COALESCE(MAX(usuario_alcance_detalle_id), 0) + 1 FROM admin.usuario_alcance_detalle), $1, $2, $3)`,
-            [scopeId, detalleTipo, refId]
+        const rawScope = body.scope_type || body.nivel_alcance || 'COMPANY';
+        if (rawScope === 'POR_AGRUPACION' || rawScope === 'DEPARTMENT' || rawScope === 'POR_DEPARTAMENTO') dbNivel = 'POR_AGRUPACION';
+        else if (rawScope === 'POR_TERRITORIO' || rawScope === 'AREA' || rawScope === 'POR_AREA') dbNivel = 'POR_TERRITORIO';
+        else if (rawScope === 'POR_AGENCIA' || rawScope === 'BRANCH' || rawScope === 'POR_SUCURSAL' || rawScope === 'SUCURSAL') dbNivel = 'POR_AGENCIA';
+        else dbNivel = 'TODA_EMPRESA';
+
+        const includeChildren = body.include_children !== undefined ? Boolean(body.include_children) : true;
+        const entityIds = Array.isArray(body.scope_entity_ids) ? body.scope_entity_ids.map(Number).filter((n: number) => !isNaN(n)) : [];
+
+        const currentScope = await client.query(`SELECT usuario_alcance_id FROM admin.usuario_alcance WHERE usuario_id = $1`, [targetUserId]);
+        let scopeId: number;
+
+        if (currentScope.rows && currentScope.rows.length > 0) {
+          scopeId = currentScope.rows[0].usuario_alcance_id;
+          await client.query(
+            `UPDATE admin.usuario_alcance
+             SET nivel_alcance = $1, incluir_herencia_jerarquica = $2
+             WHERE usuario_alcance_id = $3`,
+            [dbNivel, includeChildren, scopeId]
+          );
+        } else {
+          const nextScopeRes = await client.query(`SELECT COALESCE(MAX(usuario_alcance_id), 0) + 1 AS next_id FROM admin.usuario_alcance`);
+          scopeId = Number(nextScopeRes.rows[0].next_id);
+          await client.query(
+            `INSERT INTO admin.usuario_alcance (usuario_alcance_id, usuario_id, nivel_alcance, incluir_herencia_jerarquica)
+             VALUES ($1, $2, $3, $4)`,
+            [scopeId, targetUserId, dbNivel, includeChildren]
           );
         }
+
+        await client.query(`DELETE FROM admin.usuario_alcance_detalle WHERE usuario_alcance_id = $1`, [scopeId]);
+
+        if (dbNivel !== 'TODA_EMPRESA' && entityIds.length > 0) {
+          let detalleTipo = 'AGRUPACION';
+          if (dbNivel === 'POR_TERRITORIO') detalleTipo = 'TERRITORIO';
+          if (dbNivel === 'POR_AGENCIA') detalleTipo = 'AGENCIA';
+
+          for (const refId of entityIds) {
+            await client.query(
+              `INSERT INTO admin.usuario_alcance_detalle (usuario_alcance_detalle_id, usuario_alcance_id, alcance, referencia_id)
+               VALUES ((SELECT COALESCE(MAX(usuario_alcance_detalle_id), 0) + 1 FROM admin.usuario_alcance_detalle), $1, $2, $3)`,
+              [scopeId, detalleTipo, refId]
+            );
+          }
+        }
       }
-    }
 
-    // 5b. Persistir permisos personalizados del usuario en admin.usuario_permiso_personalizado
-    if (body.permissionsOverride !== undefined) {
-      await query(`DELETE FROM admin.usuario_permiso_personalizado WHERE usuario_id = $1`, [targetUserId]);
+      // 6. Update admin.usuario_permiso_personalizado
+      if (body.permissionsOverride !== undefined) {
+        await client.query(`DELETE FROM admin.usuario_permiso_personalizado WHERE usuario_id = $1`, [targetUserId]);
 
-      if (body.permissionsOverride && typeof body.permissionsOverride === 'object') {
-        const overrides = body.permissionsOverride as Record<string, boolean>;
-        const moduleMap: Record<number, Record<string, boolean>> = {};
-        const screenMap: Record<number, Record<string, boolean>> = {};
+        if (body.permissionsOverride && typeof body.permissionsOverride === 'object') {
+          const overrides = body.permissionsOverride as Record<string, boolean>;
+          const moduleMap: Record<number, Record<string, boolean>> = {};
+          const screenMap: Record<number, Record<string, boolean>> = {};
 
-        for (const [key, val] of Object.entries(overrides)) {
-          const parts = key.split(':');
-          if (parts.length === 2) {
-            const target = parts[0];
-            const act = parts[1];
-            if (target.startsWith('p:')) {
-              const scrId = parseInt(target.substring(2), 10);
-              if (!isNaN(scrId)) {
-                if (!screenMap[scrId]) screenMap[scrId] = {};
-                screenMap[scrId][act] = Boolean(val);
-              }
-            } else {
-              const modId = parseInt(target, 10);
-              if (!isNaN(modId)) {
-                if (!moduleMap[modId]) moduleMap[modId] = {};
-                moduleMap[modId][act] = Boolean(val);
+          for (const [key, val] of Object.entries(overrides)) {
+            const parts = key.split(':');
+            if (parts.length === 2) {
+              const target = parts[0];
+              const act = parts[1];
+              if (target.startsWith('p:')) {
+                const scrId = parseInt(target.substring(2), 10);
+                if (!isNaN(scrId)) {
+                  if (!screenMap[scrId]) screenMap[scrId] = {};
+                  screenMap[scrId][act] = Boolean(val);
+                }
+              } else {
+                const modId = parseInt(target, 10);
+                if (!isNaN(modId)) {
+                  if (!moduleMap[modId]) moduleMap[modId] = {};
+                  moduleMap[modId][act] = Boolean(val);
+                }
               }
             }
           }
-        }
 
-        // Insertar overrides a nivel de módulo
-        for (const modIdStr of Object.keys(moduleMap)) {
-          const modId = parseInt(modIdStr, 10);
-          const acts = moduleMap[modId];
-          await query(
-            `INSERT INTO admin.usuario_permiso_personalizado
-             (usuario_id, modulo_sistema_id, puede_ver, puede_crear, puede_editar, puede_inactivar, puede_exportar, puede_importar, puede_aprobar, puede_asignar, puede_mover, puede_cerrar, puede_reabrir, puede_eliminar)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
-            [
-              targetUserId, modId,
-              acts['ver'] ?? null, acts['crear'] ?? null, acts['editar'] ?? null, acts['inactivar'] ?? null,
-              acts['exportar'] ?? null, acts['importar'] ?? null, acts['aprobar'] ?? null, acts['asignar'] ?? null,
-              acts['mover'] ?? null, acts['cerrar'] ?? null, acts['reabrir'] ?? null, acts['eliminar'] ?? null
-            ]
-          );
-        }
+          // Insertar overrides a nivel de módulo
+          for (const modIdStr of Object.keys(moduleMap)) {
+            const modId = parseInt(modIdStr, 10);
+            const acts = moduleMap[modId];
+            await client.query(
+              `INSERT INTO admin.usuario_permiso_personalizado
+               (usuario_id, modulo_sistema_id, puede_ver, puede_crear, puede_editar, puede_inactivar, puede_exportar, puede_importar, puede_aprobar, puede_asignar, puede_mover, puede_cerrar, puede_reabrir, puede_eliminar)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+              [
+                targetUserId, modId,
+                acts['ver'] ?? null, acts['crear'] ?? null, acts['editar'] ?? null, acts['inactivar'] ?? null,
+                acts['exportar'] ?? null, acts['importar'] ?? null, acts['aprobar'] ?? null, acts['asignar'] ?? null,
+                acts['mover'] ?? null, acts['cerrar'] ?? null, acts['reabrir'] ?? null, acts['eliminar'] ?? null
+              ]
+            );
+          }
 
-        // Insertar overrides a nivel de pantalla
-        for (const scrIdStr of Object.keys(screenMap)) {
-          const scrId = parseInt(scrIdStr, 10);
-          const acts = screenMap[scrId];
-          await query(
-            `INSERT INTO admin.usuario_permiso_personalizado
-             (usuario_id, pantalla_id, puede_ver, puede_crear, puede_editar, puede_inactivar, puede_exportar, puede_importar, puede_aprobar, puede_asignar, puede_mover, puede_cerrar, puede_reabrir, puede_eliminar)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
-            [
-              targetUserId, scrId,
-              acts['ver'] ?? null, acts['crear'] ?? null, acts['editar'] ?? null, acts['inactivar'] ?? null,
-              acts['exportar'] ?? null, acts['importar'] ?? null, acts['aprobar'] ?? null, acts['asignar'] ?? null,
-              acts['mover'] ?? null, acts['cerrar'] ?? null, acts['reabrir'] ?? null, acts['eliminar'] ?? null
-            ]
+          // Insertar overrides a nivel de pantalla
+          for (const scrIdStr of Object.keys(screenMap)) {
+            const scrId = parseInt(scrIdStr, 10);
+            const acts = screenMap[scrId];
+            await client.query(
+              `INSERT INTO admin.usuario_permiso_personalizado
+               (usuario_id, pantalla_id, puede_ver, puede_crear, puede_editar, puede_inactivar, puede_exportar, puede_importar, puede_aprobar, puede_asignar, puede_mover, puede_cerrar, puede_reabrir, puede_eliminar)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+              [
+                targetUserId, scrId,
+                acts['ver'] ?? null, acts['crear'] ?? null, acts['editar'] ?? null, acts['inactivar'] ?? null,
+                acts['exportar'] ?? null, acts['importar'] ?? null, acts['aprobar'] ?? null, acts['asignar'] ?? null,
+                acts['mover'] ?? null, acts['cerrar'] ?? null, acts['reabrir'] ?? null, acts['eliminar'] ?? null
+              ]
+            );
+          }
+        }
+      }
+
+      // 7. Sincronización transaccional de admin.usuario_rol_adicional
+      if (additionalRolesExplicitlyProvided) {
+        // Arreglo explícito (vacío o con roles): sincronizar
+        await client.query(`DELETE FROM admin.usuario_rol_adicional WHERE usuario_id = $1`, [targetUserId]);
+
+        if (validatedAdditionalRoleIds && validatedAdditionalRoleIds.length > 0) {
+          for (const addRolId of validatedAdditionalRoleIds) {
+            await client.query(
+              `INSERT INTO admin.usuario_rol_adicional (usuario_id, rol_funcional_id)
+               VALUES ($1, $2)`,
+              [targetUserId, addRolId]
+            );
+          }
+        }
+      } else {
+        // Campo omitido: conservar existentes, pero si el rol principal cambió, remover el nuevo rol principal de los adicionales
+        if (newRolId && newRolId !== current.rol_principal_id) {
+          await client.query(
+            `DELETE FROM admin.usuario_rol_adicional WHERE usuario_id = $1 AND rol_funcional_id = $2`,
+            [targetUserId, newRolId]
           );
         }
       }
-    }
+    });
 
     // Re-query updated real data and construct usuarioActualizado
     const fetchUpdatedSql = `
@@ -848,6 +974,15 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const updatedRows = await query(fetchUpdatedSql, [targetUserId]);
     const updatedRow = updatedRows?.[0] || {};
 
+    const updatedAddRolesRes = await query<{ rol_funcional_id: number; nombre: string }>(
+      `SELECT ura.rol_funcional_id, rf.nombre
+       FROM admin.usuario_rol_adicional ura
+       JOIN admin.rol_funcional rf ON ura.rol_funcional_id = rf.rol_funcional_id
+       WHERE ura.usuario_id = $1
+       ORDER BY ura.rol_funcional_id`,
+      [targetUserId]
+    );
+
     const usuarioActualizado = updatedRow ? {
       id: updatedRow.id,
       nombre: `${updatedRow.firstName || ''} ${updatedRow.lastName || ''}`.trim() || updatedRow.email || 'Sin nombre',
@@ -862,6 +997,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       tipo_usuario_nombre: updatedRow.tipo_usuario_nombre ?? null,
       primaryRoleId: updatedRow.primaryRoleId ?? null,
       role: updatedRow.role ?? null,
+      roles_additional: (updatedAddRolesRes || []).map(r => Number(r.rol_funcional_id)),
+      additional_roles: (updatedAddRolesRes || []).map(r => ({ id: Number(r.rol_funcional_id), name: r.nombre })),
       departmentId: updatedRow.departmentId ?? null,
       departamento_nombre: updatedRow.departamento_nombre ?? null,
       areaId: updatedRow.areaId ?? null,
@@ -896,6 +1033,13 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
     // Build field-level diff for forensic audit
     const changedFields: { field: string; oldVal: string; newVal: string }[] = [];
+    if (additionalRolesExplicitlyProvided) {
+      changedFields.push({
+        field: 'Roles Adicionales',
+        oldVal: '—',
+        newVal: (validatedAdditionalRoleIds || []).join(', ') || 'Ninguno'
+      });
+    }
     if (updatedFirstName !== current.nombre) {
       changedFields.push({ field: 'Nombre', oldVal: current.nombre || '—', newVal: updatedFirstName || '—' });
     }
@@ -1055,6 +1199,31 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       );
     }
 
+    if (targetUserId === authUserId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "FORBIDDEN",
+          message: "No posee permisos para eliminar su propia cuenta."
+        },
+        { status: 403 }
+      );
+    }
+
+    const callerIsSuper = await isSuperAdmin(authUserId);
+    const targetIsSuper = await isSuperAdmin(targetUserId);
+
+    if (targetIsSuper && !callerIsSuper) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "FORBIDDEN",
+          message: "Solo un SuperAdmin institucional puede eliminar o desactivar una cuenta con Rol 1 (Administrador General)."
+        },
+        { status: 403 }
+      );
+    }
+
     // Fetch target user data
     const userRows = await query(
       `SELECT u.usuario_id, u.empresa_id, u.estado, ui.nombre, ui.apellido, ui.correo_electronico
@@ -1074,21 +1243,14 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
 
     const targetUser = userRows[0];
 
-    const isGlobalAdmin = await query(
-      `SELECT 1
-       FROM admin.usuario u
-       LEFT JOIN admin.rol_funcional r ON u.rol_principal_id = r.rol_funcional_id
-       LEFT JOIN admin.usuario_alcance alc ON u.usuario_id = alc.usuario_id
-       WHERE u.usuario_id = $1
-         AND (
-           UPPER(COALESCE(r.nombre, '')) = 'ADMINISTRADOR GENERAL'
-           OR UPPER(COALESCE(r.nombre, '')) LIKE '%SUPER%'
-           OR alc.nivel_alcance = 'TODA_EMPRESA'
-         )
-       LIMIT 1`,
-      [authUserId]
-    );
-    const hasGlobalScope = Boolean(isGlobalAdmin && isGlobalAdmin.length > 0);
+    let hasGlobalScope = callerIsSuper;
+    if (!hasGlobalScope) {
+      const alcCheck = await query<{ usuario_id: number }>(
+        `SELECT usuario_id FROM admin.usuario_alcance WHERE usuario_id = $1 AND nivel_alcance = 'TODA_EMPRESA' LIMIT 1`,
+        [authUserId]
+      );
+      hasGlobalScope = Boolean(alcCheck && alcCheck.length > 0);
+    }
 
     if (!hasGlobalScope) {
       if (authUserCompanyId && targetUser.empresa_id && Number(authUserCompanyId) !== Number(targetUser.empresa_id)) {

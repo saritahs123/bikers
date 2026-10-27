@@ -19,10 +19,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     const perms = await getScreenPermissions("FACTURACION_PAGOS", session.usuario_id);
-    const invoicePerms = await getScreenPermissions("FACTURACION_FACTURAS", session.usuario_id);
-    if (!perms.puede_crear && !invoicePerms.puede_crear) {
+    if (!perms.puede_crear) {
       return NextResponse.json(
-        { error: "FORBIDDEN", message: "No tienes permisos para registrar pagos en facturación. Se requiere el privilegio CREAR." },
+        { error: "FORBIDDEN", message: "No tienes permisos para registrar pagos en facturación. Se requiere el privilegio CREAR en la pantalla Cobros y Pagos (FACTURACION_PAGOS)." },
         { status: 403 }
       );
     }

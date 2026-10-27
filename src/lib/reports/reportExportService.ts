@@ -283,18 +283,31 @@ export async function exportReportToPdf(data: ReportExportData): Promise<void> {
     tableBody.push(totalRow);
   }
 
-  // Column styles mapping
-  const colStyles: Record<number, { halign: "left" | "center" | "right"; valign: "middle"; cellWidth: number | "auto" }> = {};
+  // Distribute column widths across the entire printable width (no blank gaps on the right)
+  const sumConfiguredWidth = data.columns.reduce((sum, col) => sum + (col.width || 30), 0);
+  const scale = contentWidth / (sumConfiguredWidth > 0 ? sumConfiguredWidth : contentWidth);
+
+  let accumulatedWidth = 0;
+  const colStyles: Record<number, { halign: "left" | "center" | "right"; valign: "middle"; cellWidth: number }> = {};
   data.columns.forEach((col, idx) => {
+    const rawW = col.width || 30;
+    let scaledW = Number((rawW * scale).toFixed(2));
+    if (idx === data.columns.length - 1) {
+      scaledW = Number((contentWidth - accumulatedWidth).toFixed(2));
+    } else {
+      accumulatedWidth += scaledW;
+    }
+
     colStyles[idx] = {
       halign: col.align || (col.isCurrency ? "right" : "left"),
       valign: "middle",
-      cellWidth: col.width || "auto",
+      cellWidth: scaledW,
     };
   });
 
   autoTable(doc, {
     startY: currentY,
+    tableWidth: contentWidth,
     margin: { left: marginX, right: marginX, bottom: 15 },
     head: [tableHeaders],
     body: tableBody,
@@ -320,6 +333,13 @@ export async function exportReportToPdf(data: ReportExportData): Promise<void> {
     },
     columnStyles: colStyles,
     didParseCell: (hookData) => {
+      // Header cell alignment matching column definition
+      if (hookData.section === "head") {
+        const colDef = data.columns[hookData.column.index];
+        if (colDef) {
+          hookData.cell.styles.halign = colDef.align || (colDef.isCurrency ? "right" : "left");
+        }
+      }
       // Bold totals row
       if (data.totals && hookData.row.index === tableBody.length - 1) {
         hookData.cell.styles.fontStyle = "bold";

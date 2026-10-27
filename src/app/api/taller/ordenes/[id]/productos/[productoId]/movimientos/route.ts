@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { getWorkshopSession, getScreenPermissions } from "@/lib/workshop-session";
 
 export async function GET(
   req: NextRequest,
@@ -43,9 +43,9 @@ export async function GET(
       );
     }
 
-    // 2. Validar permisos canónicos del módulo TALLER
-    const perms = await getModulePermissions("TALLER", session.usuario_id);
-    if (!perms.puede_ver && session.rol_principal_id !== 1) {
+    // 2. Validar permisos canónicos de Taller
+    const perms = await getScreenPermissions("TALLER_ORDENES", session.usuario_id);
+    if (!perms.puede_ver) {
       return NextResponse.json(
         { error: "FORBIDDEN", message: "No tienes permiso para consultar información de esta orden." },
         { status: 403 }

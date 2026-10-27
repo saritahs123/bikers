@@ -61,7 +61,15 @@ export async function GET(req: Request) {
       fecha_actualizacion: r.fecha_actualizacion ? String(r.fecha_actualizacion).substring(0, 10) : null
     }));
 
-    return NextResponse.json(mapped);
+    return NextResponse.json(mapped, {
+      headers: {
+        "x-perm-ver": String(perms.puede_ver),
+        "x-perm-crear": String(perms.puede_crear),
+        "x-perm-editar": String(perms.puede_editar),
+        "x-perm-eliminar": String(perms.puede_eliminar),
+        "x-perm-exportar": String(perms.puede_exportar)
+      }
+    });
   } catch (error: any) {
     console.error("Error in GET /api/areas:", error);
     return NextResponse.json({ success: false, error: "SERVER_ERROR", message: "Error al obtener la lista de áreas." }, { status: 500 });

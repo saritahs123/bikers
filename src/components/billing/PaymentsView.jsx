@@ -38,6 +38,7 @@ export default function PaymentsView() {
   });
   const [tiposPagoCatalogo, setTiposPagoCatalogo] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [canCreateInvoice, setCanCreateInvoice] = useState(false);
 
   // Filtros
   const [search, setSearch] = useState("");
@@ -65,7 +66,7 @@ export default function PaymentsView() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  // Cargar catálogo de tipos de pago
+  // Cargar catálogo de tipos de pago y permisos
   useEffect(() => {
     async function loadCatalogos() {
       try {
@@ -73,6 +74,9 @@ export default function PaymentsView() {
         const json = await res.json();
         if (json.tipos_pago) {
           setTiposPagoCatalogo(json.tipos_pago);
+        }
+        if (json.permisos) {
+          setCanCreateInvoice(Boolean(json.permisos.puede_crear));
         }
       } catch (err) {
         console.error("Error al cargar tipos de pago:", err);
@@ -255,15 +259,17 @@ export default function PaymentsView() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5">
-          <Link
-            href="/billing/new"
-            className="flex items-center gap-2 px-4 py-2 text-xs font-mono font-bold uppercase tracking-wider rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-all shadow-md shadow-primary/20"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Nueva Factura</span>
-          </Link>
-        </div>
+        {canCreateInvoice && (
+          <div className="flex items-center gap-2.5">
+            <Link
+              href="/billing/new"
+              className="flex items-center gap-2 px-4 py-2 text-xs font-mono font-bold uppercase tracking-wider rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-all shadow-md shadow-primary/20"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Nueva Factura</span>
+            </Link>
+          </div>
+        )}
       </div>
 
       {/* 2. Tarjetas de Métricas Superiores (Sección 3) */}

@@ -54,32 +54,39 @@ function SidebarContent({
   }, [isOpen, onClose]);
 
   const navItems: NavItem[] = useMemo(() => {
-    const navPerms = user?.navigationPermissions;
-    const isSuper = Boolean(navPerms?.isSuperAdmin);
+    // GAP-01: Denegación por defecto si no hay usuario o permisos cargados
+    if (!user || !user.navigationPermissions) {
+      return [];
+    }
+
+    const navPerms = user.navigationPermissions;
 
     return CANONICAL_NAVIGATION.map(menu => {
       const menuKey = normalizeCode(menu.codigo);
-      // Check menu level permission
-      const hasMenuPerm = !navPerms || isSuper || Boolean(navPerms.modules[menuKey]);
+      // Denegación por defecto: sólo permitido si el módulo está explícitamente en true
+      const hasMenuPerm = Boolean(navPerms.modules?.[menuKey]);
 
-      // Filter child screens
+      // Filtrar pantallas hijas con Fail-Closed
       const visibleScreens = menu.screens.filter(screen => {
-        if (!navPerms || isSuper) return true;
         // Check screen override first
         const screenKey = screen.codigo;
         const screenRoute = screen.ruta;
-        if (navPerms.screens[screenKey] !== undefined) {
+        if (navPerms.screens?.[screenKey] !== undefined) {
           return Boolean(navPerms.screens[screenKey]);
         }
-        if (navPerms.screens[screenRoute] !== undefined) {
+        if (navPerms.screens?.[screenRoute] !== undefined) {
           return Boolean(navPerms.screens[screenRoute]);
         }
-        // Fallback to menu permission
+        // Fail-Closed: si la pantalla requiere una acción operativa y no está explícitamente autorizada en screens, no mostrarla
+        if (screen.requiredAction && screen.requiredAction !== "puede_ver") {
+          return false;
+        }
+        // Fallback a permiso de módulo padre
         return hasMenuPerm;
       });
 
       // Special handling for backward compatibility with can_view_reports
-      if (menu.id === "reportes" && user?.can_view_reports !== undefined && !isSuper) {
+      if (menu.id === "reportes" && user?.can_view_reports !== undefined) {
         if (!user.can_view_reports) return null;
       }
 
@@ -95,6 +102,9 @@ function SidebarContent({
 
       // For HOME / single link menu
       if (menu.id === "home") {
+        if (!hasMenuPerm) {
+          return null;
+        }
         return {
           id: "home",
           href: "/",
@@ -362,9 +372,19 @@ function SidebarContent({
         </div>
 
         <div className="flex-1 overflow-y-auto custom-scrollbar -mx-2 px-2">
-          <nav className="space-y-1">
-            {navItems.map((item) => renderItemCard(item))}
-          </nav>
+          {/* GAP-07: Estado de carga seguro sin parpadeo si los permisos no se han hidratado */}
+          {!user || !user.navigationPermissions ? (
+            <div className="space-y-2.5 p-2">
+              <div className="h-10 bg-surface-subtle border border-border/40 rounded-xl animate-pulse" />
+              <div className="h-10 bg-surface-subtle border border-border/40 rounded-xl animate-pulse" />
+              <div className="h-10 bg-surface-subtle border border-border/40 rounded-xl animate-pulse" />
+              <div className="h-10 bg-surface-subtle border border-border/40 rounded-xl animate-pulse" />
+            </div>
+          ) : (
+            <nav className="space-y-1">
+              {navItems.map((item) => renderItemCard(item))}
+            </nav>
+          )}
         </div>
       </aside>
     </>

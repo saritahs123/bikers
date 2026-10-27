@@ -65,6 +65,14 @@ function InventoryAdjustmentsContent() {
   const [loadingMovimientos, setLoadingMovimientos] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  // GAP-05: Estado de permisos RBAC para control visual de acciones (fail-closed)
+  const [permissions, setPermissions] = useState({
+    puede_ver: true,
+    puede_crear: false,
+    puede_editar: false,
+    puede_aprobar: false,
+  });
+
   // Cabecera de la operación
   const [almacenId, setAlmacenId] = useState("");
   const [motivo, setMotivo] = useState("");
@@ -154,6 +162,22 @@ function InventoryAdjustmentsContent() {
       if (res.ok) {
         const data = await res.json();
         setMovimientos(data.movimientos || []);
+        if (data.permissions) {
+          setPermissions(data.permissions);
+        } else {
+          const canCrear = res.headers.get("x-perm-crear");
+          const canVer = res.headers.get("x-perm-ver");
+          const canEditar = res.headers.get("x-perm-editar");
+          const canAprobar = res.headers.get("x-perm-aprobar");
+          if (canCrear !== null) {
+            setPermissions({
+              puede_ver: canVer === "true",
+              puede_crear: canCrear === "true",
+              puede_editar: canEditar === "true",
+              puede_aprobar: canAprobar === "true"
+            });
+          }
+        }
         setErrorMovimientos(null);
       } else {
         setMovimientos([]);
@@ -1246,7 +1270,7 @@ function InventoryAdjustmentsContent() {
                 <button
                   type="button"
                   onClick={handleAddLine}
-                  disabled={!selectedProduct || !cantidad || parseFloat(cantidad) <= 0}
+                  disabled={!permissions.puede_crear || !selectedProduct || !cantidad || parseFloat(cantidad) <= 0}
                   className="flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-semibold rounded-lg bg-surface hover:bg-hover text-foreground border border-border transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <Plus className="w-3.5 h-3.5" />
@@ -1254,31 +1278,38 @@ function InventoryAdjustmentsContent() {
                 </button>
 
                 {/* Botón Registrar según color de pestaña de la referencia */}
-                <button
-                  type="button"
-                  onClick={handleSubmitOperation}
-                  disabled={submitting || (lineas.length === 0 && (!selectedProduct || !cantidad))}
-                  className={`flex items-center gap-2 px-5 py-2.5 text-xs font-bold rounded-lg shadow-sm transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
-                    activeTab === "SALIDA"
-                      ? "bg-red-500 hover:bg-red-600 text-white"
-                      : activeTab === "AJU_POS"
-                      ? "bg-emerald-500 hover:bg-emerald-600 text-white"
-                      : "bg-red-500 hover:bg-red-600 text-white"
-                  }`}
-                >
-                  {activeTab === "SALIDA" && <ArrowRight className="w-4 h-4" />}
-                  {activeTab === "AJU_POS" && <Plus className="w-4 h-4" />}
-                  {activeTab === "AJU_NEG" && <MinusCircle className="w-4 h-4" />}
-                  <span>
-                    {submitting
-                      ? "Registrando..."
-                      : activeTab === "SALIDA"
-                      ? "Registrar Salida"
-                      : activeTab === "AJU_POS"
-                      ? "Registrar Ajuste Positivo"
-                      : "Registrar Ajuste Negativo"}
-                  </span>
-                </button>
+                {!permissions.puede_crear ? (
+                  <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-500 text-xs font-mono font-bold uppercase tracking-wider">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    <span>Modo Solo Lectura</span>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleSubmitOperation}
+                    disabled={submitting || (lineas.length === 0 && (!selectedProduct || !cantidad))}
+                    className={`flex items-center gap-2 px-5 py-2.5 text-xs font-bold rounded-lg shadow-sm transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                      activeTab === "SALIDA"
+                        ? "bg-red-500 hover:bg-red-600 text-white"
+                        : activeTab === "AJU_POS"
+                        ? "bg-emerald-500 hover:bg-emerald-600 text-white"
+                        : "bg-red-500 hover:bg-red-600 text-white"
+                    }`}
+                  >
+                    {activeTab === "SALIDA" && <ArrowRight className="w-4 h-4" />}
+                    {activeTab === "AJU_POS" && <Plus className="w-4 h-4" />}
+                    {activeTab === "AJU_NEG" && <MinusCircle className="w-4 h-4" />}
+                    <span>
+                      {submitting
+                        ? "Registrando..."
+                        : activeTab === "SALIDA"
+                        ? "Registrar Salida"
+                        : activeTab === "AJU_POS"
+                        ? "Registrar Ajuste Positivo"
+                        : "Registrar Ajuste Negativo"}
+                    </span>
+                  </button>
+                )}
               </div>
             </div>
 

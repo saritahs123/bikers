@@ -16,7 +16,9 @@ import {
   ArrowDown,
   AlertCircle,
   Percent,
-  Users
+  Users,
+  Eye,
+  Lock
 } from "lucide-react";
 import SecurityConfirmDialog from "@/components/security/SecurityConfirmDialog";
 
@@ -25,23 +27,34 @@ export default function ClientLevelsView() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("Todos");
-  const [sortColumn, setSortColumn] = useState("porciento_descuento");
+  const [sortColumn, setSortColumn] = useState("descuento_servicio");
   const [sortDirection, setSortDirection] = useState("desc");
   const [page, setPage] = useState(1);
   const itemsPerPage = 8;
   const [mounted, setMounted] = useState(false);
+
+  // Permisos RBAC efectivos (Fase 6.4.13: Fail-safe defaults)
+  const [permissions, setPermissions] = useState({
+    puede_ver: false,
+    puede_crear: false,
+    puede_editar: false,
+    puede_eliminar: false,
+    puede_exportar: false
+  });
 
   // Drawer / Modal states
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [formData, setFormData] = useState({
     nombre: "",
-    porciento_descuento: 0,
+    descuento_servicio: 0,
+    descuento_producto: 0,
     descripcion: "",
     activo: true
   });
   const [nameError, setNameError] = useState("");
-  const [discountError, setDiscountError] = useState("");
+  const [discountServicioError, setDiscountServicioError] = useState("");
+  const [discountProductoError, setDiscountProductoError] = useState("");
   const [isDeletingModalOpen, setIsDeletingModalOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
@@ -52,6 +65,22 @@ export default function ClientLevelsView() {
       setLoading(true);
       const res = await fetch("/api/crm/niveles-cliente");
       if (res.ok) {
+        const permVer = res.headers.get("x-perm-ver");
+        const permCrear = res.headers.get("x-perm-crear");
+        const permEditar = res.headers.get("x-perm-editar");
+        const permEliminar = res.headers.get("x-perm-eliminar");
+        const permExportar = res.headers.get("x-perm-exportar");
+
+        if (permVer !== null) {
+          setPermissions({
+            puede_ver: permVer !== "false",
+            puede_crear: permCrear === "true",
+            puede_editar: permEditar === "true",
+            puede_eliminar: permEliminar === "true",
+            puede_exportar: permExportar === "true"
+          });
+        }
+
         const json = await res.json();
         setData(json.data || []);
       }
@@ -86,45 +115,74 @@ export default function ClientLevelsView() {
       setNameError("");
     }
 
-    const disc = Number(formData.porciento_descuento);
-    if (isNaN(disc) || disc < 0 || disc > 100) {
-      setDiscountError("El descuento debe estar entre 0% y 100%.");
+    const discServ = Number(formData.descuento_servicio);
+    if (isNaN(discServ) || discServ < 0 || discServ > 100) {
+      setDiscountServicioError("El descuento en servicios debe estar entre 0% y 100%.");
       isValid = false;
     } else {
-      setDiscountError("");
+      setDiscountServicioError("");
+    }
+
+    const discProd = Number(formData.descuento_producto);
+    if (isNaN(discProd) || discProd < 0 || discProd > 100) {
+      setDiscountProductoError("El descuento en productos debe estar entre 0% y 100%.");
+      isValid = false;
+    } else {
+      setDiscountProductoError("");
     }
 
     return isValid;
   };
 
   const handleOpenCreate = () => {
+    if (!permissions.puede_crear) {
+      showToast("No tienes permisos para crear niveles de cliente.", "error");
+      return;
+    }
     setEditingItem(null);
     setFormData({
       nombre: "",
-      porciento_descuento: 0,
+      descuento_servicio: 0,
+      descuento_producto: 0,
       descripcion: "",
       activo: true
     });
     setNameError("");
-    setDiscountError("");
+    setDiscountServicioError("");
+    setDiscountProductoError("");
     setIsDrawerOpen(true);
   };
 
   const handleOpenEdit = (item) => {
+    if (!permissions.puede_editar && !permissions.puede_ver) {
+      showToast("No tienes permisos para consultar o editar niveles de cliente.", "error");
+      return;
+    }
     setEditingItem(item);
     setFormData({
       nombre: item.nombre || "",
-      porciento_descuento: Number(item.porciento_descuento || 0),
+      descuento_servicio: Number(item.descuento_servicio ?? item.porciento_descuento ?? 0),
+      descuento_producto: Number(item.descuento_producto ?? item.porciento_descuento ?? 0),
       descripcion: item.descripcion || "",
       activo: item.activo !== false
     });
     setNameError("");
-    setDiscountError("");
+    setDiscountServicioError("");
+    setDiscountProductoError("");
     setIsDrawerOpen(true);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (editingItem && !permissions.puede_editar) {
+      showToast("No tienes permisos para modificar niveles de cliente.", "error");
+      return;
+    }
+    if (!editingItem && !permissions.puede_crear) {
+      showToast("No tienes permisos para crear niveles de cliente.", "error");
+      return;
+    }
+
     if (!validateForm()) return;
 
     try {
@@ -156,12 +214,20 @@ export default function ClientLevelsView() {
   };
 
   const handleOpenDelete = (item) => {
+    if (!permissions.puede_eliminar) {
+      showToast("No tienes permisos para eliminar niveles de cliente.", "error");
+      return;
+    }
     setItemToDelete(item);
     setIsDeletingModalOpen(true);
   };
 
   const handleConfirmDelete = async () => {
     if (!itemToDelete) return;
+    if (!permissions.puede_eliminar) {
+      showToast("No tienes permisos para eliminar niveles de cliente.", "error");
+      return;
+    }
     try {
       const res = await fetch(`/api/crm/niveles-cliente/${itemToDelete.nivel_cliente_id}`, {
         method: "DELETE"
@@ -264,14 +330,16 @@ export default function ClientLevelsView() {
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={handleOpenCreate}
-          className="flex items-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary-hover text-primary-foreground font-mono text-xs font-bold uppercase rounded-xl transition-all shadow-md shadow-primary/20 cursor-pointer shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Nuevo Nivel</span>
-        </button>
+        {permissions.puede_crear && (
+          <button
+            type="button"
+            onClick={handleOpenCreate}
+            className="flex items-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary-hover text-primary-foreground font-mono text-xs font-bold uppercase rounded-xl transition-all shadow-md shadow-primary/20 cursor-pointer shrink-0"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Nuevo Nivel</span>
+          </button>
+        )}
       </div>
 
       {/* Filters Bar */}
@@ -340,12 +408,25 @@ export default function ClientLevelsView() {
                   </div>
                 </th>
                 <th
-                  onClick={() => handleSort("porciento_descuento")}
+                  onClick={() => handleSort("descuento_servicio")}
                   className="py-3.5 px-4 font-bold cursor-pointer hover:text-primary transition-colors text-right"
                 >
                   <div className="flex items-center justify-end gap-1.5">
-                    <span>Descuento (%)</span>
-                    {sortColumn === "porciento_descuento" ? (
+                    <span>Desc. Servicios (%)</span>
+                    {sortColumn === "descuento_servicio" ? (
+                      sortDirection === "asc" ? <ArrowUp className="w-3.5 h-3.5 text-primary" /> : <ArrowDown className="w-3.5 h-3.5 text-primary" />
+                    ) : (
+                      <ArrowUpDown className="w-3.5 h-3.5 opacity-40" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort("descuento_producto")}
+                  className="py-3.5 px-4 font-bold cursor-pointer hover:text-primary transition-colors text-right"
+                >
+                  <div className="flex items-center justify-end gap-1.5">
+                    <span>Desc. Productos (%)</span>
+                    {sortColumn === "descuento_producto" ? (
                       sortDirection === "asc" ? <ArrowUp className="w-3.5 h-3.5 text-primary" /> : <ArrowDown className="w-3.5 h-3.5 text-primary" />
                     ) : (
                       <ArrowUpDown className="w-3.5 h-3.5 opacity-40" />
@@ -373,14 +454,14 @@ export default function ClientLevelsView() {
             <tbody className="divide-y divide-border">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-foreground-muted font-mono">
+                  <td colSpan={7} className="py-12 text-center text-foreground-muted font-mono">
                     <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-primary" />
                     Cargando niveles de clientes...
                   </td>
                 </tr>
               ) : paginatedData.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-foreground-disabled font-mono">
+                  <td colSpan={7} className="py-12 text-center text-foreground-disabled font-mono">
                     No se encontraron niveles de clientes configurados.
                   </td>
                 </tr>
@@ -393,10 +474,19 @@ export default function ClientLevelsView() {
                         <span>{item.nombre}</span>
                       </div>
                     </td>
+                    <td className="py-3.5 px-4 text-right font-mono font-black text-blue-500">
+                      {Number(item.descuento_servicio || item.porciento_descuento || 0) > 0 ? (
+                        <span className="px-2 py-0.5 bg-blue-500/10 border border-blue-500/20 rounded-md">
+                          {Number(item.descuento_servicio || item.porciento_descuento || 0)}%
+                        </span>
+                      ) : (
+                        <span className="text-foreground-muted font-medium">0%</span>
+                      )}
+                    </td>
                     <td className="py-3.5 px-4 text-right font-mono font-black text-emerald-500">
-                      {item.porciento_descuento > 0 ? (
+                      {Number(item.descuento_producto || item.porciento_descuento || 0) > 0 ? (
                         <span className="px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded-md">
-                          {item.porciento_descuento}%
+                          {Number(item.descuento_producto || item.porciento_descuento || 0)}%
                         </span>
                       ) : (
                         <span className="text-foreground-muted font-medium">0%</span>
@@ -424,22 +514,36 @@ export default function ClientLevelsView() {
                     </td>
                     <td className="py-3.5 px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenEdit(item)}
-                          className="p-1.5 rounded-lg border border-border bg-surface-subtle hover:bg-hover text-foreground-secondary hover:text-foreground transition-colors cursor-pointer"
-                          title="Editar nivel"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleOpenDelete(item)}
-                          className="p-1.5 rounded-lg border border-border bg-surface-subtle hover:bg-rose-500/10 hover:border-rose-500/30 text-foreground-secondary hover:text-rose-500 transition-colors cursor-pointer"
-                          title="Eliminar o desactivar nivel"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {permissions.puede_editar && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEdit(item)}
+                            className="p-1.5 rounded-lg border border-border bg-surface-subtle hover:bg-hover text-foreground-secondary hover:text-foreground transition-colors cursor-pointer"
+                            title="Editar nivel"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {!permissions.puede_editar && permissions.puede_ver && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEdit(item)}
+                            className="p-1.5 rounded-lg border border-border bg-surface-subtle hover:bg-hover text-foreground-secondary hover:text-foreground transition-colors cursor-pointer"
+                            title="Consultar nivel"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {permissions.puede_eliminar && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenDelete(item)}
+                            className="p-1.5 rounded-lg border border-border bg-surface-subtle hover:bg-rose-500/10 hover:border-rose-500/30 text-foreground-secondary hover:text-rose-500 transition-colors cursor-pointer"
+                            title="Eliminar o desactivar nivel"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -478,140 +582,206 @@ export default function ClientLevelsView() {
       </div>
 
       {/* Modal / Drawer Crear o Editar */}
-      {isDrawerOpen && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-card border border-border rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col transition-colors">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-surface/50">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-xl bg-purple-500/15 border border-purple-500/30 text-purple-500">
-                  <Award className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-foreground font-mono">
-                    {editingItem ? "Editar Nivel de Cliente" : "Crear Nivel de Cliente"}
-                  </h3>
-                  <p className="text-[11px] text-foreground-muted font-mono">
-                    {editingItem ? `Nivel #${editingItem.nivel_cliente_id}` : "Nuevo registro en catálogo"}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsDrawerOpen(false)}
-                className="p-1.5 rounded-lg text-foreground-muted hover:text-foreground hover:bg-hover transition-colors cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              {/* Nombre */}
-              <div>
-                <label className="block text-xs font-mono font-bold text-foreground mb-1 uppercase tracking-wider">
-                  Nombre del Nivel *
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ej: VIP, DIAMANTE, INTERMEDIO, BÁSICO"
-                  value={formData.nombre}
-                  onChange={(e) => setFormData(prev => ({ ...prev, nombre: e.target.value }))}
-                  className={`w-full bg-surface-subtle border rounded-xl px-3.5 py-2.5 text-xs font-mono text-foreground placeholder:text-foreground-disabled focus:outline-none transition-colors ${
-                    nameError ? "border-rose-500 focus:border-rose-500" : "border-border focus:border-primary"
-                  }`}
-                />
-                {nameError && <p className="text-[11px] text-rose-500 font-mono mt-1">{nameError}</p>}
-              </div>
-
-              {/* Porcentaje de Descuento */}
-              <div>
-                <label className="block text-xs font-mono font-bold text-foreground mb-1 uppercase tracking-wider flex items-center justify-between">
-                  <span>Porcentaje de Descuento (0% - 100%) *</span>
-                  <span className="text-emerald-500 font-black">{formData.porciento_descuento}%</span>
-                </label>
-                <div className="flex items-center gap-3">
-                  <div className="relative flex-1">
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.5"
-                      value={formData.porciento_descuento}
-                      onChange={(e) => setFormData(prev => ({ ...prev, porciento_descuento: e.target.value }))}
-                      className={`w-full bg-surface-subtle border rounded-xl px-3.5 py-2.5 text-xs font-mono text-foreground focus:outline-none transition-colors ${
-                        discountError ? "border-rose-500 focus:border-rose-500" : "border-border focus:border-primary"
-                      }`}
-                    />
-                    <Percent className="w-4 h-4 text-foreground-muted absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+      {isDrawerOpen && (() => {
+        const canSave = editingItem ? permissions.puede_editar : permissions.puede_crear;
+        return (
+          <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="bg-card border border-border rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col transition-colors">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-surface/50">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-purple-500/15 border border-purple-500/30 text-purple-500">
+                    <Award className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-bold text-foreground font-mono">
+                        {editingItem ? (canSave ? "Editar Nivel de Cliente" : "Consultar Nivel de Cliente") : "Crear Nivel de Cliente"}
+                      </h3>
+                      {!canSave && (
+                        <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-500 text-[10px] font-mono font-bold uppercase tracking-wider">
+                          <Lock className="w-3 h-3" />
+                          <span>Solo Lectura</span>
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-foreground-muted font-mono">
+                      {editingItem ? `Nivel #${editingItem.nivel_cliente_id}` : "Nuevo registro en catálogo"}
+                    </p>
                   </div>
                 </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  step="1"
-                  value={formData.porciento_descuento || 0}
-                  onChange={(e) => setFormData(prev => ({ ...prev, porciento_descuento: Number(e.target.value) }))}
-                  className="w-full mt-2 accent-primary cursor-pointer"
-                />
-                {discountError && <p className="text-[11px] text-rose-500 font-mono mt-1">{discountError}</p>}
-              </div>
-
-              {/* Descripción */}
-              <div>
-                <label className="block text-xs font-mono font-bold text-foreground mb-1 uppercase tracking-wider">
-                  Descripción (Opcional)
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="Detalles sobre beneficios, requisitos o aplicación del nivel..."
-                  value={formData.descripcion}
-                  onChange={(e) => setFormData(prev => ({ ...prev, descripcion: e.target.value }))}
-                  className="w-full bg-surface-subtle border border-border rounded-xl px-3.5 py-2 text-xs font-mono text-foreground placeholder:text-foreground-disabled focus:outline-none focus:border-primary transition-colors"
-                />
-              </div>
-
-              {/* Estado Activo */}
-              <div className="pt-2 flex items-center justify-between border-t border-border">
-                <div>
-                  <span className="text-xs font-mono font-bold text-foreground block">Nivel Activo</span>
-                  <span className="text-[11px] text-foreground-muted font-mono">
-                    Los niveles inactivos no pueden asignarse a nuevos clientes ni otorgan descuento
-                  </span>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.activo}
-                    onChange={(e) => setFormData(prev => ({ ...prev, activo: e.target.checked }))}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-surface-subtle peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
-                </label>
-              </div>
-
-              {/* Footer */}
-              <div className="pt-4 border-t border-border flex items-center justify-end gap-2.5">
                 <button
                   type="button"
                   onClick={() => setIsDrawerOpen(false)}
-                  disabled={isSaving}
-                  className="px-4 py-2 text-xs font-mono font-bold text-foreground-muted hover:text-foreground hover:bg-hover rounded-xl border border-border transition-colors cursor-pointer"
+                  className="p-1.5 rounded-lg text-foreground-muted hover:text-foreground hover:bg-hover transition-colors cursor-pointer"
                 >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="px-5 py-2 text-xs font-mono font-bold text-primary-foreground bg-primary hover:bg-primary-hover rounded-xl shadow-md shadow-primary/20 flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
-                >
-                  {isSaving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                  <span>{editingItem ? "Actualizar Nivel" : "Guardar Nivel"}</span>
+                  <X className="w-5 h-5" />
                 </button>
               </div>
-            </form>
+
+              <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                {/* Nombre */}
+                <div>
+                  <label className="block text-xs font-mono font-bold text-foreground mb-1 uppercase tracking-wider">
+                    Nombre del Nivel *
+                  </label>
+                  <input
+                    type="text"
+                    disabled={!canSave}
+                    readOnly={!canSave}
+                    placeholder="Ej: VIP, DIAMANTE, INTERMEDIO, BÁSICO"
+                    value={formData.nombre}
+                    onChange={(e) => setFormData(prev => ({ ...prev, nombre: e.target.value }))}
+                    className={`w-full bg-surface-subtle border rounded-xl px-3.5 py-2.5 text-xs font-mono text-foreground placeholder:text-foreground-disabled focus:outline-none transition-colors ${
+                      !canSave ? "opacity-60 cursor-not-allowed border-border" : nameError ? "border-rose-500 focus:border-rose-500" : "border-border focus:border-primary"
+                    }`}
+                  />
+                  {nameError && <p className="text-[11px] text-rose-500 font-mono mt-1">{nameError}</p>}
+                </div>
+
+                {/* Descuento en Servicios */}
+                <div className="p-3.5 bg-surface-subtle border border-border rounded-xl space-y-2">
+                  <label className="block text-xs font-mono font-bold text-foreground uppercase tracking-wider flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-blue-500" />
+                      <span>Descuento en Servicios (0% - 100%) *</span>
+                    </span>
+                    <span className="text-blue-500 font-black">{formData.descuento_servicio}%</span>
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <div className="relative flex-1">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.5"
+                        disabled={!canSave}
+                        readOnly={!canSave}
+                        value={formData.descuento_servicio}
+                        onChange={(e) => setFormData(prev => ({ ...prev, descuento_servicio: e.target.value }))}
+                        className={`w-full bg-surface border rounded-xl px-3.5 py-2 text-xs font-mono text-foreground focus:outline-none transition-colors ${
+                          !canSave ? "opacity-60 cursor-not-allowed border-border" : discountServicioError ? "border-rose-500 focus:border-rose-500" : "border-border focus:border-primary"
+                        }`}
+                      />
+                      <Percent className="w-4 h-4 text-foreground-muted absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="0.5"
+                    disabled={!canSave}
+                    value={formData.descuento_servicio || 0}
+                    onChange={(e) => setFormData(prev => ({ ...prev, descuento_servicio: Number(e.target.value) }))}
+                    className={`w-full accent-blue-500 ${canSave ? "cursor-pointer" : "opacity-50 cursor-not-allowed"}`}
+                  />
+                  {discountServicioError && <p className="text-[11px] text-rose-500 font-mono mt-1">{discountServicioError}</p>}
+                </div>
+
+                {/* Descuento en Productos */}
+                <div className="p-3.5 bg-surface-subtle border border-border rounded-xl space-y-2">
+                  <label className="block text-xs font-mono font-bold text-foreground uppercase tracking-wider flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                      <span>Descuento en Productos (0% - 100%) *</span>
+                    </span>
+                    <span className="text-emerald-500 font-black">{formData.descuento_producto}%</span>
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <div className="relative flex-1">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.5"
+                        disabled={!canSave}
+                        readOnly={!canSave}
+                        value={formData.descuento_producto}
+                        onChange={(e) => setFormData(prev => ({ ...prev, descuento_producto: e.target.value }))}
+                        className={`w-full bg-surface border rounded-xl px-3.5 py-2 text-xs font-mono text-foreground focus:outline-none transition-colors ${
+                          !canSave ? "opacity-60 cursor-not-allowed border-border" : discountProductoError ? "border-rose-500 focus:border-rose-500" : "border-border focus:border-primary"
+                        }`}
+                      />
+                      <Percent className="w-4 h-4 text-foreground-muted absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="0.5"
+                    disabled={!canSave}
+                    value={formData.descuento_producto || 0}
+                    onChange={(e) => setFormData(prev => ({ ...prev, descuento_producto: Number(e.target.value) }))}
+                    className={`w-full accent-emerald-500 ${canSave ? "cursor-pointer" : "opacity-50 cursor-not-allowed"}`}
+                  />
+                  {discountProductoError && <p className="text-[11px] text-rose-500 font-mono mt-1">{discountProductoError}</p>}
+                </div>
+
+                {/* Descripción */}
+                <div>
+                  <label className="block text-xs font-mono font-bold text-foreground mb-1 uppercase tracking-wider">
+                    Descripción (Opcional)
+                  </label>
+                  <textarea
+                    rows={2}
+                    disabled={!canSave}
+                    readOnly={!canSave}
+                    placeholder="Detalles sobre beneficios, requisitos o aplicación del nivel..."
+                    value={formData.descripcion}
+                    onChange={(e) => setFormData(prev => ({ ...prev, descripcion: e.target.value }))}
+                    className={`w-full bg-surface-subtle border border-border rounded-xl px-3.5 py-2 text-xs font-mono text-foreground placeholder:text-foreground-disabled focus:outline-none focus:border-primary transition-colors ${
+                      !canSave ? "opacity-60 cursor-not-allowed" : ""
+                    }`}
+                  />
+                </div>
+
+                {/* Estado Activo */}
+                <div className="pt-2 flex items-center justify-between border-t border-border">
+                  <div>
+                    <span className="text-xs font-mono font-bold text-foreground block">Nivel Activo</span>
+                    <span className="text-[11px] text-foreground-muted font-mono">
+                      Los niveles inactivos no pueden asignarse a nuevos clientes ni otorgan descuento
+                    </span>
+                  </div>
+                  <label className={`relative inline-flex items-center ${canSave ? "cursor-pointer" : "cursor-not-allowed opacity-60"}`}>
+                    <input
+                      type="checkbox"
+                      disabled={!canSave}
+                      checked={formData.activo}
+                      onChange={(e) => setFormData(prev => ({ ...prev, activo: e.target.checked }))}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-surface-subtle peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                  </label>
+                </div>
+
+                {/* Footer */}
+                <div className="pt-4 border-t border-border flex items-center justify-end gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setIsDrawerOpen(false)}
+                    disabled={isSaving}
+                    className="px-4 py-2 text-xs font-mono font-bold text-foreground-muted hover:text-foreground hover:bg-hover rounded-xl border border-border transition-colors cursor-pointer"
+                  >
+                    {canSave ? "Cancelar" : "Cerrar"}
+                  </button>
+                  {canSave && (
+                    <button
+                      type="submit"
+                      disabled={isSaving || !!nameError || !!discountServicioError || !!discountProductoError || !formData.nombre.trim()}
+                      className="px-5 py-2 text-xs font-mono font-bold text-primary-foreground bg-primary hover:bg-primary-hover rounded-xl shadow-md shadow-primary/20 flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      {isSaving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                      <span>{editingItem ? "Actualizar Nivel" : "Guardar Nivel"}</span>
+                    </button>
+                  )}
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Modal Confirmar Eliminación */}
       <SecurityConfirmDialog

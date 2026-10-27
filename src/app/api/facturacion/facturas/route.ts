@@ -39,6 +39,10 @@ interface FacturaListRow {
   nivel_cliente_id?: number | null;
   porciento_descuento_nivel?: number | string | null;
   descuento_nivel?: number | string | null;
+  porciento_descuento_servicio?: number | string | null;
+  porciento_descuento_producto?: number | string | null;
+  descuento_servicio?: number | string | null;
+  descuento_producto?: number | string | null;
   nivel_cliente_nombre?: string | null;
 }
 
@@ -261,6 +265,10 @@ export async function GET(request: NextRequest) {
         ${facCols.has("nivel_cliente_id") ? "f.nivel_cliente_id" : "NULL::int AS nivel_cliente_id"},
         ${facCols.has("porciento_descuento_nivel") ? "COALESCE(f.porciento_descuento_nivel, 0)::numeric AS porciento_descuento_nivel" : "0.00::numeric AS porciento_descuento_nivel"},
         ${facCols.has("descuento_nivel") ? "COALESCE(f.descuento_nivel, 0)::numeric AS descuento_nivel" : "0.00::numeric AS descuento_nivel"},
+        ${facCols.has("porciento_descuento_servicio") ? "f.porciento_descuento_servicio" : "NULL::numeric AS porciento_descuento_servicio"},
+        ${facCols.has("porciento_descuento_producto") ? "f.porciento_descuento_producto" : "NULL::numeric AS porciento_descuento_producto"},
+        ${facCols.has("descuento_servicio") ? "COALESCE(f.descuento_servicio, 0)::numeric AS descuento_servicio" : "0.00::numeric AS descuento_servicio"},
+        ${facCols.has("descuento_producto") ? "COALESCE(f.descuento_producto, 0)::numeric AS descuento_producto" : "0.00::numeric AS descuento_producto"},
         nc.nombre AS nivel_cliente_nombre,
         (SELECT COUNT(*)::int FROM admin.detalle_factura df WHERE df.factura_id = f.factura_id) AS total_lineas
       FROM admin.facturas f
@@ -293,6 +301,14 @@ export async function GET(request: NextRequest) {
       nivel_cliente_id: row.nivel_cliente_id ? Number(row.nivel_cliente_id) : null,
       porciento_descuento_nivel: parseFloat(Number(row.porciento_descuento_nivel || 0).toFixed(2)),
       descuento_nivel: parseFloat(Number(row.descuento_nivel || 0).toFixed(2)),
+      porciento_descuento_servicio: row.porciento_descuento_servicio !== null && row.porciento_descuento_servicio !== undefined
+        ? parseFloat(Number(row.porciento_descuento_servicio).toFixed(2))
+        : null,
+      porciento_descuento_producto: row.porciento_descuento_producto !== null && row.porciento_descuento_producto !== undefined
+        ? parseFloat(Number(row.porciento_descuento_producto).toFixed(2))
+        : null,
+      descuento_servicio: parseFloat(Number(row.descuento_servicio || 0).toFixed(2)),
+      descuento_producto: parseFloat(Number(row.descuento_producto || 0).toFixed(2)),
       nivel_cliente_nombre: row.nivel_cliente_nombre || null,
       orden_trabajo_id: row.orden_trabajo_id ? Number(row.orden_trabajo_id) : null,
       codigo_orden: row.codigo_orden || null,
@@ -309,9 +325,10 @@ export async function GET(request: NextRequest) {
       total_lineas: Number(row.total_lineas || 0)
     }));
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data,
+      permissions: perms,
       pagination: {
         page,
         limit,
@@ -326,6 +343,10 @@ export async function GET(request: NextRequest) {
         total_facturas: totalRecords
       }
     });
+    response.headers.set("x-perm-crear", String(Boolean(perms.puede_crear)));
+    response.headers.set("x-perm-ver", String(Boolean(perms.puede_ver)));
+    response.headers.set("x-perm-aprobar", String(Boolean(perms.puede_aprobar)));
+    return response;
   } catch (err) {
     console.error("Error en GET /api/facturacion/facturas:", err);
     return NextResponse.json(
@@ -348,10 +369,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const perms = await getScreenPermissions("FACTURACION_FACTURAS", session.usuario_id);
+    const perms = await getScreenPermissions("FACTURACION_NUEVA", session.usuario_id);
     if (!perms.puede_crear) {
       return NextResponse.json(
-        { error: "FORBIDDEN", message: "No tienes permisos para crear facturas." },
+        { error: "FORBIDDEN", message: "No tienes permisos para crear facturas. Se requiere el privilegio CREAR en la pantalla Nueva Factura (FACTURACION_NUEVA)." },
         { status: 403 }
       );
     }

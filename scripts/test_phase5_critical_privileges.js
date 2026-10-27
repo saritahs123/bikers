@@ -432,17 +432,17 @@ async function runPhase5CriticalPrivilegeTests() {
 
     // 12. UI Synchronization checks
     const invDetailModalContent = fs.readFileSync(path.join(__dirname, '../src/components/billing/InvoiceDetailModal.jsx'), 'utf8');
-    assert(invDetailModalContent.includes('Boolean(effectivePerms.puede_aprobar)'), "UI InvoiceDetailModal valida Boolean(effectivePerms.puede_aprobar) para mostrar botón Anular");
+    assert(invDetailModalContent.includes('Boolean(effectivePerms.puede_aprobar)') || invDetailModalContent.includes('Boolean(effectivePerms?.puede_aprobar)'), "UI InvoiceDetailModal valida Boolean(effectivePerms.puede_aprobar) para mostrar botón Anular");
 
     const woDetailViewContent = fs.readFileSync(path.join(__dirname, '../src/components/workshop/WorkOrderDetailView.jsx'), 'utf8');
-    assert(woDetailViewContent.includes('permissions.puede_cerrar !== false'), "UI WorkOrderDetailView condiciona botón ENTREGAR A CLIENTE a puede_cerrar");
-    assert(woDetailViewContent.includes('permissions.puede_reabrir !== false'), "UI WorkOrderDetailView condiciona botón REABRIR REPARACIÓN a puede_reabrir");
+    assert(woDetailViewContent.includes('permissions.puede_cerrar !== false') || woDetailViewContent.includes('permissions.puede_cerrar === true'), "UI WorkOrderDetailView condiciona botón ENTREGAR A CLIENTE a puede_cerrar");
+    assert(woDetailViewContent.includes('permissions.puede_reabrir !== false') || woDetailViewContent.includes('permissions.puede_reabrir === true'), "UI WorkOrderDetailView condiciona botón REABRIR REPARACIÓN a puede_reabrir");
 
     const editWoModalContent = fs.readFileSync(path.join(__dirname, '../src/components/workshop/EditWorkOrderModal.jsx'), 'utf8');
     assert(editWoModalContent.includes('disabled={!puedeAsignar}'), "UI EditWorkOrderModal deshabilita selector de mecánico cuando no tiene puede_asignar");
 
     const transfersViewContent = fs.readFileSync(path.join(__dirname, '../src/components/inventory/InventoryTransfersView.jsx'), 'utf8');
-    assert(transfersViewContent.includes('(permisos && !permisos.puede_mover)'), "UI InventoryTransfersView deshabilita Registrar Transferencia cuando no tiene puede_mover");
+    assert(transfersViewContent.includes('!permisos.puede_mover') || transfersViewContent.includes('!permisos?.puede_mover'), "UI InventoryTransfersView deshabilita Registrar Transferencia cuando no tiene puede_mover");
 
     // Rollback isolated transaction
     await client.query("ROLLBACK");

@@ -1,5 +1,7 @@
 import { cookies } from "next/headers";
 import { query } from "@/lib/db";
+import { normalizeModuleCode } from "@/lib/moduleCode";
+import { CANONICAL_NAVIGATION, normalizeCode, getRequiredActionForScreen } from "@/config/navigationConfig";
 
 export interface WorkshopSession {
   usuario_id: number;
@@ -78,20 +80,66 @@ export async function getWorkshopSession(): Promise<WorkshopSession | null> {
   }
 }
 
+/**
+ * Salvaguarda Institucional de Seguridad (Modelo B - GAP-06)
+ * Recursos administrativos indispensables a los cuales el Administrador General (Rol 1)
+ * conserva acceso garantizado e inmutable para prevenir bloqueos de administración.
+ */
+export const INSTITUTIONAL_SECURITY_SCREEN_CODES = new Set([
+  "SEGURIDAD",
+  "SEGURIDAD_USUARIOS",
+  "SEGURIDAD_ROLES",
+  "SEGURIDAD_PERMISOS",
+  "SEGURIDAD_EMPRESAS",
+  "SEGURIDAD_TIPOS_EMPRESA",
+  "SEGURIDAD_TIPOS_USUARIO",
+]);
+
+export const INSTITUTIONAL_SECURITY_PATHS = new Set([
+  "/settings/security/roles",
+  "/settings/security/users",
+  "/settings/security/permissions",
+  "/settings/security/companies",
+  "/settings/security/company-types",
+  "/settings/security/user-types",
+  "/settings/security/departments",
+  "/settings/security/positions",
+  "/settings/security/areas",
+  "/settings/security/data-scopes",
+]);
+
+export function isInstitutionalSecurityTarget(target: string | number): boolean {
+  if (typeof target === "number") {
+    return target === 2; // modulo_sistema_id = 2 es SEGURIDAD
+  }
+  const clean = String(target).trim();
+  const upper = clean.toUpperCase();
+  if (upper === "SEGURIDAD") return true;
+  if (INSTITUTIONAL_SECURITY_SCREEN_CODES.has(upper)) return true;
+  if (INSTITUTIONAL_SECURITY_PATHS.has(clean)) return true;
+  for (const path of INSTITUTIONAL_SECURITY_PATHS) {
+    if (clean === path || clean.startsWith(path + "/") || clean.startsWith(path + "?")) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export async function isSuperAdmin(usuarioId: number): Promise<boolean> {
   if (!usuarioId) return false;
   try {
     const rows = await query(
       `SELECT 1
        FROM admin.usuario u
-       JOIN admin.rol_funcional r ON u.rol_principal_id = r.rol_funcional_id
+       JOIN admin.rol_funcional r ON r.rol_funcional_id = 1 AND r.estado = 'ACTIVO'
        WHERE u.usuario_id = $1
-         AND (u.estado = 'ACTIVO' OR u.estado IS NULL)
-         AND (r.estado = 'ACTIVO' OR r.estado IS NULL)
+         AND u.estado = 'ACTIVO'
          AND (
            u.rol_principal_id = 1
-           OR UPPER(COALESCE(r.nombre, '')) = 'ADMINISTRADOR GENERAL'
-           OR UPPER(COALESCE(r.nombre, '')) LIKE '%SUPER%'
+           OR EXISTS (
+             SELECT 1 FROM admin.usuario_rol_adicional ura
+             WHERE ura.usuario_id = u.usuario_id AND ura.rol_funcional_id = 1
+           )
          )
        LIMIT 1`,
       [usuarioId]
@@ -130,24 +178,44 @@ export async function getModulePermissions(
       return noPerms;
     }
 
-    if (await isSuperAdmin(usuarioId)) {
+    if ((await isSuperAdmin(usuarioId)) && isInstitutionalSecurityTarget(moduloNameOrId)) {
       return fullPerms;
     }
 
     const isId = typeof moduloNameOrId === 'number' || /^\d+$/.test(String(moduloNameOrId));
     const targetModule = isId ? Number(moduloNameOrId) : String(moduloNameOrId).toUpperCase();
+    const targetCode = isId ? '' : normalizeModuleCode(String(moduloNameOrId));
 
-    // 1. Obtener módulo objetivo
-    const modRows = await query(
-      `SELECT modulo_sistema_id
-       FROM admin.modulo_sistema
-       WHERE ${isId ? 'modulo_sistema_id = $1' : `(
-         UPPER(nombre) = UPPER($1)
-         OR UPPER(TRANSLATE(nombre, 'ÁÉÍÓÚáéíóú', 'AEIOUaeiou')) = UPPER(TRANSLATE($1, 'ÁÉÍÓÚáéíóú', 'AEIOUaeiou'))
-       )`}
-       LIMIT 1`,
-      [targetModule]
-    );
+    // 1. Obtener módulo objetivo: intenta por código canónico, con fallback a nombre
+    let modRows: Array<{ modulo_sistema_id: number }> = [];
+    if (isId) {
+      modRows = (await query(
+        `SELECT modulo_sistema_id FROM admin.modulo_sistema WHERE modulo_sistema_id = $1 LIMIT 1`,
+        [targetModule]
+      )) as Array<{ modulo_sistema_id: number }>;
+    } else {
+      if (targetCode) {
+        try {
+          modRows = await query(
+            `SELECT modulo_sistema_id FROM admin.modulo_sistema WHERE codigo = $1 LIMIT 1`,
+            [targetCode]
+          );
+        } catch {
+          modRows = [];
+        }
+      }
+
+      if (!modRows || modRows.length === 0) {
+        modRows = await query(
+          `SELECT modulo_sistema_id
+           FROM admin.modulo_sistema
+           WHERE UPPER(nombre) = UPPER($1)
+              OR UPPER(TRANSLATE(nombre, 'ÁÉÍÓÚáéíóú', 'AEIOUaeiou')) = UPPER(TRANSLATE($1, 'ÁÉÍÓÚáéíóú', 'AEIOUaeiou'))
+           LIMIT 1`,
+          [targetModule]
+        );
+      }
+    }
 
     if (!modRows || modRows.length === 0) {
       return noPerms;
@@ -259,7 +327,7 @@ export async function getScreenPermissions(
       return noPerms;
     }
 
-    if (await isSuperAdmin(usuarioId)) {
+    if ((await isSuperAdmin(usuarioId)) && isInstitutionalSecurityTarget(screenCodeOrPath)) {
       return fullPerms;
     }
 
@@ -274,7 +342,12 @@ export async function getScreenPermissions(
            OR (ruta LIKE '%?%' AND split_part(ruta, '?', 1) = split_part($1, '?', 1))
            OR ($1 LIKE (ruta || '%'))
          )
-       ORDER BY CASE WHEN ruta = $1 THEN 1 WHEN UPPER(codigo) = UPPER($1) THEN 2 ELSE 3 END
+       ORDER BY CASE
+         WHEN ruta = $1 THEN 1
+         WHEN UPPER(codigo) = UPPER($1) THEN 2
+         WHEN ($1 = '/workshop' OR $1 = '/workshop/') AND ruta = '/workshop?view=list' THEN 3
+         ELSE 4
+       END, orden ASC, pantalla_id ASC
        LIMIT 1`,
       [screenCodeOrPath]
     );
@@ -286,6 +359,10 @@ export async function getScreenPermissions(
 
     const pantallaId = screenRows[0].pantalla_id;
     const moduloId = screenRows[0].modulo_sistema_id;
+
+    if (moduloId === 2 && (await isSuperAdmin(usuarioId))) {
+      return fullPerms;
+    }
 
     // 2. Precedencia:
     //    1) user_custom_screen (permiso personalizado usuario en pantalla)
@@ -397,9 +474,6 @@ export async function getUserNavigationPermissions(usuarioId: number): Promise<{
     }
 
     const isSuper = await isSuperAdmin(usuarioId);
-    if (isSuper) {
-      return { isSuperAdmin: true, modules: {}, screens: {} };
-    }
 
     // 1. Module-level visibility (user custom override > role permission)
     const modRows = await query(
@@ -461,7 +535,18 @@ export async function getUserNavigationPermissions(usuarioId: number): Promise<{
            ps.modulo_sistema_id,
            ps.codigo,
            ps.ruta,
-           BOOL_OR(COALESCE(map.puede_ver, mar.puede_ver, false)) AS puede_ver_rol
+           BOOL_OR(COALESCE(map.puede_ver, mar.puede_ver, false)) AS puede_ver_rol,
+           BOOL_OR(COALESCE(map.puede_crear, mar.puede_crear, false)) AS puede_crear_rol,
+           BOOL_OR(COALESCE(map.puede_editar, mar.puede_editar, false)) AS puede_editar_rol,
+           BOOL_OR(COALESCE(map.puede_inactivar, mar.puede_inactivar, false)) AS puede_inactivar_rol,
+           BOOL_OR(COALESCE(map.puede_exportar, mar.puede_exportar, false)) AS puede_exportar_rol,
+           BOOL_OR(COALESCE(map.puede_importar, mar.puede_importar, false)) AS puede_importar_rol,
+           BOOL_OR(COALESCE(map.puede_aprobar, mar.puede_aprobar, false)) AS puede_aprobar_rol,
+           BOOL_OR(COALESCE(map.puede_asignar, mar.puede_asignar, false)) AS puede_asignar_rol,
+           BOOL_OR(COALESCE(map.puede_mover, mar.puede_mover, false)) AS puede_mover_rol,
+           BOOL_OR(COALESCE(map.puede_cerrar, mar.puede_cerrar, false)) AS puede_cerrar_rol,
+           BOOL_OR(COALESCE(map.puede_reabrir, mar.puede_reabrir, false)) AS puede_reabrir_rol,
+           BOOL_OR(COALESCE(map.puede_eliminar, mar.puede_eliminar, false)) AS puede_eliminar_rol
          FROM admin.pantalla_sistema ps
          LEFT JOIN user_roles ur ON true
          LEFT JOIN admin.matriz_acceso_pantalla map
@@ -475,7 +560,18 @@ export async function getUserNavigationPermissions(usuarioId: number): Promise<{
          rsv.codigo AS pantalla_codigo,
          rsv.ruta AS pantalla_ruta,
          UPPER(TRANSLATE(ms.nombre, 'ÁÉÍÓÚáéíóú', 'AEIOUaeiou')) AS modulo_key,
-         COALESCE(ucs.puede_ver, ucm.puede_ver, rsv.puede_ver_rol, false) AS puede_ver
+         COALESCE(ucs.puede_ver, ucm.puede_ver, rsv.puede_ver_rol, false) AS puede_ver,
+         COALESCE(ucs.puede_crear, ucm.puede_crear, rsv.puede_crear_rol, false) AS puede_crear,
+         COALESCE(ucs.puede_editar, ucm.puede_editar, rsv.puede_editar_rol, false) AS puede_editar,
+         COALESCE(ucs.puede_inactivar, ucm.puede_inactivar, rsv.puede_inactivar_rol, false) AS puede_inactivar,
+         COALESCE(ucs.puede_exportar, ucm.puede_exportar, rsv.puede_exportar_rol, false) AS puede_exportar,
+         COALESCE(ucs.puede_importar, ucm.puede_importar, rsv.puede_importar_rol, false) AS puede_importar,
+         COALESCE(ucs.puede_aprobar, ucm.puede_aprobar, rsv.puede_aprobar_rol, false) AS puede_aprobar,
+         COALESCE(ucs.puede_asignar, ucm.puede_asignar, rsv.puede_asignar_rol, false) AS puede_asignar,
+         COALESCE(ucs.puede_mover, ucm.puede_mover, rsv.puede_mover_rol, false) AS puede_mover,
+         COALESCE(ucs.puede_cerrar, ucm.puede_cerrar, rsv.puede_cerrar_rol, false) AS puede_cerrar,
+         COALESCE(ucs.puede_reabrir, ucm.puede_reabrir, rsv.puede_reabrir_rol, false) AS puede_reabrir,
+         COALESCE(ucs.puede_eliminar, ucm.puede_eliminar, rsv.puede_eliminar_rol, false) AS puede_eliminar
        FROM role_screen_visibility rsv
        JOIN admin.modulo_sistema ms ON rsv.modulo_sistema_id = ms.modulo_sistema_id
        LEFT JOIN admin.usuario_permiso_personalizado ucs
@@ -495,19 +591,49 @@ export async function getUserNavigationPermissions(usuarioId: number): Promise<{
       pantalla_ruta: string;
       modulo_key: string;
       puede_ver: boolean;
+      puede_crear: boolean;
+      puede_editar: boolean;
+      puede_inactivar: boolean;
+      puede_exportar: boolean;
+      puede_importar: boolean;
+      puede_aprobar: boolean;
+      puede_asignar: boolean;
+      puede_mover: boolean;
+      puede_cerrar: boolean;
+      puede_reabrir: boolean;
+      puede_eliminar: boolean;
+      [key: string]: unknown;
     }
     const screens: Record<string, boolean> = {};
     ((screenRows || []) as unknown as ScreenRow[]).forEach((row) => {
-      screens[row.pantalla_codigo] = Boolean(row.puede_ver);
-      screens[row.pantalla_ruta] = Boolean(row.puede_ver);
+      const requiredAction = getRequiredActionForScreen(row.pantalla_codigo) || "puede_ver";
+      const hasBaseVer = Boolean(row.puede_ver);
+      let isAllowed = hasBaseVer;
+      if (hasBaseVer && requiredAction !== "puede_ver") {
+        isAllowed = Boolean(row[requiredAction]);
+      }
+
+      screens[row.pantalla_codigo] = isAllowed;
+      screens[row.pantalla_ruta] = isAllowed;
       // Si el usuario tiene acceso a alguna pantalla de un módulo, el módulo debe ser visible
-      if (row.puede_ver && row.modulo_key) {
+      if (isAllowed && row.modulo_key) {
         modules[row.modulo_key] = true;
       }
     });
 
+    if (isSuper) {
+      // Salvaguarda institucional inmutable para Administrador General (Modelo B)
+      modules["SEGURIDAD"] = true;
+      for (const code of INSTITUTIONAL_SECURITY_SCREEN_CODES) {
+        screens[code] = true;
+      }
+      for (const path of INSTITUTIONAL_SECURITY_PATHS) {
+        screens[path] = true;
+      }
+    }
+
     return {
-      isSuperAdmin: false,
+      isSuperAdmin: isSuper,
       modules,
       screens
     };
@@ -528,7 +654,7 @@ export async function canUser(
   target: string | number
 ): Promise<boolean> {
   if (!usuarioId) return false;
-  if (await isSuperAdmin(usuarioId)) return true;
+  if ((await isSuperAdmin(usuarioId)) && isInstitutionalSecurityTarget(target)) return true;
 
   if (typeof target === "string" && (target.startsWith("/") || target.includes("_"))) {
     const perms = await getScreenPermissions(target, usuarioId);
@@ -550,4 +676,92 @@ export function validateCompanyAccess(
   if (isSuperAdminUser) return true;
   if (!sessionEmpresaId || !targetEmpresaId) return false;
   return Number(sessionEmpresaId) === Number(targetEmpresaId);
+}
+
+/**
+ * Resuelve el destino inicial autorizado para un usuario autenticado
+ * cuando no tiene acceso a DASHBOARD_MAIN ('/').
+ *
+ * Condiciones:
+ * 1. Prioriza módulos según el orden canónico documentado:
+ *    TALLER -> FACTURACIÓN -> CRM -> INVENTARIO -> REPORTES -> CONFIGURACIÓN -> SEGURIDAD
+ * 2. Valida permisos efectivos de pantalla en el motor RBAC (no únicamente de módulo).
+ * 3. Admite rutas con query parameters (ej. /workshop?view=work_orders).
+ * 4. Excluye rutas de creación (/new, /create), edición (/edit), eliminación (/delete).
+ * 5. Excluye APIs (/api/*), tracking público (/tracking/*) y rutas externas.
+ * 6. Excluye '/' para evitar bucles de redirección.
+ * 7. Prioriza listados, consultas y resúmenes.
+ * 8. Retorna la ruta destino autorizada o null si el usuario no tiene pantallas operativas.
+ */
+export async function resolveDefaultAuthorizedPath(usuarioId: number | string): Promise<string | null> {
+  const numUserId = typeof usuarioId === "string" ? parseInt(usuarioId, 10) : usuarioId;
+  if (!numUserId || isNaN(numUserId)) return null;
+
+  try {
+    const navPerms = await getUserNavigationPermissions(numUserId);
+    if (!navPerms || !navPerms.modules || !navPerms.screens) {
+      return null;
+    }
+
+    for (const menu of CANONICAL_NAVIGATION) {
+      // Ignorar home/dashboard porque la función se llama cuando DASHBOARD_MAIN está denegado
+      if (menu.id === "home") continue;
+
+      const menuKey = normalizeCode(menu.codigo);
+      const hasModulePerm = Boolean(navPerms.modules[menuKey]);
+
+      for (const screen of menu.screens) {
+        const ruta = (screen.ruta || "").trim();
+        if (!ruta) continue;
+
+        // Descartar '/' para evitar bucle
+        if (ruta === "/") continue;
+
+        // Descartar APIs, tracking público y rutas externas
+        if (
+          ruta.startsWith("/api") ||
+          ruta.startsWith("/tracking") ||
+          ruta.startsWith("http://") ||
+          ruta.startsWith("https://") ||
+          ruta.startsWith("//")
+        ) {
+          continue;
+        }
+
+        // Descartar rutas de creación, edición, eliminación o auxiliares
+        const lowerRuta = ruta.toLowerCase();
+        if (
+          lowerRuta.includes("/new") ||
+          lowerRuta.includes("/nuevo") ||
+          lowerRuta.includes("/nueva") ||
+          lowerRuta.includes("/create") ||
+          lowerRuta.includes("/crear") ||
+          lowerRuta.includes("/edit") ||
+          lowerRuta.includes("/editar") ||
+          lowerRuta.includes("/delete") ||
+          lowerRuta.includes("/eliminar")
+        ) {
+          continue;
+        }
+
+        // Validar permisos de pantalla (no únicamente de módulo)
+        const screenExplicitPerm =
+          navPerms.screens[screen.codigo] !== undefined
+            ? navPerms.screens[screen.codigo]
+            : navPerms.screens[ruta];
+
+        const isAuthorized =
+          screenExplicitPerm !== undefined ? Boolean(screenExplicitPerm) : hasModulePerm;
+
+        if (isAuthorized) {
+          return ruta;
+        }
+      }
+    }
+
+    return null;
+  } catch (err) {
+    console.error("Error in resolveDefaultAuthorizedPath:", err);
+    return null;
+  }
 }

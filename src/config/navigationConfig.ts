@@ -16,6 +16,8 @@ export interface ScreenDefinition {
   apiPatterns?: string[];
   /** Si se omite, aplican todas las 12 acciones estándar */
   disallowActions?: string[];
+  /** Acción específica requerida para que la pantalla sea operativa y visible (por defecto puede_ver) */
+  requiredAction?: string;
 }
 
 export interface MenuDefinition {
@@ -98,7 +100,8 @@ export const CANONICAL_NAVIGATION: MenuDefinition[] = [
         ruta: "/billing/new",
         tipo: "PANTALLA",
         orden: 1,
-        apiPatterns: ["/api/facturacion/facturas", "/api/facturacion/ordenes-facturables"]
+        apiPatterns: ["/api/facturacion/facturas", "/api/facturacion/ordenes-facturables"],
+        requiredAction: "puede_crear"
       },
       {
         id: "facturacion_facturas",
@@ -153,15 +156,6 @@ export const CANONICAL_NAVIGATION: MenuDefinition[] = [
         tipo: "PANTALLA",
         orden: 2,
         apiPatterns: ["/api/crm/bicicletas"]
-      },
-      {
-        id: "crm_niveles_clientes",
-        codigo: "CRM_NIVELES_CLIENTES",
-        nombre: "Niveles de Clientes",
-        ruta: "/crm/client-levels",
-        tipo: "PANTALLA",
-        orden: 3,
-        apiPatterns: ["/api/crm/niveles-cliente"]
       }
     ]
   },
@@ -206,7 +200,8 @@ export const CANONICAL_NAVIGATION: MenuDefinition[] = [
         ruta: "/inventory/entries",
         tipo: "PANTALLA",
         orden: 4,
-        apiPatterns: ["/api/inventario/entradas"]
+        apiPatterns: ["/api/inventario/entradas"],
+        requiredAction: "puede_crear"
       },
       {
         id: "inventario_salidas_ajustes",
@@ -224,7 +219,8 @@ export const CANONICAL_NAVIGATION: MenuDefinition[] = [
         ruta: "/inventory/transfers",
         tipo: "PANTALLA",
         orden: 6,
-        apiPatterns: ["/api/inventario/transferencias"]
+        apiPatterns: ["/api/inventario/transferencias"],
+        requiredAction: "puede_mover"
       }
     ]
   },
@@ -377,7 +373,8 @@ export const CANONICAL_NAVIGATION: MenuDefinition[] = [
         ruta: "/inventory/initial",
         tipo: "PANTALLA",
         orden: 9,
-        apiPatterns: ["/api/inventario/inventario-inicial"]
+        apiPatterns: ["/api/inventario/inventario-inicial"],
+        requiredAction: "puede_crear"
       },
       {
         id: "config_niveles_clientes",
@@ -530,5 +527,39 @@ export function matchScreenByPath(pathname: string, searchParams?: URLSearchPara
     }
   }
 
+  // Regla explícita de resolución sin ambigüedad:
+  // Si pathname === "/workshop" y no se especifica view o view === "list", resuelve a TALLER_RECEPCIONES
+  if (pathname === "/workshop" && (!currentView || currentView === "list")) {
+    const taller = CANONICAL_NAVIGATION.find(m => m.codigo === "TALLER");
+    return taller?.screens.find(s => s.codigo === "TALLER_RECEPCIONES") || null;
+  }
+
   return null;
+}
+
+/**
+ * Retorna la acción requerida para una pantalla o ruta (por defecto "puede_ver")
+ */
+export function getRequiredActionForScreen(codigoOrPath: string): string {
+  if (!codigoOrPath) return "puede_ver";
+  const normalized = normalizeCode(codigoOrPath);
+  const lowerPath = codigoOrPath.toLowerCase().trim();
+  const cleanPath = lowerPath.split("?")[0];
+
+  for (const menu of CANONICAL_NAVIGATION) {
+    for (const screen of menu.screens) {
+      const screenNormCode = normalizeCode(screen.codigo);
+      const screenPath = (screen.ruta || "").toLowerCase().trim();
+      const screenCleanPath = screenPath.split("?")[0];
+
+      if (
+        screenNormCode === normalized ||
+        screenPath === lowerPath ||
+        (screenCleanPath && screenCleanPath === cleanPath)
+      ) {
+        return screen.requiredAction || "puede_ver";
+      }
+    }
+  }
+  return "puede_ver";
 }

@@ -1,4 +1,5 @@
 import NewInvoiceView from "@/components/billing/NewInvoiceView";
+import { ProtectedServerPage } from "@/components/auth/ProtectedServerPage";
 
 export const metadata = {
   title: "Nueva Factura | Ride Lab",
@@ -6,5 +7,12 @@ export const metadata = {
 };
 
 export default function NewBillingPage() {
-  return <NewInvoiceView />;
+  return (
+    <ProtectedServerPage
+      screenCode="FACTURACION_NUEVA"
+      requiredAction="puede_crear"
+    >
+      <NewInvoiceView />
+    </ProtectedServerPage>
+  );
 }

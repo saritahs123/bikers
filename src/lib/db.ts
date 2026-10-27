@@ -14,6 +14,35 @@ const createPool = (): Pool => {
     throw new Error("La variable DATABASE_URL no está configurada.");
   }
 
+  // PROTECCIÓN DE SEGURIDAD ESTRICTA: MODO PRUEBAS (POSTGRESQL 18 LOCAL)
+  const isTestEnv = process.env.APP_ENV === "test";
+  if (isTestEnv) {
+    try {
+      const url = new URL(connectionString);
+      const host = (url.hostname || "").toLowerCase();
+      const port = parseInt(url.port || "5432", 10);
+      const db = (url.pathname || "").replace(/^\//, "");
+      const allowedHosts = ["127.0.0.1", "localhost", "::1"];
+
+      if (
+        !allowedHosts.includes(host) ||
+        port !== 5432 ||
+        db !== "bikers_dbtest" ||
+        host.includes("amazonaws.com") ||
+        host.includes("bikerrd.com")
+      ) {
+        throw new Error(
+          `[BLOQUEO CRÍTICO DE SEGURIDAD] Intento de conexión a destino no autorizado (${host}:${port}/${db}) en APP_ENV=test. Solo se permite 127.0.0.1:5432/bikers_dbtest. Destinos externos, túneles (59083) y pools (6432) están terminantemente bloqueados.`
+        );
+      }
+    } catch (parseErr: any) {
+      if (parseErr.message && parseErr.message.includes("[BLOQUEO CRÍTICO")) {
+        throw parseErr;
+      }
+      throw new Error("[BLOQUEO CRÍTICO DE SEGURIDAD] Formato de DATABASE_URL inválido en modo test.");
+    }
+  }
+
   const configuredMax = Number.parseInt(
     process.env.DB_POOL_MAX || "2",
     10
@@ -24,29 +53,32 @@ const createPool = (): Pool => {
     max:
       Number.isInteger(configuredMax) && configuredMax > 0
         ? configuredMax
-        : 2,
+        : (isTestEnv ? 5 : 2),
     idleTimeoutMillis: 10_000,
     connectionTimeoutMillis: 10_000,
     allowExitOnIdle: true,
-    application_name: "bikers-vercel",
+    application_name: isTestEnv ? "bikers-test-local-pg18" : "bikers-vercel",
   };
 
   const ca = normalizePem(process.env.DATABASE_SSL_CA);
   const certificate = normalizePem(process.env.DATABASE_SSL_CERT);
   const privateKey = normalizePem(process.env.DATABASE_SSL_KEY);
 
-  if (
-    process.env.NODE_ENV === "production" ||
-    ca ||
-    certificate ||
-    privateKey
-  ) {
-    poolConfig.ssl = {
-      rejectUnauthorized: true,
-      ...(ca ? { ca } : {}),
-      ...(certificate ? { cert: certificate } : {}),
-      ...(privateKey ? { key: privateKey } : {}),
-    };
+  // En modo test local, la conexión se realiza sin SSL a 127.0.0.1
+  if (!isTestEnv) {
+    if (
+      process.env.NODE_ENV === "production" ||
+      ca ||
+      certificate ||
+      privateKey
+    ) {
+      poolConfig.ssl = {
+        rejectUnauthorized: true,
+        ...(ca ? { ca } : {}),
+        ...(certificate ? { cert: certificate } : {}),
+        ...(privateKey ? { key: privateKey } : {}),
+      };
+    }
   }
 
   const pool = new Pool(poolConfig);

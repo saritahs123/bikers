@@ -102,6 +102,16 @@ export async function GET(request: NextRequest) {
         referencia: r.referencia || "-",
         usuario: r.usuario_nombre || "Sistema",
       })),
+      permissions: perms,
+    }, {
+      headers: {
+        "x-perm-ver": String(perms.puede_ver),
+        "x-perm-crear": String(perms.puede_crear),
+        "x-perm-editar": String(perms.puede_editar),
+        "x-perm-eliminar": String(perms.puede_eliminar),
+        "x-perm-exportar": String(perms.puede_exportar),
+        "x-perm-aprobar": String(perms.puede_aprobar)
+      }
     });
   } catch (error: any) {
     console.error("Error en GET /api/inventario/ajustes:", error);

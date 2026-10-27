@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/db";
-import { getWorkshopSession, getModulePermissions } from "@/lib/workshop-session";
+import { getWorkshopSession, getModulePermissions, getScreenPermissions } from "@/lib/workshop-session";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +37,10 @@ export async function GET() {
       perms = await getModulePermissions("FACTURACIÓN", session.usuario_id);
     }
 
-    if (!perms.puede_ver) {
+    const permsNueva = await getScreenPermissions("FACTURACION_NUEVA", session.usuario_id);
+    const permsFacturas = await getScreenPermissions("FACTURACION_FACTURAS", session.usuario_id);
+
+    if (!perms.puede_ver && !permsNueva.puede_ver && !permsFacturas.puede_ver) {
       return NextResponse.json(
         { error: "FORBIDDEN", message: "No tienes permisos para acceder a Facturación." },
         { status: 403 }
@@ -251,11 +254,13 @@ export async function GET() {
       correo: string | null;
       nivel_cliente_id: number | null;
       nivel_cliente_nombre: string | null;
+      descuento_servicio?: number | string | null;
+      descuento_producto?: number | string | null;
       porciento_descuento: number | string | null;
       nivel_cliente_activo: boolean | null;
     }
 
-    // 6. Clientes activos (CRM) con su Nivel de Cliente y porcentaje de descuento asociado
+    // 6. Clientes activos (CRM) con su Nivel de Cliente y porcentajes de descuento asociados
     const clientesRows = await query<ClienteCatalogRow>(
       `SELECT
          c.cliente_id,
@@ -267,7 +272,9 @@ export async function GET() {
          c.correo,
          c.nivel_cliente_id,
          nc.nombre AS nivel_cliente_nombre,
-         COALESCE(nc.porciento_descuento, 0)::numeric AS porciento_descuento,
+         COALESCE(nc.descuento_servicio, 0)::numeric AS descuento_servicio,
+         COALESCE(nc.descuento_producto, 0)::numeric AS descuento_producto,
+         COALESCE(nc.descuento_servicio, 0)::numeric AS porciento_descuento,
          nc.activo AS nivel_cliente_activo
        FROM admin.clientes c
        LEFT JOIN admin.nivel_cliente nc ON c.nivel_cliente_id = nc.nivel_cliente_id
@@ -280,9 +287,9 @@ export async function GET() {
 
     // 7. Catálogo de Niveles de Cliente
     const nivelesRows = await query(
-      `SELECT nivel_cliente_id, nombre, porciento_descuento, descripcion, activo
+      `SELECT nivel_cliente_id, nombre, descuento_servicio, descuento_producto, descripcion, activo
        FROM admin.nivel_cliente
-       ORDER BY porciento_descuento DESC, nombre ASC`
+       ORDER BY descuento_servicio DESC, descuento_producto DESC, nombre ASC`
     );
 
     return NextResponse.json({
@@ -296,11 +303,17 @@ export async function GET() {
         nivel_cliente_id: c.nivel_cliente_id ? Number(c.nivel_cliente_id) : null,
         nivel_cliente_nombre: c.nivel_cliente_nombre || null,
         // Solo otorgar descuento si el nivel está activo
-        porciento_descuento: c.nivel_cliente_activo ? Number(c.porciento_descuento || 0) : 0,
+        descuento_servicio: c.nivel_cliente_activo ? Number(c.descuento_servicio || 0) : 0,
+        descuento_producto: c.nivel_cliente_activo ? Number(c.descuento_producto || 0) : 0,
+        porciento_descuento: c.nivel_cliente_activo ? Number(c.descuento_servicio || 0) : 0,
         nivel_cliente_activo: c.nivel_cliente_activo !== undefined && c.nivel_cliente_activo !== null ? Boolean(c.nivel_cliente_activo) : null
       })),
       niveles_cliente: nivelesRows || [],
-      permisos: perms
+      permisos: {
+        ...perms,
+        puede_ver: Boolean(perms.puede_ver || permsNueva.puede_ver || permsFacturas.puede_ver),
+        puede_crear: Boolean(permsNueva.puede_crear)
+      }
     });
 
   } catch (error: unknown) {
